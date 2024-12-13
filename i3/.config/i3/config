@@ -200,13 +200,13 @@ bindsym $mod+x exec /home/$USER/.config/scripts/lock
 exec_always picom -f 
 
 # Color shemes for windows 
-set $bgcolor	#18181899
-set $in-bgcolor #1818184D
+set $bgcolor	#36363699
+set $in-bgcolor #2020204D
 set $text	#ffffff
 set $u-bgcolor	#330000
 set $indicator	#a8a3c1
 set $in-text	#969696
-set $focused-ws	#18181880
+set $focused-ws	#181818
 # set $focused-ws	#523d6480
 set $bar-color	#523d640D
 
