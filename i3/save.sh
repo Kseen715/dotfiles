@@ -9,5 +9,7 @@ if [ -d ./.config/i3 ]; then
         cp -r $HOME/.config/i3 ./.config/i3
     fi
 else
+    # make sure the directory exists
+    mkdir -p ./.config
     cp -r $HOME/.config/i3 ./.config/i3
 fi
