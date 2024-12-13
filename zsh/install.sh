@@ -1,29 +1,73 @@
 #!/usr/bin/env bash
 
-# Install ./.zshrc to $HOME
-# if file exists, ask to overwrite
-if [ -f $HOME/.zshrc ]; then
-    echo "[✨] File .zshrc already exists. Overwrite? (y/N)"
-    read answer
-    if [ "$answer" = "y" ]; then
-        cp ./.zshrc $HOME/.zshrc
-        echo "[✨] Copied .zshrc to $HOME/.zshrc"
-    fi
-else
-    cp ./.zshrc $HOME/.zshrc
-    echo "[✨] Copied .zshrc to $HOME/.zshrc"
-fi
+SEP=','
 
-# Install ./.oh-my-zsh to $HOME
-# if directory exists, ask to overwrite
-if [ -d $HOME/.oh-my-zsh ]; then
-    echo "[✨] Directory .oh-my-zsh already exists. Overwrite? (y/N)"
-    read answer
-    if [ "$answer" = "y" ]; then
-        cp -r ./.oh-my-zsh $HOME/.oh-my-zsh
-        echo "[✨] Copied .oh-my-zsh to $HOME/.oh-my-zsh"
+DIRECTORIES_TO_INSTALL="$HOME/.oh-my-zsh"
+DIRECTORIES_LOCAL=".oh-my-zsh"
+
+FILES_TO_INSTALL="$HOME/.zshrc"
+FILES_LOCAL=".zshrc"
+
+YES=false
+
+# Parse arguments
+while getopts "y" opt; do
+    case $opt in
+        y) YES=true ;;
+    esac
+done
+
+# Convert comma-separated strings to arrays, splitting on SEP character
+IFS="$SEP" read -r -a DIRS_TO_INSTALL <<< "$DIRECTORIES_TO_INSTALL"
+IFS="$SEP" read -r -a DIRS_LOCAL <<< "$DIRECTORIES_LOCAL"
+IFS="$SEP" read -r -a FILES_TO_INSTALL_ARR <<< "$FILES_TO_INSTALL"
+IFS="$SEP" read -r -a FILES_LOCAL_ARR <<< "$FILES_LOCAL"
+
+# Process directories
+for i in "${!DIRS_TO_INSTALL[@]}"; do
+    dir_to_save=$(echo "${DIRS_TO_INSTALL[$i]}" | xargs)
+    dir_local=$(echo "${DIRS_LOCAL[$i]}" | xargs)
+    
+    if [ -d "$dir_to_save" ]; then
+        if [ "$YES" = true ]; then
+            cp -r "$dir_local" "$dir_to_save"
+            echo "[✨] Copied $dir_local to $dir_to_save"
+        else
+            echo "[✨] Directory $dir_to_save already exists. Overwrite? (y/N)"
+            read -r answer
+            if [ "$answer" = "y" ]; then
+                cp -r "$dir_local" "$dir_to_save"
+                echo "[✨] Copied $dir_local to $dir_to_save"
+            fi
+        fi
+    else
+        mkdir -p "$(dirname "$dir_to_save")"
+        echo "[✨] Created directory $(dirname "$dir_to_save")"
+        cp -r "$dir_local" "$dir_to_save"
+        echo "[✨] Copied $dir_local to $dir_to_save"
     fi
-else
-    cp -r ./.oh-my-zsh $HOME/.oh-my-zsh
-    echo "[✨] Copied .oh-my-zsh to $HOME/.oh-my-zsh"
-fi
+done
+
+# Process files
+for i in "${!FILES_TO_INSTALL_ARR[@]}"; do
+    file_to_save=$(echo "${FILES_TO_INSTALL_ARR[$i]}" | xargs)
+    file_local=$(echo "${FILES_LOCAL_ARR[$i]}" | xargs)
+    
+    if [ -f "$file_to_save" ]; then
+        if [ "$YES" = true ]; then
+            cp "$file_local" "$file_to_save"
+            echo "[✨] Copied $file_local to $file_to_save"
+        else
+            echo "[✨] File $file_to_save already exists. Overwrite? (y/N)"
+            read -r answer
+            if [ "$answer" = "y" ]; then
+                cp "$file_local" "$file_to_save"
+                echo "[✨] Copied $file_local to $file_to_save"
+            fi
+        fi
+    else
+        mkdir -p "$(dirname "$file_to_save")"
+        cp "$file_local" "$file_to_save"
+        echo "[✨] Copied $file_local to $file_to_save"
+    fi
+done
