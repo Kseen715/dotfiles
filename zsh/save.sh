@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # Save $HOME/.zshrc to current directory
 # if file exists, ask to overwrite

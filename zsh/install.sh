@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # Install ./.zshrc to $HOME
 # if file exists, ask to overwrite
