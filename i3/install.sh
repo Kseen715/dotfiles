@@ -8,7 +8,6 @@ DIRECTORIES_LOCAL="./.config/i3"
 FILES_TO_INSTALL=""
 FILES_LOCAL=""
 
-
 YES=false
 
 # Parse arguments
