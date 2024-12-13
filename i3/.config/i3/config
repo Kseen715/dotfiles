@@ -63,6 +63,9 @@ bindsym $mod+d exec --no-startup-id dmenu_run
 # .desktop file. It is a wrapper around dmenu, so you need that installed.
 # bindcode $mod+40 exec --no-startup-id i3-dmenu-desktop
 
+# Turn off borders
+default_border pixel
+
 # change focus
 bindsym $mod+j focus left
 bindsym $mod+k focus down
@@ -171,6 +174,17 @@ mode "resize" {
 
 bindsym $mod+r mode "resize"
 
+# Color shemes for windows 
+set $text	#ffffff
+set $bgcolor	#363636
+set $in-bgcolor #202020
+set $u-bgcolor	#330000
+set $indicator	#a8a3c1
+set $in-text	#969696
+set $focused-ws	#181818
+# set $focused-ws	#523d64
+set $bar-color	#523d64
+
 # Start i3bar to display a workspace bar (plus the system information i3status
 # finds out, if available)
 bar {
@@ -197,24 +211,16 @@ bar {
 bindsym $mod+x exec /home/$USER/.config/scripts/lock
 
 # Transperency with picom compositor
-exec_always picom -f 
-
-# Color shemes for windows 
-set $bgcolor	#36363699
-set $in-bgcolor #2020204D
-set $text	#ffffff
-set $u-bgcolor	#330000
-set $indicator	#a8a3c1
-set $in-text	#969696
-set $focused-ws	#181818
-# set $focused-ws	#523d6480
-set $bar-color	#523d640D
+# exec_always picom -f
 
 #			border		background	text		indicator (a line which shows where the next window will be placed)	
 client.focused		$bgcolor	$bgcolor	$text		$indicator
-client.unfocused	$in-bgcolor	$in-bgcolor	$in-text	$in-bgcolor
-client.focused_inactive	$in-bgcolor	$in-bgcolor	$in-text	$in-bgcolor
-client.urgent		$u-bgcolor	$u-bgcolor	$text		$u-bgcolor
+client.unfocused		$bgcolor	$bgcolor	$text		$indicator
+client.focused_inactive		$bgcolor	$bgcolor	$text		$indicator
+client.urgent		$bgcolor	$bgcolor	$text		$indicator
+# client.unfocused	$in-bgcolor	$in-bgcolor	$in-text	$in-bgcolor
+# client.focused_inactive	$in-bgcolor	$in-bgcolor	$in-text	$in-bgcolor
+# client.urgent		$u-bgcolor	$u-bgcolor	$text		$u-bgcolor
 
 # Key bindings for Media control keys
 bindsym XF86AudioPlay exec playerctl play
@@ -224,7 +230,7 @@ bindsym XF86AudioPrev exec playerctl previous
 
 # default gaps
 gaps inner 15
-gaps outer 5
+gaps outer 15
 
 # gaps
 set $mode_gaps Gaps: (o)uter, (i)nner, (h)orizontal, (v)ertical, (t)op, (r)ight, (b)ottom, (l)eft
