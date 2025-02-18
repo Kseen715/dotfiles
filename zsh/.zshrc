@@ -4,6 +4,8 @@
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
+export EDITOR=micro
+
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
@@ -110,6 +112,16 @@ alias cdla='f() { cd $1 && ls -alh};f'
 alias stfu='f() { nohup $@ &};f'
 alias s='f() { sudo $@};f'
 
-
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
+
 eval "$(starship init zsh)"
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	yazi "$@" --cwd-file="$tmp"
+	if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+		builtin cd -- "$cwd"
+	fi
+	rm -f -- "$tmp"
+}
