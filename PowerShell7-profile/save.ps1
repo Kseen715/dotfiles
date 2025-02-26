@@ -34,7 +34,7 @@ if ($DIRS_TO_SAVE.Count -gt 0 -and $DIRS_LOCAL.Count -eq $DIRS_TO_SAVE.Count) {
                 Copy-Item -Path "$dir_to_save\*" -Destination $dir_local -Recurse -Force
                 Write-Host "[✨] Saved $dir_to_save to $dir_local"
             } else {
-                Write-Host "[❓] Local directory $dir_local exists. Overwrite? (y/N)"
+                Write-Host "[❓] Local directory $dir_local exists. Overwrite? (y/N) " -NoNewline
                 $answer = Read-Host
                 if ($answer -eq "y") {
                     Copy-Item -Path "$dir_to_save\*" -Destination $dir_local -Recurse -Force
@@ -67,7 +67,7 @@ if ($FILES_TO_SAVE_ARR.Count -gt 0 -and $FILES_LOCAL_ARR.Count -eq $FILES_TO_SAV
                 Copy-Item -Path $file_to_save -Destination $file_local -Force
                 Write-Host "[✨] Saved $file_to_save to $file_local"
             } else {
-                Write-Host "[❓] Local file $file_local exists. Overwrite? (y/N)"
+                Write-Host "[❓] Local file $file_local exists. Overwrite? (y/N) " -NoNewline
                 $answer = Read-Host
                 if ($answer -eq "y") {
                     Copy-Item -Path $file_to_save -Destination $file_local -Force

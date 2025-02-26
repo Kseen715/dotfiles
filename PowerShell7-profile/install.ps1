@@ -34,7 +34,7 @@ if ($DIRS_LOCAL.Count -gt 0 -and $DIRS_TO_INSTALL.Count -eq $DIRS_LOCAL.Count) {
                 Copy-Item -Path "$dir_local\*" -Destination $dir_to_install -Recurse -Force
                 Write-Host "[✨] Installed from $dir_local to $dir_to_install"
             } else {
-                Write-Host "[❓] Destination directory $dir_to_install exists. Overwrite? (y/N)"
+                Write-Host "[❓] Destination directory $dir_to_install exists. Overwrite? (y/N) " -NoNewline
                 $answer = Read-Host
                 if ($answer -eq "y") {
                     Copy-Item -Path "$dir_local\*" -Destination $dir_to_install -Recurse -Force
@@ -67,7 +67,7 @@ if ($FILES_LOCAL_ARR.Count -gt 0 -and $FILES_TO_INSTALL_ARR.Count -eq $FILES_LOC
                 Copy-Item -Path $file_local -Destination $file_to_install -Force
                 Write-Host "[✨] Installed $file_local to $file_to_install"
             } else {
-                Write-Host "[❓] Destination file $file_to_install exists. Overwrite? (y/N)"
+                Write-Host "[❓] Destination file $file_to_install exists. Overwrite? (y/N) " -NoNewline
                 $answer = Read-Host
                 if ($answer -eq "y") {
                     Copy-Item -Path $file_local -Destination $file_to_install -Force
