@@ -4,8 +4,8 @@ param (
 
 $SEP = ","
 
-$DIRECTORIES_TO_SAVE = "$env:USERPROFILE\.oh-my-zsh"
-$DIRECTORIES_LOCAL = ".\.oh-my-zsh"
+$DIRECTORIES_TO_SAVE = ""
+$DIRECTORIES_LOCAL = ""
 
 $FILES_TO_SAVE = "$PROFILE"
 $FILES_LOCAL = "./Microsoft.PowerShell_profile.ps1"
