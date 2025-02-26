@@ -244,4 +244,4 @@ Set-PSReadLineOption -Colors @{ InlinePrediction = “$([char]0x1b)[36;7;238m”
 # }
 
 cls
-fastfetch -c $ffConfigPath
+# fastfetch -c $ffConfigPath
