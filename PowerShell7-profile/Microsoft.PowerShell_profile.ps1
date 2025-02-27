@@ -48,7 +48,7 @@ if ($host.Name -eq 'ConsoleHost') {
     # Set-PoshPrompt -Theme iterm2
 #>
 
-oh-my-posh --init --shell pwsh --config ~\AppData\Local\Programs\oh-my-posh\themes\M365Princess.omp.json | Invoke-Expression
+oh-my-posh --init --shell pwsh --config $env:POSH_THEMES_PATH\M365Princess++.omp.json | Invoke-Expression
 
 
 Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
