@@ -236,7 +236,7 @@
                     "powerline_symbol": "",
                     "foreground": "#100e23",
                     "background": "#549c5f",
-                    "template": "  {{ if .Error }}{{ else }}{{ if .Venv }}{{ .Venv }}{{ end }}{{ .Full }} {{ end }}"
+                    "template": "  {{ if .Error }}{{ else }}{{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }} {{ end }}"
                 },
                 {
                     "type": "r",
