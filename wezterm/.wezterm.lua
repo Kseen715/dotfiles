@@ -314,8 +314,8 @@ config.color_scheme = "Apple System Colors"
 config.colors = {
 	background = "#000000",
 	cursor_border = "#555555",
-	-- cursor_fg = "#281733",
-	cursor_bg = "#ffffff",
+	cursor_fg = "None",
+	cursor_bg = "#777777",
 	-- selection_fg = '#281733',
 
 	tab_bar = {
