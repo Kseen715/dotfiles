@@ -243,5 +243,9 @@ Set-PSReadLineOption -Colors @{ InlinePrediction = “$([char]0x1b)[36;7;238m”
 #   Import-Module "$ChocolateyProfile"
 # }
 
+if (Test-Path($env:ChocolateyInstall\helpers\chocolateyProfile.psm1)) {
+    Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+}
+
 cls
 # fastfetch -c $ffConfigPath
