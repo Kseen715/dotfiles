@@ -1,9 +1,46 @@
 #!/bin/bash
 
-# Gather modules
-sudo apt update \
-&& sudo apt install curl zsh \
-&& sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+# Detect package manager and install required packages
+install_packages() {
+    echo "Installing required packages..."
+    local PKGS="curl zsh"
+    local PKGS_GENTOO="net-misc/curl app-shells/zsh"
+
+    if command -v apt &> /dev/null; then
+        # Debian/Ubuntu
+        sudo apt update && sudo apt install -y $PKGS
+    elif command -v dnf &> /dev/null; then
+        # Fedora/RHEL
+        sudo dnf install -y $PKGS
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL/Fedora legacy
+        sudo yum install -y $PKGS
+    elif command -v pacman &> /dev/null; then
+        # Arch Linux
+        sudo pacman -Sy --noconfirm $PKGS
+    elif command -v zypper &> /dev/null; then
+        # openSUSE
+        sudo zypper install -y $PKGS
+    elif command -v brew &> /dev/null; then
+        # macOS (Homebrew)
+        brew install $PKGS
+    elif command -v apk &> /dev/null; then
+        # Alpine Linux
+        sudo apk add $PKGS
+    elif command -v port &> /dev/null; then
+        # macOS (MacPorts)
+        sudo port install $PKGS
+    elif command -v emerge &> /dev/null; then
+        # Gentoo
+        sudo emerge --ask $PKGS_GENTOO
+    else
+        echo "Unsupported package manager. Please install $PKGS manually."
+        exit 1
+    fi
+}
+
+# Get the install script for Oh My Zsh and run it
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
 # Check if cargo is available
 if ! command -v cargo &> /dev/null
