@@ -33,6 +33,9 @@ install_packages() {
     elif command -v emerge &> /dev/null; then
         # Gentoo
         sudo emerge --ask $PKGS_GENTOO
+    elif command -v xbps-install &> /dev/null; then
+        # Void Linux
+        sudo xbps-install -y $PKGS
     else
         echo "Unsupported package manager. Please install $PKGS manually."
         exit 1
