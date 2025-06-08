@@ -63,4 +63,4 @@ cargo install starship --locked
 
 # Update configs
 ./install.sh -y \
-&& chsh -s $(which zsh)
+&& sudo chsh -s $(which zsh)
