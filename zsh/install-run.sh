@@ -61,10 +61,6 @@ fi
 # Install starship and run install script
 cargo install starship --locked
 
-if ! echo "$PATH" | grep -q "$HOME/.cargo/bin"; then
-  export PATH="$HOME/.cargo/bin:$PATH"
-fi
-
 # Update configs
 ./install.sh -y \
 && chsh -s $(which zsh)
