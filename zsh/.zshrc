@@ -117,7 +117,10 @@ alias s='f() { sudo $@};f'
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
 
 eval "$(starship init zsh)"
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+if command -v brew &>/dev/null; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
 
 function y() {
 	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
