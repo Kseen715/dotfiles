@@ -63,7 +63,6 @@ cargo install starship --locked
 
 if ! echo "$PATH" | grep -q "$HOME/.cargo/bin"; then
   export PATH="$HOME/.cargo/bin:$PATH"
-  source ~/.zshrc
 fi
 
 # Update configs
