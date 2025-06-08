@@ -4,6 +4,8 @@
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
+export PATH="$HOME/.cargo/bin:$PATH"
+
 export EDITOR=micro
 
 # Set name of the theme to load --- if set to "random", it will
