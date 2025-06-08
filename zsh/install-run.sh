@@ -42,6 +42,8 @@ install_packages() {
     fi
 }
 
+install_packages()
+
 # Get the install script for Oh My Zsh and run it
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
 
