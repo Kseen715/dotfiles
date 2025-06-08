@@ -21,7 +21,7 @@ config.cursor_blink_rate = 500
 config.term = "xterm-256color" -- Set the terminal type
 config.prefer_egl = true -- Use universal rendering backend
 local windows_pwsh_path = { "C:/Program Files/PowerShell/7/pwsh.exe", "-nologo" }
-local linux_shell_path = { "$SHELL" }
+local linux_shell_path = { wezterm.getenv("SHELL") }
 config.scrollback_lines = 10000
 config.check_for_updates = false
 
