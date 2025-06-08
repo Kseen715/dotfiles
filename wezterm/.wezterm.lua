@@ -22,7 +22,7 @@ config.term = "xterm-256color" -- Set the terminal type
 config.prefer_egl = true -- Use universal rendering backend
 local windows_pwsh_path = { "C:/Program Files/PowerShell/7/pwsh.exe", "-nologo" }
 local shell = wezterm.getenv("SHELL")
-local linux_shell_path = { shell }
+local linux_shell_path = { shell, "--login" }
 config.scrollback_lines = 10000
 config.check_for_updates = false
 
