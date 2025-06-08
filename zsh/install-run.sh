@@ -17,7 +17,7 @@ install_packages() {
         sudo yum install -y $PKGS
     elif command -v pacman &> /dev/null; then
         # Arch Linux
-        sudo pacman -Sy --noconfirm $PKGS
+        sudo pacman -S --noconfirm $PKGS
     elif command -v zypper &> /dev/null; then
         # openSUSE
         sudo zypper install -y $PKGS
