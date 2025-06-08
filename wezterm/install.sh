@@ -2,8 +2,8 @@
 
 SEP=','
 
-DIRECTORIES_TO_INSTALL="$HOME/.config/i3"
-DIRECTORIES_LOCAL="./.config/i3"
+DIRECTORIES_TO_INSTALL=""
+DIRECTORIES_LOCAL=""
 
 FILES_TO_INSTALL="~/.wezterm.lua"
 FILES_LOCAL="./.wezterm.lua"
