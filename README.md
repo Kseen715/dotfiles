@@ -9,7 +9,7 @@
 | <kbd>Super + D</kbd> | Open application launcher |
 | <kbd>Super + Q</kbd> | Kill focused application |
 | <kbd>Super + Shift + S</kbd> | Take screenshot of area (requires Hyprshot) |
-| <kbd>Super + Shift + Space</kbd> | Toggle focused window to be floating or tiled |
+| <kbd>Super + Alt + Space</kbd> | Toggle focused window to be floating or tiled |
 | <kbd>Super + F</kbd> | Toggle focused window to full-screen view |
 | <kbd>Super + 1-0</kbd> | Switch to workspace 1-10 |
 | <kbd>Super + Shift + 1-0</kbd> | Move focused window to workspace 1-10 |
