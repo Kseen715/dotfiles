@@ -104,9 +104,6 @@ trace chmod +x ./install.sh
 trace ./install.sh -y
 trace cd $SCRIPT_DIR
 
-echo "Installing micro..."
-trace sudo pacman -S --needed --noconfirm micro
-
 echo "Installing zsh, dependencies and dotfiles..."
 trace cd $DOTFILES_KSEEN715_REPO/zsh
 trace chmod +x ./install-run.sh

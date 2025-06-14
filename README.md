@@ -1,5 +1,7 @@
 # ARCH
 
+[Glyphs](https://nerdfonts.ytyng.com/)
+
 ## Keybinds
 
 | Keybind | Action |
