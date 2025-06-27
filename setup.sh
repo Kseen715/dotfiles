@@ -139,7 +139,6 @@ trace mkdir -p /etc/sddm.conf.d
 trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/
 echo "Activating sddm..."
 trace systemctl enable sddm.service --force 
-trace systemctl start sddm.service
 
 echo "Installing hyprpaper..."
 trace pacman -S --needed --noconfirm hyprpaper
