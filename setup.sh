@@ -137,15 +137,6 @@ trace mkdir -p ~/.config/waybar
 trace cp config/waybar/config.jsonc ~/.config/waybar/
 trace cp config/waybar/style.css ~/.config/waybar/
 
-echo "Installing wezterm..."
-trace sudo pacman -S --needed --noconfirm wezterm
-echo "Installing dotfiles for wezterm..."
-trace cd $DOTFILES_KSEEN715_REPO/wezterm
-trace sudo pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd noto-fonts-emoji
-trace chmod +x ./install.sh
-trace ./install.sh -y
-trace cd $SCRIPT_DIR
-
 echo "Installing zsh, dependencies and dotfiles..."
 trace cd $DOTFILES_KSEEN715_REPO/zsh
 trace chmod +x ./install-run.sh
@@ -159,10 +150,21 @@ trace mkdir -p ~/.config/wofi
 trace cp config/wofi/config ~/.config/wofi/
 trace cp config/wofi/style.css ~/.config/wofi/
 
-echo "Installing foot..."
-trace sudo pacman -S --needed --noconfirm foot
-echo "Installing foot dotfiles..."
-trace mkdir -p ~/.config/foot
-trace cp config/foot/foot.ini ~/.config/foot/
+echo "Installing wezterm..."
+trace sudo pacman -S --needed --noconfirm wezterm
+echo "Installing dotfiles for wezterm..."
+trace cd $DOTFILES_KSEEN715_REPO/wezterm
+trace sudo pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd noto-fonts-emoji
+trace chmod +x ./install.sh
+trace ./install.sh -y
+trace cd $SCRIPT_DIR
+
+if [ "$VIRT" = "vmware" ]; then
+    echo "Installing foot..."
+    trace sudo pacman -S --needed --noconfirm foot
+    echo "Installing foot dotfiles..."
+    trace mkdir -p ~/.config/foot
+    trace cp config/foot/foot.ini ~/.config/foot/
+fi
 
 success "Setup completed successfully!"
