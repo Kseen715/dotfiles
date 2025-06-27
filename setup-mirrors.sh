@@ -42,12 +42,24 @@ trace() {
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
-# ==============================================================================
-
 echo "Checking if root..."
 if [[ $EUID -ne 0 ]]; then
-    error "This script must be run as root. Use 'su' to switch to root user"
+    if ! command -v sudo &>/dev/null; then
+        error "This script must be run as root. Use 'su' to switch to root user or install sudo"
+    else
+        warning "Running with sudo..."
+        # use absolute path to the script to avoid issues with relative paths
+        if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
+            error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
+        fi
+        # Re-executes the script with sudo
+        trace chmod +x "$SCRIPT_DIR/$(basename "$0")"
+        exec sudo "$SCRIPT_DIR/$(basename "$0")" "$@"
+        exit 0
+    fi
 fi
+
+# ==============================================================================
 
 echo "Backuping current mirrorlist..."
 if [[ -f /etc/pacman.d/mirrorlist ]]; then
@@ -62,4 +74,4 @@ else
 fi
 
 echo "Ranking mirrors..."
-trace -n 6 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
+trace rankmirrors -n 10 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
