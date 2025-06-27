@@ -136,7 +136,7 @@ echo "Installing sddm..."
 trace pacman -S --needed --noconfirm sddm
 echo "Installing sddm dotfiles..."
 trace mkdir -p /etc/sddm.conf.d
-trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/
+trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/sddm.conf
 echo "Activating sddm..."
 trace systemctl enable sddm.service --force 
 
