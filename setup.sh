@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
 
+# Signal handler for Ctrl+C
+cleanup() {
+    echo ""
+    error "Script interrupted by user (Ctrl+C). Exiting..."
+}
+
+# Trap SIGINT (Ctrl+C) and call cleanup function
+trap cleanup SIGINT SIGTERM SIGQUIT
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -74,10 +83,20 @@ DOTFILES_KSEEN715_REPO="$TMP_FOLDER/dotfiles_Kseen715"
 trace rm -rf $DOTFILES_KSEEN715_REPO
 trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
 
-echo "Installing gdm..."
-trace sudo pacman -S --needed --noconfirm gdm
-echo "Enabling gdm service..."
-trace sudo systemctl enable gdm.service --now
+echo "Installing sddm..."
+trace sudo pacman -S --needed --noconfirm sddm
+echo "Creating sddm configuration directory..."
+trace sudo mkdir -p /etc/sddm.conf.d
+echo "Creating sddm configuration file..." 
+trace sudo tee /etc/sddm.conf.d/00-sddm.conf > /dev/null <<EOF
+[Desktop Entry] 
+Name=Hyprland
+Comment=An intelligent dynamic tiling Wayland compositor 
+Exec=Hyprland
+Type=Application
+EOF
+echo "Enabling sddm service..."
+trace sudo systemctl enable sddm --now
 
 echo "Installing wayland..."
 trace sudo pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
