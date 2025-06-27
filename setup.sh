@@ -53,6 +53,7 @@ if [[ $EUID -ne 0 ]]; then
             error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
         fi
         # Re-executes the script with sudo
+        chmod +x "$SCRIPT_DIR/$(basename "$0")"
         exec sudo "$SCRIPT_DIR/$(basename "$0")" "$@"
         exit 0
     fi
