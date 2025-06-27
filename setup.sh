@@ -65,10 +65,19 @@ if [ -z "$AUR_HELPER" ]; then
 fi
 echo "Using $AUR_HELPER as the AUR helper"
 
+# Install minimal text editors 
+echo "Installing minimal text editors..."
+trace sudo pacman -S --needed --noconfirm nano vim
+
 echo "Downloading dotfiles from Kseen715..."
 DOTFILES_KSEEN715_REPO="$TMP_FOLDER/dotfiles_Kseen715"
 trace rm -rf $DOTFILES_KSEEN715_REPO
 trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
+
+echo "Installing gdm..."
+trace sudo pacman -S --needed --noconfirm gdm
+echo "Enabling gdm service..."
+trace sudo systemctl enable gdm.service --now
 
 echo "Installing wayland..."
 trace sudo pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
