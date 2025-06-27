@@ -61,6 +61,9 @@ fi
 
 # ==============================================================================
 
+echo "Installing required packages..."
+trace pacman -Sy --needed pacman-contrib curl --noconfirm
+
 echo "Backuping current mirrorlist..."
 if [[ -f /etc/pacman.d/mirrorlist ]]; then
     trace cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
@@ -72,9 +75,6 @@ else
     curl -o /etc/pacman.d/mirrorlist https://archlinux.org/mirrorlist/all/
     error "Edit the mirrorlist at /etc/pacman.d/mirrorlist to choose your preferred mirrors."
 fi
-
-echo "Installing required packages..."
-trace pacman -Sy --needed pacman-contrib curl --noconfirm
 
 echo "Ranking mirrors..."
 trace rankmirrors -n 10 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
