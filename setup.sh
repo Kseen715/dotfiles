@@ -70,9 +70,24 @@ fi
 if [ -z "$AUR_HELPER" ]; then
     warning "No AUR helper found. Installing PARU as the default AUR helper"
     # Run setup-paru.sh script to install paru
-    trace bash "$SCRIPT_DIR/setup-paru.sh"
+    trace bash "$SCRIPT_DIR/build-paru.sh"
 fi
 echo "Using $AUR_HELPER as the AUR helper"
+
+VIRT=""
+# Detect virtualizations (VMware, VirtualBox, QEMU, etc.)
+if command -v lscpu &>/dev/null; then
+    if lscpu | grep -q "VMware"; then
+        echo "VMware detected"
+        VIRT="vmware"
+    elif lscpu | grep -q "VirtualBox"; then
+        echo "VirtualBox detected"
+        VIRT="virtualbox"
+    elif lscpu | grep -q "QEMU"; then
+        echo "QEMU detected"
+        VIRT="qemu"
+    fi
+fi
 
 # Install minimal text editors 
 echo "Installing minimal text editors..."
@@ -83,29 +98,28 @@ DOTFILES_KSEEN715_REPO="$TMP_FOLDER/dotfiles_Kseen715"
 trace rm -rf $DOTFILES_KSEEN715_REPO
 trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
 
-echo "Installing sddm..."
-trace sudo pacman -S --needed --noconfirm sddm
-echo "Creating sddm configuration directory..."
-trace sudo mkdir -p /etc/sddm.conf.d
-echo "Creating sddm configuration file..." 
-trace sudo tee /etc/sddm.conf.d/00-sddm.conf > /dev/null <<EOF
-[Desktop Entry] 
-Name=Hyprland
-Comment=An intelligent dynamic tiling Wayland compositor 
-Exec=Hyprland
-Type=Application
-EOF
-echo "Enabling sddm service..."
-trace sudo systemctl enable sddm --now
-
 echo "Installing wayland..."
 trace sudo pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
+echo "Installing wayland dotfiles..."
+trace mkdir -p /usr/share/wayland-sessions
+trace cp config/wayland/hyprland.desktop /usr/share/wayland-sessions
+if [ "$VIRT" = "vmware" ]; then
+    echo "Detected VMware, installing VMware specific dotfiles..."
+    trace cp config/wayland/hyprland-vmware.desktop /usr/share/wayland-sessions
+    trace cp config/wayland/start-hyprland-vmware.sh /usr/share/wayland-sessions
+fi
 
 echo "Installing hyprland..."
 trace sudo pacman -S --needed --noconfirm hyprland hyprshot
 echo "Installing hyprland dotfiles..."
 trace mkdir -p ~/.config/hypr
 trace cp config/hypr/hyprland.conf ~/.config/hypr/
+
+echo "Installing sddm..."
+trace sudo pacman -S --needed --noconfirm sddm
+echo "Installing sddm dotfiles..."
+trace sudo mkdir -p /etc/sddm.conf.d
+trace sudo cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/
 
 echo "Installing hyprpaper..."
 trace sudo pacman -S --needed --noconfirm hyprpaper
