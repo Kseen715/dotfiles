@@ -73,5 +73,8 @@ else
     error "Edit the mirrorlist at /etc/pacman.d/mirrorlist to choose your preferred mirrors."
 fi
 
+echo "Installing required packages..."
+trace pacman -S --needed pacman-contrib curl --noconfirm
+
 echo "Ranking mirrors..."
 trace rankmirrors -n 10 /etc/pacman.d/mirrorlist.backup > /etc/pacman.d/mirrorlist
