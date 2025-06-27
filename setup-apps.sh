@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
 
+# Signal handler for Ctrl+C
+cleanup() {
+    echo ""
+    error "Script interrupted by user (Ctrl+C). Exiting..."
+}
+
+# Trap SIGINT (Ctrl+C) and call cleanup function
+trap cleanup SIGINT SIGTERM SIGQUIT
+
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
