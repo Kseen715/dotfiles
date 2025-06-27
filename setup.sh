@@ -48,7 +48,12 @@ if [[ $EUID -ne 0 ]]; then
         error "This script must be run as root. Use 'su' to switch to root user or install sudo"
     else
         warning "Running with sudo..."
-        exec sudo "$0" "$@"
+        # use absolute path to the script to avoid issues with relative paths
+        if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
+            error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
+        fi
+        # Re-executes the script with sudo
+        exec sudo "$SCRIPT_DIR/$(basename "$0")" "$@"
         exit 0
     fi
 fi
