@@ -17,7 +17,7 @@ install_packages() {
         sudo yum install -y $PKGS
     elif command -v pacman &> /dev/null; then
         # Arch Linux
-        sudo pacman -Sy --noconfirm $PKGS
+        sudo pacman -S --needed --noconfirm $PKGS
     elif command -v zypper &> /dev/null; then
         # openSUSE
         sudo zypper install -y $PKGS
@@ -42,6 +42,8 @@ install_packages() {
     fi
 }
 
+install_packages
+
 # Get the install script for Oh My Zsh and run it
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --skip-chsh
 
@@ -58,6 +60,9 @@ fi
 
 # Install starship and run install script
 cargo install starship --locked
+
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 
 # Update configs
 ./install.sh -y \
