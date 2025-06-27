@@ -42,6 +42,17 @@ trace() {
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
+echo "Checking if root..."
+if [[ $EUID -ne 0 ]]; then
+    if ! command -v sudo &>/dev/null; then
+        error "This script must be run as root. Use 'su' to switch to root user or install sudo"
+    else
+        warning "Running with sudo..."
+        exec sudo "$0" "$@"
+        exit 0
+    fi
+fi
+
 # ==============================================================================
 
 TMP_FOLDER="/tmp/setup"
@@ -49,12 +60,12 @@ trace mkdir -p $TMP_FOLDER
 
 # Update sources
 echo "Updating package sources..."
-trace sudo pacman -Sy --noconfirm 
+trace pacman -Sy --noconfirm 
 
 # Ensure git is installed
 if ! command -v git &>/dev/null; then
     echo "Git not found. Installing git..."
-    trace sudo pacman -S --needed --noconfirm git
+    trace pacman -S --needed --noconfirm git
 fi
 
 # Check if yay and/or paru is installed and chose one as preferred AUR helper.
@@ -91,7 +102,7 @@ fi
 
 # Install minimal text editors 
 echo "Installing minimal text editors..."
-trace sudo pacman -S --needed --noconfirm nano vim
+trace pacman -S --needed --noconfirm nano vim
 
 echo "Downloading dotfiles from Kseen715..."
 DOTFILES_KSEEN715_REPO="$TMP_FOLDER/dotfiles_Kseen715"
@@ -99,7 +110,7 @@ trace rm -rf $DOTFILES_KSEEN715_REPO
 trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
 
 echo "Installing wayland..."
-trace sudo pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
+trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
 echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
 trace cp config/wayland/hyprland.desktop /usr/share/wayland-sessions
@@ -110,28 +121,28 @@ if [ "$VIRT" = "vmware" ]; then
 fi
 
 echo "Installing hyprland..."
-trace sudo pacman -S --needed --noconfirm hyprland hyprshot
+trace pacman -S --needed --noconfirm hyprland hyprshot
 echo "Installing hyprland dotfiles..."
 trace mkdir -p ~/.config/hypr
 trace cp config/hypr/hyprland.conf ~/.config/hypr/
 
 echo "Installing sddm..."
-trace sudo pacman -S --needed --noconfirm sddm
+trace pacman -S --needed --noconfirm sddm
 echo "Installing sddm dotfiles..."
-trace sudo mkdir -p /etc/sddm.conf.d
-trace sudo cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/
+trace mkdir -p /etc/sddm.conf.d
+trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/
 
 echo "Installing hyprpaper..."
-trace sudo pacman -S --needed --noconfirm hyprpaper
+trace pacman -S --needed --noconfirm hyprpaper
 echo "Installing hyprpaper dotfiles..."
 trace mkdir -p ~/.config/hypr
 trace cp config/hypr/hyprpaper.conf ~/.config/hypr/
 
 echo "Installing hyprpicker..."
-trace sudo pacman -S --needed --noconfirm hyprpicker
+trace pacman -S --needed --noconfirm hyprpicker
 
 echo "Installing waybar..."
-trace sudo pacman -S --needed --noconfirm waybar gsimplecal
+trace pacman -S --needed --noconfirm waybar gsimplecal
 trace echo "Installing waybar dotfiles..."
 trace mkdir -p ~/.config/waybar
 trace cp config/waybar/config.jsonc ~/.config/waybar/
@@ -144,24 +155,24 @@ trace ./install-run.sh -y
 trace cd $SCRIPT_DIR
 
 echo "Installing wofi..."
-trace sudo pacman -S --needed --noconfirm wofi
+trace pacman -S --needed --noconfirm wofi
 echo "Installing wofi dotfiles..."
 trace mkdir -p ~/.config/wofi
 trace cp config/wofi/config ~/.config/wofi/
 trace cp config/wofi/style.css ~/.config/wofi/
 
 echo "Installing wezterm..."
-trace sudo pacman -S --needed --noconfirm wezterm
+trace pacman -S --needed --noconfirm wezterm
 echo "Installing dotfiles for wezterm..."
 trace cd $DOTFILES_KSEEN715_REPO/wezterm
-trace sudo pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd noto-fonts-emoji
+trace pacman -S --needed --noconfirm ttf-jetbrains-mono-nerd noto-fonts-emoji
 trace chmod +x ./install.sh
 trace ./install.sh -y
 trace cd $SCRIPT_DIR
 
 if [ "$VIRT" = "vmware" ]; then
     echo "Installing foot..."
-    trace sudo pacman -S --needed --noconfirm foot
+    trace pacman -S --needed --noconfirm foot
     echo "Installing foot dotfiles..."
     trace mkdir -p ~/.config/foot
     trace cp config/foot/foot.ini ~/.config/foot/
