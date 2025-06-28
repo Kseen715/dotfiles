@@ -127,6 +127,70 @@ DOTFILES_KSEEN715_REPO="$TMP_FOLDER/dotfiles_Kseen715"
 trace rm -rf $DOTFILES_KSEEN715_REPO
 trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
 
+echo "Installing video drivers..."
+# Install video drivers based on virtualization type and hardware if not virtualized
+if [ "$VIRT" = "vmware" ]; then
+    echo "Detected VMware, installing VMware specific GPU drivers..."
+    trace pacman -S --needed --noconfirm open-vm-tools mesa
+    sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware
+    echo "Activating VMware tools..."
+    trace systemctl enable vmtoolsd.service --force
+    trace systemctl enable vmware-vmblock-fuse.service --force
+fi
+
+GPU_VENDOR=""
+# Detect GPU vendor, including virtualized environments
+if command -v lspci &>/dev/null; then
+    GPU_VENDOR=$(lspci | grep -E "VGA|3D" | awk -F: '{print $3}' | awk '{print $1}')
+    if [[ "$GPU_VENDOR" == "NVIDIA" ]]; then
+        echo "NVIDIA GPU detected"
+    elif [[ "$GPU_VENDOR" == "AMD" ]]; then
+        echo "AMD GPU detected"
+    elif [[ "$GPU_VENDOR" == "Intel" ]]; then
+        echo "Intel GPU detected"
+    elif [[ "$GPU_VENDOR" == "VMware" ]]; then
+        echo "VMware GPU detected"
+    elif [[ "$GPU_VENDOR" == "VirtualBox" ]]; then
+        echo "VirtualBox GPU detected"
+    elif [[ -z "$GPU_VENDOR" ]]; then
+        echo "No GPU detected, assuming virtualized environment with no dedicated GPU"
+    else
+        warning "Unknown GPU vendor: $GPU_VENDOR"
+    fi
+else
+    warning "lspci command not found, unable to detect GPU vendor"
+fi
+
+# add multilib repository to pacman.conf if not already present (can be commented out, if so - add it anyway)
+if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
+    echo "Adding multilib repository to /etc/pacman.conf"
+    trace sudo tee -a /etc/pacman.conf <<EOF
+
+[multilib]
+Include = /etc/pacman.d/mirrorlist
+EOF
+else
+    echo "Multilib repository already exists in /etc/pacman.conf"
+fi
+
+echo "Installing GPU drivers..."
+if [ "$GPU_VENDOR" == "NVIDIA" ]; then
+    echo "NVIDIA GPU detected"
+    trace sudo pacman -S --needed --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings
+fi
+if [ "$GPU_VENDOR" == "AMD" ]; then
+    echo "AMD GPU detected"
+    trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
+fi
+if [ "$GPU_VENDOR" == "Intel" ]; then
+    echo "Intel GPU detected"
+    trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel
+fi
+if [ "$GPU_VENDOR" == "VMware" ]; then
+    echo "VMware GPU detected"
+    trace sudo pacman -S --needed --noconfirm open-vm-tools mesa lib32-vulkan-virtio
+fi
+
 echo "Installing wayland..."
 trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd uwsm
 echo "Installing wayland dotfiles..."
@@ -142,14 +206,8 @@ echo "Installing hyprland dotfiles..."
 trace mkdir -p /home/$DELEVATED_USER/.config
 trace mkdir -p /home/$DELEVATED_USER/.config/hypr
 trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
-
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 if [ "$VIRT" = "vmware" ]; then
-    echo "Detected VMware, installing VMware specific dotfiles and dependencies..."
-    trace pacman -S --needed --noconfirm open-vm-tools
-    echo "Activating VMware tools..."
-    trace systemctl enable vmtoolsd.service --force
-    trace systemctl enable vmware-vmblock-fuse.service --force
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
     trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
     trace chmod +x /usr/share/wayland-sessions/start-hyprland-vmware.sh
@@ -158,7 +216,7 @@ if [ "$VIRT" = "vmware" ]; then
 fi
 
 echo "Installing sddm..."
-trace pacman -S --needed --noconfirm sddm
+trace pacman -S --needed --noconfirm sddm qt6-5compat qt6-declarative qt6-svg
 echo "Installing sddm dotfiles..."
 trace mkdir -p /etc/sddm.conf.d
 trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/sddm.conf
@@ -210,5 +268,20 @@ if [ "$VIRT" = "vmware" ]; then
     trace mkdir -p /home/$DELEVATED_USER/.config/foot
     trace cp config/foot/foot.ini /home/$DELEVATED_USER/.config/foot/
 fi
+
+# cliphist
+#  qt5ct
+#   qt6ct
+#   qt6-svg
+#   wl-clipboard
+#   wlogout
+#   xdg-user-dirs
+#   xdg-utils 
+# blue=(
+#   bluez
+#   bluez-utils
+#   blueman
+# )
+
 
 success "Setup completed successfully!"
