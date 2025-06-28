@@ -1,5 +1,22 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ==============================================================================
+
+# Grab --delevated <username> argument if provided
+if [[ "$1" == "--delevated" && -n "$2" ]]; then
+    DELEVATED_USER="$2"
+    shift 2 # Remove the first two arguments
+else
+    DELEVATED_USER=""
+fi
+
+# Signal handler for Ctrl+C
+cleanup() {
+    echo ""
+    error "Script interrupted by user (Ctrl+C). Exiting..."
+}
+
+# Trap SIGINT (Ctrl+C) and call cleanup function
+trap cleanup SIGINT SIGTERM SIGQUIT
 
 # Color codes
 RED='\033[0;31m'
@@ -33,6 +50,26 @@ trace() {
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
+echo "Checking if root..."
+if [[ $EUID -ne 0 ]]; then
+    # If not root, save username and re-execute with sudo
+    USERNAME=$(whoami)
+    echo "Current user: $USERNAME"
+    if ! command -v sudo &>/dev/null; then
+        error "This script must be run as root. Use 'su' to switch to root user or install sudo"
+    else
+        warning "Running with sudo..."
+        # use absolute path to the script to avoid issues with relative paths
+        if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
+            error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
+        fi
+        # Re-executes the script with sudo
+        trace chmod +x "$SCRIPT_DIR/$(basename "$0")"
+        exec sudo "$SCRIPT_DIR/$(basename "$0")" --delevated "$USERNAME" "$@"
+        exit 0
+    fi
+fi
+
 # ==============================================================================
 
 # Folder for temp repos
@@ -41,7 +78,7 @@ trace mkdir -p $TMP_FOLDER
 
 # Deps for stuff
 echo "Installing dependencies for setup..."
-trace sudo pacman -S --needed --noconfirm base-devel git
+trace pacman -S --needed --noconfirm base-devel git
 
 # PARU
 echo "Installing PARU..."
@@ -63,7 +100,7 @@ if command -v paru &>/dev/null; then
         warning "Updating PARU from version $CURRENT_VERSION to $LATEST_VERSION..."
     fi
 fi
-trace makepkg -si --needed --noconfirm -D $PARU_REPO
+trace sudo -u "$DELEVATED_USER" makepkg -si --needed --noconfirm -D $PARU_REPO
 
 # test if paru is installed
 if ! command -v paru &>/dev/null; then
