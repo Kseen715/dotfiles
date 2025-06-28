@@ -171,7 +171,7 @@ trace cp config/waybar/style.css ~/.config/waybar/
 echo "Installing zsh, dependencies and dotfiles..."
 trace cd $DOTFILES_KSEEN715_REPO/zsh
 trace chmod +x ./install-run.sh
-trace ./install-run.sh -y
+sudo -u "$DELEVATED_USER" ./install-run.sh -y
 trace cd $SCRIPT_DIR
 
 echo "Installing wofi..."
