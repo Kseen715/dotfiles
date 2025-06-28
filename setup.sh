@@ -223,7 +223,7 @@ trace mkdir -p /etc/sddm.conf.d
 trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/sddm.conf
 echo "Installing sddm theme..." # config/sddm/jakoolit-theme
 trace mkdir -p /usr/share/sddm/themes/jakoolit-theme
-trace cp -r config/sddm/jakoolit-theme /usr/share/sddm/themes/jakoolit-theme
+trace cp -r config/sddm/jakoolit-theme /usr/share/sddm/themes
 trace mkdir -p /etc/sddm.conf.d
 trace cp config/sddm/theme.conf.user /etc/sddm.conf.d/theme.conf.user
 echo "Activating sddm..."
