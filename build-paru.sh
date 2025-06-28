@@ -100,6 +100,10 @@ if command -v paru &>/dev/null; then
         warning "Updating PARU from version $CURRENT_VERSION to $LATEST_VERSION..."
     fi
 fi
+
+if [ -n "$DELEVATED_USER" ]; then
+    trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" $PARU_REPO
+fi
 trace sudo -u "$DELEVATED_USER" makepkg -si --needed --noconfirm -D $PARU_REPO
 
 # test if paru is installed
