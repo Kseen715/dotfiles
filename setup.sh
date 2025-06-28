@@ -1,6 +1,14 @@
 #!/bin/bash
 # ==============================================================================
 
+# Grab --delevated <username> argument if provided
+if [[ "$1" == "--delevated" && -n "$2" ]]; then
+    DELEVATED_USER="$2"
+    shift 2 # Remove the first two arguments
+else
+    DELEVATED_USER=""
+fi
+
 # Signal handler for Ctrl+C
 cleanup() {
     echo ""
@@ -44,6 +52,9 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 echo "Checking if root..."
 if [[ $EUID -ne 0 ]]; then
+    # If not root, save username and re-execute with sudo
+    USERNAME=$(whoami)
+    echo "Current user: $USERNAME"
     if ! command -v sudo &>/dev/null; then
         error "This script must be run as root. Use 'su' to switch to root user or install sudo"
     else
@@ -54,7 +65,7 @@ if [[ $EUID -ne 0 ]]; then
         fi
         # Re-executes the script with sudo
         trace chmod +x "$SCRIPT_DIR/$(basename "$0")"
-        exec sudo "$SCRIPT_DIR/$(basename "$0")" "$@"
+        exec sudo "$SCRIPT_DIR/$(basename "$0")" --delevated "$USERNAME" "$@"
         exit 0
     fi
 fi
@@ -87,7 +98,8 @@ fi
 if [ -z "$AUR_HELPER" ]; then
     warning "No AUR helper found. Installing PARU as the default AUR helper"
     # Run setup-paru.sh script to install paru
-    trace bash "$SCRIPT_DIR/build-paru.sh"
+    # run as non-root user to avoid permission issues
+    trace sudo -u "$DELEVATED_USER" bash "$SCRIPT_DIR/setup-paru.sh"
 fi
 echo "Using $AUR_HELPER as the AUR helper"
 
