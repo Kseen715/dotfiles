@@ -99,7 +99,7 @@ if [ -z "$AUR_HELPER" ]; then
     warning "No AUR helper found. Installing PARU as the default AUR helper"
     # Run setup-paru.sh script to install paru
     # run as non-root user to avoid permission issues
-    trace sudo -u "$DELEVATED_USER" bash "$SCRIPT_DIR/setup-paru.sh"
+    trace sudo -u "$DELEVATED_USER" bash "$SCRIPT_DIR/build-paru.sh"
 fi
 echo "Using $AUR_HELPER as the AUR helper"
 
