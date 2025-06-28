@@ -133,7 +133,11 @@ echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
 
 echo "Installing hyprland..."
-trace rm /usr/share/wayland-sessions/hyprland.desktop
+# check if hyprland is not already installed
+if command -v hyprctl &>/dev/null; then
+else
+    trace rm /usr/share/wayland-sessions/hyprland.desktop
+fi
 trace pacman -S --needed --noconfirm hyprland hyprshot
 echo "Installing hyprland dotfiles..."
 trace mkdir -p ~/.config/hypr
