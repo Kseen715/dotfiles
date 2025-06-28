@@ -27,3 +27,4 @@
 - `~/.local/share/sddm/wayland-session.log` - SDDM log file (Wayland)
 - `~/.local/share/sddm/xorg-session.log` - SDDM log file (Xorg)
 - `~/.config/hypr/hypr.log` - Hyprland log file
+- `~/.cache/hyprland/hyprlandCrashReportXXX.log` - Hyprland crash report

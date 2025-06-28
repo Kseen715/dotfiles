@@ -147,6 +147,9 @@ trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hy
 if [ "$VIRT" = "vmware" ]; then
     echo "Detected VMware, installing VMware specific dotfiles and dependencies..."
     trace pacman -S --needed --noconfirm open-vm-tools
+    echo "Activating VMware tools..."
+    trace systemctl enable vmtoolsd.service --force
+    trace systemctl enable vmware-vmblock-fuse.service --force
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
     trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
     trace chmod +x /usr/share/wayland-sessions/start-hyprland-vmware.sh
