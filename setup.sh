@@ -132,7 +132,7 @@ echo "Installing video drivers..."
 if [ "$VIRT" = "vmware" ]; then
     echo "Detected VMware, installing VMware specific GPU drivers..."
     trace pacman -S --needed --noconfirm open-vm-tools mesa
-    sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware
+    # sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware
     echo "Activating VMware tools..."
     trace systemctl enable vmtoolsd.service --force
     trace systemctl enable vmware-vmblock-fuse.service --force
@@ -221,6 +221,11 @@ trace pacman -S --needed --noconfirm sddm qt6-5compat qt6-declarative qt6-svg
 echo "Installing sddm dotfiles..."
 trace mkdir -p /etc/sddm.conf.d
 trace cp config/sddm/hyprland.main.conf /etc/sddm.conf.d/sddm.conf
+echo "Installing sddm theme..." # config/sddm/jakoolit-theme
+trace mkdir -p /usr/share/sddm/themes/jakoolit-theme
+trace cp -r config/sddm/jakoolit-theme /usr/share/sddm/themes/jakoolit-theme
+trace mkdir -p /etc/sddm.conf.d
+trace cp config/sddm/theme.conf.user /etc/sddm.conf.d/theme.conf.user
 echo "Activating sddm..."
 trace systemctl enable sddm.service --force 
 
