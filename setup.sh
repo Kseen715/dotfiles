@@ -134,8 +134,7 @@ trace mkdir -p /usr/share/wayland-sessions
 
 echo "Installing hyprland..."
 # check if hyprland is not already installed
-if command -v hyprctl &>/dev/null; then
-else
+if ! command -v hyprctl &>/dev/null; then
     trace rm /usr/share/wayland-sessions/hyprland.desktop
 fi
 trace pacman -S --needed --noconfirm hyprland hyprshot
