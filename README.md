@@ -21,3 +21,9 @@
 | <kbd>Super + Shift + Left/Right/Up/Down</kbd> | Swap focused window with window in that direction |
 | <kbd>Super + Alt + Left/Right/Up/Down</kbd> | Resize focused window in that direction |
 | <kbd>Alt + Tab</kbd> | Cycle windows / if floating bring to top |
+
+## Log files
+
+- `~/.local/share/sddm/wayland-session.log` - SDDM log file (Wayland)
+- `~/.local/share/sddm/xorg-session.log` - SDDM log file (Xorg)
+- `~/.config/hypr/hypr.log` - Hyprland log file

@@ -139,8 +139,9 @@ if ! command -v hyprctl &>/dev/null; then
 fi
 trace pacman -S --needed --noconfirm hyprland hyprshot
 echo "Installing hyprland dotfiles..."
-trace mkdir -p ~/.config/hypr
-trace cp config/hypr/hyprland.conf ~/.config/hypr/
+trace mkdir -p /home/$DELEVATED_USER/.config
+trace mkdir -p /home/$DELEVATED_USER/.config/hypr
+trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
 
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 if [ "$VIRT" = "vmware" ]; then
@@ -164,8 +165,8 @@ trace systemctl enable sddm.service --force
 echo "Installing hyprpaper..."
 trace pacman -S --needed --noconfirm hyprpaper
 echo "Installing hyprpaper dotfiles..."
-trace mkdir -p ~/.config/hypr
-trace cp config/hypr/hyprpaper.conf ~/.config/hypr/
+trace mkdir -p /home/$DELEVATED_USER/.config/hypr
+trace cp config/hypr/hyprpaper.conf /home/$DELEVATED_USER/.config/hypr/
 
 echo "Installing hyprpicker..."
 trace pacman -S --needed --noconfirm hyprpicker
@@ -173,9 +174,9 @@ trace pacman -S --needed --noconfirm hyprpicker
 echo "Installing waybar..."
 trace pacman -S --needed --noconfirm waybar gsimplecal
 trace echo "Installing waybar dotfiles..."
-trace mkdir -p ~/.config/waybar
-trace cp config/waybar/config.jsonc ~/.config/waybar/
-trace cp config/waybar/style.css ~/.config/waybar/
+trace mkdir -p /home/$DELEVATED_USER/.config/waybar
+trace cp config/waybar/config.jsonc /home/$DELEVATED_USER/.config/waybar/
+trace cp config/waybar/style.css /home/$DELEVATED_USER/.config/waybar/
 
 echo "Installing zsh, dependencies and dotfiles..."
 trace cd $DOTFILES_KSEEN715_REPO/zsh
@@ -186,9 +187,9 @@ trace cd $SCRIPT_DIR
 echo "Installing wofi..."
 trace pacman -S --needed --noconfirm wofi
 echo "Installing wofi dotfiles..."
-trace mkdir -p ~/.config/wofi
-trace cp config/wofi/config ~/.config/wofi/
-trace cp config/wofi/style.css ~/.config/wofi/
+trace mkdir -p /home/$DELEVATED_USER/.config/wofi
+trace cp config/wofi/config /home/$DELEVATED_USER/.config/wofi/
+trace cp config/wofi/style.css /home/$DELEVATED_USER/.config/wofi/
 
 echo "Installing wezterm..."
 trace pacman -S --needed --noconfirm wezterm
@@ -203,8 +204,8 @@ if [ "$VIRT" = "vmware" ]; then
     echo "Installing foot..."
     trace pacman -S --needed --noconfirm foot
     echo "Installing foot dotfiles..."
-    trace mkdir -p ~/.config/foot
-    trace cp config/foot/foot.ini ~/.config/foot/
+    trace mkdir -p /home/$DELEVATED_USER/.config/foot
+    trace cp config/foot/foot.ini /home/$DELEVATED_USER/.config/foot/
 fi
 
 success "Setup completed successfully!"
