@@ -172,6 +172,7 @@ EOF
 else
     echo "Multilib repository already exists in /etc/pacman.conf"
 fi
+trace pacman -Sy
 
 echo "Installing GPU drivers..."
 if [ "$GPU_VENDOR" == "NVIDIA" ]; then
