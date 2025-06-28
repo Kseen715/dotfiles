@@ -131,11 +131,11 @@ echo "Installing wayland..."
 trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd
 echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
-trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions
+trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 if [ "$VIRT" = "vmware" ]; then
     echo "Detected VMware, installing VMware specific dotfiles and dependencies..."
     trace pacman -S --needed --noconfirm open-vm-tools
-    trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions
+    trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
     trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
     trace chmod +x /usr/share/wayland-sessions/start-hyprland-vmware.sh
     # Give execute permissions to the delevated user, so sddm can run it
