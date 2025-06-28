@@ -136,7 +136,10 @@ if [ "$VIRT" = "vmware" ]; then
     echo "Detected VMware, installing VMware specific dotfiles and dependencies..."
     trace pacman -S --needed --noconfirm open-vm-tools
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions
-    trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions
+    trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
+    trace chmod +x /usr/share/wayland-sessions/start-hyprland-vmware.sh
+    # Give execute permissions to the delevated user, so sddm can run it
+    trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/share/wayland-sessions/start-hyprland-vmware.sh
 fi
 
 echo "Installing hyprland..."
