@@ -133,7 +133,8 @@ echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions
 if [ "$VIRT" = "vmware" ]; then
-    echo "Detected VMware, installing VMware specific dotfiles..."
+    echo "Detected VMware, installing VMware specific dotfiles and dependencies..."
+    trace pacman -S --needed --noconfirm open-vm-tools
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions
     trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions
 fi
