@@ -1,5 +1,13 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ==============================================================================
+
+# Grab --delevated <username> argument if provided
+if [[ "$1" == "--delevated" && -n "$2" ]]; then
+    DELEVATED_USER="$2"
+    shift 2 # Remove the first two arguments
+else
+    DELEVATED_USER=""
+fi
 
 # Signal handler for Ctrl+C
 cleanup() {
@@ -42,6 +50,26 @@ trace() {
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
+echo "Checking if root..."
+if [[ $EUID -ne 0 ]]; then
+    # If not root, save username and re-execute with sudo
+    USERNAME=$(whoami)
+    echo "Current user: $USERNAME"
+    if ! command -v sudo &>/dev/null; then
+        error "This script must be run as root. Use 'su' to switch to root user or install sudo"
+    else
+        warning "Running with sudo..."
+        # use absolute path to the script to avoid issues with relative paths
+        if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
+            error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
+        fi
+        # Re-executes the script with sudo
+        trace chmod +x "$SCRIPT_DIR/$(basename "$0")"
+        exec sudo "$SCRIPT_DIR/$(basename "$0")" --delevated "$USERNAME" "$@"
+        exit 0
+    fi
+fi
+
 # ==============================================================================
 
 TMP_FOLDER="/tmp/setup"
@@ -49,12 +77,12 @@ trace mkdir -p $TMP_FOLDER
 
 # Update sources
 echo "Updating package sources..."
-trace sudo pacman -Sy --noconfirm 
+trace pacman -Sy --noconfirm 
 
 # Ensure git is installed
 if ! command -v git &>/dev/null; then
     echo "Git not found. Installing git..."
-    trace sudo pacman -S --needed --noconfirm git
+    trace pacman -S --needed --noconfirm git
 fi
 
 # Check if yay and/or paru is installed and chose one as preferred AUR helper.
@@ -80,33 +108,33 @@ echo "Using $AUR_HELPER as the AUR helper"
 # trace git clone https://github.com/Kseen715/dotfiles $DOTFILES_KSEEN715_REPO --depth 1
 
 echo "Installing micro..."
-trace sudo pacman -S --needed --noconfirm micro
+trace pacman -S --needed --noconfirm micro
 
 echo "Installing Zen Browser..."
-trace sudo $AUR_HELPER -S --needed --noconfirm zen-browser-bin
+trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm zen-browser-bin
 
 echo "Installing Firefox..."
-trace sudo pacman -S --needed --noconfirm firefox
+trace pacman -S --needed --noconfirm firefox
 
 echo "Installing VSCode Insiders..."
-trace sudo $AUR_HELPER -S --needed --noconfirm visual-studio-code-insiders-bin
+trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm visual-studio-code-insiders-bin
 
 echo "Installing Discord..."
-trace sudo pacman -S --needed --noconfirm discord
+trace pacman -S --needed --noconfirm discord
 
 echo "Installing Telegram..."
-trace sudo pacman -S --needed --noconfirm telegram-desktop
+trace pacman -S --needed --noconfirm telegram-desktop
 
 echo "Installing OBS Studio..."
-trace sudo pacman -S --needed --noconfirm obs-studio
+trace pacman -S --needed --noconfirm obs-studio
 trace mkdir -p ~/.config/obs-studio
 trace chown $USER:$USER ~/.config/obs-studio
 
 echo "Installing qbittorrent..."
-trace sudo pacman -S --needed --noconfirm qbittorrent
+trace pacman -S --needed --noconfirm qbittorrent
 
 # echo "Installing Flatpak..."
-# trace sudo pacman -S --needed --noconfirm flatpak
+# trace pacman -S --needed --noconfirm flatpak
 # trace flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
 
@@ -115,22 +143,23 @@ echo "Installing Steam..."
 if lspci | grep -i "vga" | grep -i "nvidia" &>/dev/null; then
     IS_NVIDIA_GPU=true
     echo "NVIDIA GPU detected"
-    trace sudo pacman -S --needed --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings
+    trace pacman -S --needed --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings
 fi
 if lspci | grep -i "vga" | grep -i "amd" &>/dev/null; then
     IS_AMD_GPU=true
     echo "AMD GPU detected"
-    trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
+    trace pacman -S --needed --noconfirm mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
 fi
 if lspci | grep -i "vga" | grep -i "intel" &>/dev/null; then
     IS_INTEL_GPU=true
     echo "Intel GPU detected"
-    trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel
+    trace pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel
 fi
 if lspci | grep -i "vga" | grep -i "vmware" &>/dev/null; then
     IS_VMWARE_GPU=true
     echo "VMware GPU detected"
-    trace sudo pacman -S --needed --noconfirm open-vm-tools lib32-vulkan-virtio
+    trace pacman -S --needed --noconfirm open-vm-tools
+    sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware-git
 fi
 if [ -z "$IS_NVIDIA_GPU" ] && [ -z "$IS_AMD_GPU" ] && [ -z "$IS_INTEL_GPU" ] && [ -z "$IS_VMWARE_GPU" ]; then
     warning "No supported GPU detected"
@@ -145,7 +174,7 @@ fi
 # add multilib repository to pacman.conf if not already present (can be commented out, if so - add it anyway)
 if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
     echo "Adding multilib repository to /etc/pacman.conf"
-    trace sudo tee -a /etc/pacman.conf <<EOF
+    trace tee -a /etc/pacman.conf <<EOF
 
 [multilib]
 Include = /etc/pacman.d/mirrorlist
@@ -153,12 +182,12 @@ EOF
 else
     echo "Multilib repository already exists in /etc/pacman.conf"
 fi
-trace sudo pacman -S --needed --noconfirm ttf-liberation vulkan-tools lib32-systemd
-trace sudo paru -S --needed --noconfirm steam
+trace pacman -S --needed --noconfirm ttf-liberation vulkan-tools lib32-systemd
+trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm steam
 # if using systemd-resolved, create a symlink for resolv.conf
 if [ -d /run/systemd/resolve ]; then
     echo "Systemd-resolved detected, creating symlink for resolv.conf"
-    trace sudo ln -sf ../run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf
+    trace ln -sf ../run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf
 else
     echo "Systemd-resolved not detected, skipping resolv.conf symlink creation"
 fi

@@ -132,7 +132,7 @@ echo "Installing video drivers..."
 if [ "$VIRT" = "vmware" ]; then
     echo "Detected VMware, installing VMware specific GPU drivers..."
     trace pacman -S --needed --noconfirm open-vm-tools mesa
-    # sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware
+    sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm xf86-video-vmware-git
     echo "Activating VMware tools..."
     trace systemctl enable vmtoolsd.service --force
     trace systemctl enable vmware-vmblock-fuse.service --force
@@ -193,7 +193,7 @@ if [ "$GPU_VENDOR" == "VMware" ]; then
 fi
 
 echo "Installing wayland..."
-trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd uwsm  wayland-protocols wayland-utils wl-clipboard xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr xdg-utils wayland-protocols wayland-utils
+trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd uwsm  wayland-protocols wayland-utils wl-clipboard xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr xdg-utils wayland-protocols wayland-utils wlr-protocols
 echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
 
