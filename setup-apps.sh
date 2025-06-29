@@ -177,8 +177,8 @@ if ! trace grep -q "STEAM_FORCE_DESKTOPUI_SCALING" /home/$DELEVATED_USER/.bashrc
 else
     warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in /home/$DELEVATED_USER/.bashrc"
 fi
-# add multilib repository to pacman.conf if not already present (can be commented out, if so - add it anyway)
-if ! trace grep -q "^[[:space:]]*\[multilib\]" /etc/pacman.conf; then
+# add multilib repository to pacman.conf if not already present
+if trace grep -q "^[[:space:]]*\[multilib\]" /etc/pacman.conf; then
     echo "Adding multilib repository to /etc/pacman.conf"
     trace tee -a /etc/pacman.conf <<EOF
 
