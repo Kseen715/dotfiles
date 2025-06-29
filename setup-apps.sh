@@ -187,7 +187,7 @@ trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm steam
 # if using systemd-resolved, create a symlink for resolv.conf
 if [ -d /run/systemd/resolve ]; then
     echo "Systemd-resolved detected, creating symlink for resolv.conf"
-    trace ln -sf ../run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf
+    trace ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 else
     echo "Systemd-resolved not detected, skipping resolv.conf symlink creation"
 fi
