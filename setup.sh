@@ -251,6 +251,16 @@ trace chmod +x ./install-run.sh
 sudo -u "$DELEVATED_USER" ./install-run.sh -y
 trace cd $SCRIPT_DIR
 
+echo "Installing helvum, easyeffects..."
+trace pacman -S --needed --noconfirm helvum easyeffects
+trace mkdir -p /home/$DELEVATED_USER/.config/dconf
+trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/dconf
+trace mkdir -p /home/$DELEVATED_USER/.config/easyeffects/
+trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/easyeffects/
+echo "Installing easyeffects plugins..."
+trace pacman -S --needed --noconfirm lsp-plugins lsp-plugins-ladspa calf libebur128 zam-plugins zita-convolver speex soundtouch rnnoise
+sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filter_ladspa-bin
+
 echo "Installing wofi..."
 trace pacman -S --needed --noconfirm wofi
 echo "Installing wofi dotfiles..."
@@ -289,5 +299,7 @@ fi
 #   blueman
 # )
 
+# from gnome ???
+# xdg-user-dirs-gtk
 
 success "Setup completed successfully!"

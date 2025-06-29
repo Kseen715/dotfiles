@@ -22,6 +22,9 @@
 | <kbd>Super + Alt + Left/Right/Up/Down</kbd> | Resize focused window in that direction |
 | <kbd>Alt + Tab</kbd> | Cycle windows / if floating bring to top |
 
+<!-- next workspace (ctrl+super+right) -->
+<!--  -->
+
 ## Log files
 
 - `~/.local/share/sddm/wayland-session.log` - SDDM log file (Wayland)
