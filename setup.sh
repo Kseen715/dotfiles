@@ -193,7 +193,7 @@ if [ "$GPU_VENDOR" == "VMware" ]; then
 fi
 
 echo "Installing wayland..."
-trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd uwsm
+trace pacman -S --needed --noconfirm xorg-xwayland xorg-xlsclients qt5-wayland qt6-wayland glfw-wayland gtk3 gtk4 meson wayland libxcb xcb-util-wm xcb-util-keysyms pango cairo libinput libglvnd uwsm  wayland-protocols wayland-utils wl-clipboard xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr xdg-utils wayland-protocols wayland-utils
 echo "Installing wayland dotfiles..."
 trace mkdir -p /usr/share/wayland-sessions
 
@@ -202,7 +202,7 @@ echo "Installing hyprland..."
 if ! command -v hyprctl &>/dev/null; then
     trace rm /usr/share/wayland-sessions/hyprland.desktop
 fi
-trace pacman -S --needed --noconfirm hyprland hyprshot
+trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland
 echo "Installing hyprland dotfiles..."
 trace mkdir -p /home/$DELEVATED_USER/.config
 trace mkdir -p /home/$DELEVATED_USER/.config/hypr
@@ -258,7 +258,7 @@ trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config
 trace mkdir -p /home/$DELEVATED_USER/.config/easyeffects/
 trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/easyeffects/
 echo "Installing easyeffects plugins..."
-trace pacman -S --needed --noconfirm lsp-plugins lsp-plugins-ladspa calf libebur128 zam-plugins zita-convolver speex soundtouch rnnoise
+trace pacman -S --needed --noconfirm lsp-plugins lsp-plugins-ladspa calf libebur128 zam-plugins zita-convolver speex soundtouch rnnoise libsamplerate libsndfile libbs2b fftw speexdsp nlohmann-json onetbb
 sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filter_ladspa-bin calf-ladspa
 
 echo "Installing wofi..."
@@ -277,13 +277,11 @@ trace chmod +x ./install.sh
 trace ./install.sh -y
 trace cd $SCRIPT_DIR
 
-if [ "$VIRT" = "vmware" ]; then
-    echo "Installing foot..."
-    trace pacman -S --needed --noconfirm foot
-    echo "Installing foot dotfiles..."
-    trace mkdir -p /home/$DELEVATED_USER/.config/foot
-    trace cp config/foot/foot.ini /home/$DELEVATED_USER/.config/foot/
-fi
+echo "Installing foot..."
+trace pacman -S --needed --noconfirm foot
+echo "Installing foot dotfiles..."
+trace mkdir -p /home/$DELEVATED_USER/.config/foot
+trace cp config/foot/foot.ini /home/$DELEVATED_USER/.config/foot/
 
 # cliphist
 #  qt5ct

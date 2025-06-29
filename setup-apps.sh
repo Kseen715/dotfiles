@@ -99,6 +99,8 @@ trace sudo pacman -S --needed --noconfirm telegram-desktop
 
 echo "Installing OBS Studio..."
 trace sudo pacman -S --needed --noconfirm obs-studio
+trace mkdir -p ~/.config/obs-studio
+trace chown $USER:$USER ~/.config/obs-studio
 
 echo "Installing qbittorrent..."
 trace sudo pacman -S --needed --noconfirm qbittorrent

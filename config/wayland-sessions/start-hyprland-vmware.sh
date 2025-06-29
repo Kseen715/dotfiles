@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+export XDG_SESSION_TYPE=wayland
+export XDG_SESSION_DESKTOP=Hyprland
+export XDG_CURRENT_DESKTOP=Hyprland
+export GDK_BACKEND=wayland,x11
+export GSK_RENDERER=cairo
 export WLR_NO_HARDWARE_CURSORS=1
 export WLR_RENDERER_ALLOW_SOFTWARE=1
 exec Hyprland
