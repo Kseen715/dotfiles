@@ -173,7 +173,7 @@ fi
 # we need to add STEAM_FORCE_DESKTOPUI_SCALING=1 steam to the environment variables somewhere for wayland support
 if ! trace grep -q "STEAM_FORCE_DESKTOPUI_SCALING" /home/$DELEVATED_USER/.bashrc; then
     echo "Adding STEAM_FORCE_DESKTOPUI_SCALING=1 to /home/$DELEVATED_USER/.bashrc"
-    echo "export STEAM_FORCE_DESKTOPUI_SCALING=1" >> /home/$DELEVATED_USER/.bashrc
+    trace sed -i '$a export STEAM_FORCE_DESKTOPUI_SCALING=1' /home/$DELEVATED_USER/.bashrc
 else
     warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in /home/$DELEVATED_USER/.bashrc"
 fi
