@@ -204,8 +204,8 @@ if ! command -v hyprctl &>/dev/null; then
 fi
 trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland
 echo "Installing hyprland dotfiles..."
-trace mkdir -p /home/$DELEVATED_USER/.config
-trace mkdir -p /home/$DELEVATED_USER/.config/hypr
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
 trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 if [ "$VIRT" = "vmware" ]; then
@@ -232,7 +232,7 @@ trace systemctl enable sddm.service --force
 echo "Installing hyprpaper..."
 trace pacman -S --needed --noconfirm hyprpaper
 echo "Installing hyprpaper dotfiles..."
-trace mkdir -p /home/$DELEVATED_USER/.config/hypr
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
 trace cp config/hypr/hyprpaper.conf /home/$DELEVATED_USER/.config/hypr/
 
 echo "Installing hyprpicker..."
@@ -241,7 +241,7 @@ trace pacman -S --needed --noconfirm hyprpicker
 echo "Installing waybar..."
 trace pacman -S --needed --noconfirm waybar gsimplecal
 trace echo "Installing waybar dotfiles..."
-trace mkdir -p /home/$DELEVATED_USER/.config/waybar
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/waybar
 trace cp config/waybar/config.jsonc /home/$DELEVATED_USER/.config/waybar/
 trace cp config/waybar/style.css /home/$DELEVATED_USER/.config/waybar/
 
@@ -253,10 +253,8 @@ trace cd $SCRIPT_DIR
 
 echo "Installing helvum, easyeffects..."
 trace pacman -S --needed --noconfirm helvum easyeffects
-trace mkdir -p /home/$DELEVATED_USER/.config/dconf
-trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/dconf
-trace mkdir -p /home/$DELEVATED_USER/.config/easyeffects/
-trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/easyeffects/
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/dconf
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/easyeffects/
 echo "Installing easyeffects plugins..."
 trace pacman -S --needed --noconfirm lsp-plugins lsp-plugins-ladspa calf libebur128 zam-plugins zita-convolver speex soundtouch rnnoise libsamplerate libsndfile libbs2b fftw speexdsp nlohmann-json onetbb
 sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filter_ladspa-bin calf-ladspa
@@ -264,7 +262,7 @@ sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filte
 echo "Installing wofi..."
 trace pacman -S --needed --noconfirm wofi
 echo "Installing wofi dotfiles..."
-trace mkdir -p /home/$DELEVATED_USER/.config/wofi
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/wofi
 trace cp config/wofi/config /home/$DELEVATED_USER/.config/wofi/
 trace cp config/wofi/style.css /home/$DELEVATED_USER/.config/wofi/
 
@@ -280,7 +278,7 @@ trace cd $SCRIPT_DIR
 echo "Installing foot..."
 trace pacman -S --needed --noconfirm foot
 echo "Installing foot dotfiles..."
-trace mkdir -p /home/$DELEVATED_USER/.config/foot
+sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/foot
 trace cp config/foot/foot.ini /home/$DELEVATED_USER/.config/foot/
 
 # cliphist
