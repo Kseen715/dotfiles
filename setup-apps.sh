@@ -127,8 +127,8 @@ trace pacman -S --needed --noconfirm telegram-desktop
 
 echo "Installing OBS Studio..."
 trace pacman -S --needed --noconfirm obs-studio
-trace mkdir -p ~/.config/obs-studio
-trace chown $USER:$USER ~/.config/obs-studio
+trace mkdir -p /home/$DELEVATED_USER/.config/obs-studio
+trace chown -R $DELEVATED_USER:$DELEVATED_USER /home/$DELEVATED_USER/.config/obs-studio
 
 echo "Installing qbittorrent..."
 trace pacman -S --needed --noconfirm qbittorrent
@@ -165,11 +165,11 @@ if [ -z "$IS_NVIDIA_GPU" ] && [ -z "$IS_AMD_GPU" ] && [ -z "$IS_INTEL_GPU" ] && 
     warning "No supported GPU detected"
 fi
 # we need to add STEAM_FORCE_DESKTOPUI_SCALING=1 steam to the environment variables somewhere for wayland support
-if ! grep -q "STEAM_FORCE_DESKTOPUI_SCALING" ~/.bashrc; then
-    echo "Adding STEAM_FORCE_DESKTOPUI_SCALING=1 to ~/.bashrc"
-    echo "export STEAM_FORCE_DESKTOPUI_SCALING=1" >> ~/.bashrc
+if ! grep -q "STEAM_FORCE_DESKTOPUI_SCALING" /home/$DELEVATED_USER/.bashrc; then
+    echo "Adding STEAM_FORCE_DESKTOPUI_SCALING=1 to /home/$DELEVATED_USER/.bashrc"
+    echo "export STEAM_FORCE_DESKTOPUI_SCALING=1" >> /home/$DELEVATED_USER/.bashrc
 else
-    warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in ~/.bashrc"
+    warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in /home/$DELEVATED_USER/.bashrc"
 fi
 # add multilib repository to pacman.conf if not already present (can be commented out, if so - add it anyway)
 if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
@@ -193,3 +193,4 @@ else
 fi
 # trace flatpak install flathub com.valvesoftware.Steam --assumeyes
 
+success "Apps installed successfully"
