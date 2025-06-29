@@ -259,7 +259,7 @@ trace mkdir -p /home/$DELEVATED_USER/.config/easyeffects/
 trace chown -R "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/easyeffects/
 echo "Installing easyeffects plugins..."
 trace pacman -S --needed --noconfirm lsp-plugins lsp-plugins-ladspa calf libebur128 zam-plugins zita-convolver speex soundtouch rnnoise
-sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filter_ladspa-bin
+sudo -u "$DELEVATED_USER" paru -S --needed --noconfirm mda-lv2-git libdeep_filter_ladspa-bin calf-ladspa
 
 echo "Installing wofi..."
 trace pacman -S --needed --noconfirm wofi
