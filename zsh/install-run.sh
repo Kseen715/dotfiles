@@ -45,7 +45,7 @@ install_packages() {
 install_packages
 
 # Get the install script for Oh My Zsh and run it
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --skip-chsh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed 's:env zsh -l::g' | sed 's:chsh -s .*$::g')"
 
 # Check if cargo is available
 if ! command -v cargo &> /dev/null
