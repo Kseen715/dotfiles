@@ -56,7 +56,7 @@ if [[ $EUID -ne 0 ]]; then
     # If not root, save username and re-execute with sudo
     USERNAME=$(whoami)
     echo "Current user: $USERNAME"
-    if ! trace command -v sudo &>/dev/null; then
+    if ! trace "command -v sudo &>/dev/null"; then
         error "This script must be run as root. Use 'su' to switch to root user or install sudo"
     else
         warning "Running with sudo..."
@@ -81,18 +81,18 @@ echo "Updating package sources..."
 trace pacman -Sy --noconfirm 
 
 # Ensure git is installed
-if ! trace command -v git &>/dev/null; then
+if ! trace "command -v git &>/dev/null"; then
     echo "Git not found. Installing git..."
     trace pacman -S --needed --noconfirm git
 fi
 
 # Check if yay and/or paru is installed and chose one as preferred AUR helper.
 # (paru is preferred if both are installed)
-if trace command -v yay &>/dev/null; then
+if trace "command -v yay &>/dev/null"; then
     echo "YAY detected"
     AUR_HELPER="yay"
 fi
-if trace command -v paru &>/dev/null; then
+if trace "command -v paru &>/dev/null"; then
     echo "PARU detected"
     AUR_HELPER="paru"
 fi
@@ -146,22 +146,22 @@ trace chown -R $DELEVATED_USER:$DELEVATED_USER /home/$DELEVATED_USER/.config/qBi
 
 echo "Installing Steam..."
 # Detect AMD/NVIDIA/Intel GPU and install appropriate drivers
-if trace lspci | grep -i "vga" | grep -i "nvidia" &>/dev/null; then
+if trace "lspci | grep -i "vga" | grep -i "nvidia" &>/dev/null"; then
     IS_NVIDIA_GPU=true
     echo "NVIDIA GPU detected"
     trace pacman -S --needed --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings
 fi
-if trace lspci | grep -i "vga" | grep -i "amd" &>/dev/null; then
+if trace "lspci | grep -i "vga" | grep -i "amd" &>/dev/null"; then
     IS_AMD_GPU=true
     echo "AMD GPU detected"
     trace pacman -S --needed --noconfirm mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon
 fi
-if trace lspci | grep -i "vga" | grep -i "intel" &>/dev/null; then
+if trace "lspci | grep -i "vga" | grep -i "intel" &>/dev/null"; then
     IS_INTEL_GPU=true
     echo "Intel GPU detected"
     trace pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel
 fi
-if trace lspci | grep -i "vga" | grep -i "vmware" &>/dev/null; then
+if trace "lspci | grep -i "vga" | grep -i "vmware" &>/dev/null"; then
     IS_VMWARE_GPU=true
     echo "VMware GPU detected"
     trace pacman -S --needed --noconfirm open-vm-tools
@@ -173,7 +173,7 @@ fi
 # we need to add STEAM_FORCE_DESKTOPUI_SCALING=1 steam to the environment variables somewhere for wayland support
 if ! trace grep -q "STEAM_FORCE_DESKTOPUI_SCALING" /home/$DELEVATED_USER/.bashrc; then
     echo "Adding STEAM_FORCE_DESKTOPUI_SCALING=1 to /home/$DELEVATED_USER/.bashrc"
-    trace printf "\nexport STEAM_FORCE_DESKTOPUI_SCALING=1\n" | tee -a /home/$DELEVATED_USER/.bashrc > /dev/null
+    trace "printf "\nexport STEAM_FORCE_DESKTOPUI_SCALING=1\n" | tee -a /home/$DELEVATED_USER/.bashrc > /dev/null"
 else
     warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in /home/$DELEVATED_USER/.bashrc"
 fi
