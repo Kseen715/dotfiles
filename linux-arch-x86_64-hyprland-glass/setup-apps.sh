@@ -111,6 +111,9 @@ echo "Using $AUR_HELPER as the AUR helper"
 echo "Installing micro..."
 trace pacman -S --needed --noconfirm micro
 
+echo "Installing htop, btop..."
+trace pacman -S --needed --noconfirm htop btop
+
 echo "Installing fastfetch..."
 trace pacman -S --needed --noconfirm fastfetch
 
