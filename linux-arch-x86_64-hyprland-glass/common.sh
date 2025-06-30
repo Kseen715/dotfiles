@@ -68,6 +68,8 @@ if [[ $EUID -ne 0 ]]; then
         trace exec sudo "$SCRIPT_DIR/$(basename "$0")" --delevated "$USERNAME" "$@"
         exit 0
     fi
+else
+    info "root - OK"
 fi
 
 # ==============================================================================
