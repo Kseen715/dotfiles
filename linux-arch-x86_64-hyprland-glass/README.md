@@ -9,7 +9,7 @@
 
 > [!NOTE]
 > All scripts should be run as user, not as root. They will ask for `sudo` password when needed.
-> 
+>
 > If you run them as root, pass `--delevated <user-name>` to the scripts, where `<user-name>` is the user you want to set up the environment for. They will ask `sudo` password for that user when needed.
 
 1. The installation is based on `minimal` Arch Linux installation. Assuming you have a working Arch Linux installation with network access, you can follow the steps below.
@@ -29,6 +29,12 @@
 
     ```bash
     ./setup.sh
+    ```
+
+1. Install all the apps that I use:
+
+    ```bash
+    ./setup-apps.sh
     ```
 
 ## Keybinds
