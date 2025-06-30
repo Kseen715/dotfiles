@@ -206,9 +206,17 @@ trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprla
 echo "Installing hyprland dotfiles..."
 sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
 sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
+
 trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
+
 trace cp config/hypr/start-easyeffects.sh /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
+
+trace cp config/hypr/start-cliphist-store.sh /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
+trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
+
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 if [ "$VIRT" = "vmware" ]; then
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
