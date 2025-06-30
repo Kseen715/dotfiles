@@ -1,6 +1,34 @@
-# ARCH
+# linux-arch-x86_64-hyprland-glass
+@ 2025.06.30
 
-[Glyphs](https://nerdfonts.ytyng.com/)
+<p align="center">
+  <img src="https://github.com/Kseen715/imgs/blob/main/sakura_kharune.png" title="Logo" alt="Logo" width="150" height="150"/>
+</p>
+
+## Installation
+
+> [!NOTE]
+> All scripts should be run as user, not as root. They will ask for `sudo` password when needed.
+> If you run them as root, pass `--delevated <user-name>` to the scripts, where `<user-name>` is the user you want to set up the environment for. They will ask `sudo` password for that user when needed.
+
+1. The installation is based on `minimal` Arch Linux installation. Assuming you have a working Arch Linux installation with network access, you can follow the steps below.
+1. If you have a `pulseaudio` installed, you can remove it and install `pipewire` instead:
+
+    ```bash
+    ./pulseaudio-to-pipewire.sh
+    ```
+
+1. Rate `pacman` mirrors based on speed and update the mirror list:
+
+    ```bash
+    ./setup-mirrors.sh
+    ```
+
+1. Install the hyprland with all dependencies:
+
+    ```bash
+    ./setup.sh
+    ```
 
 ## Keybinds
 
@@ -25,7 +53,14 @@
 <!-- next workspace (ctrl+super+right) -->
 <!--  -->
 
-## Log files
+## Helpful links
+
+- [Hyprland Wiki](https://wiki.hyprland.org/)
+- [Hyprland GitHub](https://github.com/hyprwm/Hyprland)
+- [Arch Wiki - Hyprland](https://wiki.archlinux.org/title/Hyprland)
+- [Font glyphs for configs](https://nerdfonts.ytyng.com/)
+
+## Log files for debugging
 
 - `~/.local/share/sddm/wayland-session.log` - SDDM log file (Wayland)
 - `~/.local/share/sddm/xorg-session.log` - SDDM log file (Xorg)
