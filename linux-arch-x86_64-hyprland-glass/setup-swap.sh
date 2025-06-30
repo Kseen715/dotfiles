@@ -5,13 +5,12 @@ source "$(dirname "$(realpath "$0")")/common.sh"
 SWAPFILE_SIZE="24G"
 SWAPFILE="/swapfile"
 
-info "Setting up swap file with size $SWAPFILE_SIZE..."
-# unmount any existing swap file
-if mountpoint -q "$SWAPFILE"; then
-    info "Swap file is currently mounted, unmounting..."
+info "Checking if swap file is currently mounted..."
+if trace "swapon --show | grep -q '$SWAPFILE'"; then
+    info "Swap file is currently active, disabling..."
     trace swapoff $SWAPFILE
     if [[ $? -ne 0 ]]; then
-        error "Failed to unmount swap file $SWAPFILE"
+        error "Failed to disable swap file $SWAPFILE"
     fi
 fi
 
@@ -23,6 +22,7 @@ if [[ -f $SWAPFILE ]]; then
     fi
 fi
 
+info "Setting up swap file with size $SWAPFILE_SIZE..."
 trace mkswap -U clear --size $SWAPFILE_SIZE --file $SWAPFILE
 
 if [[ $? -ne 0 ]]; then
