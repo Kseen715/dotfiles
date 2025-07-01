@@ -1,12 +1,12 @@
 show=drun
-term=kitty
+term=foot
 show_all=true
-gtk_dark=false
+gtk_dark=true
 location=center
 insensitive=false
 allow_markup=true
 allow_images=true
-line_wrap=word
-lines=8
-width=30%
+line_wrap=none
+lines=5
+width=50%
 hide_scroll=true
