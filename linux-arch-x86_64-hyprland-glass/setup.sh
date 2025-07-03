@@ -188,7 +188,8 @@ info "Installing hyprpaper dotfiles..."
 sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
 trace cp config/hypr/hyprpaper.conf /home/$DELEVATED_USER/.config/hypr/
 mkdir -p /home/$DELEVATED_USER/Pictures/Wallpapers
-chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures/Wallpapers
+chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures/Wallpapers/
+chmod 755 /home/$DELEVATED_USER/Pictures/Wallpapers/
 trace cp "wallpapers/avogado6 - 2024.06.jpg" /home/$DELEVATED_USER/Pictures/Wallpapers/
 
 info "Installing hyprpicker..."
