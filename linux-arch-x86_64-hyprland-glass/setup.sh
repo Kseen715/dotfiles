@@ -136,8 +136,18 @@ if ! command -v hyprctl &>/dev/null; then
 fi
 trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland
 info "Installing hyprland dotfiles..."
-sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
-sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
+trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
+trace chmod 775 /home/$DELEVATED_USER/.config
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config
+trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
+trace chmod 775 /home/$DELEVATED_USER/.config/hypr
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr
+trace mkdir -p /home/$DELEVATED_USER/Downloads
+trace chmod 775 /home/$DELEVATED_USER/Downloads
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Downloads
+trace mkdir -p /home/$DELEVATED_USER/Pictures
+trace chmod 775 /home/$DELEVATED_USER/Pictures
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures
 
 trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
 
@@ -189,7 +199,7 @@ sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
 trace cp config/hypr/hyprpaper.conf /home/$DELEVATED_USER/.config/hypr/
 mkdir -p /home/$DELEVATED_USER/Pictures/Wallpapers
 chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures/Wallpapers/
-chmod 755 /home/$DELEVATED_USER/Pictures/Wallpapers/
+chmod 775 /home/$DELEVATED_USER/Pictures/Wallpapers/
 trace cp "wallpapers/avogado6 - 2024.06.jpg" /home/$DELEVATED_USER/Pictures/Wallpapers/
 
 info "Installing hyprpicker..."
