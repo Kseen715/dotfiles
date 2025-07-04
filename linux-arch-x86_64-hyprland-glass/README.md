@@ -66,6 +66,7 @@
 - [Hyprland GitHub](https://github.com/hyprwm/Hyprland)
 - [Arch Wiki - Hyprland](https://wiki.archlinux.org/title/Hyprland)
 - [Font glyphs for configs](https://nerdfonts.ytyng.com/)
+- [SDDM QML configs by Keyitdev](https://github.com/Keyitdev/sddm-astronaut-theme)
 
 ## Log files for debugging
 
