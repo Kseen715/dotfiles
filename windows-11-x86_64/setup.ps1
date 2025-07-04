@@ -7,3 +7,6 @@ function InvokeEcho {
 
 # Disable the window shake gesture
 InvokeEcho "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\microscripts\window-shake-gesture-disable.ps1`"' -Verb RunAs -Wait -PassThru | Out-Null"
+
+# Debloat Windows 11
+InvokeEcho "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\microscripts\raphire-win11debloat.ps1`"' -Verb RunAs -Wait -PassThru | Out-Null"
