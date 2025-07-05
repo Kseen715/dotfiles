@@ -1,5 +1,3 @@
-# ==============================================================================
-
 # Grab --delevated <username> argument if provided
 if [[ "$1" == "--delevated" && -n "$2" ]]; then
     DELEVATED_USER="$2"
@@ -48,17 +46,17 @@ trace() {
     return $?
 }
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/.."
 
 info "Checking if root..."
 if [[ $EUID -ne 0 ]]; then
     # If not root, save username and re-execute with sudo
     USERNAME=$(whoami)
     info "Current user: $USERNAME"
-    if ! trace "command -v sudo &>/dev/null"; then
+    if ! command -v sudo &>/dev/null; then
         error "This script must be run as root. Use 'su' to switch to root user or install sudo"
     else
-        warning "Running with sudo..."
+        info "Running with sudo..."
         # use absolute path to the script to avoid issues with relative paths
         if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
             error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
@@ -72,4 +70,5 @@ else
     info "root - OK"
 fi
 
-# ==============================================================================
+TMP_FOLDER="/tmp/setup"
+trace mkdir -p $TMP_FOLDER
