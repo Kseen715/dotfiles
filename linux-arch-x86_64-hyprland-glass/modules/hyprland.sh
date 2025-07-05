@@ -41,6 +41,10 @@ trace chmod +x /usr/local/bin/cliphist-wofi-img
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/local/bin/cliphist-wofi-img
 
 trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
+trace cp config/wayland-sessions/start-hyprland.sh /usr/share/wayland-sessions/start-hyprland.sh
+trace chmod +x /usr/share/wayland-sessions/start-hyprland.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/share/wayland-sessions/start-hyprland.sh
+
 if [ "$VIRT" = "vmware" ]; then
     trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
     trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh

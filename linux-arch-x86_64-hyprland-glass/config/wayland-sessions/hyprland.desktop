@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Hyprland
 Comment=Hyprland
-Exec=Hyprland
+Exec=/usr/share/wayland-sessions/start-hyprland.sh
 Type=Application
 DesktopNames=Hyprland
