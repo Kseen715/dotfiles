@@ -7,7 +7,6 @@
   "margin-top": 8,
   "margin-left": 8,
   "modules-left": [
-    "custom/os_btn",
     "hyprland/workspaces"
   ],
   "modules-center": [],
@@ -15,7 +14,6 @@
     "tray",
     "network",
     "cpu",
-    "custom/ddc_brightness",
     "wireplumber",
     "battery",
     "clock"
@@ -149,22 +147,34 @@
     "tooltip": true
   },
   "custom/ddc_brightness": {
-        // I don't even want to know why this works.
-        // Change it to the following for your custom icons,
-        // current format is a hack for Material Symbols to display normally:
-        "format": "{icon}",
-        // "format": "<span rise='-2pt' size='12pt'>{icon}</span> <span rise='1pt' size='10pt'>{percentage}%</span>",
-        "format-icons": [
-            // Icons from Google Material Symbols.
-            // Put your icons here.
-            "󰃚", "󰃛", "󰃜", "󰃝", "󰃞", "󰃟", "󰃠"
-        ],
-        "exec": "~/.config/waybar/waybar-ddc-module.sh",
-        "return-type": "json",
-        "on-scroll-up": "echo '+' > /tmp/waybar-ddc-module-rx",
-        "on-scroll-down": "echo '-' > /tmp/waybar-ddc-module-rx",
-        "on-click": "echo 'min' > /tmp/waybar-ddc-module-rx",
-        "on-click-right": "echo 'max' > /tmp/waybar-ddc-module-rx",
-        "tooltip": false
+    // I don't even want to know why this works.
+    // Change it to the following for your custom icons,
+    // current format is a hack for Material Symbols to display normally:
+    "format": "{icon}",
+    // "format": "<span rise='-2pt' size='12pt'>{icon}</span> <span rise='1pt' size='10pt'>{percentage}%</span>",
+    "format-icons": [
+      // Icons from Google Material Symbols.
+      // Put your icons here.
+      "󰃚",
+      "󰃛",
+      "󰃜",
+      "󰃝",
+      "󰃞",
+      "󰃟",
+      "󰃠"
+    ],
+    "exec": "~/.config/waybar/waybar-ddc-module.sh",
+    "return-type": "json",
+    "on-scroll-up": "echo '+' > /tmp/waybar-ddc-module-rx",
+    "on-scroll-down": "echo '-' > /tmp/waybar-ddc-module-rx",
+    "on-click": "echo 'min' > /tmp/waybar-ddc-module-rx",
+    "on-click-right": "echo 'max' > /tmp/waybar-ddc-module-rx",
+    "tooltip": false
+  },
+  "custom/gpu-usage": {
+    "exec": "cat /sys/class/hwmon/hwmon2/device/gpu_busy_percent",
+    "format": "GPU: {}%",
+    "return-type": "",
+    "interval": 1
   }
 }

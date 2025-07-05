@@ -60,6 +60,21 @@
 | <kbd>Super + Alt + Left/Right/Up/Down</kbd> | Resize focused window in that direction |
 | <kbd>Alt + Tab</kbd> | Cycle windows / if floating bring to top |
 
+## Parts
+
+- Window manager - [Hyprland](https://github.com/hyprwm/Hyprland)
+- Display manager - [SDDM](https://github.com/sddm/sddm)
+- Compositor - [Hyprland](https://github.com/hyprwm/Hyprland)
+- Status bar - [waybar](https://github.com/Alexays/Waybar)
+- Terminal emulator - [wezterm](https://github.com/wezterm/wezterm)/[foot](https://codeberg.org/dnkl/foot/)
+- File manager - 
+- Audio manager - [pipewire](https://pipewire.org/)/[wireplumber](https://gitlab.freedesktop.org/pipewire/wireplumber/)/[Helvum](https://gitlab.freedesktop.org/pipewire/helvum)/[easyeffects](https://github.com/wwmm/easyeffects)
+- Launcher - [wofi](https://github.com/SimplyCEO/wofi)
+- Notifications - [mako](https://github.com/emersion/mako)
+- Clipboard manager - [cliphist](https://github.com/sentriz/cliphist)
+- Brightness manager - [luminance](https://github.com/sidevesh/Luminance)
+- Display configuration - [nwg-displays](https://github.com/nwg-piotr/nwg-displays)
+
 ## Helpful links
 
 - [Hyprland Wiki](https://wiki.hyprland.org/)
