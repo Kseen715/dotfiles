@@ -40,14 +40,16 @@ trace wget https://raw.githubusercontent.com/sentriz/cliphist/refs/heads/master/
 trace chmod +x /usr/local/bin/cliphist-wofi-img
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/local/bin/cliphist-wofi-img
 
-trace cp config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
-trace cp config/wayland-sessions/start-hyprland.sh /usr/share/wayland-sessions/start-hyprland.sh
+trace mkdir -p /usr/share/wayland-sessions
+trace chmod 775 /usr/share/wayland-sessions
+trace cp $SCRIPT_DIR/config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
+trace cp $SCRIPT_DIR/config/wayland-sessions/start-hyprland.sh /usr/share/wayland-sessions/start-hyprland.sh
 trace chmod +x /usr/share/wayland-sessions/start-hyprland.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/share/wayland-sessions/start-hyprland.sh
 
 if [ "$VIRT" = "vmware" ]; then
-    trace cp config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
-    trace cp config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
+    trace cp $SCRIPT_DIR/config/wayland-sessions/hyprland-vmware.desktop /usr/share/wayland-sessions/hyprland-vmware.desktop
+    trace cp $SCRIPT_DIR/config/wayland-sessions/start-hyprland-vmware.sh /usr/share/wayland-sessions/start-hyprland-vmware.sh
     trace chmod +x /usr/share/wayland-sessions/start-hyprland-vmware.sh
     # Give execute permissions to the delevated user, so sddm can run it
     trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/share/wayland-sessions/start-hyprland-vmware.sh
