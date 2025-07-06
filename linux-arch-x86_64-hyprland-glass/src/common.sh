@@ -73,3 +73,32 @@ fi
 
 TMP_FOLDER="/tmp/setup"
 trace mkdir -p $TMP_FOLDER
+
+# Function to install or update git repository
+install_or_update_git_repo() {
+    local repo_name="$1"
+    local repo_url="$2"
+    local repo_dir="$3"
+    local clone_args="${4:-}"  # Optional additional arguments like --depth 1
+    
+    if [ -d "$repo_dir" ]; then
+        info "$repo_name repository directory exists, checking repository..."
+        local current_remote=$(git -C "$repo_dir" remote get-url origin 2>/dev/null || echo "")
+        info "Current remote for $repo_name: $current_remote"
+        if [ "$current_remote" = "$repo_url" ] || [ "$current_remote" = "$repo_url.git" ] || [ "$current_remote" = "${repo_url%.git}" ]; then
+            info "Updating $repo_name repository..."
+            if ! trace "git -C "$repo_dir" diff --quiet" || ! trace "git -C "$repo_dir" diff --cached --quiet"; then
+                info "Changes detected in repository. Resetting to clean state..."
+                trace git -C "$repo_dir" reset --hard HEAD && trace git -C "$repo_dir" clean -fd
+            fi
+            trace git -C "$repo_dir" pull
+        else
+            info "Different repository found for $repo_name, removing and cloning correct one..."
+            trace rm -rf "$repo_dir"
+            trace git clone $repo_url "$repo_dir" $clone_args
+        fi
+    else
+        info "Installing $repo_name repository..."
+        trace git clone $repo_url "$repo_dir" $clone_args
+    fi
+}
