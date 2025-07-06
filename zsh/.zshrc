@@ -3,9 +3,9 @@
 
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
-
 export PATH="$HOME/.cargo/bin:$PATH"
 
+export STEAM_FORCE_DESKTOPUI_SCALING=1
 export EDITOR=micro
 
 # Set name of the theme to load --- if set to "random", it will
