@@ -46,7 +46,7 @@ trace() {
     return $?
 }
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 info "Checking if root..."
 if [[ $EUID -ne 0 ]]; then
@@ -58,12 +58,12 @@ if [[ $EUID -ne 0 ]]; then
     else
         info "Running with sudo..."
         # use absolute path to the script to avoid issues with relative paths
-        if [[ ! -f "$SCRIPT_DIR/$(basename "$0")" ]]; then
-            error "Script not found at expected location: $SCRIPT_DIR/$(basename "$0")"
+        if [[ ! -f "$SCRIPT_DIR/../$(basename "$0")" ]]; then
+            error "Script not found at expected location: $SCRIPT_DIR/../$(basename "$0")"
         fi
         # Re-executes the script with sudo
-        trace chmod +x "$SCRIPT_DIR/$(basename "$0")"
-        trace exec sudo "$SCRIPT_DIR/$(basename "$0")" --delevated "$USERNAME" "$@"
+        trace chmod +x "$SCRIPT_DIR/../$(basename "$0")"
+        trace exec sudo "$SCRIPT_DIR/../$(basename "$0")" --delevated "$USERNAME" "$@"
         exit 0
     fi
 else
