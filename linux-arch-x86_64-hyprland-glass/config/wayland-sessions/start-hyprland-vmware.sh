@@ -9,6 +9,7 @@ export DISPLAY="wayland-0"
 export QT_QPA_PLATFORM="wayland;xcb"
 export SDL_VIDEODRIVER="wayland"
 export CLUTTER_BACKEND="wayland"
+export STEAM_FORCE_DESKTOPUI_SCALING=1
 
 export GSK_RENDERER=cairo
 export WLR_NO_HARDWARE_CURSORS=1
