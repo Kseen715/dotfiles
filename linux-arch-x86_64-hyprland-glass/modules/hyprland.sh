@@ -17,15 +17,15 @@ trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Downloads
 trace mkdir -p /home/$DELEVATED_USER/Pictures
 trace chmod 775 /home/$DELEVATED_USER/Pictures
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures
-trace cp config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
+trace cp $SCRIPT_DIR/config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
 
 # Start of easyeffects
-trace cp config/hypr/start-easyeffects.sh /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
+trace cp $SCRIPT_DIR/config/hypr/start-easyeffects.sh /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
 
 # Start of cliphist
-trace cp config/hypr/start-cliphist-store.sh /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
+trace cp $SCRIPT_DIR/config/hypr/start-cliphist-store.sh /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-cliphist-store.sh
 info "Checking if Golang installed..."
