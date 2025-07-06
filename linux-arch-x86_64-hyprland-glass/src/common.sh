@@ -46,7 +46,8 @@ trace() {
     return $?
 }
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)/.."
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+SCRIPT_DIR="${SCRIPT_DIR%/*}"
 
 info "Checking if root..."
 if [[ $EUID -ne 0 ]]; then
