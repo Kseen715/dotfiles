@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "$(dirname "$(realpath "$0")")/common.sh"
+source "$(dirname "$(realpath "$0")")/src/common.sh"
 
 SWAPFILE_SIZE="24G"
 SWAPFILE="/swapfile"

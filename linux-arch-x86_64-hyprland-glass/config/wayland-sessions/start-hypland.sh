@@ -2,7 +2,8 @@
 export XDG_SESSION_TYPE=wayland
 export XDG_SESSION_DESKTOP=Hyprland
 export XDG_CURRENT_DESKTOP=Hyprland
-export GDK_BACKEND=wayland
+export GDK_BACKEND="wayland,x11"
 export ELECTRON_OZONE_PLATFORM_HINT=wayland
-export WAYLAND_DISPLAY=wayland-0
+export WAYLAND_DISPLAY="wayland-0"
+export DISPLAY="wayland-0"
 exec Hyprland
