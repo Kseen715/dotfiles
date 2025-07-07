@@ -41,4 +41,6 @@ if [[ "$MODULE_NAME" == *","* ]]; then
         inst_module "$MODULE"
     done
     exit 0
+else
+    inst_module "$MODULE_NAME"
 fi

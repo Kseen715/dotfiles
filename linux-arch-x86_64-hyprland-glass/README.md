@@ -44,11 +44,14 @@
 | <kbd>Super + Enter</kbd> | Open Terminal |
 | <kbd>Super + E</kbd> | Open File Manager |
 | <kbd>Super + D</kbd> | Open application launcher |
+| <kbd>Super + T</kbd> | Open btop/htop/top |
 | <kbd>Super + Q</kbd> | Kill focused application |
 | <kbd>Super + Shift + S</kbd> | Take screenshot of area (requires Hyprshot) |
 | <kbd>Super + Shift + C</kbd> | Color picker (requires Hyprpicker) |
 | <kbd>Super + Alt + Space</kbd> | Toggle focused window to be floating or tiled |
 | <kbd>Super + F</kbd> | Toggle focused window to full-screen view |
+| <kbd>Super + J</kbd> | Swap tiling vertical/horizontal |
+| <kbd>Super + P</kbd> | Pseudo-tile mode |
 | <kbd>Super + 1-0</kbd> | Switch to workspace 1-10 |
 | <kbd>Super + Ctrl + Right</kbd> | Switch to next workspace |
 | <kbd>Super + Ctrl + Left</kbd> | Switch to previous workspace |
