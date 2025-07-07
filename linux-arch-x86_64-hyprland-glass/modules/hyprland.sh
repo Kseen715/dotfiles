@@ -40,6 +40,11 @@ trace wget https://raw.githubusercontent.com/sentriz/cliphist/refs/heads/master/
 trace chmod +x /usr/local/bin/cliphist-wofi-img
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /usr/local/bin/cliphist-wofi-img
 
+# Start of top
+trace cp $SCRIPT_DIR/config/hypr/start-top.sh /home/$DELEVATED_USER/.config/hypr/start-top.sh
+trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-top.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-top.sh
+
 trace mkdir -p /usr/share/wayland-sessions
 trace chmod 775 /usr/share/wayland-sessions
 trace cp $SCRIPT_DIR/config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
