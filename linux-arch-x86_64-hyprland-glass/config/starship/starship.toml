@@ -67,7 +67,7 @@ Windows = "󰍲 "
 
 [cmd_duration]
 format = "[$duration]($style) "
-style="white bold"
+style = "white bold"
 
 [character]
 success_symbol = "[](bold blue)"
@@ -116,7 +116,7 @@ format = '[\($hash$tag\)]($style) '
 symbol = "Ada "
 style = 'bold yellow'
 format = '[$symbol($output)]($style) '
-detect_extensions = [ 'ada', 'adc', 'ads', 'adb' ]
+detect_extensions = ['ada', 'adc', 'ads', 'adb']
 command = "gnatmake --version 2>/dev/null | sed -n 's/.*GNATMAKE[ \\t]*\\([0-9.]*\\).*/\\1-gnat/p'"
 disabled = false
 
@@ -144,7 +144,7 @@ disabled = false
 symbol = "C3 "
 style = 'bold blue'
 format = '[$symbol($output)]($style) '
-detect_extensions = [ 'c3' ]
+detect_extensions = ['c3']
 command = "c3c --version 2>/dev/null | sed -n 's/.*C3 Compiler Version:[ \\t]*\\([0-9.]*\\).*/\\1/p'"
 disabled = false
 
@@ -207,7 +207,12 @@ disabled = false
 [dotnet]
 symbol = ".NET "
 format = '[$symbol($version)($tfm)]($style) '
-detect_files = ['global.json', 'Directory.Build.props', 'Directory.Build.targets', 'Packages.props']
+detect_files = [
+    'global.json',
+    'Directory.Build.props',
+    'Directory.Build.targets',
+    'Packages.props',
+]
 disabled = false
 
 [elixir]
@@ -269,7 +274,16 @@ disabled = false
 symbol = " "
 style = 'red bold'
 format = '[$symbol($version)]($style) '
-detect_extensions = ['java', 'class', 'gradle', 'jar', 'cljs', 'cljc', 'kt', 'kts']
+detect_extensions = [
+    'java',
+    'class',
+    'gradle',
+    'jar',
+    'cljs',
+    'cljc',
+    'kt',
+    'kts',
+]
 disabled = false
 
 [julia]
