@@ -36,6 +36,7 @@ install_or_update_zsh_plugin() {
 # Update configs
 trace cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "/home/$DELEVATED_USER/.zshrc"
 trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "/home/$DELEVATED_USER/.oh-my-zsh"
+trace cp $SCRIPT_DIR/config/starship/starship.toml "/home/$DELEVATED_USER/.config/starship.toml"
 
 # Install or update zsh plugins
 install_or_update_zsh_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"
