@@ -128,6 +128,13 @@ format = '[$symbol($version)]($style) '
 symbol = " "
 format = '[$symbol($version(-$name))]($style) '
 
+[custom.c3]
+symbol = "C3 "
+style = 'bold blue'
+format = '[$symbol($output)]($style) '
+detect_extensions = [ 'c3' ]
+command = "c3c --version 2>/dev/null | sed -n 's/.*C3 Compiler Version:[ \\t]*\\([0-9.]*\\).*/\\1/p'"
+
 [cpp]
 symbol = "++ "
 format = '[$symbol($version(-$name))]($style) '
@@ -175,6 +182,7 @@ format = '[$symbol$context]($style) '
 [dotnet]
 symbol = ".NET "
 format = '[$symbol($version)($tfm)]($style) '
+detect_files = ['global.json', 'Directory.Build.props', 'Directory.Build.targets', 'Packages.props']
 
 [elixir]
 symbol = " "
