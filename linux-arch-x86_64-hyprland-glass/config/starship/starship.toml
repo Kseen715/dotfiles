@@ -114,7 +114,7 @@ format = '[\($hash$tag\)]($style) '
 
 [aws]
 symbol = "󰸏 "
-format = '[$symbol($profile )(\($region\) )(\[$duration\] )]($style) '
+format = '[$symbol($profile)( \($region\))( \[$duration\])]($style) '
 
 [buf]
 symbol = " "
@@ -178,7 +178,7 @@ format = '[$symbol($version)($tfm)]($style) '
 
 [elixir]
 symbol = " "
-format = '[$symbol($version \(OTP $otp_version\) )]($style) '
+format = '[$symbol($version \(OTP $otp_version\))]($style) '
 
 [elm]
 symbol = " "
@@ -272,7 +272,7 @@ format = '[$symbol($version)]($style) '
 
 [ocaml]
 symbol = " "
-format = '[$symbol($version )(\($switch_indicator$switch_name\) )]($style) '
+format = '[$symbol($version)( \($switch_indicator$switch_name\))]($style) '
 
 [odin]
 symbol = "Ø "
@@ -308,7 +308,8 @@ format = '[$symbol($version)]($style) '
 
 [python]
 symbol = " "
-format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style) '
+style = 'bold green'
+format = '[${symbol}${pyenv_prefix}(${version})( \($virtualenv\))]($style) '
 
 [quarto]
 symbol = "⨁ "
