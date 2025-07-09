@@ -3,7 +3,7 @@ info "Installing hyprland..."
 if ! command -v hyprctl &>/dev/null; then
     trace rm /usr/share/wayland-sessions/hyprland.desktop
 fi
-trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland
+trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support
 info "Installing hyprland dotfiles..."
 trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
 trace chmod 775 /home/$DELEVATED_USER/.config
@@ -45,8 +45,13 @@ trace cp $SCRIPT_DIR/config/hypr/start-top.sh /home/$DELEVATED_USER/.config/hypr
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-top.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-top.sh
 
+# Start of wleave
+trace cp $SCRIPT_DIR/config/hypr/start-wleave.sh /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
+trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
+
 trace mkdir -p /usr/share/wayland-sessions
-trace chmod 775 /usr/share/wayland-sessions
+trace chmod 755 /usr/share/wayland-sessions
 trace cp $SCRIPT_DIR/config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
 trace cp $SCRIPT_DIR/config/wayland-sessions/start-hyprland.sh /usr/share/wayland-sessions/start-hyprland.sh
 trace chmod +x /usr/share/wayland-sessions/start-hyprland.sh
