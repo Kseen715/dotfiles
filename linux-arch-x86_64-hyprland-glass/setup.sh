@@ -38,6 +38,10 @@ source "$(dirname "$(realpath "$0")")/modules/hyprpaper.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/hyprpicker.sh"
 
+source "$(dirname "$(realpath "$0")")/modules/hyprlock.sh"
+
+source "$(dirname "$(realpath "$0")")/modules/hyprcursor.sh"
+
 source "$(dirname "$(realpath "$0")")/modules/waybar.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"

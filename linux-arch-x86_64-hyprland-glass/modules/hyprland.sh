@@ -3,7 +3,7 @@ info "Installing hyprland..."
 if ! command -v hyprctl &>/dev/null; then
     trace rm /usr/share/wayland-sessions/hyprland.desktop
 fi
-trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support
+trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support hypridle hyprutils aquamarine hyprgraphics hyprland-qtutils hyprpolkitagent 
 info "Installing hyprland dotfiles..."
 trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
 trace chmod 775 /home/$DELEVATED_USER/.config
