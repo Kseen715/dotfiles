@@ -37,6 +37,12 @@
     ./setup-apps.sh
     ```
 
+If you want to install additional modules/apps from the list, you can run (with comma-separated values):
+
+```bash
+./install-module.sh <module-name-1>,<module-name-2>,<module-name-3>...
+```
+
 ## Keybinds
 
 | Keybind | Action |
@@ -69,8 +75,10 @@
 - Display manager - [SDDM](https://github.com/sddm/sddm)
 - Compositor - [Hyprland](https://github.com/hyprwm/Hyprland)
 - Status bar - [waybar](https://github.com/Alexays/Waybar)
+- Lock screen - [gtklock](https://github.com/jovanlanik/gtklock)
+- Text editor - [Kate](https://kate-editor.org/)
 - Terminal emulator - [wezterm](https://github.com/wezterm/wezterm)/[foot](https://codeberg.org/dnkl/foot/)
-- File manager - 
+- File manager - [Nautilus](https://apps.gnome.org/Nautilus/)
 - Audio manager - [pipewire](https://pipewire.org/)/[wireplumber](https://gitlab.freedesktop.org/pipewire/wireplumber/)/[Helvum](https://gitlab.freedesktop.org/pipewire/helvum)/[easyeffects](https://github.com/wwmm/easyeffects)
 - Launcher - [wofi](https://github.com/SimplyCEO/wofi)
 - Notifications - [mako](https://github.com/emersion/mako)
