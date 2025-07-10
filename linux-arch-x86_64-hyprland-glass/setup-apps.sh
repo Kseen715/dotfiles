@@ -24,8 +24,6 @@ source "$(dirname "$(realpath "$0")")/apps/btop.sh"
 
 source "$(dirname "$(realpath "$0")")/apps/fastfetch.sh"
 
-source "$(dirname "$(realpath "$0")")/apps/zen-browser.sh"
-
 source "$(dirname "$(realpath "$0")")/apps/firefox.sh"
 
 source "$(dirname "$(realpath "$0")")/apps/vscode-insiders.sh"

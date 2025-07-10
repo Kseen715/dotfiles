@@ -68,13 +68,7 @@ source "$(dirname "$(realpath "$0")")/modules/wezterm.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/foot.sh"
 
-#  qt5ct
-#   qt6ct
-#   qt6-svg
-#   wl-clipboard
-#   wlogout
-#   xdg-user-dirs
-#   xdg-utils 
+
 # blue=(
 #   bluez
 #   bluez-utils
