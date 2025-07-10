@@ -42,7 +42,13 @@ source "$(dirname "$(realpath "$0")")/modules/hyprlock.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/hyprcursor.sh"
 
+source "$(dirname "$(realpath "$0")")/modules/hypridle.sh"
+
 source "$(dirname "$(realpath "$0")")/modules/waybar.sh"
+
+source "$(dirname "$(realpath "$0")")/modules/wleave.sh"
+
+source "$(dirname "$(realpath "$0")")/modules/gtklock.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"
 

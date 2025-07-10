@@ -1,5 +1,5 @@
-@define-color bckg rgba(24, 24, 24, 0.7);
-@define-color bckg-dimm rgba(24, 24, 24, 0.1);
+@define-color bg rgba(24, 24, 24, 0.7);
+@define-color bg-dimm rgba(24, 24, 24, 0.1);
 @define-color borders rgba(255, 255, 255, 0.2);
 @define-color accents rgba(87, 143, 141, 1);
 @define-color white #fff;
@@ -19,6 +19,10 @@ button {
     border: 1px solid rgba(255, 255, 255, 0.2);
     background-repeat: no-repeat;
     background-position: center;
+}
+
+window {
+    background-color: alpha(@bg, 1);
 }
 
 #lock {
@@ -71,6 +75,6 @@ button {
 
 button:focus {
     background-color: rgba(87, 143, 141, 1);
-    color: #000000;
+    /* color: #000000; */
     background-position: center;
 }

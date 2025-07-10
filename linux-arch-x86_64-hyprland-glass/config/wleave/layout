@@ -2,7 +2,7 @@
     "buttons": [
         {
             "label": "lock",
-            "action": "loginctl lock-session",
+            "action": "pidof gtklock || gtklock",
             "text": "Lock",
             "keybind": "l"
         },
