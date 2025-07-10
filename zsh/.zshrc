@@ -75,10 +75,10 @@ ZSH_THEME="robbyrussell"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
-git
-zsh-autosuggestions
-zsh-syntax-highlighting
-dirhistory
+	git
+	zsh-autosuggestions
+	zsh-syntax-highlighting
+	dirhistory
 )
 
 source $ZSH/oh-my-zsh.sh
@@ -108,9 +108,10 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+alias ls="lsd"
+alias la="ls -lah"
+alias ll="ls -l"
 alias git-graph="git log --graph"
-alias cdl='f() { cd $1 && ls -h};f'
-alias cdla='f() { cd $1 && ls -alh};f'
 alias stfu='f() { nohup $@ &};f'
 alias s='f() { sudo $@};f'
 
@@ -119,7 +120,7 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
 eval "$(starship init zsh)"
 
 if command -v brew &>/dev/null; then
-  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+	eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 fi
 
 function y() {
