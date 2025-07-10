@@ -1,6 +1,6 @@
 info "Installing zsh, dependencies and dotfiles..."
 
-trace pacman -S --needed --noconfirm zsh curl starship
+trace pacman -S --needed --noconfirm zsh curl starship lsd
 
 # Get the install script for Oh My Zsh and run it
 sudo -u "$DELEVATED_USER" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
