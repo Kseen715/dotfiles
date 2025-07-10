@@ -112,101 +112,108 @@ format = '[\($hash$tag\)]($style) '
 
 # Langs and stuff
 
+[custom.1c]
+symbol = "1C "
+style = 'bold yellow'
+format = '[$symbol($output)]($style) '
+detect_extensions = ['1cd', 'cfl', 'lgf', 'lpg', 'bsl']
+disabled = false
+
 [custom.ada]
 symbol = "Ada "
 style = 'bold yellow'
-format = '[$symbol($output)]($style) '
+format = '[$symbol($output )]($style)'
 detect_extensions = ['ada', 'adc', 'ads', 'adb']
 command = "gnatmake --version 2>/dev/null | sed -n 's/.*GNATMAKE[ \\t]*\\([0-9.]*\\).*/\\1-gnat/p'"
 disabled = false
 
 [aws]
 symbol = "󰸏 "
-format = '[$symbol($profile)( \($region\))( \[$duration\])]($style) '
+format = '[$symbol($profile )(\($region\) )(\[$duration\] )]($style)'
 disabled = false
 
 [buf]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [bun]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [c]
 symbol = " "
-format = '[$symbol($version(-$name))]($style) '
+format = '[$symbol($version(-$name) )]($style)'
 disabled = false
 
 [custom.c3]
 symbol = "C3 "
 style = 'bold blue'
-format = '[$symbol($output)]($style) '
+format = '[$symbol($output )]($style)'
 detect_extensions = ['c3']
 command = "c3c --version 2>/dev/null | sed -n 's/.*C3 Compiler Version:[ \\t]*\\([0-9.]*\\).*/\\1/p'"
 disabled = false
 
 [cpp]
 symbol = " "
-format = '[$symbol($version(-$name))]($style) '
+format = '[$symbol($version(-$name) )]($style)'
 disabled = false
 style = 'bold blue'
 
 [cmake]
 symbol = "△ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [cobol]
 symbol = "󰒓 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [conda]
 symbol = "🅒 "
-format = '[$symbol$environment]($style) '
+format = '[$symbol$environment ]($style)'
 disabled = false
 
 [container]
 symbol = "⬢ "
-format = '[$symbol \[$name\]]($style) '
+format = '[$symbol\[$name\] ]($style)'
 disabled = false
 
 [crystal]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [daml]
 symbol = "Λ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [dart]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [deno]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [direnv]
 symbol = " "
-format = '[$symbol$loaded/$allowed]($style) '
+format = '[$symbol$loaded/$allowed ]($style)'
 disabled = false
 
 [docker_context]
 symbol = " "
-format = '[$symbol$context]($style) '
+format = '[$symbol$context ]($style)'
 disabled = false
 
 [dotnet]
 symbol = ".NET "
-format = '[$symbol($version)($tfm)]($style) '
+format = '[$symbol(($version)($tfm) )]($style)'
 detect_files = [
     'global.json',
     'Directory.Build.props',
@@ -217,63 +224,63 @@ disabled = false
 
 [elixir]
 symbol = " "
-format = '[$symbol($version \(OTP $otp_version\))]($style) '
+format = '[$symbol($version \(OTP $otp_version\) )]($style)'
 disabled = false
 
 [elm]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [erlang]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [fennel]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [gleam]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [golang]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [guix_shell]
 symbol = " "
-format = '[$symbol]($style) '
+format = '[$symbol ]($style)'
 disabled = false
 
 [gradle]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [haskell]
 symbol = "λ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [haxe]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [helm]
 symbol = "⎈ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [java]
 symbol = " "
 style = 'red bold'
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 detect_extensions = [
     'java',
     'class',
@@ -288,186 +295,186 @@ disabled = false
 
 [julia]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [kotlin]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [kubernetes]
 symbol = "☸ "
-format = '[$symbol$context( \($namespace\))]($style) '
+format = '[$symbol$context( \($namespace\) )]($style)'
 disabled = false
 
 [lua]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [meson]
 symbol = "⬢ "
-format = '[$symbol$project]($style) '
+format = '[$symbol$project ]($style)'
 disabled = false
 
 [mise]
 symbol = "mise "
-format = '[$symbol$health]($style) '
+format = '[$symbol$health ]($style)'
 disabled = false
 
 [mojo]
 symbol = "🔥 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [nats]
 symbol = "󰾱 "
-format = '[$symbol$name]($style) '
+format = '[$symbol$name ]($style)'
 disabled = false
 
 [nim]
 symbol = "󰆥 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [nix_shell]
 symbol = " "
-format = '[$symbol$state( \($name\))]($style) '
+format = '[$symbol$state( \($name\) )]($style)'
 disabled = false
 
 [nodejs]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [ocaml]
 symbol = " "
-format = '[$symbol($version)( \($switch_indicator$switch_name\))]($style) '
+format = '[$symbol($version )(\($switch_indicator$switch_name\) )]($style)'
 disabled = false
 
 [odin]
 symbol = "Ø "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [openstack]
 symbol = " "
-format = '[$symbol$cloud(\($project\))]($style) '
+format = '[$symbol$cloud (\($project\) )]($style)'
 disabled = false
 
 [package]
 symbol = "󰏗 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [perl]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [php]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [pixi]
 symbol = "󱡄 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [pulumi]
 symbol = " "
-format = '[$symbol($username@)$stack]($style) '
+format = '[$symbol($username@)$stack ]($style)'
 disabled = false
 
 [purescript]
 symbol = "<=> "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [python]
 symbol = " "
 style = 'bold green'
-format = '[${symbol}${pyenv_prefix}(${version})( \($virtualenv\))]($style) '
+format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
 disabled = false
 
 [quarto]
 symbol = "⨁ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [rlang]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [raku]
 symbol = "󱖉 "
-format = '[$symbol($version-$vm_version)]($style) '
+format = '[$symbol($version-$vm_version )]($style)'
 disabled = false
 
 [red]
 symbol = "󰔶 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [ruby]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [rust]
 symbol = "󱘗 "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [scala]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [singularity]
 symbol = " "
-format = '[$symbol\[$env\]]($style) '
+format = '[$symbol\[$env\] ]($style)'
 disabled = false
 
 [solidity]
 symbol = "S "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [spack]
 symbol = " "
-format = '[$symbol$environment]($style) '
+format = '[$symbol$environment ]($style)'
 disabled = false
 
 [swift]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [terraform]
 symbol = " "
-format = '[$symbol$workspace]($style) '
+format = '[$symbol$workspace ]($style)'
 disabled = false
 
 [typst]
 symbol = "t "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [vagrant]
 symbol = "⍱ "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [vlang]
 symbol = "V "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
 
 [zig]
 symbol = " "
-format = '[$symbol($version)]($style) '
+format = '[$symbol($version )]($style)'
 disabled = false
