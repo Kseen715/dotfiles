@@ -7,7 +7,7 @@ else
     warning "STEAM_FORCE_DESKTOPUI_SCALING already exists in /home/$DELEVATED_USER/.bashrc"
 fi
 
-trace pacman -S --needed --noconfirm ttf-liberation vulkan-tools lib32-systemd
+trace pacman -S --needed --noconfirm ttf-liberation lib32-systemd
 trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm steam
 
 trace mkdir -p /home/$DELEVATED_USER/.local/share/Steam
