@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Hyprland (VMware)
+Comment=VMware-compatible Hyprland
+Exec=/usr/share/wayland-sessions/start-hyprland-vmware.sh
+Type=Application
+DesktopNames=Hyprland

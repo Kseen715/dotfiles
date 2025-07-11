@@ -1,0 +1,14 @@
+show=drun
+term=foot
+show_all=true
+gtk_dark=true
+location=center
+insensitive=false
+allow_markup=true
+allow_images=true
+line_wrap=word
+width=50%
+height=50%
+hide_scroll=true
+insensitive=true
+prompt=search

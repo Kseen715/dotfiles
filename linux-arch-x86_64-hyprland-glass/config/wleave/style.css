@@ -1,0 +1,80 @@
+@define-color bg rgba(24, 24, 24, 0.7);
+@define-color bg-dimm rgba(24, 24, 24, 0.1);
+@define-color borders rgba(255, 255, 255, 0.2);
+@define-color accents rgba(87, 143, 141, 1);
+@define-color white #fff;
+
+* {
+    all: unset;
+    background-image: none;
+    margin: unset;
+    padding: unset;
+    /* transition: 200ms cubic-bezier(0, 0, 1, 1); */
+}
+
+button {
+    font-family: JetBrains Mono, monospace;
+    background-color: rgba(24, 24, 24, 0.7);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+window {
+    background-color: alpha(@bg, 1);
+}
+
+#lock {
+    background-image: url("../../.config/wlogout/lock.png");
+    /* margin : 5px 5px 5px 300px; */
+    margin: 5px 5px 5px 5px;
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+#shutdown {
+    background-image: url("../../.config/wlogout/power.png");
+    margin: 5px 5px 5px 5px;
+    /* margin : 5px 300px 5px 5px; */
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+#logout {
+    background-image: url("../../.config/wlogout/logout.png");
+    margin: 5px 5px 5px 5px;
+    /* margin : 5px 300px 5px 5px; */
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+#reboot {
+    background-image: url("../../.config/wlogout/restart.png");
+    /* margin : 5px 5px 5px 300px; */
+    margin: 5px 5px 5px 5px;
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+#hibernate {
+    background-image: url("../../.config/wlogout/pause.png");
+    margin: 5px 5px 5px 5px;
+    /* margin : 5px 300px 5px 5px; */
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+#sleep {
+    background-image: url("../../.config/wlogout/sleep.png");
+    margin: 5px 5px 5px 5px;
+    /* margin : 5px 300px 5px 5px; */
+    padding: 5px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+button:focus {
+    background-color: rgba(87, 143, 141, 1);
+    /* color: #000000; */
+    background-position: center;
+}

@@ -1,0 +1,15 @@
+[SddmGreeterTheme]
+Name=glass-theme
+Description=glass-theme
+Author=null
+License=GPL-3.0-or-later
+Type=sddm-theme
+Version=1.0
+Website=null
+Screenshot=
+MainScript=Main.qml
+ConfigFile=theme.conf
+TranslationsDirectory=translations
+Theme-Id=glass-theme
+Theme-API=2.0
+QtVersion=6

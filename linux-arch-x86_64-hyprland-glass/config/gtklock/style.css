@@ -1,0 +1,90 @@
+@define-color border rgba(255, 255, 255, 0.2);
+@define-color accent rgba(87, 143, 141, 1);
+@define-color accent-hover rgba(77, 133, 131, 1);
+@define-color accent-pressed rgba(67, 123, 121, 1);
+
+@define-color bg rgba(24, 24, 24, 0.7);
+@define-color fg #ffffff;
+
+* {
+    all: unset;
+    font-size: 14px;
+}
+
+window {
+    background-color: @bg;
+    background-image: url("{{WALLPAPER_PATH}}");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+#window-box {
+    background-color: alpha(@bg, 1);
+    border: 1px solid @border;
+    border-radius: 12px;
+    box-shadow: 10px 10px 0px @bg;
+    padding: 0 3em;
+    color: rgba(255, 255, 255, 0.0);
+}
+
+#clock-label {
+    min-width: 320px;
+    background-color: @accent;
+    color: @fg;
+    font-weight: 500;
+    padding: 10px 30px;
+    margin-bottom: 10px;
+    border-radius: 0 0 10px 10px;
+    border: 1px solid @border;
+    border-top: 0;
+}
+
+/* hide "Password:" label */
+#input-label {
+    color: @fg;
+    font-size: 0;
+}
+
+#user-name {
+    color: @fg;
+}
+
+#input-field {
+    color: @fg;
+    border-radius: 12px;
+    padding: 10px 15px;
+    border: 1px solid @border;
+}
+
+#warning-label,
+#error-label,
+#unlock-button {
+    margin-top: 12px;
+    padding: 10px 2rem;
+    margin-bottom: 20px;
+    color: @fg;
+}
+
+#unlock-button {
+    border-radius: 12px;
+    background-color: @accent;
+    color: @fg;
+    border: 1px solid @border;
+}
+
+#unlock-button:hover {
+    border-radius: 12px;
+    /* dimm color by 0.8, not alpha*/
+    background-color: @accent-hover; 
+    color: @fg;
+    border: 1px solid @border;
+}
+
+#unlock-button:focus {
+    border-radius: 12px;
+    /* dimm color by 0.8, not alpha*/
+    background-color: @accent-pressed; 
+    color: @fg;
+    border: 1px solid @border;
+}
