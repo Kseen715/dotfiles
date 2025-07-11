@@ -9,6 +9,11 @@ fi
 
 trace pacman -S --needed --noconfirm ttf-liberation vulkan-tools lib32-systemd
 trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm steam
+
+trace mkdir -p /home/$DELEVATED_USER/.local/share/Steam
+trace chmod 775 /home/$DELEVATED_USER/.local/share/Steam
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.local/share/Steam
+
 # if using systemd-resolved, create a symlink for resolv.conf
 if [ -d /run/systemd/resolve ]; then
     info "Systemd-resolved detected, creating symlink for resolv.conf"

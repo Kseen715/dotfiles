@@ -6,7 +6,7 @@ for vendor in "${vendors[@]}"; do
     case "$vendor" in
         NVIDIA)
             info "NVIDIA GPU detected"
-            trace sudo pacman -S --needed --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings
+            trace sudo pacman -S --needed --noconfirm mesa nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings lib32-vulkan-nouveau xf86-video-nouveau
             ;;
         AMD)
             info "AMD GPU detected"
