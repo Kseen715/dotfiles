@@ -6,7 +6,7 @@ for vendor in "${vendors[@]}"; do
     case "$vendor" in
         NVIDIA)
             info "NVIDIA GPU detected"
-            trace sudo pacman -S --needed --noconfirm mesa lib32-mesa nvidia-open nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader nvidia-settings vulkan-tools vulkan-mesa-layers lib32-vulkan-mesa-layers
+            trace sudo pacman -S --needed --noconfirm nvidia-open vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools vulkan-mesa-layers lib32-vulkan-mesa-layers nvidia-settings nvidia-utils lib32-nvidia-utils nvidia-prime
             ;;
         AMD)
             info "AMD GPU detected"
@@ -14,7 +14,7 @@ for vendor in "${vendors[@]}"; do
             ;;
         Intel)
             info "Intel GPU detected"
-            trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel vulkan-tools
+            trace sudo pacman -S --needed --noconfirm mesa lib32-mesa vulkan-intel lib32-vulkan-intel vulkan-tools xf86-video-intel
             ;;
         VMware)
             info "VMware GPU detected"
