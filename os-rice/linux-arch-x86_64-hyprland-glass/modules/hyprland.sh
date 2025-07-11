@@ -51,6 +51,9 @@ trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 
 # Config of qt6ct
+trace mkdir -p /home/$DELEVATED_USER/.config/qt6ct
+trace chmod 755 /home/$DELEVATED_USER/.config/qt6ct
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct
 trace cp $SCRIPT_DIR/config/qt6ct/qt6ct.conf /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
 trace chmod 644 /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
