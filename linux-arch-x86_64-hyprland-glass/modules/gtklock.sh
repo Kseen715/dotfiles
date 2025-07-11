@@ -13,5 +13,8 @@ trace "sudo -u $DELEVATED_USER sed \"s#{{WALLPAPER_PATH}}#$WALLPAPER_PATH#g\" \"
 
 trace chmod 644 /home/$DELEVATED_USER/.config/gtklock/style.css
 
-trace cp "$(dirname "$(realpath "$0")")/config/gtklock/.face" /home/$DELEVATED_USER/
-trace chmod 644 /home/$DELEVATED_USER/.face
+# if file not exists
+if [ ! -f /home/$DELEVATED_USER/.face ]; then
+    trace cp "$(dirname "$(realpath "$0")")/config/gtklock/.face" /home/$DELEVATED_USER/
+    trace chmod 644 /home/$DELEVATED_USER/.face
+fi
