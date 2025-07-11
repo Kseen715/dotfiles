@@ -3,7 +3,7 @@ info "Installing hyprland..."
 if ! command -v hyprctl &>/dev/null; then
     trace rm /usr/share/wayland-sessions/hyprland.desktop
 fi
-trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support hypridle hyprutils aquamarine hyprgraphics hyprland-qtutils hyprpolkitagent 
+trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support hypridle hyprutils aquamarine hyprgraphics hyprland-qtutils hyprpolkitagent qt6ct
 info "Installing hyprland dotfiles..."
 trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
 trace chmod 775 /home/$DELEVATED_USER/.config
@@ -49,6 +49,11 @@ trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hy
 trace cp $SCRIPT_DIR/config/hypr/start-wleave.sh /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
+
+# Config of qt6ct
+trace cp $SCRIPT_DIR/config/qt6ct/qt6ct.conf /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
+trace chmod 644 /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
 
 trace mkdir -p /usr/share/wayland-sessions
 trace chmod 755 /usr/share/wayland-sessions
