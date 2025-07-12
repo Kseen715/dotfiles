@@ -35,7 +35,7 @@ source "$(dirname "$(realpath "$0")")/modules/wofi.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"
 
-source "$(dirname "$(realpath "$0")")/modules/helvum.sh"
+source "$(dirname "$(realpath "$0")")/modules/qpwgraph.sh"
 source "$(dirname "$(realpath "$0")")/modules/easyeffects.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/luminance.sh"
