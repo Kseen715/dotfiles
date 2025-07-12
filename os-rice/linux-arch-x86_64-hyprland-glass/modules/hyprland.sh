@@ -58,6 +58,10 @@ trace cp $SCRIPT_DIR/config/qt6ct/qt6ct.conf /home/$DELEVATED_USER/.config/qt6ct
 trace chmod 644 /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
 
+trace mkdir -p /home/$DELEVATED_USER/.local/share
+trace chmod 777 /home/$DELEVATED_USER/.local/share
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.local/share
+
 trace mkdir -p /usr/share/wayland-sessions
 trace chmod 755 /usr/share/wayland-sessions
 trace cp $SCRIPT_DIR/config/wayland-sessions/hyprland.desktop /usr/share/wayland-sessions/hyprland.desktop
