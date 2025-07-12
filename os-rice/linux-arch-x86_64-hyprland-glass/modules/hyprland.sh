@@ -50,6 +50,11 @@ trace cp $SCRIPT_DIR/config/hypr/start-wleave.sh /home/$DELEVATED_USER/.config/h
 trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
 
+# Start of audio
+trace cp $SCRIPT_DIR/config/hypr/start-audio.sh /home/$DELEVATED_USER/.config/hypr/start-audio.sh
+trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-audio.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-audio.sh
+
 # Config of qt6ct
 trace mkdir -p /home/$DELEVATED_USER/.config/qt6ct
 trace chmod 755 /home/$DELEVATED_USER/.config/qt6ct

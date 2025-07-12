@@ -37,6 +37,8 @@
     ./setup-apps.sh
     ```
 
+1. On first start, you'll need to launch `qpwgraph` to set up the audio patchbay. Save the configuration to `~/.patchbay`. Next time `qpwgraph` will be launched automatically with that configuration.
+
 If you want to install additional modules/apps from the list, you can run (with comma-separated values):
 
 ```bash
