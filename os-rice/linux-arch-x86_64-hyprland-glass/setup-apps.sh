@@ -17,6 +17,7 @@ source "$(dirname "$(realpath "$0")")/apps/htop.sh"
 source "$(dirname "$(realpath "$0")")/apps/btop.sh"
 source "$(dirname "$(realpath "$0")")/apps/fastfetch.sh"
 
+source "$(dirname "$(realpath "$0")")/apps/celluloid.sh"
 source "$(dirname "$(realpath "$0")")/apps/firefox.sh"
 source "$(dirname "$(realpath "$0")")/apps/vscode-insiders.sh"
 source "$(dirname "$(realpath "$0")")/apps/discord.sh"
