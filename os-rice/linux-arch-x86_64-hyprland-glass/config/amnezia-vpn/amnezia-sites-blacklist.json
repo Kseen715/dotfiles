@@ -1,0 +1,110 @@
+[
+    {
+        "hostname": "0.0.0.0/24",
+        "ip": ""
+    },
+    {
+        "hostname": "10.18.17.1/24",
+        "ip": ""
+    },
+    {
+        "hostname": "10.18.18.1/24",
+        "ip": ""
+    },
+    {
+        "hostname": "127.0.0.1",
+        "ip": ""
+    },
+    {
+        "hostname": "127.0.0.1/24",
+        "ip": ""
+    },
+    {
+        "hostname": "149.154.160.0/20",
+        "ip": ""
+    },
+    {
+        "hostname": "185.76.151.0/24",
+        "ip": ""
+    },
+    {
+        "hostname": "91.105.192.0/23",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.12.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.16.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.20.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.4.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.56.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "91.108.8.0/22",
+        "ip": ""
+    },
+    {
+        "hostname": "api.telegram.org",
+        "ip": "149.154.167.220"
+    },
+    {
+        "hostname": "core.telegram.org",
+        "ip": "149.154.167.99"
+    },
+    {
+        "hostname": "dash.bunkr.cr",
+        "ip": "91.149.226.80"
+    },
+    {
+        "hostname": "disk.yandex.ru",
+        "ip": "87.250.250.50"
+    },
+    {
+        "hostname": "etm.ru",
+        "ip": "85.142.247.47"
+    },
+    {
+        "hostname": "huggingface.co",
+        "ip": "3.160.150.2"
+    },
+    {
+        "hostname": "raw.githubusercontent.com",
+        "ip": "185.199.108.133"
+    },
+    {
+        "hostname": "t.me",
+        "ip": "149.154.167.99"
+    },
+    {
+        "hostname": "telegram.me",
+        "ip": "149.154.167.99"
+    },
+    {
+        "hostname": "telegram.org",
+        "ip": "149.154.167.99"
+    },
+    {
+        "hostname": "users.v8.1c.ru",
+        "ip": "185.12.152.43"
+    },
+    {
+        "hostname": "www.mfc31.ru",
+        "ip": "82.151.96.178"
+    },
+    {
+        "hostname": "www.securitycode.ru",
+        "ip": "195.133.217.136"
+    }
+]
