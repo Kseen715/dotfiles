@@ -32,6 +32,7 @@ source "$(dirname "$(realpath "$0")")/modules/wleave.sh"
 source "$(dirname "$(realpath "$0")")/modules/mako.sh"
 source "$(dirname "$(realpath "$0")")/modules/gtklock.sh"
 source "$(dirname "$(realpath "$0")")/modules/wofi.sh"
+source "$(dirname "$(realpath "$0")")/modules/cliphist.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"
 

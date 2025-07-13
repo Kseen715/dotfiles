@@ -102,3 +102,31 @@ If you want to install additional modules/apps from the list, you can run (with 
 - `~/.local/share/sddm/xorg-session.log` - SDDM log file (Xorg)
 - `~/.config/hypr/hypr.log` - Hyprland log file
 - `~/.cache/hyprland/hyprlandCrashReportXXX.log` - Hyprland crash report
+
+# Sound fix
+
+Abstract from [StackExchange](https://unix.stackexchange.com/questions/560545/problem-with-audio-stuttering-choppy-in-every-single-distribution-ive-used)
+
+
+```
+sudo mkdir /etc/pipewire
+sudo cp /usr/share/pipewire/pipewire.conf /etc/pipewire/
+sudo vi /etc/pipewire/pipewire.conf
+```
+In section context.properties, comment out default.clock.rate
+Add the following 4 lines beneath the line commented out in step 3 above:
+
+```
+default.clock.rate        = 192000
+default.clock.quantum     = 512
+default.clock.min-quantum = 32
+default.clock.max-quantum = 4096
+```
+
+Save the file and Restart Pipewire:
+
+```
+systemctl --user restart pipewire-media-session pipewire-pulse pipewire
+```
+
+Enjoy clean music!
