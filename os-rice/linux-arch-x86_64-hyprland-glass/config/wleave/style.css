@@ -26,7 +26,7 @@ window {
 }
 
 #lock {
-    background-image: url("../../.config/wlogout/lock.png");
+    background-image: url("../../.config/wleave/lock.png");
     /* margin : 5px 5px 5px 300px; */
     margin: 5px 5px 5px 5px;
     padding: 5px;
@@ -34,7 +34,7 @@ window {
 }
 
 #shutdown {
-    background-image: url("../../.config/wlogout/power.png");
+    background-image: url("../../.config/wleave/power.png");
     margin: 5px 5px 5px 5px;
     /* margin : 5px 300px 5px 5px; */
     padding: 5px;
@@ -42,7 +42,7 @@ window {
 }
 
 #logout {
-    background-image: url("../../.config/wlogout/logout.png");
+    background-image: url("../../.config/wleave/logout.png");
     margin: 5px 5px 5px 5px;
     /* margin : 5px 300px 5px 5px; */
     padding: 5px;
@@ -50,7 +50,7 @@ window {
 }
 
 #reboot {
-    background-image: url("../../.config/wlogout/restart.png");
+    background-image: url("../../.config/wleave/restart.png");
     /* margin : 5px 5px 5px 300px; */
     margin: 5px 5px 5px 5px;
     padding: 5px;
@@ -58,7 +58,7 @@ window {
 }
 
 #hibernate {
-    background-image: url("../../.config/wlogout/pause.png");
+    background-image: url("../../.config/wleave/pause.png");
     margin: 5px 5px 5px 5px;
     /* margin : 5px 300px 5px 5px; */
     padding: 5px;
@@ -66,7 +66,7 @@ window {
 }
 
 #sleep {
-    background-image: url("../../.config/wlogout/sleep.png");
+    background-image: url("../../.config/wleave/sleep.png");
     margin: 5px 5px 5px 5px;
     /* margin : 5px 300px 5px 5px; */
     padding: 5px;

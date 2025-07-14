@@ -10,6 +10,12 @@ export QT_QPA_PLATFORM="wayland;xcb"
 export SDL_VIDEODRIVER="wayland"
 export CLUTTER_BACKEND="wayland"
 export STEAM_FORCE_DESKTOPUI_SCALING=1
+export XCURSOR_SIZE=20
+export XCURSOR_THEME=Bibata-Modern-Ice
+export HYPRCURSOR_SIZE=20
+export HYPRCURSOR_THEME=Bibata-Modern-Ice
+export GTK_THEME=pop:dark
+export QT_QPA_PLATFORMTHEME=qt6ct
 
 export GSK_RENDERER=cairo
 export WLR_NO_HARDWARE_CURSORS=1
