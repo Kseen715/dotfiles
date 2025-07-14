@@ -79,7 +79,6 @@
   /* entries with multiple actions */
   /* max-height: 5px; */
   background: transparent;
-  max-width: 50px;
 }
 
 #entry {
@@ -106,7 +105,7 @@
   background-color: @bckg-dimm;
   text-shadow: 0px 0px 6px @white;
   outline-color: @accents;
-  outline-radius: 12px;
+  --gtk-outline-radius: 12px;
 }
 
 #img {
