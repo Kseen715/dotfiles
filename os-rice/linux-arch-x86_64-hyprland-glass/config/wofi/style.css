@@ -105,7 +105,7 @@
   background-color: @bckg-dimm;
   text-shadow: 0px 0px 6px @white;
   outline-color: @accents;
-  --gtk-outline-radius: 12px;
+  -gtk-outline-radius: 12px;
 }
 
 #img {
