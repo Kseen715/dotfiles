@@ -77,7 +77,7 @@
   "wireplumber": {
     "format": "{icon} {volume}%",
     "format-muted": " ",
-    "on-click": "qpwgraph",
+    "on-click": "easyeffects",
     "format-icons": [
       "",
       "",
