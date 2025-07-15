@@ -78,6 +78,8 @@
     "format": "{icon} {volume}%",
     "format-muted": " ",
     "on-click": "easyeffects",
+    "on-click-right": "pavucontrol",
+    "on-click-middle": "pactl set-default-sink $((s=$(pactl list short sinks | sed -e 's:^[0-9]\\+\\s\\+::' | grep -oP '^\\S+'); echo \"$s\"; echo \"$s\") | fgrep $(pactl get-default-sink) -m 1 -A 1 | tail -1)",
     "format-icons": [
       "",
       "",
@@ -85,7 +87,7 @@
     ],
     "max-volume": 150,
     "scroll-step": 5,
-    "tooltip": false
+    "tooltip": true
   },
   "battery": {
     "format": "{icon} {capacity}%",
