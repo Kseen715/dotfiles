@@ -8,9 +8,8 @@ trace pacman -Sy --noconfirm
 source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 
 source "$(dirname "$(realpath "$0")")/src/detect-aur-helper.sh"
-
 source "$(dirname "$(realpath "$0")")/src/detect-virt.sh"
-
+source "$(dirname "$(realpath "$0")")/src/detect-cpu.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-gpu.sh"
 
 inst_module() {

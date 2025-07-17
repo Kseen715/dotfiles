@@ -10,10 +10,12 @@ source "$(dirname "$(realpath "$0")")/modules/git.sh"
 
 source "$(dirname "$(realpath "$0")")/src/detect-aur-helper.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-virt.sh"
+source "$(dirname "$(realpath "$0")")/src/detect-cpu.sh"
 source "$(dirname "$(realpath "$0")")/modules/vmware-init.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-gpu.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/pacman-multilib.sh"
+source "$(dirname "$(realpath "$0")")/modules/cpu-microcodes.sh"
 source "$(dirname "$(realpath "$0")")/modules/gpu-drivers.sh"
 
 source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
