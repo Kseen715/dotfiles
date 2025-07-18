@@ -43,6 +43,7 @@ source "$(dirname "$(realpath "$0")")/modules/easyeffects.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/luminance.sh"
 source "$(dirname "$(realpath "$0")")/modules/nwg-displays.sh"
+source "$(dirname "$(realpath "$0")")/modules/printer.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/wezterm.sh"
 source "$(dirname "$(realpath "$0")")/modules/foot.sh"
