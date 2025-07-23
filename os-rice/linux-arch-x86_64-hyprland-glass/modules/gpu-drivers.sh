@@ -7,24 +7,24 @@ for vendor in "${vendors[@]}"; do
         NVIDIA)
             info "NVIDIA GPU detected"
             # check if nvidia-open-dkms is in ignore list
-            to_install = ""
+            to_install=""
             if grep -q "nvidia-open-dkms" /etc/pacman.conf; then
-                warning "nvidia-open-dkms is in the ignore list, skipping installation"
+                warning "nvidia-open-dkms is in the ignore list -- skipping"
             else
-                to_install="nvidia-open-dkms"
+                to_install="$to_install nvidia-open-dkms"
             fi
             if grep -q "nvidia-settings" /etc/pacman.conf; then
-                warning "nvidia-settings is in the ignore list, skipping installation"
+                warning "nvidia-settings is in the ignore list -- skipping"
             else
                 to_install="$to_install nvidia-settings"
             fi
             if grep -q "nvidia-utils" /etc/pacman.conf; then
-                warning "nvidia-utils is in the ignore list, skipping installation"
+                warning "nvidia-utils is in the ignore list -- skipping"
             else
                 to_install="$to_install nvidia-utils"
             fi
             if grep -q "lib32-nvidia-utils" /etc/pacman.conf; then
-                warning "lib32-nvidia-utils is in the ignore list, skipping installation"
+                warning "lib32-nvidia-utils is in the ignore list -- skipping"
             else
                 to_install="$to_install lib32-nvidia-utils"
             fi
