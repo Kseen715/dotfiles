@@ -48,7 +48,8 @@ source "$(dirname "$(realpath "$0")")/modules/printer.sh"
 source "$(dirname "$(realpath "$0")")/modules/wezterm.sh"
 source "$(dirname "$(realpath "$0")")/modules/foot.sh"
 source "$(dirname "$(realpath "$0")")/modules/nautilus.sh"
-source "$(dirname "$(realpath "$0")")/modules/kate.sh"
+
+source "$(dirname "$(realpath "$0")")/apps/kate.sh"
 
 # blue=(
 #   bluez
