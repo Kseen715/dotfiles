@@ -1,5 +1,5 @@
 # detect cpu vendor and model
-CPU_VENDOR=""
+CPU_VENDOR="" # GenuineIntel, AuthenticAMD
 CPU_MODEL=""
 CPU_ARCH=""
 if command -v lscpu &>/dev/null; then
