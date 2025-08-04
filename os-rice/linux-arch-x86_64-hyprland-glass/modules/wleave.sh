@@ -1,5 +1,5 @@
 info "Installing wleave..."
-trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm wleave-git
+trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm wleave scdoc
 trace mkdir -p /home/$DELEVATED_USER/.config/wleave
 trace chmod 775 /home/$DELEVATED_USER/.config/wleave
 trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/wleave
