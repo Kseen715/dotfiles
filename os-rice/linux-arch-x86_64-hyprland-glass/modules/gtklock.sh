@@ -16,5 +16,5 @@ trace chmod 644 /home/$DELEVATED_USER/.config/gtklock/style.css
 # if file not exists
 if [ ! -f /home/$DELEVATED_USER/.face ]; then
     trace cp "$(dirname "$(realpath "$0")")/config/gtklock/.face" /home/$DELEVATED_USER/
-    trace chmod 644 /home/$DELEVATED_USER/.face
 fi
+trace chmod 644 /home/$DELEVATED_USER/.face
