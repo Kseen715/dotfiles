@@ -7,6 +7,7 @@ info "Updating package sources..."
 trace pacman -Sy --noconfirm 
 
 source "$(dirname "$(realpath "$0")")/modules/git.sh"
+source "$(dirname "$(realpath "$0")")/modules/openssh.sh"
 
 source "$(dirname "$(realpath "$0")")/src/detect-aur-helper.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-virt.sh"
