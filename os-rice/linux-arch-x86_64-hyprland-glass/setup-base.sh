@@ -20,6 +20,8 @@ source "$(dirname "$(realpath "$0")")/modules/dkms.sh"
 source "$(dirname "$(realpath "$0")")/modules/cpu-microcodes.sh"
 source "$(dirname "$(realpath "$0")")/modules/gpu-drivers.sh"
 
+source "$(dirname "$(realpath "$0")")/modules/zip.sh"
+
 source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"
