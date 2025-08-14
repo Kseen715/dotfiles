@@ -102,3 +102,85 @@ install_or_update_git_repo() {
         trace git clone $repo_url "$repo_dir" $clone_args
     fi
 }
+
+install_pkg_pacman() {
+    local pkgs=("$@")
+    local filtered_pkgs=()
+    
+    # Extract IgnorePkg entries from pacman.conf
+    local ignore_list=""
+    if [[ -f /etc/pacman.conf ]]; then
+        # Get all IgnorePkg lines, remove comments, extract package names
+        ignore_list=$(grep -E "^[[:space:]]*IgnorePkg[[:space:]]*=" /etc/pacman.conf | \
+                     sed 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//' | \
+                     tr ' ' '\n' | sort -u)
+    fi
+    
+    # Filter out packages that are in the ignore list
+    for pkg in "${pkgs[@]}"; do
+        local skip=false
+        if [[ -n "$ignore_list" ]]; then
+            # Check if package is in ignore list (exact match or glob pattern)
+            while IFS= read -r ignore_pkg; do
+                [[ -z "$ignore_pkg" ]] && continue
+                # Handle glob patterns in IgnorePkg
+                if [[ "$pkg" == $ignore_pkg ]]; then
+                    skip=true
+                    break
+                fi
+            done <<< "$ignore_list"
+        fi
+        
+        if [[ "$skip" == true ]]; then
+            warning "$pkg is in the ignore list -- skipping"
+        else
+            filtered_pkgs+=("$pkg")
+        fi
+    done
+    
+    # Install filtered packages if any remain
+    if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
+        trace sudo pacman -S --needed --noconfirm "${filtered_pkgs[@]}"
+    fi
+}
+
+install_pkg_aur() {
+    local pkgs=("$@")
+    local filtered_pkgs=()
+    
+    # Extract IgnorePkg entries from pacman.conf
+    local ignore_list=""
+    if [[ -f /etc/pacman.conf ]]; then
+        # Get all IgnorePkg lines, remove comments, extract package names
+        ignore_list=$(grep -E "^[[:space:]]*IgnorePkg[[:space:]]*=" /etc/pacman.conf | \
+                     sed 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//' | \
+                     tr ' ' '\n' | sort -u)
+    fi
+    
+    # Filter out packages that are in the ignore list
+    for pkg in "${pkgs[@]}"; do
+        local skip=false
+        if [[ -n "$ignore_list" ]]; then
+            # Check if package is in ignore list (exact match or glob pattern)
+            while IFS= read -r ignore_pkg; do
+                [[ -z "$ignore_pkg" ]] && continue
+                # Handle glob patterns in IgnorePkg
+                if [[ "$pkg" == $ignore_pkg ]]; then
+                    skip=true
+                    break
+                fi
+            done <<< "$ignore_list"
+        fi
+        
+        if [[ "$skip" == true ]]; then
+            warning "$pkg is in the ignore list -- skipping"
+        else
+            filtered_pkgs+=("$pkg")
+        fi
+    done
+    
+    # Install filtered packages if any remain
+    if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
+        trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm "${filtered_pkgs[@]}"
+    fi
+}
