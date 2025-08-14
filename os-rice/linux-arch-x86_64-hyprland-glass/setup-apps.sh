@@ -12,11 +12,6 @@ source "$(dirname "$(realpath "$0")")/src/detect-virt.sh"
 source "$(dirname "$(realpath "$0")")/modules/vmware-init.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-gpu.sh"
 
-source "$(dirname "$(realpath "$0")")/apps/micro.sh"
-source "$(dirname "$(realpath "$0")")/apps/htop.sh"
-source "$(dirname "$(realpath "$0")")/apps/btop.sh"
-source "$(dirname "$(realpath "$0")")/apps/fastfetch.sh"
-
 source "$(dirname "$(realpath "$0")")/apps/celluloid.sh"
 source "$(dirname "$(realpath "$0")")/apps/firefox.sh"
 source "$(dirname "$(realpath "$0")")/apps/vscode-insiders.sh"

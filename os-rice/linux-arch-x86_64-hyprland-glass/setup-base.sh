@@ -26,4 +26,9 @@ source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 
 source "$(dirname "$(realpath "$0")")/modules/zsh.sh"
 
+source "$(dirname "$(realpath "$0")")/apps/micro.sh"
+source "$(dirname "$(realpath "$0")")/apps/htop.sh"
+source "$(dirname "$(realpath "$0")")/apps/btop.sh"
+source "$(dirname "$(realpath "$0")")/apps/fastfetch.sh"
+
 success "Setup completed successfully!"
