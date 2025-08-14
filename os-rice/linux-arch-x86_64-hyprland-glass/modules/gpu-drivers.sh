@@ -50,14 +50,14 @@ for vendor in "${vendors[@]}"; do
             install_pkg_pacman dkms
             case "$nvidia_family" in
                 "Ada Lovelace"|"Ampere"|"Turing"|"Unknown")
-                    install_pkg_pacman nvidia-open-dkms nvidia-settings nvidia-utils lib32-nvidia-utils
+                    install_pkg_pacman nvidia-open-dkms nvidia-settings nvidia-utils lib32-nvidia-utils nvtop
                     trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     ;;
                 "Volta"|"Pascal"|"Maxwell")
-                    install_pkg_pacman nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils
+                    install_pkg_pacman nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils nvtop
                     trace pacman -Qi nvidia-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
@@ -69,6 +69,8 @@ for vendor in "${vendors[@]}"; do
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
+                    install_pkg_aur opencl-nvidia-470xx
+                    install_pkg_pacman ocl-icd nvtop
                     ;;
                 "Fermi")
                     install_pkg_aur nvidia-390xx-dkms
@@ -76,6 +78,8 @@ for vendor in "${vendors[@]}"; do
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
+                    install_pkg_aur opencl-nvidia-390xx
+                    install_pkg_pacman ocl-icd nvtop
                     ;;
                 "Tesla")
                     install_pkg_aur nvidia-340xx-dkms
@@ -83,6 +87,8 @@ for vendor in "${vendors[@]}"; do
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
+                    install_pkg_aur opencl-nvidia-340xx
+                    install_pkg_pacman ocl-icd nvtop
                     ;;
                 "Curie"|"Rankine"|"Kelvin"|"Celsius"|"Fahrenheit")
                     error "NVIDIA $nvidia_chip is NOT IMPLEMENTED YET"
