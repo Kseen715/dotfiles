@@ -51,35 +51,35 @@ for vendor in "${vendors[@]}"; do
             case "$nvidia_family" in
                 "Ada Lovelace"|"Ampere"|"Turing"|"Unknown")
                     install_pkg_pacman nvidia-open-dkms nvidia-settings nvidia-utils lib32-nvidia-utils
-                    trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
+                    trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     ;;
                 "Volta"|"Pascal"|"Maxwell")
                     install_pkg_pacman nvidia-dkms nvidia-settings nvidia-utils lib32-nvidia-utils
-                    trace pacman -Qi nvidia-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
+                    trace pacman -Qi nvidia-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     ;;
                 "Kepler")
                     install_pkg_aur nvidia-470xx-dkms
-                    trace pacman -Qi nvidia-470xx-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
+                    trace pacman -Qi nvidia-470xx-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     ;;
                 "Fermi")
                     install_pkg_aur nvidia-390xx-dkms
-                    trace pacman -Qi nvidia-390xx-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
+                    trace pacman -Qi nvidia-390xx-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     ;;
                 "Tesla")
                     install_pkg_aur nvidia-340xx-dkms
-                    trace pacman -Qi nvidia-340xx-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
+                    trace pacman -Qi nvidia-340xx-dkms | grep Version | awk '{print $3}' | sed 's/-.*//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
