@@ -79,7 +79,7 @@ for vendor in "${vendors[@]}"; do
                     info "NVIDIA version: $nvidia_version"
                     trace dkms install --no-depmod nvidia/$nvidia_version
                     install_pkg_aur opencl-nvidia-390xx
-                    install_pkg_pacman ocl-icd nvtop
+                    install_pkg_pacman ocl-icd nvtop libvdpau
                     ;;
                 "Tesla")
                     install_pkg_aur nvidia-340xx-dkms
