@@ -65,7 +65,6 @@ for vendor in "${vendors[@]}"; do
                     ;;
                 "Kepler")
                     install_pkg_aur nvidia-470xx-dkms
-                    install_pkg_pacman nvidia-settings nvidia-utils lib32-nvidia-utils
                     trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
@@ -73,7 +72,6 @@ for vendor in "${vendors[@]}"; do
                     ;;
                 "Fermi")
                     install_pkg_aur nvidia-390xx-dkms
-                    install_pkg_pacman nvidia-settings nvidia-utils lib32-nvidia-utils
                     trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
@@ -81,7 +79,6 @@ for vendor in "${vendors[@]}"; do
                     ;;
                 "Tesla")
                     install_pkg_aur nvidia-340xx-dkms
-                    install_pkg_pacman nvidia-settings nvidia-utils lib32-nvidia-utils
                     trace pacman -Qi nvidia-open-dkms | grep Version | awk '{print $3}' | sed 's/-2//g' > /tmp/nvidia_version
                     nvidia_version=$(cat /tmp/nvidia_version)
                     info "NVIDIA version: $nvidia_version"
