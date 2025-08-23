@@ -107,11 +107,14 @@ for vendor in "${vendors[@]}"; do
                     fi
                     ;;
             esac
-            install_pkg_pacman vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools vulkan-mesa-layers lib32-vulkan-mesa-layers nvidia-prime
+            install_pkg_pacman vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools vulkan-mesa-layers lib32-vulkan-mesa-layers nvidia-prime ocl-icd
             ;;
         AMD)
             info "AMD GPU detected"
-            install_pkg_pacman mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon vulkan-tools
+            install_pkg_pacman mesa  xf86-video-ati opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa  lib32-opencl-mesa lib32-libvdpau
+            # vulkan-radeon vulkan-tools lib32-vulkan-radeon
+            # xf86-video-amdgpu
+            # install_pkg_aur opencl-legacy-amdgpu-pro
             ;;
         Intel)
             info "Intel GPU detected"
