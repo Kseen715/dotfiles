@@ -111,10 +111,55 @@ for vendor in "${vendors[@]}"; do
             ;;
         AMD)
             info "AMD GPU detected"
-            install_pkg_pacman mesa  xf86-video-ati opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa  lib32-opencl-mesa lib32-libvdpau
-            # vulkan-radeon vulkan-tools lib32-vulkan-radeon
-            # xf86-video-amdgpu
-            # install_pkg_aur opencl-legacy-amdgpu-pro
+
+            amd_chip=$(lspci -k -d ::03xx | grep -oP '\[AMD/ATI\]\s+\K[^\s\[]+')
+            info "AMD chip: $amd_chip"
+
+            amd_family=
+            if [[ $amd_chip =~ ^(R100|RV100|RV200|RS100|RS200) ]]; then
+                amd_family="R100" # 7xxx, 320-345
+            elif [[ $amd_chip =~ ^(R200|RV250|RV280|RS300) ]]; then
+                amd_family="R200" # 8xxx - 9250
+            elif [[ $amd_chip =~ ^(	R300|R350|RV350|RV380|RS400|RS480) ]]; then
+                amd_family="R300" # 9500 - 9800, X300 - X600, X1050 - X1150, 200M
+            elif [[ $amd_chip =~ ^(R420|R423|RV410|RS600|RS690|RS740) ]]; then
+                amd_family="R400" # X700 - X850, X12xx, 2100
+            elif [[ $amd_chip =~ ^(RV515|R520|RV530|RV560|RV570|R580) ]]; then
+                amd_family="R500" # X1300 - X2300, HD2300
+            elif [[ $amd_chip =~ ^(R600|RV610|RV630|RV620|RV635|RV670|RS780|RS880) ]]; then
+                amd_family="R600" # HD2400 - HD4290
+            elif [[ $amd_chip =~ ^(RV770|RV730|RV710|RV740) ]]; then
+                amd_family="R700" # HD4330 - HD5165, HD5xxV
+            elif [[ $amd_chip =~ ^(CEDAR|REDWOOD|JUNIPER|CYPRESS|PALM|Wrestler|Ontario|SUMO|Llano|SUMO2) ]]; then
+                amd_family="Evergreen" # HD5430 - HD5970, all HD6000 not listed under Northern Islands, HD7350
+            elif [[ $amd_chip =~ ^(ARUBA|Trinity|Richland|BARTS|TURKS|CAICOS|CAYMAN) ]]; then
+                amd_family="Northern Islands" # HD6450, HD6570, HD6670, HD6790 - HD6990, HD64xxM, HD67xxM, HD69xxM, HD7450 - HD7670
+            elif [[ $amd_chip =~ ^(VERDE|PITCAIRN|TAHITI|OLAND|HAINAN) ]]; then
+                amd_family="Southern Islands" # HD7750 - HD7970, R9 270, R9-280, R7 240, R7 250
+            elif [[ $amd_chip =~ ^(BONAIRE|KABINI|MULLINS|KAVERI|HAWAII) ]]; then
+                amd_family="Sea Islands" # HD7790, R7 260, R9 290
+            elif [[ $amd_chip =~ ^(TONGA|ICELAND/TOPAZ|CARRIZO|FIJI|STONEY|POLARIS10|POLARIS11|POLARIS12|VEGAM) ]]; then
+                amd_family="Volcanic Islands" # R9 285
+            else 
+                amd_family="Unknown"
+            fi
+            info "AMD family: $amd_family"
+
+            case "$amd_family" in
+                "R100"|"R200"|"R300"|"R400"|"R500"|"R600"|"R700")
+                    warning "AMD $amd_chip is very old and might have limited support"
+                    install_pkg_pacman mesa xf86-video-ati opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa  lib32-opencl-mesa lib32-libvdpau
+                    # install_pkg_aur opencl-legacy-amdgpu-pro
+                    ;;
+                "Evergreen"|"Northern Islands"|"Southern Islands"|"Volcanic Islands"|"Unknown")
+                    install_pkg_pacman mesa opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa lib32-opencl-mesa lib32-libvdpau
+                    install_pkg_pacman vulkan-radeon vulkan-tools lib32-vulkan-radeon xf86-video-amdgpu
+                    ;;
+                *)
+                    warning "AMD $amd_chip is NOT IMPLEMENTED YET"
+                    ;;
+            esac
+
             ;;
         Intel)
             info "Intel GPU detected"
