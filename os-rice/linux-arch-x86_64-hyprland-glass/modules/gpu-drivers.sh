@@ -120,7 +120,7 @@ for vendor in "${vendors[@]}"; do
                 amd_family="R100" # 7xxx, 320-345
             elif [[ $amd_chip =~ ^(R200|RV250|RV280|RS300) ]]; then
                 amd_family="R200" # 8xxx - 9250
-            elif [[ $amd_chip =~ ^(	R300|R350|RV350|RV380|RS400|RS480) ]]; then
+            elif [[ $amd_chip =~ ^(R300|R350|RV350|RV380|RS400|RS480) ]]; then
                 amd_family="R300" # 9500 - 9800, X300 - X600, X1050 - X1150, 200M
             elif [[ $amd_chip =~ ^(R420|R423|RV410|RS600|RS690|RS740) ]]; then
                 amd_family="R400" # X700 - X850, X12xx, 2100
@@ -140,18 +140,51 @@ for vendor in "${vendors[@]}"; do
                 amd_family="Sea Islands" # HD7790, R7 260, R9 290
             elif [[ $amd_chip =~ ^(TONGA|ICELAND/TOPAZ|CARRIZO|FIJI|STONEY|POLARIS10|POLARIS11|POLARIS12|VEGAM) ]]; then
                 amd_family="Volcanic Islands" # R9 285
+            elif [[ $amd_chip =~ ^(Polaris|Ellesmere|Baffin|Lexa|Neo|Scorpio) ]]; then
+                amd_family="Arctic Islands/Polaris" # RX480, 520/530, RX530/550/570/580
+            elif [[ $amd_chip =~ ^(Vega 10|Vega 12|Vega 20|Raven Ridge|Picasso|Renoir|Cezanne) ]]; then
+                amd_family="Vega" # Vega Frontier Edition
+            elif [[ $amd_chip =~ ^(Navi 1) ]]; then
+                amd_family="Navi 1x" # RX 5xx0
+            elif [[ $amd_chip =~ ^(Navi 2) ]]; then
+                amd_family="Navi 2x" # RX 6xx0
+            elif [[ $amd_chip =~ ^(Navi 3) ]]; then
+                amd_family="Navi 3x" # RX 7xx0
+            elif [[ $amd_chip =~ ^(Navi 4) ]]; then
+                amd_family="Navi 4x" # RX 90x0
             else 
                 amd_family="Unknown"
             fi
             info "AMD family: $amd_family"
 
             case "$amd_family" in
-                "R100"|"R200"|"R300"|"R400"|"R500"|"R600"|"R700")
-                    warning "AMD $amd_chip is very old and might have limited support"
-                    install_pkg_pacman mesa xf86-video-ati opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa  lib32-opencl-mesa lib32-libvdpau
+                "R100"|"R200")
+                    # ATI Ember
+                    warning "OpenCL is NOT supported on $amd_family"
+                    install_pkg_pacman mesa-amber lib32-mesa-amber xf86-video-ati
+                    install_pkg_pacman libva-utils libvdpau-va-gl
+                    ;;
+                "R300"|"R400"|"R500")
+                    # ATI + VA-API
+                    warning "OpenCL is NOT supported on $amd_family"
+                    install_pkg_pacman mesa mesa-utils lib32-mesa xf86-video-ati
+                    install_pkg_pacman libva-utils libvdpau-va-gl
+                    ;;
+                "R600")
+                    # ATI + VA-API + VDPAU
+                    warning "OpenCL is NOT supported on $amd_family"
+                    install_pkg_pacman mesa mesa-utils lib32-mesa xf86-video-ati
+                    install_pkg_pacman libva-utils libvdpau-va-gl
+                    install_pkg_pacman libvdpau lib32-libvdpau vdpauinfo
                     # install_pkg_aur opencl-legacy-amdgpu-pro
                     ;;
-                "Evergreen"|"Northern Islands"|"Southern Islands"|"Volcanic Islands"|"Unknown")
+                "R700"|"Evergreen"|"Northern Islands"|"Sea Islands"|"Southern Islands")
+                    # ATI
+                    warning "OpenCL has limited support on R700"
+                    install_pkg_pacman mesa mesa-utils xf86-video-ati libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa lib32-libvdpau
+                    ;;
+                "Volcanic Islands"|"Unknown")
+                    # AMDGPU
                     install_pkg_pacman mesa opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl libvdpau lib32-mesa lib32-opencl-mesa lib32-libvdpau
                     install_pkg_pacman vulkan-radeon vulkan-tools lib32-vulkan-radeon xf86-video-amdgpu
                     ;;
