@@ -1,6 +1,12 @@
+# v0.1.1
+
 GPU_VENDOR=""
 GPU_MODEL=""
 GPU_COUNT=0
+
+NPU_VENDOR=""
+NPU_MODEL=""
+NPU_COUNT=0
 
 # Function to normalize vendor names
 normalize_vendor() {
@@ -51,6 +57,7 @@ normalize_vendor() {
     esac
 }
 
+# === GPU ===
 # Detect GPU vendor and model
 if command -v lspci &>/dev/null; then
     # Get all GPU devices (VGA compatible controllers and 3D controllers)
@@ -125,7 +132,7 @@ if command -v lspci &>/dev/null; then
     
     # Additional detection methods for edge cases
     if [[ -z "$GPU_VENDOR" ]] && command -v glxinfo &>/dev/null; then
-        info "Trying alternative detection with glxinfo..."
+        # info "Trying alternative detection with glxinfo..."
         renderer=$(glxinfo | grep "OpenGL renderer string" | cut -d: -f2- | xargs)
         if [[ -n "$renderer" ]]; then
             normalized_vendor=$(normalize_vendor "$renderer")
@@ -141,7 +148,7 @@ if command -v lspci &>/dev/null; then
     
     # Try /proc/driver/nvidia/version for NVIDIA detection
     if [[ -z "$GPU_VENDOR" ]] && [[ -f "/proc/driver/nvidia/version" ]]; then
-        info "NVIDIA driver detected via /proc filesystem"
+        # info "NVIDIA driver detected via /proc filesystem"
         GPU_VENDOR="NVIDIA"
         GPU_COUNT=1
         if command -v nvidia-smi &>/dev/null; then
@@ -154,7 +161,7 @@ if command -v lspci &>/dev/null; then
     
     # Try /sys/class/drm for additional detection
     if [[ -z "$GPU_VENDOR" ]] && [[ -d "/sys/class/drm" ]]; then
-        info "Trying detection via DRM subsystem..."
+        # info "Trying detection via DRM subsystem..."
         for card in /sys/class/drm/card*/device/vendor; do
             if [[ -f "$card" ]]; then
                 vendor_id=$(cat "$card" 2>/dev/null)
@@ -191,7 +198,7 @@ else
     
     # Try alternative detection methods when lspci is not available
     if command -v glxinfo &>/dev/null; then
-        info "Trying detection with glxinfo..."
+        # info "Trying detection with glxinfo..."
         renderer=$(glxinfo | grep "OpenGL renderer string" | cut -d: -f2- | xargs 2>/dev/null)
         if [[ -n "$renderer" ]]; then
             normalized_vendor=$(normalize_vendor "$renderer")
@@ -219,10 +226,202 @@ if [[ -n "$GPU_VENDOR" ]]; then
     fi
     info "  Count: $GPU_COUNT"
 else
-    warning "Unable to detect any GPU vendor"
+    info "No GPU detected"
     GPU_VENDOR="Unknown"
     GPU_COUNT=0
 fi
+# === /GPU ===
+
+# === NPU ===
+# Detect NPU vendor and model
+if command -v dmesg &>/dev/null; then
+    # Get dmesg output and look for NPU-related entries
+    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bnpu\b|rknpu|neural.*processing|rockchip.*npu\b|mali.*npu|ethos.*npu|hexagon.*npu|qualcomm.*npu|intel.*npu|mediatek.*npu|amlogic.*npu")
+    
+    if [[ -n "$dmesg_output" ]]; then
+        declare -A npu_vendor_count
+        declare -a detected_npu_vendors
+        declare -a detected_npu_models
+        
+        # Process each NPU-related dmesg line
+        while IFS= read -r line; do
+            npu_vendor=""
+            npu_model=""
+            
+            # Rockchip NPU detection
+            if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
+                npu_vendor="Rockchip"
+                if echo "$line" | grep -i -q "rk3588"; then
+                    npu_model="RK3588 NPU"
+                elif echo "$line" | grep -i -q "rk3566\|rk3568"; then
+                    npu_model="RK356x NPU"
+                elif echo "$line" | grep -i -q "rk3399"; then
+                    npu_model="RK3399 NPU"
+                elif echo "$line" | grep -i -q "rk1808"; then
+                    npu_model="RK1808 NPU"
+                else
+                    # Extract model from dmesg line
+                    model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
+                    if [[ -n "$model_match" ]]; then
+                        npu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') NPU"
+                    else
+                        npu_model="Rockchip NPU"
+                    fi
+                fi
+            # Qualcomm NPU detection
+            elif echo "$line" | grep -i -q "qualcomm.*npu\|hexagon"; then
+                npu_vendor="Qualcomm"
+                if echo "$line" | grep -i -q "hexagon"; then
+                    npu_model="Hexagon NPU"
+                else
+                    npu_model="Qualcomm NPU"
+                fi
+            # Intel NPU detection
+            elif echo "$line" | grep -i -q "intel.*npu"; then
+                npu_vendor="Intel"
+                npu_model="Intel NPU"
+            # MediaTek NPU detection
+            elif echo "$line" | grep -i -q "mediatek.*npu"; then
+                npu_vendor="MediaTek"
+                npu_model="MediaTek NPU"
+            # Amlogic NPU detection
+            elif echo "$line" | grep -i -q "amlogic.*npu"; then
+                npu_vendor="Amlogic"
+                npu_model="Amlogic NPU"
+            # ARM Mali NPU detection
+            elif echo "$line" | grep -i -q "mali.*npu\|ethos"; then
+                npu_vendor="ARM"
+                if echo "$line" | grep -i -q "ethos"; then
+                    npu_model="ARM Ethos NPU"
+                else
+                    npu_model="ARM Mali NPU"
+                fi
+            # Generic neural/npu detection
+            elif echo "$line" | grep -i -q "neural\|npu"; then
+                npu_vendor="Unknown"
+                npu_model="Unknown NPU"
+            fi
+            
+            if [[ -n "$npu_vendor" ]]; then
+                # Count occurrences of each vendor
+                if [[ -z "${npu_vendor_count[$npu_vendor]}" ]]; then
+                    npu_vendor_count[$npu_vendor]=1
+                    detected_npu_vendors+=("$npu_vendor")
+                else
+                    ((npu_vendor_count[$npu_vendor]++))
+                fi
+                
+                # Store full model information
+                if [[ -n "$npu_model" ]]; then
+                    detected_npu_models+=("$npu_model")
+                fi
+                
+                ((NPU_COUNT++))
+            fi
+        done <<< "$dmesg_output"
+        
+        # Create comma-separated vendor list
+        if [[ ${#detected_npu_vendors[@]} -gt 0 ]]; then
+            NPU_VENDOR=$(IFS=","; echo "${detected_npu_vendors[*]}")
+            NPU_MODEL=$(IFS=" | "; echo "${detected_npu_models[*]}")
+            
+            info "Detected $NPU_COUNT NPU(s) via dmesg:"
+            for vendor in "${detected_npu_vendors[@]}"; do
+                count=${npu_vendor_count[$vendor]}
+                if [[ $count -eq 1 ]]; then
+                    info "  - $vendor NPU"
+                else
+                    info "  - $vendor NPU (x$count)"
+                fi
+            done
+            
+            if [[ -n "$NPU_MODEL" ]]; then
+                info "NPU model(s): $NPU_MODEL"
+            fi
+        fi
+    fi
+else
+    warning "dmesg command not found, unable to detect NPU via kernel messages"
+fi
+
+# Additional NPU detection methods
+# Check for NPU-specific device files and drivers
+if [[ -z "$NPU_VENDOR" ]]; then
+    # info "Trying additional NPU detection methods..."
+    
+    # Check for Rockchip NPU device files
+    if [[ -c "/dev/rknpu" ]] || [[ -d "/sys/class/rknpu" ]]; then
+        NPU_VENDOR="Rockchip"
+        NPU_MODEL="Rockchip NPU"
+        NPU_COUNT=1
+        info "Rockchip NPU detected via device files"
+    fi
+    
+    # Check for loaded NPU kernel modules
+    if command -v lsmod &>/dev/null; then
+        npu_modules=$(lsmod | grep -i -E "rknpu|npu|neural")
+        if [[ -n "$npu_modules" ]]; then
+            while IFS= read -r module_line; do
+                module_name=$(echo "$module_line" | awk '{print $1}')
+                case "$module_name" in
+                    *rknpu*|*rockchip*npu*)
+                        if [[ -z "$NPU_VENDOR" ]]; then
+                            NPU_VENDOR="Rockchip"
+                            NPU_MODEL="Rockchip NPU"
+                            NPU_COUNT=1
+                            info "Rockchip NPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                    *npu*|*neural*)
+                        if [[ -z "$NPU_VENDOR" ]]; then
+                            NPU_VENDOR="Unknown"
+                            NPU_MODEL="Unknown NPU"
+                            NPU_COUNT=1
+                            info "NPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                esac
+            done <<< "$npu_modules"
+        fi
+    fi
+    
+    # Check /proc/device-tree for NPU nodes (ARM-based systems)
+    if [[ -d "/proc/device-tree" ]]; then
+        npu_nodes=$(find /proc/device-tree -name "*npu*" -o -name "*neural*" 2>/dev/null)
+        if [[ -n "$npu_nodes" ]]; then
+            # Check for Rockchip specific nodes
+            if echo "$npu_nodes" | grep -q "rknpu"; then
+                if [[ -z "$NPU_VENDOR" ]]; then
+                    NPU_VENDOR="Rockchip"
+                    NPU_MODEL="Rockchip NPU"
+                    NPU_COUNT=1
+                    info "Rockchip NPU detected via device tree"
+                fi
+            elif [[ -z "$NPU_VENDOR" ]]; then
+                NPU_VENDOR="Unknown"
+                NPU_MODEL="Unknown NPU"
+                NPU_COUNT=1
+                info "NPU detected via device tree"
+            fi
+        fi
+    fi
+fi
+
+# Final NPU validation and summary
+if [[ -n "$NPU_VENDOR" && "$NPU_VENDOR" != "" ]]; then
+    info "Final NPU detection result:"
+    info "  Vendor(s): $NPU_VENDOR"
+    if [[ -n "$NPU_MODEL" ]]; then
+        info "  Model(s): $NPU_MODEL"
+    fi
+    info "  Count: $NPU_COUNT"
+else
+    info "No NPU detected"
+    NPU_VENDOR=""
+    NPU_MODEL=""
+    NPU_COUNT=0
+fi
+# === /NPU ===
 
 # Export variables for use by other scripts
 export GPU_VENDOR

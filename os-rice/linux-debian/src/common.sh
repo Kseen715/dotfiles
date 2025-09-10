@@ -169,7 +169,7 @@ install_pkg_apt() {
     
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
-        trace sudo apt install -y "${filtered_pkgs[@]}"
+        trace sudo apt install --yes "${filtered_pkgs[@]}"
     fi
 }
 
