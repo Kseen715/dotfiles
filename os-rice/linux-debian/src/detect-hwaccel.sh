@@ -1,4 +1,4 @@
-# v0.1.1
+# v0.1.2
 
 GPU_VENDOR=""
 GPU_MODEL=""
@@ -20,6 +20,9 @@ normalize_vendor() {
             ;;
         *"Intel"*|*"HD Graphics"*|*"UHD Graphics"*|*"Iris"*|*"Arc"*)
             echo "Intel"
+            ;;
+        *"Mali"*|*"mali"*|*"panfrost"*|*"ARM Mali"*|*"Immortalis"*|*"immortalis"*)
+            echo "ARM"
             ;;
         *"VMware"*|*"VMWARE"*)
             echo "VMware"
@@ -212,6 +215,63 @@ else
         GPU_VENDOR="NVIDIA"
         GPU_COUNT=1
         info "NVIDIA GPU detected via /proc filesystem"
+    fi
+fi
+
+# Try Mali GPU detection via dmesg
+if [[ -z "$GPU_VENDOR" ]] && command -v dmesg &>/dev/null; then
+    # info "Trying Mali GPU detection via dmesg..."
+    mali_info=$(dmesg 2>/dev/null | grep -i -E "mali|panfrost.*gpu")
+    if [[ -n "$mali_info" ]]; then
+        # Look for Mali GPU model information
+        mali_model=""
+        
+        # Check for panfrost driver with GPU model info
+        panfrost_line=$(echo "$mali_info" | grep -i "panfrost.*gpu.*mali-g" | head -1)
+        if [[ -n "$panfrost_line" ]]; then
+            # Extract Mali model from panfrost line (e.g., "mali-g52 id 0x7402")
+            mali_model=$(echo "$panfrost_line" | grep -o -i "mali-g[0-9]\+[a-z]*" | head -1)
+            if [[ -n "$mali_model" ]]; then
+                mali_model="ARM $(echo "$mali_model" | tr '[:lower:]' '[:upper:]')"
+            fi
+        fi
+        
+        # Fallback: check for generic mali driver
+        if [[ -z "$mali_model" ]]; then
+            mali_line=$(echo "$mali_info" | grep -i "mali.*gpu" | head -1)
+            if [[ -n "$mali_line" ]]; then
+                mali_model="ARM Mali GPU"
+            fi
+        fi
+        
+        if [[ -n "$mali_model" ]]; then
+            GPU_VENDOR="ARM"
+            GPU_MODEL="$mali_model"
+            GPU_COUNT=1
+            info "Detected Mali GPU via dmesg: $mali_model"
+        fi
+    fi
+fi
+
+# Try Mali GPU detection via device files
+if [[ -z "$GPU_VENDOR" ]]; then
+    # Check for Mali device files
+    if [[ -c "/dev/mali0" ]] || [[ -d "/sys/class/misc/mali0" ]] || [[ -c "/dev/dri/renderD128" && -d "/sys/class/drm/card0" ]]; then
+        # Check if it's actually a Mali GPU by looking at driver info
+        if [[ -f "/sys/class/drm/card0/device/driver/module" ]]; then
+            driver_module=$(readlink -f /sys/class/drm/card0/device/driver/module 2>/dev/null)
+            if echo "$driver_module" | grep -q -i "mali\|panfrost"; then
+                GPU_VENDOR="ARM"
+                GPU_MODEL="ARM Mali GPU"
+                GPU_COUNT=1
+                info "Detected Mali GPU via device files"
+            fi
+        elif [[ -c "/dev/mali0" ]]; then
+            GPU_VENDOR="ARM"
+            GPU_MODEL="ARM Mali GPU"
+            GPU_COUNT=1
+            info "Detected Mali GPU via /dev/mali0 device"
+        fi
     fi
 fi
 
