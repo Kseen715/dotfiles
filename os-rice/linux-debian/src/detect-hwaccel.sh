@@ -8,6 +8,10 @@ NPU_VENDOR=""
 NPU_MODEL=""
 NPU_COUNT=0
 
+VPU_VENDOR=""
+VPU_MODEL=""
+VPU_COUNT=0
+
 # Function to normalize vendor names
 normalize_vendor() {
     local vendor="$1"
@@ -529,7 +533,352 @@ else
 fi
 # === /NPU ===
 
-# Export variables for use by other scripts
-export GPU_VENDOR
-export GPU_MODEL
-export GPU_COUNT
+# === VPU ===
+
+# Detect VPU vendor and model
+if command -v dmesg &>/dev/null; then
+    # Get dmesg output and look for VPU-related entries
+    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bvpu\b|video.*processing|rockchip.*vpu\b|hantro|rkvdec|rkvenc|vdec|venc|cedrus.*vpu|allwinner.*vpu|mediatek.*vpu|imx.*vpu|amlogic.*vpu|meson.*vpu|venus.*vpu|qualcomm.*vpu")
+    
+    if [[ -n "$dmesg_output" ]]; then
+        declare -A vpu_vendor_count
+        declare -a detected_vpu_vendors
+        declare -a detected_vpu_models
+        declare -A unique_vpu_devices  # Track unique VPU devices by address/identifier
+        
+        # Process each VPU-related dmesg line
+        while IFS= read -r line; do
+            vpu_vendor=""
+            vpu_model=""
+            device_identifier=""
+            
+            # For Rockchip VPU, always use a consistent identifier regardless of device address
+            if echo "$line" | grep -i -q "rockchip.*vpu\|hantro\|rkvdec\|rkvenc"; then
+                # Create unique identifier based on VPU type
+                if echo "$line" | grep -i -q "rkvdec"; then
+                    device_identifier="rockchip_vdec_0"
+                elif echo "$line" | grep -i -q "rkvenc"; then
+                    device_identifier="rockchip_venc_0"
+                elif echo "$line" | grep -i -q "hantro"; then
+                    device_identifier="rockchip_hantro_0"
+                else
+                    device_identifier="rockchip_vpu_0"
+                fi
+            else
+                # Extract device identifier (address) from dmesg line for other vendors
+                device_addr=$(echo "$line" | grep -o "[0-9a-f]\{6,8\}\.vpu\|[0-9a-f]\{6,8\}\.video")
+                if [[ -n "$device_addr" ]]; then
+                    device_identifier="$device_addr"
+                else
+                    # For other vendors, use a cleaned version as identifier
+                    device_identifier=$(echo "$line" | sed "s/\[.*\] *//" | sed "s/^[[:space:]]*//" | awk "{print \$1 \$2}" | head -c 30)
+                fi
+            fi
+            
+            # Skip lines that are just power supply lookups or property failures (noise)
+            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present"; then
+                continue
+            fi
+            
+            # Rockchip VPU detection
+            if echo "$line" | grep -i -q "rockchip.*vpu\|hantro\|rkvdec\|rkvenc"; then
+                vpu_vendor="Rockchip"
+                # Universal method: extract VPU model from system name (2nd word)
+                detect_system_name_inxi
+                if [[ -n "$SYS_NAME" ]]; then
+                    # Extract the second word from system name (should be the SoC model)
+                    soc_model=$(echo "$SYS_NAME" | awk '{print $2}')
+                    if [[ -n "$soc_model" && "$soc_model" =~ ^RK[0-9] ]]; then
+                        if echo "$line" | grep -i -q "rkvdec"; then
+                            vpu_model="$(echo "$soc_model" | tr '[:lower:]' '[:upper:]') VDEC"
+                        elif echo "$line" | grep -i -q "rkvenc"; then
+                            vpu_model="$(echo "$soc_model" | tr '[:lower:]' '[:upper:]') VENC"
+                        elif echo "$line" | grep -i -q "hantro"; then
+                            vpu_model="$(echo "$soc_model" | tr '[:lower:]' '[:upper:]') Hantro VPU"
+                        else
+                            vpu_model="$(echo "$soc_model" | tr '[:lower:]' '[:upper:]') VPU"
+                        fi
+                    else
+                        # Fallback: extract from dmesg line
+                        model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
+                        if [[ -n "$model_match" ]]; then
+                            if echo "$line" | grep -i -q "rkvdec"; then
+                                vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VDEC"
+                            elif echo "$line" | grep -i -q "rkvenc"; then
+                                vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VENC"
+                            elif echo "$line" | grep -i -q "hantro"; then
+                                vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') Hantro VPU"
+                            else
+                                vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VPU"
+                            fi
+                        else
+                            if echo "$line" | grep -i -q "rkvdec"; then
+                                vpu_model="Rockchip VDEC"
+                            elif echo "$line" | grep -i -q "rkvenc"; then
+                                vpu_model="Rockchip VENC"
+                            elif echo "$line" | grep -i -q "hantro"; then
+                                vpu_model="Rockchip Hantro VPU"
+                            else
+                                vpu_model="Rockchip VPU"
+                            fi
+                        fi
+                    fi
+                else
+                    # Fallback: extract from dmesg line
+                    model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
+                    if [[ -n "$model_match" ]]; then
+                        if echo "$line" | grep -i -q "rkvdec"; then
+                            vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VDEC"
+                        elif echo "$line" | grep -i -q "rkvenc"; then
+                            vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VENC"
+                        elif echo "$line" | grep -i -q "hantro"; then
+                            vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') Hantro VPU"
+                        else
+                            vpu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') VPU"
+                        fi
+                    else
+                        if echo "$line" | grep -i -q "rkvdec"; then
+                            vpu_model="Rockchip VDEC"
+                        elif echo "$line" | grep -i -q "rkvenc"; then
+                            vpu_model="Rockchip VENC"
+                        elif echo "$line" | grep -i -q "hantro"; then
+                            vpu_model="Rockchip Hantro VPU"
+                        else
+                            vpu_model="Rockchip VPU"
+                        fi
+                    fi
+                fi
+            # Allwinner VPU detection (Cedrus)
+            elif echo "$line" | grep -i -q "cedrus.*vpu\|allwinner.*vpu"; then
+                vpu_vendor="Allwinner"
+                if echo "$line" | grep -i -q "cedrus"; then
+                    vpu_model="Allwinner Cedrus VPU"
+                else
+                    vpu_model="Allwinner VPU"
+                fi
+            # Qualcomm VPU detection (Venus)
+            elif echo "$line" | grep -i -q "qualcomm.*vpu\|venus.*vpu"; then
+                vpu_vendor="Qualcomm"
+                if echo "$line" | grep -i -q "venus"; then
+                    vpu_model="Qualcomm Venus VPU"
+                else
+                    vpu_model="Qualcomm VPU"
+                fi
+            # MediaTek VPU detection
+            elif echo "$line" | grep -i -q "mediatek.*vpu"; then
+                vpu_vendor="MediaTek"
+                vpu_model="MediaTek VPU"
+            # Amlogic VPU detection (Meson)
+            elif echo "$line" | grep -i -q "amlogic.*vpu\|meson.*vpu"; then
+                vpu_vendor="Amlogic"
+                if echo "$line" | grep -i -q "meson"; then
+                    vpu_model="Amlogic Meson VPU"
+                else
+                    vpu_model="Amlogic VPU"
+                fi
+            # NXP i.MX VPU detection
+            elif echo "$line" | grep -i -q "imx.*vpu"; then
+                vpu_vendor="NXP"
+                vpu_model="NXP i.MX VPU"
+            # Generic video processing/vpu detection
+            elif echo "$line" | grep -i -q "video.*processing\|\bvpu\b"; then
+                vpu_vendor="Unknown"
+                vpu_model="Unknown VPU"
+            fi
+            
+            if [[ -n "$vpu_vendor" && -n "$device_identifier" ]]; then
+                # Only count each unique device once
+                device_key="${vpu_vendor}_${device_identifier}"
+                if [[ -z "${unique_vpu_devices[$device_key]}" ]]; then
+                    unique_vpu_devices[$device_key]=1
+                    
+                    # Count occurrences of each vendor
+                    if [[ -z "${vpu_vendor_count[$vpu_vendor]}" ]]; then
+                        vpu_vendor_count[$vpu_vendor]=1
+                        detected_vpu_vendors+=("$vpu_vendor")
+                    else
+                        ((vpu_vendor_count[$vpu_vendor]++))
+                    fi
+                    
+                    # Store full model information (only once per unique device)
+                    if [[ -n "$vpu_model" ]]; then
+                        detected_vpu_models+=("$vpu_model")
+                    fi
+                    
+                    ((VPU_COUNT++))
+                fi
+            fi
+        done <<< "$dmesg_output"
+        
+        # Create comma-separated vendor list
+        if [[ ${#detected_vpu_vendors[@]} -gt 0 ]]; then
+            VPU_VENDOR=$(IFS=","; echo "${detected_vpu_vendors[*]}")
+            VPU_MODEL=$(IFS=","; echo "${detected_vpu_models[*]}")
+            
+            info "Detected $VPU_COUNT VPU(s) via dmesg:"
+            for vendor in "${detected_vpu_vendors[@]}"; do
+                count=${vpu_vendor_count[$vendor]}
+                if [[ $count -eq 1 ]]; then
+                    info "  - $vendor VPU"
+                else
+                    info "  - $vendor VPU (x$count)"
+                fi
+            done
+            
+            if [[ -n "$VPU_MODEL" ]]; then
+                info "VPU model(s): $VPU_MODEL"
+            fi
+        fi
+    fi
+else
+    warning "dmesg command not found, unable to detect VPU via kernel messages"
+fi
+
+# Additional VPU detection methods
+# Check for VPU-specific device files and drivers
+if [[ -z "$VPU_VENDOR" ]]; then
+    # info "Trying additional VPU detection methods..."
+    
+    # Check for Rockchip VPU device files
+    if [[ -c "/dev/rkvdec" ]] || [[ -c "/dev/rkvenc" ]] || [[ -d "/sys/class/video4linux" ]]; then
+        # Check if it's actually a Rockchip VPU by looking at driver info
+        vpu_found=0
+        for v4l_device in /sys/class/video4linux/video*; do
+            if [[ -d "$v4l_device" ]]; then
+                device_name=$(cat "$v4l_device/name" 2>/dev/null)
+                if echo "$device_name" | grep -i -q "rockchip\|rkvdec\|rkvenc\|hantro"; then
+                    if [[ -z "$VPU_VENDOR" ]]; then
+                        VPU_VENDOR="Rockchip"
+                        if echo "$device_name" | grep -i -q "rkvdec"; then
+                            VPU_MODEL="Rockchip VDEC"
+                        elif echo "$device_name" | grep -i -q "rkvenc"; then
+                            VPU_MODEL="Rockchip VENC"
+                        elif echo "$device_name" | grep -i -q "hantro"; then
+                            VPU_MODEL="Rockchip Hantro VPU"
+                        else
+                            VPU_MODEL="Rockchip VPU"
+                        fi
+                        VPU_COUNT=1
+                        vpu_found=1
+                        info "Rockchip VPU detected via V4L2 device: $device_name"
+                        break
+                    fi
+                fi
+            fi
+        done
+        
+        # Fallback: check for rkvdec/rkvenc device files directly
+        if [[ $vpu_found -eq 0 ]]; then
+            if [[ -c "/dev/rkvdec" ]] || [[ -c "/dev/rkvenc" ]]; then
+                VPU_VENDOR="Rockchip"
+                if [[ -c "/dev/rkvdec" && -c "/dev/rkvenc" ]]; then
+                    VPU_MODEL="Rockchip VDEC/VENC"
+                elif [[ -c "/dev/rkvdec" ]]; then
+                    VPU_MODEL="Rockchip VDEC"
+                elif [[ -c "/dev/rkvenc" ]]; then
+                    VPU_MODEL="Rockchip VENC"
+                fi
+                VPU_COUNT=1
+                info "Rockchip VPU detected via device files"
+            fi
+        fi
+    fi
+    
+    # Check for loaded VPU kernel modules
+    if command -v lsmod &>/dev/null; then
+        vpu_modules=$(lsmod | grep -i -E "rkvdec|rkvenc|hantro|cedrus|venus|vpu|video.*codec")
+        if [[ -n "$vpu_modules" ]]; then
+            while IFS= read -r module_line; do
+                module_name=$(echo "$module_line" | awk '{print $1}')
+                case "$module_name" in
+                    *rkvdec*|*rkvenc*|*hantro*)
+                        if [[ -z "$VPU_VENDOR" ]]; then
+                            VPU_VENDOR="Rockchip"
+                            if echo "$module_name" | grep -q "rkvdec"; then
+                                VPU_MODEL="Rockchip VDEC"
+                            elif echo "$module_name" | grep -q "rkvenc"; then
+                                VPU_MODEL="Rockchip VENC"
+                            elif echo "$module_name" | grep -q "hantro"; then
+                                VPU_MODEL="Rockchip Hantro VPU"
+                            else
+                                VPU_MODEL="Rockchip VPU"
+                            fi
+                            VPU_COUNT=1
+                            info "Rockchip VPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                    *cedrus*)
+                        if [[ -z "$VPU_VENDOR" ]]; then
+                            VPU_VENDOR="Allwinner"
+                            VPU_MODEL="Allwinner Cedrus VPU"
+                            VPU_COUNT=1
+                            info "Allwinner VPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                    *venus*)
+                        if [[ -z "$VPU_VENDOR" ]]; then
+                            VPU_VENDOR="Qualcomm"
+                            VPU_MODEL="Qualcomm Venus VPU"
+                            VPU_COUNT=1
+                            info "Qualcomm VPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                    *vpu*|*video*codec*)
+                        if [[ -z "$VPU_VENDOR" ]]; then
+                            VPU_VENDOR="Unknown"
+                            VPU_MODEL="Unknown VPU"
+                            VPU_COUNT=1
+                            info "VPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                esac
+            done <<< "$vpu_modules"
+        fi
+    fi
+    
+    # Check /proc/device-tree for VPU nodes (ARM-based systems)
+    if [[ -d "/proc/device-tree" ]]; then
+        vpu_nodes=$(find /proc/device-tree -name "*vpu*" -o -name "*vdec*" -o -name "*venc*" -o -name "*video*codec*" 2>/dev/null)
+        if [[ -n "$vpu_nodes" ]]; then
+            # Check for Rockchip specific nodes
+            if echo "$vpu_nodes" | grep -i -q "rkvdec\|rkvenc\|rockchip.*vpu"; then
+                if [[ -z "$VPU_VENDOR" ]]; then
+                    VPU_VENDOR="Rockchip"
+                    VPU_MODEL="Rockchip VPU"
+                    VPU_COUNT=1
+                    info "Rockchip VPU detected via device tree"
+                fi
+            # Check for Allwinner/Cedrus nodes
+            elif echo "$vpu_nodes" | grep -i -q "cedrus\|allwinner.*vpu"; then
+                if [[ -z "$VPU_VENDOR" ]]; then
+                    VPU_VENDOR="Allwinner"
+                    VPU_MODEL="Allwinner Cedrus VPU"
+                    VPU_COUNT=1
+                    info "Allwinner VPU detected via device tree"
+                fi
+            elif [[ -z "$VPU_VENDOR" ]]; then
+                VPU_VENDOR="Unknown"
+                VPU_MODEL="Unknown VPU"
+                VPU_COUNT=1
+                info "VPU detected via device tree"
+            fi
+        fi
+    fi
+fi
+
+# Final VPU validation and summary
+if [[ -n "$VPU_VENDOR" && "$VPU_VENDOR" != "" ]]; then
+    info "Final VPU detection result:"
+    info "  Vendor(s): $VPU_VENDOR"
+    if [[ -n "$VPU_MODEL" ]]; then
+        info "  Model(s): $VPU_MODEL"
+    fi
+    info "  Count: $VPU_COUNT"
+else
+    info "No VPU detected"
+    VPU_VENDOR=""
+    VPU_MODEL=""
+    VPU_COUNT=0
+fi
+
+# === /VPU ===
