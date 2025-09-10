@@ -127,13 +127,13 @@ if command -v lspci &>/dev/null; then
             warning "No GPU vendors could be identified"
         fi
     else
-        warning "No GPU devices found"
+        info "No GPU devices found"
     fi
     
     # Additional detection methods for edge cases
     if [[ -z "$GPU_VENDOR" ]] && command -v glxinfo &>/dev/null; then
         # info "Trying alternative detection with glxinfo..."
-        renderer=$(glxinfo | grep "OpenGL renderer string" | cut -d: -f2- | xargs)
+        renderer=$(glxinfo 2>/dev/null | grep "OpenGL renderer string" | cut -d: -f2- | xargs)
         if [[ -n "$renderer" ]]; then
             normalized_vendor=$(normalize_vendor "$renderer")
             if [[ "$normalized_vendor" != "Unknown" ]]; then
@@ -233,6 +233,19 @@ fi
 # === /GPU ===
 
 # === NPU ===
+
+SYS_NAME=""
+SYS_NAME_DETECTED=0
+detect_system_name_inxi() {
+    if [[ $SYS_NAME_DETECTED -eq 1 ]]; then
+        return
+    fi
+    if command -v inxi &>/dev/null; then
+        SYS_NAME="$(inxi -zM --indents=0 --tty 2>/dev/null | grep "System:" | sed 's/.*System:[[:space:]]*//' | sed 's/[[:space:]]*details:.*//')"
+        SYS_NAME_DETECTED=1
+    fi
+}
+
 # Detect NPU vendor and model
 if command -v dmesg &>/dev/null; then
     # Get dmesg output and look for NPU-related entries
@@ -272,19 +285,24 @@ if command -v dmesg &>/dev/null; then
             # Rockchip NPU detection
             if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
                 npu_vendor="Rockchip"
-                if echo "$line" | grep -i -q "rk3588"; then
-                    npu_model="RK3588 NPU"
-                elif echo "$line" | grep -i -q "rk3566\|rk3568"; then
-                    npu_model="RK356x NPU"
-                elif echo "$line" | grep -i -q "rk3399"; then
-                    npu_model="RK3399 NPU"
-                elif echo "$line" | grep -i -q "rk1808"; then
-                    npu_model="RK1808 NPU"
+                # Universal method: extract NPU model from system name (2nd word)
+                detect_system_name_inxi
+                if [[ -n "$SYS_NAME" ]]; then
+                    # Extract the second word from system name (should be the SoC model)
+                    soc_model=$(echo "$SYS_NAME" | awk '{print $2}')
+                    if [[ -n "$soc_model" && "$soc_model" =~ ^RK[0-9] ]]; then
+                        npu_model="$(echo "$soc_model" | tr '[:lower:]' '[:upper:]') NPU"
+                    else
+                        # Fallback: extract from dmesg line
+                        model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
+                        if [[ -n "$model_match" ]]; then
+                            npu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') NPU"
+                        else
+                            npu_model="Rockchip NPU"
+                        fi
+                    fi
                 else
-                # try to guess model from soc name if available
-                    soc_name=
-
-                    # Extract model from dmesg line
+                    # Fallback: extract from dmesg line
                     model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
                     if [[ -n "$model_match" ]]; then
                         npu_model="$(echo "$model_match" | tr '[:lower:]' '[:upper:]') NPU"
