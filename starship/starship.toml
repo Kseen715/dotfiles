@@ -155,11 +155,20 @@ detect_extensions = ['c3']
 command = "c3c --version 2>/dev/null | sed -n 's/.*C3 Compiler Version:[ \\t]*\\([0-9.]*\\).*/\\1/p'"
 disabled = false
 
-[cpp]
+# Not working (2025-09-10)
+# [cpp]
+# symbol = " "
+# format = '[$symbol($version(-$name) )]($style)'
+# disabled = false
+# style = 'bold blue'
+
+[custom.cpp]
 symbol = " "
-format = '[$symbol($version(-$name) )]($style)'
 disabled = false
 style = 'bold blue'
+format = '[$symbol($output )]($style)'
+detect_extensions = ['cpp', 'cc', 'cxx', 'c++', 'hpp', 'hh', 'hxx', 'h++', 'tcc']
+command = "cpp --version 2>/dev/null | sed -n 's/.*cpp (.*) \\([0-9][0-9.]*\\).*/\\1/p'"
 
 [cmake]
 symbol = "△ "
@@ -318,10 +327,11 @@ symbol = "⬢ "
 format = '[$symbol$project ]($style)'
 disabled = false
 
-[mise]
-symbol = "mise "
-format = '[$symbol$health ]($style)'
-disabled = false
+# Not working (2025-09-10)
+# [mise]
+# symbol = "mise "
+# format = '[$symbol$health ]($style)'
+# disabled = false
 
 [mojo]
 symbol = "🔥 "
@@ -378,10 +388,11 @@ symbol = " "
 format = '[$symbol($version )]($style)'
 disabled = false
 
-[pixi]
-symbol = "󱡄 "
-format = '[$symbol($version )]($style)'
-disabled = false
+# Not working (2025-09-10)
+# [pixi]
+# symbol = "󱡄 "
+# format = '[$symbol($version )]($style)'
+# disabled = false
 
 [pulumi]
 symbol = " "

@@ -1,4 +1,4 @@
-# v0.1.1
+# v0.1.2
 
 # Grab --delevated <username> argument if provided
 if [[ "$1" == "--delevated" && -n "$2" ]]; then
@@ -43,7 +43,7 @@ success() {
 }
 
 trace() {
-    printf "${NC}[BASH]${NC}\t%s\n" "$*"
+    printf "${NC}[SHELL]${NC}\t%s\n" "$*"
     bash -c "$*"
     return $?
 }
