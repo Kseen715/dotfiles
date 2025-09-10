@@ -242,11 +242,32 @@ if command -v dmesg &>/dev/null; then
         declare -A npu_vendor_count
         declare -a detected_npu_vendors
         declare -a detected_npu_models
+        declare -A unique_npu_devices  # Track unique NPU devices by address/identifier
         
         # Process each NPU-related dmesg line
         while IFS= read -r line; do
             npu_vendor=""
             npu_model=""
+            device_identifier=""
+            
+            # For Rockchip NPU, always use a consistent identifier regardless of device address
+            if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
+                device_identifier="rockchip_npu_0"
+            else
+                # Extract device identifier (address) from dmesg line for other vendors
+                device_addr=$(echo "$line" | grep -o "[0-9a-f]\{6,8\}\.npu")
+                if [[ -n "$device_addr" ]]; then
+                    device_identifier="$device_addr"
+                else
+                    # For other vendors, use a cleaned version as identifier
+                    device_identifier=$(echo "$line" | sed "s/\[.*\] *//" | sed "s/^[[:space:]]*//" | awk "{print \$1 \$2}" | head -c 30)
+                fi
+            fi
+            
+            # Skip lines that are just power supply lookups or property failures (noise)
+            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present"; then
+                continue
+            fi
             
             # Rockchip NPU detection
             if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
@@ -260,6 +281,9 @@ if command -v dmesg &>/dev/null; then
                 elif echo "$line" | grep -i -q "rk1808"; then
                     npu_model="RK1808 NPU"
                 else
+                # try to guess model from soc name if available
+                    soc_name=
+
                     # Extract model from dmesg line
                     model_match=$(echo "$line" | grep -o -i "rk[0-9]\+[a-z]*")
                     if [[ -n "$model_match" ]]; then
@@ -302,21 +326,27 @@ if command -v dmesg &>/dev/null; then
                 npu_model="Unknown NPU"
             fi
             
-            if [[ -n "$npu_vendor" ]]; then
-                # Count occurrences of each vendor
-                if [[ -z "${npu_vendor_count[$npu_vendor]}" ]]; then
-                    npu_vendor_count[$npu_vendor]=1
-                    detected_npu_vendors+=("$npu_vendor")
-                else
-                    ((npu_vendor_count[$npu_vendor]++))
+            if [[ -n "$npu_vendor" && -n "$device_identifier" ]]; then
+                # Only count each unique device once
+                device_key="${npu_vendor}_${device_identifier}"
+                if [[ -z "${unique_npu_devices[$device_key]}" ]]; then
+                    unique_npu_devices[$device_key]=1
+                    
+                    # Count occurrences of each vendor
+                    if [[ -z "${npu_vendor_count[$npu_vendor]}" ]]; then
+                        npu_vendor_count[$npu_vendor]=1
+                        detected_npu_vendors+=("$npu_vendor")
+                    else
+                        ((npu_vendor_count[$npu_vendor]++))
+                    fi
+                    
+                    # Store full model information (only once per unique device)
+                    if [[ -n "$npu_model" ]]; then
+                        detected_npu_models+=("$npu_model")
+                    fi
+                    
+                    ((NPU_COUNT++))
                 fi
-                
-                # Store full model information
-                if [[ -n "$npu_model" ]]; then
-                    detected_npu_models+=("$npu_model")
-                fi
-                
-                ((NPU_COUNT++))
             fi
         done <<< "$dmesg_output"
         
