@@ -126,8 +126,6 @@ if command -v lspci &>/dev/null; then
         else
             warning "No GPU vendors could be identified"
         fi
-    else
-        info "No GPU devices found"
     fi
     
     # Additional detection methods for edge cases
