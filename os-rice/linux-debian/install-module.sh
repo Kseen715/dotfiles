@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# v0.1.1
+
 source "$(dirname "$(realpath "$0")")/src/common.sh"
 
 info "Updating package sources..."
@@ -9,7 +11,7 @@ source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 
 source "$(dirname "$(realpath "$0")")/src/detect-virt.sh"
 source "$(dirname "$(realpath "$0")")/src/detect-cpu.sh"
-source "$(dirname "$(realpath "$0")")/src/detect-gpu.sh"
+source "$(dirname "$(realpath "$0")")/src/detect-hwaccel.sh"
 
 inst_module() {
     local MODULE_NAME="$1"

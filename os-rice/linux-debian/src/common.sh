@@ -1,3 +1,5 @@
+# v0.1.1
+
 # Grab --delevated <username> argument if provided
 if [[ "$1" == "--delevated" && -n "$2" ]]; then
     DELEVATED_USER="$2"
