@@ -169,7 +169,7 @@ install_pkg_apt() {
     
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
-        trace sudo apt install --yes "${filtered_pkgs[@]}"
+        trace sudo apt install --yes -q=2 "${filtered_pkgs[@]}"
     fi
 }
 
@@ -257,14 +257,14 @@ install_pkg_cargo_locked() {
     # Check for already installed packages (cargo doesn't have a "pinned" concept like other managers)
     # But we can check for packages that are already installed globally
     local installed_list=""
-    if [[ -d "$HOME/.cargo/bin" ]]; then
+    if [[ -d "/home/$DELEVATED_USER/.cargo/bin" ]]; then
         # Get list of installed cargo binaries (this is approximate since cargo install doesn't track packages perfectly)
-        installed_list=$(ls "$HOME/.cargo/bin" 2>/dev/null | sort -u)
+        installed_list=$(ls "/home/$DELEVATED_USER/.cargo/bin" 2>/dev/null | sort -u)
     fi
     
     # Check for packages in a hypothetical ignore file (custom implementation)
-    if [[ -f "$HOME/.cargo/ignore" ]]; then
-        ignore_list=$(cat "$HOME/.cargo/ignore" | grep -v "^#" | grep -v "^$" | sort -u)
+    if [[ -f "/home/$DELEVATED_USER/.cargo/ignore" ]]; then
+        ignore_list=$(cat "/home/$DELEVATED_USER/.cargo/ignore" | grep -v "^#" | grep -v "^$" | sort -u)
     fi
     
     # Combine ignore and restricted lists
@@ -312,6 +312,6 @@ install_pkg_cargo_locked() {
     
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
-        trace cargo install "${filtered_pkgs[@]}" --locked
+        trace sudo -u $DELEVATED_USER /home/$DELEVATED_USER/.cargo/bin/cargo install "${filtered_pkgs[@]}" --locked
     fi
 }

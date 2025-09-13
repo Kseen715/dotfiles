@@ -2,6 +2,7 @@ format = """
 \
 $os\
 $username\
+$hostname\
 $directory\
 $git_branch\
 $git_status\
@@ -11,8 +12,8 @@ $character"""
 [username]
 show_always = true
 format = '[$user ]($style)'
-style_user = "white bold"
-disabled = true
+style_user = "green"
+disabled = false
 
 [os]
 disabled = false

@@ -5,7 +5,7 @@
 source "$(dirname "$(realpath "$0")")/src/common.sh"
 
 info "Updating package sources..."
-trace apt update --yes --quiet
+trace apt update --yes -q=2 
 
 source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 

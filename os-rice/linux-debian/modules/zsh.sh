@@ -38,9 +38,10 @@ install_or_update_zsh_plugin() {
 }
 
 # Update configs
-trace cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "/home/$DELEVATED_USER/.zshrc"
-trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "/home/$DELEVATED_USER/.oh-my-zsh"
-trace cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "/home/$DELEVATED_USER/.config/starship.toml"
+trace sudo -u $DELEVATED_USER cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "/home/$DELEVATED_USER/.zshrc"
+trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "/home/$DELEVATED_USER/"
+trace sudo -u $DELEVATED_USER mkdir -p "/home/$DELEVATED_USER/.config"
+trace sudo -u $DELEVATED_USER cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "/home/$DELEVATED_USER/.config/starship.toml"
 
 # Install or update zsh plugins
 install_or_update_zsh_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"
