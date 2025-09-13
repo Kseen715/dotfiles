@@ -1,6 +1,6 @@
 info "Installing Rust..."
 
-install_pkg_apt curl
+install_pkg_apt curl gcc
 
 if [[ ":$PATH:" != *":/home/$DELEVATED_USER/.cargo/bin:"* ]]; then
     PATH="$PATH:/home/$DELEVATED_USER/.cargo/bin"
