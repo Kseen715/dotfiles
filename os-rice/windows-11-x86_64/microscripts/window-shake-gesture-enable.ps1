@@ -1,1 +1,0 @@
-Set-ItemProperty -Path "HKCU:Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DisallowShaking" -Value 0

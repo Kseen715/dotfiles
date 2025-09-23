@@ -1,12 +1,25 @@
-function InvokeEcho {
-    param([string]$Command)
-    Write-Host "[PWSH]`t" -ForegroundColor Cyan -NoNewline
-    Write-Host $Command 
-    Invoke-Expression $Command
-}
+. $PSScriptRoot/src/common.ps1
 
-# Disable the window shake gesture
-InvokeEcho "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\microscripts\window-shake-gesture-disable.ps1`"' -Verb RunAs -Wait -PassThru | Out-Null"
+Invoke-ElevatedScript
 
-# Debloat Windows 11
-InvokeEcho "Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\microscripts\raphire-win11debloat.ps1`"' -Verb RunAs -Wait -PassThru | Out-Null"
+# Explorer
+InvokeRegMicroscript "reg-hide-file-extension.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-show-hidden.ps1" 1 $PSScriptRoot
+
+# Taskbar
+InvokeRegMicroscript "reg-cortana-button.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-taskbar-end-task.ps1" 1 $PSScriptRoot
+InvokeRegMicroscript "reg-window-disallow-shaking.ps1" 1 $PSScriptRoot
+
+# Multitasking / Snap settings
+InvokeRegMicroscript "reg-enable-task-groups.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-snap-assist.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-enable-snap-bar.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-enable-snap-assist-flyout.ps1" 0 $PSScriptRoot
+InvokeRegMicroscript "reg-soft-bound-snap.ps1" 0 $PSScriptRoot
+
+# Sudo
+InvokeRegMicroscript "reg-sudo.ps1" 3 $PSScriptRoot
+
+# # Debloat Windows 11
+# InvokeMicroscript "raphire-win11debloat.ps1" $PSScriptRoot
