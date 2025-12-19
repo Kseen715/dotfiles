@@ -1,6 +1,4 @@
-format = """ 
-\
-$os\
+format = """$os\
 $username\
 $hostname\
 $directory\
