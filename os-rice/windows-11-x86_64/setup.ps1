@@ -2,6 +2,27 @@
 
 Invoke-ElevatedScript
 
+# Telemetry
+InvokeMicroscript "disable-telemetry.ps1" $PSScriptRoot
+
+# Diagnostics
+InvokeMicroscript "disable-diag.ps1" $PSScriptRoot
+
+# Disable dmwappushservice
+InvokeMicroscript "disable-dmwappushservice.ps1" $PSScriptRoot
+
+# Disable Windows Search
+InvokeMicroscript "disable-windows-search.ps1" $PSScriptRoot
+
+# Disable Superfetch (SysMain)
+InvokeMicroscript "disable-superfetch.ps1" $PSScriptRoot
+
+# Disable Fax Service
+# InvokeMicroscript "disable-fax.ps1" $PSScriptRoot
+
+# Disable Auto Update of Windows
+InvokeMicroscript "disable-auto-updates.ps1" $PSScriptRoot
+
 # Explorer
 InvokeRegMicroscript "reg-hide-file-extension.ps1" 0 $PSScriptRoot
 InvokeRegMicroscript "reg-show-hidden.ps1" 1 $PSScriptRoot

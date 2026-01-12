@@ -1,0 +1,18 @@
+{
+  "WPFFeature": [],
+  "WPFInstall": [],
+  "Install": [],
+  "WPFTweaks": [
+    "WPFTweaksRestorePoint",
+    "WPFTweaksLocation",
+    "WPFTweaksEndTaskOnTaskbar",
+    "WPFTweaksActivity",
+    "WPFTweaksTele",
+    "WPFTweaksDisableExplorerAutoDiscovery",
+    "WPFTweaksConsumerFeatures",
+    "WPFTweaksRemoveCopilot",
+    "WPFTweaksDeleteTempFiles",
+    "WPFTweaksPowershell7Tele",
+    "WPFTweaksServices"
+  ]
+}
