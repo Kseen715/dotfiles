@@ -6,6 +6,10 @@ export ZSH="$HOME/.oh-my-zsh"
 export PATH="$HOME/.cargo/bin:$PATH"
 export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
 export PATH="/usr/local/cuda-13.1/bin/:$PATH"
+export PATH="$PATH:$HOME/.nvm"
+export PATH="$PATH:$HOME/.npm"
+
+
 
 export STEAM_FORCE_DESKTOPUI_SCALING=1
 export EDITOR=micro
