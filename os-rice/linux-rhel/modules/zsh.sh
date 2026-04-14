@@ -11,7 +11,7 @@ install_pkg_cargo_locked starship
 if [ -d "/home/$DELEVATED_USER/.oh-my-zsh" ]; then
     info "Oh My Zsh is already installed, skipping installation."
 else
-    sudo -u "$DELEVATED_USER" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
+    sudo -u "$DELEVATED_USER" sh -c "$(curl -f#SL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
     check_error $? "Failed to install Oh My Zsh"
 fi
 
@@ -20,7 +20,7 @@ install_or_update_zsh_plugin() {
     local plugin_name="$1"
     local plugin_repo="$2"
     local plugin_dir="/home/$DELEVATED_USER/.oh-my-zsh/custom/plugins/$plugin_name"
-    
+
     if [ -d "$plugin_dir" ]; then
         info "$plugin_name plugin directory exists, checking repository..."
         local current_remote=$(git -C "$plugin_dir" remote get-url origin 2>/dev/null || echo "")

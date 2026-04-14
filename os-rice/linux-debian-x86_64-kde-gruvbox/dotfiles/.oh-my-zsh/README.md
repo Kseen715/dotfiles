@@ -85,7 +85,7 @@ Oh My Zsh is installed by running one of the following commands in your terminal
 
 | Method    | Command                                                                                           |
 | :-------- | :------------------------------------------------------------------------------------------------ |
-| **curl**  | `sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"` |
+| **curl**  | `sh -c "$(curl -f#SL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"` |
 | **wget**  | `sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"`   |
 | **fetch** | `sh -c "$(fetch -o - https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"` |
 
@@ -93,7 +93,7 @@ Alternatively, the installer is also mirrored outside GitHub. Using this URL ins
 
 | Method    | Command                                                                                           |
 | :-------- | :------------------------------------------------------------------------------------------------ |
-| **curl**  | `sh -c "$(curl -fsSL https://install.ohmyz.sh/)"`                                                 |
+| **curl**  | `sh -c "$(curl -f#SL https://install.ohmyz.sh/)"`                                                 |
 | **wget**  | `sh -c "$(wget -O- https://install.ohmyz.sh/)"`                                                   |
 | **fetch** | `sh -c "$(fetch -o - https://install.ohmyz.sh/)"`                                                 |
 
@@ -228,7 +228,7 @@ flag to the `install.sh` script. This will have the effect of not trying to chan
 the default shell, and it also won't run `zsh` when the installation has finished.
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+sh -c "$(curl -f#SL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 ```
 
 If you're in China, India, or another country that blocks `raw.githubusercontent.com`, you may have to substitute the URL for `https://install.ohmyz.sh` for it to install.

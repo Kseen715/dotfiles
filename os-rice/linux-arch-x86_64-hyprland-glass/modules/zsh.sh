@@ -3,14 +3,14 @@ info "Installing zsh, dependencies and dotfiles..."
 trace pacman -S --needed --noconfirm zsh curl starship lsd
 
 # Get the install script for Oh My Zsh and run it
-sudo -u "$DELEVATED_USER" sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
+sudo -u "$DELEVATED_USER" sh -c "$(curl -f#SL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
 
 # Function to install or update zsh plugins
 install_or_update_zsh_plugin() {
     local plugin_name="$1"
     local plugin_repo="$2"
     local plugin_dir="/home/$DELEVATED_USER/.oh-my-zsh/custom/plugins/$plugin_name"
-    
+
     if [ -d "$plugin_dir" ]; then
         info "$plugin_name plugin directory exists, checking repository..."
         local current_remote=$(git -C "$plugin_dir" remote get-url origin 2>/dev/null || echo "")

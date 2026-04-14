@@ -84,6 +84,189 @@ check_error() {
     fi
 }
 
+# Download and install a GPG key for apt
+# Usage: install_gpg_key_apt <key_url> <key_filename> [key_dir]
+#   key_filename: bare filename, e.g. "myrepo.gpg" or "myrepo.asc"
+#                 .gpg  -> key is dearmored (binary)
+#                 .asc  -> key is saved as-is (ASCII armor, no dearmor)
+#   key_dir:      directory to store the key (default: /etc/apt/trusted.gpg.d)
+#                 use /etc/apt/keyrings for per-repo Signed-By references
+install_gpg_key_apt() {
+    local key_url="$1"
+    local key_file="$2"
+    local key_dir="${3:-/etc/apt/trusted.gpg.d}"
+    local key_path="$key_dir/$key_file"
+
+    if [ -z "$key_url" ] || [ -z "$key_file" ]; then
+        error "install_gpg_key_apt: usage: install_gpg_key_apt <key_url> <key_filename> [key_dir]"
+    fi
+
+    if ! command -v gpg &>/dev/null; then
+        install_pkg_apt gnupg
+    fi
+
+    trace install -m 0755 -d "$key_dir"
+    check_error $? "Failed to create key directory $key_dir"
+
+    if [ -f "$key_path" ]; then
+        info "GPG key already present: $key_path -- skipping"
+        return 0
+    fi
+
+    info "Adding GPG key from $key_url..."
+    local tmp_asc="$TMP_FOLDER/$(basename "$key_url")"
+
+    trace curl -f#SL -o "$tmp_asc" "$key_url"
+    check_error $? "Failed to download GPG key from $key_url"
+
+    if [[ "$key_file" == *.asc ]]; then
+        # Keep ASCII armor as-is (used with DEB822 Signed-By field)
+        trace mv "$tmp_asc" "$key_path"
+        check_error $? "Failed to move GPG key to $key_path"
+    else
+        # Dearmor to binary .gpg for traditional trusted.gpg.d usage
+        trace gpg --dearmor --yes -o "$key_path" "$tmp_asc"
+        check_error $? "Failed to dearmor GPG key to $key_path"
+        trace rm -f "$tmp_asc"
+        check_error $? "Failed to remove temporary key file $tmp_asc"
+    fi
+
+    trace chmod 644 "$key_path"
+    check_error $? "Failed to set permissions on $key_path"
+}
+
+# Add a Debian apt repository to sources.list.d
+# Usage: install_deb_repo_apt <repo_url> <list_filename> [components]
+#   list_filename: bare filename stored under /etc/apt/sources.list.d/
+#                  e.g. "myrepo.list"
+#   components:    defaults to "main"
+install_deb_repo_apt() {
+    local repo_url="$1"
+    local list_file="$2"
+    local components="${3:-main}"
+    local list_path="/etc/apt/sources.list.d/$list_file"
+
+    if [ -z "$repo_url" ] || [ -z "$list_file" ]; then
+        error "install_deb_repo_apt: usage: install_deb_repo_apt <repo_url> <list_filename> [components]"
+    fi
+
+    # Detect distro codename
+    local codename
+    if command -v lsb_release &>/dev/null; then
+        codename=$(lsb_release -sc 2>/dev/null)
+    fi
+    if [ -z "$codename" ] && [ -f /etc/os-release ]; then
+        codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    fi
+    if [ -z "$codename" ]; then
+        error "install_deb_repo_apt: failed to detect distro codename for $repo_url"
+    fi
+
+    # Skip if the repo URL is already present in the file
+    if [ -f "$list_path" ] && grep -qF "$repo_url" "$list_path" 2>/dev/null; then
+        info "APT repository already present in $list_path -- skipping"
+        return 0
+    fi
+
+    info "Adding APT repository: deb $repo_url $codename $components"
+
+    # Write to a temp file first, then move atomically to avoid partial writes
+    local tmp_list="$TMP_FOLDER/$(basename "$list_file")"
+    echo "deb $repo_url $codename $components" > "$tmp_list"
+    check_error $? "Failed to write temporary repo file $tmp_list"
+
+    trace mv "$tmp_list" "$list_path"
+    check_error $? "Failed to install repo file to $list_path"
+
+    trace chmod 644 "$list_path"
+    check_error $? "Failed to set permissions on $list_path"
+
+    info "Updating package sources after adding $list_path..."
+    trace apt update -q=2
+    if [ $? -ne 0 ]; then
+        warning "apt update failed, rolling back $list_path..."
+        trace rm -f "$list_path"
+        check_error $? "Failed to remove broken repo file $list_path during rollback"
+        error "Rolled back $list_path — fix the repository URL or key and retry"
+    fi
+}
+
+# Add a Debian apt repository in DEB822 format (.sources file)
+# Usage: install_deb822_repo_apt <list_filename> <uri> <components> <key_path>
+#   list_filename: bare filename stored under /etc/apt/sources.list.d/
+#                  e.g. "docker.sources"
+#   uri:           repository base URL
+#   components:    e.g. "stable" or "main contrib"
+#   key_path:      absolute path to the signing key set by install_gpg_key_apt
+#                  e.g. "/etc/apt/keyrings/docker.asc"
+install_deb822_repo_apt() {
+    local list_file="$1"
+    local uri="$2"
+    local components="$3"
+    local key_path="$4"
+    local list_path="/etc/apt/sources.list.d/$list_file"
+
+    if [ -z "$list_file" ] || [ -z "$uri" ] || [ -z "$components" ] || [ -z "$key_path" ]; then
+        error "install_deb822_repo_apt: usage: install_deb822_repo_apt <list_filename> <uri> <components> <key_path>"
+    fi
+
+    # Detect distro codename
+    local codename
+    if command -v lsb_release &>/dev/null; then
+        codename=$(lsb_release -sc 2>/dev/null)
+    fi
+    if [ -z "$codename" ] && [ -f /etc/os-release ]; then
+        codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    fi
+    if [ -z "$codename" ]; then
+        error "install_deb822_repo_apt: failed to detect distro codename for $uri"
+    fi
+
+    # Detect architecture
+    local arch
+    if command -v dpkg &>/dev/null; then
+        arch=$(dpkg --print-architecture 2>/dev/null)
+    fi
+    if [ -z "$arch" ]; then
+        arch=$(uname -m)
+    fi
+
+    # Skip if URI is already present in the file
+    if [ -f "$list_path" ] && grep -qF "$uri" "$list_path" 2>/dev/null; then
+        info "DEB822 repository already present in $list_path -- skipping"
+        return 0
+    fi
+
+    info "Adding DEB822 repository: $uri ($codename, $components) -> $list_path"
+
+    # Write to temp file first, then move atomically
+    local tmp_list="$TMP_FOLDER/$(basename "$list_file")"
+    cat > "$tmp_list" << EOF
+Types: deb
+URIs: $uri
+Suites: $codename
+Components: $components
+Architectures: $arch
+Signed-By: $key_path
+EOF
+    check_error $? "Failed to write temporary DEB822 repo file $tmp_list"
+
+    trace mv "$tmp_list" "$list_path"
+    check_error $? "Failed to install DEB822 repo file to $list_path"
+
+    trace chmod 644 "$list_path"
+    check_error $? "Failed to set permissions on $list_path"
+
+    info "Updating package sources after adding $list_path..."
+    trace apt update -q=2
+    if [ $? -ne 0 ]; then
+        warning "apt update failed, rolling back $list_path..."
+        trace rm -f "$list_path"
+        check_error $? "Failed to remove broken repo file $list_path during rollback"
+        error "Rolled back $list_path — fix the repository URL or key and retry"
+    fi
+}
+
 # Function to install or update git repository
 install_or_update_git_repo() {
     local repo_name="$1"

@@ -12,7 +12,8 @@ fi
 source "$(dirname "$(realpath "$0")")/src/common.sh"
 
 info "Updating package sources..."
-trace apt update --yes -q=2 
+trace apt update --yes -q=2
+check_error $? "Failed to update sources"
 
 source "$(dirname "$(realpath "$0")")/src/repo-dotfiles.sh"
 
