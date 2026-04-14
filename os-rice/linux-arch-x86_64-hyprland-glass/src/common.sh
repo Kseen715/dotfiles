@@ -6,6 +6,21 @@ else
     DELEVATED_USER=""
 fi
 
+# When already running as root without --delevated (e.g. sudo ./install-module.sh),
+# fall back to the invoking user via SUDO_USER.
+if [[ $EUID -eq 0 && -z "$DELEVATED_USER" && -n "$SUDO_USER" && "$SUDO_USER" != "root" ]]; then
+    DELEVATED_USER="$SUDO_USER"
+fi
+
+# Resolve the real home directory for DELEVATED_USER.
+# Using getent handles non-standard homes (e.g. /root for the root user itself).
+if [[ -n "$DELEVATED_USER" ]]; then
+    DELEVATED_USER_HOME=$(getent passwd "$DELEVATED_USER" 2>/dev/null | cut -d: -f6)
+    DELEVATED_USER_HOME="${DELEVATED_USER_HOME:-/home/$DELEVATED_USER}"
+else
+    DELEVATED_USER_HOME="${HOME:-/root}"
+fi
+
 # Signal handler for Ctrl+C
 cleanup() {
     echo ""

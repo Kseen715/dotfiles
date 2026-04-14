@@ -9,7 +9,7 @@ sudo -u "$DELEVATED_USER" sh -c "$(curl -f#SL https://raw.githubusercontent.com/
 install_or_update_zsh_plugin() {
     local plugin_name="$1"
     local plugin_repo="$2"
-    local plugin_dir="/home/$DELEVATED_USER/.oh-my-zsh/custom/plugins/$plugin_name"
+    local plugin_dir="$DELEVATED_USER_HOME/.oh-my-zsh/custom/plugins/$plugin_name"
 
     if [ -d "$plugin_dir" ]; then
         info "$plugin_name plugin directory exists, checking repository..."
@@ -34,9 +34,9 @@ install_or_update_zsh_plugin() {
 }
 
 # Update configs
-trace cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "/home/$DELEVATED_USER/.zshrc"
-trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "/home/$DELEVATED_USER/.oh-my-zsh"
-trace cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "/home/$DELEVATED_USER/.config/starship.toml"
+trace cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "$DELEVATED_USER_HOME/.zshrc"
+trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "$DELEVATED_USER_HOME/.oh-my-zsh"
+trace cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "$DELEVATED_USER_HOME/.config/starship.toml"
 
 # Install or update zsh plugins
 install_or_update_zsh_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"

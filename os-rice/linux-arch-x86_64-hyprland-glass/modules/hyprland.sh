@@ -5,51 +5,51 @@ if ! command -v hyprctl &>/dev/null; then
 fi
 trace pacman -S --needed --noconfirm hyprland hyprshot xdg-desktop-portal-hyprland hyprland-qt-support hypridle hyprutils aquamarine hyprgraphics hyprland-qtutils hyprpolkitagent qt6ct pop-gtk-theme
 info "Installing hyprland dotfiles..."
-trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config
-trace chmod 775 /home/$DELEVATED_USER/.config
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config
-trace sudo -u "$DELEVATED_USER" mkdir -p /home/$DELEVATED_USER/.config/hypr
-trace chmod 775 /home/$DELEVATED_USER/.config/hypr
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr
-trace mkdir -p /home/$DELEVATED_USER/Downloads
-trace chmod 775 /home/$DELEVATED_USER/Downloads
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Downloads
-trace mkdir -p /home/$DELEVATED_USER/Pictures
-trace chmod 775 /home/$DELEVATED_USER/Pictures
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/Pictures
-trace cp $SCRIPT_DIR/config/hypr/hyprland.conf /home/$DELEVATED_USER/.config/hypr/
+trace sudo -u "$DELEVATED_USER" mkdir -p $DELEVATED_USER_HOME/.config
+trace chmod 775 $DELEVATED_USER_HOME/.config
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config
+trace sudo -u "$DELEVATED_USER" mkdir -p $DELEVATED_USER_HOME/.config/hypr
+trace chmod 775 $DELEVATED_USER_HOME/.config/hypr
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/hypr
+trace mkdir -p $DELEVATED_USER_HOME/Downloads
+trace chmod 775 $DELEVATED_USER_HOME/Downloads
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/Downloads
+trace mkdir -p $DELEVATED_USER_HOME/Pictures
+trace chmod 775 $DELEVATED_USER_HOME/Pictures
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/Pictures
+trace cp $SCRIPT_DIR/config/hypr/hyprland.conf $DELEVATED_USER_HOME/.config/hypr/
 
 # Start of easyeffects
-trace cp $SCRIPT_DIR/config/hypr/start-easyeffects.sh /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
-trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-easyeffects.sh
+trace cp $SCRIPT_DIR/config/hypr/start-easyeffects.sh $DELEVATED_USER_HOME/.config/hypr/start-easyeffects.sh
+trace chmod +x $DELEVATED_USER_HOME/.config/hypr/start-easyeffects.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/hypr/start-easyeffects.sh
 
 # Start of top
-trace cp $SCRIPT_DIR/config/hypr/start-top.sh /home/$DELEVATED_USER/.config/hypr/start-top.sh
-trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-top.sh
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-top.sh
+trace cp $SCRIPT_DIR/config/hypr/start-top.sh $DELEVATED_USER_HOME/.config/hypr/start-top.sh
+trace chmod +x $DELEVATED_USER_HOME/.config/hypr/start-top.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/hypr/start-top.sh
 
 # Start of wleave
-trace cp $SCRIPT_DIR/config/hypr/start-wleave.sh /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
-trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-wleave.sh
+trace cp $SCRIPT_DIR/config/hypr/start-wleave.sh $DELEVATED_USER_HOME/.config/hypr/start-wleave.sh
+trace chmod +x $DELEVATED_USER_HOME/.config/hypr/start-wleave.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/hypr/start-wleave.sh
 
 # Start of audio
-trace cp $SCRIPT_DIR/config/hypr/start-audio.sh /home/$DELEVATED_USER/.config/hypr/start-audio.sh
-trace chmod +x /home/$DELEVATED_USER/.config/hypr/start-audio.sh
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/hypr/start-audio.sh
+trace cp $SCRIPT_DIR/config/hypr/start-audio.sh $DELEVATED_USER_HOME/.config/hypr/start-audio.sh
+trace chmod +x $DELEVATED_USER_HOME/.config/hypr/start-audio.sh
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/hypr/start-audio.sh
 
 # Config of qt6ct
-trace mkdir -p /home/$DELEVATED_USER/.config/qt6ct
-trace chmod 755 /home/$DELEVATED_USER/.config/qt6ct
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct
-trace cp $SCRIPT_DIR/config/qt6ct/qt6ct.conf /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
-trace chmod 644 /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.config/qt6ct/qt6ct.conf
+trace mkdir -p $DELEVATED_USER_HOME/.config/qt6ct
+trace chmod 755 $DELEVATED_USER_HOME/.config/qt6ct
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/qt6ct
+trace cp $SCRIPT_DIR/config/qt6ct/qt6ct.conf $DELEVATED_USER_HOME/.config/qt6ct/qt6ct.conf
+trace chmod 644 $DELEVATED_USER_HOME/.config/qt6ct/qt6ct.conf
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.config/qt6ct/qt6ct.conf
 
-trace mkdir -p /home/$DELEVATED_USER/.local/share
-trace chmod 777 /home/$DELEVATED_USER/.local/share
-trace chown "$DELEVATED_USER":"$DELEVATED_USER" /home/$DELEVATED_USER/.local/share
+trace mkdir -p $DELEVATED_USER_HOME/.local/share
+trace chmod 777 $DELEVATED_USER_HOME/.local/share
+trace chown "$DELEVATED_USER":"$DELEVATED_USER" $DELEVATED_USER_HOME/.local/share
 
 trace mkdir -p /usr/share/wayland-sessions
 trace chmod 755 /usr/share/wayland-sessions

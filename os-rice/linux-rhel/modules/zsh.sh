@@ -8,7 +8,7 @@ install_pkg_cargo_locked starship
 
 # Get the install script for Oh My Zsh and run it
 # if The $ZSH folder already exists (/home/kseen/.oh-my-zsh). skip installation.
-if [ -d "/home/$DELEVATED_USER/.oh-my-zsh" ]; then
+if [ -d "$DELEVATED_USER_HOME/.oh-my-zsh" ]; then
     info "Oh My Zsh is already installed, skipping installation."
 else
     sudo -u "$DELEVATED_USER" sh -c "$(curl -f#SL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sed "s:env zsh -l::g" | sed "s:chsh -s .*$:true:g")" "" --unattended --skip-chsh
@@ -19,7 +19,7 @@ fi
 install_or_update_zsh_plugin() {
     local plugin_name="$1"
     local plugin_repo="$2"
-    local plugin_dir="/home/$DELEVATED_USER/.oh-my-zsh/custom/plugins/$plugin_name"
+    local plugin_dir="$DELEVATED_USER_HOME/.oh-my-zsh/custom/plugins/$plugin_name"
 
     if [ -d "$plugin_dir" ]; then
         info "$plugin_name plugin directory exists, checking repository..."
@@ -48,17 +48,17 @@ install_or_update_zsh_plugin() {
 }
 
 # Update configs
-trace sudo -u $DELEVATED_USER cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "/home/$DELEVATED_USER/.zshrc"
-check_error $? "Failed to copy .zshrc to /home/$DELEVATED_USER/"
-trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "/home/$DELEVATED_USER/"
-check_error $? "Failed to copy .oh-my-zsh to /home/$DELEVATED_USER/"
-trace sudo -u $DELEVATED_USER mkdir -p "/home/$DELEVATED_USER/.config"
-check_error $? "Failed to create /home/$DELEVATED_USER/.config directory"
-trace sudo -u $DELEVATED_USER cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "/home/$DELEVATED_USER/.config/starship.toml"
-check_error $? "Failed to copy starship.toml to /home/$DELEVATED_USER/.config/"
+trace sudo -u "$DELEVATED_USER" cp -f "$DOTFILES_KSEEN715_REPO/zsh/.zshrc" "$DELEVATED_USER_HOME/.zshrc"
+check_error $? "Failed to copy .zshrc to $DELEVATED_USER_HOME/"
+trace cp -rf "$DOTFILES_KSEEN715_REPO/zsh/.oh-my-zsh" "$DELEVATED_USER_HOME/"
+check_error $? "Failed to copy .oh-my-zsh to $DELEVATED_USER_HOME/"
+trace sudo -u "$DELEVATED_USER" mkdir -p "$DELEVATED_USER_HOME/.config"
+check_error $? "Failed to create $DELEVATED_USER_HOME/.config directory"
+trace sudo -u "$DELEVATED_USER" cp -f $DOTFILES_KSEEN715_REPO/starship/starship.toml "$DELEVATED_USER_HOME/.config/starship.toml"
+check_error $? "Failed to copy starship.toml to $DELEVATED_USER_HOME/.config/"
 
-trace chown -R $DELEVATED_USER:$DELEVATED_USER "/home/$DELEVATED_USER/.oh-my-zsh"
-check_error $? "Failed to change ownership of /home/$DELEVATED_USER/.oh-my-zsh"
+trace chown -R "$DELEVATED_USER:$DELEVATED_USER" "$DELEVATED_USER_HOME/.oh-my-zsh"
+check_error $? "Failed to change ownership of $DELEVATED_USER_HOME/.oh-my-zsh"
 
 # Install or update zsh plugins
 install_or_update_zsh_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"

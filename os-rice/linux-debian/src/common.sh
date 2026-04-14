@@ -8,6 +8,21 @@ else
     DELEVATED_USER=""
 fi
 
+# When already running as root without --delevated (e.g. sudo ./install-module.sh),
+# fall back to the invoking user via SUDO_USER.
+if [[ $EUID -eq 0 && -z "$DELEVATED_USER" && -n "$SUDO_USER" && "$SUDO_USER" != "root" ]]; then
+    DELEVATED_USER="$SUDO_USER"
+fi
+
+# Resolve the real home directory for DELEVATED_USER.
+# Using getent handles non-standard homes (e.g. /root for the root user itself).
+if [[ -n "$DELEVATED_USER" ]]; then
+    DELEVATED_USER_HOME=$(getent passwd "$DELEVATED_USER" 2>/dev/null | cut -d: -f6)
+    DELEVATED_USER_HOME="${DELEVATED_USER_HOME:-/home/$DELEVATED_USER}"
+else
+    DELEVATED_USER_HOME="${HOME:-/root}"
+fi
+
 # Signal handler for Ctrl+C
 cleanup() {
     echo ""
@@ -454,14 +469,14 @@ install_pkg_cargo_locked() {
     # Check for already installed packages (cargo doesn't have a "pinned" concept like other managers)
     # But we can check for packages that are already installed globally
     local installed_list=""
-    if [[ -d "/home/$DELEVATED_USER/.cargo/bin" ]]; then
+    if [[ -d "$DELEVATED_USER_HOME/.cargo/bin" ]]; then
         # Get list of installed cargo binaries (this is approximate since cargo install doesn't track packages perfectly)
-        installed_list=$(ls "/home/$DELEVATED_USER/.cargo/bin" 2>/dev/null | sort -u)
+        installed_list=$(ls "$DELEVATED_USER_HOME/.cargo/bin" 2>/dev/null | sort -u)
     fi
 
     # Check for packages in a hypothetical ignore file (custom implementation)
-    if [[ -f "/home/$DELEVATED_USER/.cargo/ignore" ]]; then
-        ignore_list=$(cat "/home/$DELEVATED_USER/.cargo/ignore" | grep -v "^#" | grep -v "^$" | sort -u)
+    if [[ -f "$DELEVATED_USER_HOME/.cargo/ignore" ]]; then
+        ignore_list=$(cat "$DELEVATED_USER_HOME/.cargo/ignore" | grep -v "^#" | grep -v "^$" | sort -u)
     fi
 
     # Combine ignore and restricted lists
@@ -509,7 +524,7 @@ install_pkg_cargo_locked() {
 
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
-        trace sudo -u $DELEVATED_USER /home/$DELEVATED_USER/.cargo/bin/cargo install "${filtered_pkgs[@]}" --locked
+        trace sudo -u "$DELEVATED_USER" "$DELEVATED_USER_HOME/.cargo/bin/cargo" install "${filtered_pkgs[@]}" --locked
         check_error $? "Failed to install cargo packages: ${filtered_pkgs[*]}"
     fi
 }

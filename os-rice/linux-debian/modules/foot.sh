@@ -4,7 +4,7 @@ install_pkg_apt foot sed
 info "Installing foot dotfiles..."
 
 # download and install jetbrains mono nerd font
-FONT_DIR="/home/$DELEVATED_USER/.local/share/fonts"
+FONT_DIR="$DELEVATED_USER_HOME/.local/share/fonts"
 trace sudo -u "$DELEVATED_USER" mkdir -p "$FONT_DIR"
 check_error $? "Failed to create font directory $FONT_DIR"
 
@@ -23,7 +23,7 @@ else
 fi
 
 # install foot config files
-FOOT_CONFIG_DIR="/home/$DELEVATED_USER/.config/foot"
+FOOT_CONFIG_DIR="$DELEVATED_USER_HOME/.config/foot"
 trace sudo -u "$DELEVATED_USER" mkdir -p "$FOOT_CONFIG_DIR"
 check_error $? "Failed to create foot config directory $FOOT_CONFIG_DIR"
 
