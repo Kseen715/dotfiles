@@ -12,14 +12,15 @@ if [[ $EUID -eq 0 && -z "$DELEVATED_USER" && -n "$SUDO_USER" && "$SUDO_USER" != 
     DELEVATED_USER="$SUDO_USER"
 fi
 
-# Resolve the real home directory for DELEVATED_USER.
-# Using getent handles non-standard homes (e.g. /root for the root user itself).
-if [[ -n "$DELEVATED_USER" ]]; then
-    DELEVATED_USER_HOME=$(getent passwd "$DELEVATED_USER" 2>/dev/null | cut -d: -f6)
-    DELEVATED_USER_HOME="${DELEVATED_USER_HOME:-/home/$DELEVATED_USER}"
-else
-    DELEVATED_USER_HOME="${HOME:-/root}"
+# Last resort: direct root shell (su -, root login, etc.) — install for root itself.
+if [[ -z "$DELEVATED_USER" ]]; then
+    DELEVATED_USER="root"
 fi
+
+# Resolve the real home directory for DELEVATED_USER.
+# Using getent handles non-standard homes (e.g. /root for the root account).
+DELEVATED_USER_HOME=$(getent passwd "$DELEVATED_USER" 2>/dev/null | cut -d: -f6)
+DELEVATED_USER_HOME="${DELEVATED_USER_HOME:-/home/$DELEVATED_USER}"
 
 # Signal handler for Ctrl+C
 cleanup() {
