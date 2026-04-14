@@ -5,9 +5,13 @@ CPU_ARCH=""
 CPU_CORES=0
 if command -v lscpu &>/dev/null; then
     CPU_VENDOR=$(lscpu | grep "Vendor ID" | awk '{print $3}')
+    check_error $? "Failed to detect CPU vendor"
     CPU_MODEL=$(lscpu | grep "Model name" | awk -F: '{print $2}' | xargs)
+    check_error $? "Failed to detect CPU model"
     CPU_ARCH=$(lscpu | grep "Architecture" | awk '{print $2}')
+    check_error $? "Failed to detect CPU architecture"
     CPU_CORES=$(lscpu | grep "^CPU(s):" | awk '{print $2}')
+    check_error $? "Failed to detect CPU cores"
     if [[ -n "$CPU_VENDOR" && -n "$CPU_MODEL" && -n "$CPU_ARCH" ]]; then
         info "CPU vendor: $CPU_VENDOR"
         info "CPU model: $CPU_MODEL"

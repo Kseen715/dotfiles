@@ -1,6 +1,13 @@
 #!/bin/bash
 
-# v0.1.0
+# v0.1.2
+
+# Ask for sudo password once upfront (only if not already root) and keep the
+# credential alive in a background loop for the lifetime of this process.
+if [[ $EUID -ne 0 ]]; then
+    sudo -v || exit 1
+    (while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done) &
+fi
 
 source "$(dirname "$(realpath "$0")")/src/common.sh"
 

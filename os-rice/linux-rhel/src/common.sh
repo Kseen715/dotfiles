@@ -26,24 +26,24 @@ NC='\033[0m' # No Color
 
 # Enhanced logging functions with colors
 info() {
-    printf "${CYAN}[INFO]${NC}\t%s\n" "$*"
+    printf "${CYAN}%-8s${NC}%s\n" "[INFO]" "$*"
 }
 
 warning() {
-    printf "${YELLOW}[WARN]${NC}\t%s\n" "$*" >&2
+    printf "${YELLOW}%-8s${NC}%s\n" "[WARN]" "$*" >&2
 }
 
 error() {
-    printf "${RED}[ERROR]${NC}\t%s\n" "$*" >&2
+    printf "${RED}%-8s${NC}%s\n" "[ERROR]" "$*" >&2
     exit 1
 }
 
 success() {
-    printf "${GREEN}[DONE]${NC}\t%s\n" "$*"
+    printf "${GREEN}%-8s${NC}%s\n" "[DONE]" "$*"
 }
 
 trace() {
-    printf "${NC}[SHELL]${NC}\t%s\n" "$*"
+    printf "${NC}%-8s${NC}%s\n" "[SHELL]" "$*"
     bash -c "$*"
     return $?
 }
@@ -90,14 +90,14 @@ install_or_update_git_repo() {
     local repo_url="$2"
     local repo_dir="$3"
     local clone_args="${4:-}"  # Optional additional arguments like --depth 1
-    
+
     if [ -d "$repo_dir" ]; then
         info "$repo_name repository directory exists, checking repository..."
         local current_remote=$(git -C "$repo_dir" remote get-url origin 2>/dev/null || echo "")
         info "Current remote for $repo_name: $current_remote"
         if [ "$current_remote" = "$repo_url" ] || [ "$current_remote" = "$repo_url.git" ] || [ "$current_remote" = "${repo_url%.git}" ]; then
             info "Updating $repo_name repository..."
-            if ! trace "git -C "$repo_dir" diff --quiet" || ! trace "git -C "$repo_dir" diff --cached --quiet"; then
+            if ! trace git -C "$repo_dir" diff --quiet || ! trace git -C "$repo_dir" diff --cached --quiet; then
                 info "Changes detected in repository. Resetting to clean state..."
                 trace git -C "$repo_dir" reset --hard HEAD && trace git -C "$repo_dir" clean -fd
             fi
@@ -120,27 +120,27 @@ install_or_update_git_repo() {
 install_pkg_dnf() {
     local pkgs=("$@")
     local filtered_pkgs=()
-    
+
     # Extract excluded packages from dnf configuration
     local ignore_list=""
     if command -v dnf &>/dev/null; then
         # Get list of excluded packages from dnf.conf
         ignore_list=$(dnf config-manager --dump 2>/dev/null | grep "^excludepkgs" | cut -d'=' -f2 | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sort -u)
     fi
-    
+
     # Also check for packages marked as excluded in DNF config
     local excluded_list=""
     if [[ -f /etc/dnf/dnf.conf ]]; then
         excluded_list=$(awk -F'=' '/^excludepkgs/ {print $2}' /etc/dnf/dnf.conf | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sort -u)
     fi
-    
+
     # Check for packages in /etc/dnf/vars/ or other plugin configs that might exclude packages
     local plugin_excludes=""
     if [[ -d /etc/dnf/plugins/versionlock.list ]]; then
         # DNF versionlock plugin - get locked packages
         plugin_excludes=$(cat /etc/dnf/plugins/versionlock.list 2>/dev/null | grep -v "^#" | grep -v "^$" | cut -d'-' -f1 | sort -u)
     fi
-    
+
     # Combine all ignore lists
     local combined_ignore_list=""
     for list in "$ignore_list" "$excluded_list" "$plugin_excludes"; do
@@ -153,7 +153,7 @@ install_pkg_dnf() {
         fi
     done
     combined_ignore_list=$(echo "$combined_ignore_list" | sort -u | grep -v "^$")
-    
+
     # Filter out packages that are in the ignore list
     for pkg in "${pkgs[@]}"; do
         local skip=false
@@ -168,14 +168,14 @@ install_pkg_dnf() {
                 fi
             done <<< "$combined_ignore_list"
         fi
-        
+
         if [[ "$skip" == true ]]; then
             warning "$pkg is excluded or locked -- skipping"
         else
             filtered_pkgs+=("$pkg")
         fi
     done
-    
+
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
         trace sudo dnf install --assumeyes -q "${filtered_pkgs[@]}"
@@ -186,17 +186,17 @@ install_pkg_dnf() {
 install_pkg_cargo_locked() {
     local pkgs=("$@")
     local filtered_pkgs=()
-    
+
     # Check for packages that might be restricted or problematic
     local ignore_list=""
     local restricted_list=""
-    
+
     # Check if cargo is available
     if ! command -v cargo &>/dev/null; then
         error "cargo command not found. Please install Rust and Cargo first."
         return 1
     fi
-    
+
     # Check for already installed packages (cargo doesn't have a "pinned" concept like other managers)
     # But we can check for packages that are already installed globally
     local installed_list=""
@@ -204,12 +204,12 @@ install_pkg_cargo_locked() {
         # Get list of installed cargo binaries (this is approximate since cargo install doesn't track packages perfectly)
         installed_list=$(ls "/home/$DELEVATED_USER/.cargo/bin" 2>/dev/null | sort -u)
     fi
-    
+
     # Check for packages in a hypothetical ignore file (custom implementation)
     if [[ -f "/home/$DELEVATED_USER/.cargo/ignore" ]]; then
         ignore_list=$(cat "/home/$DELEVATED_USER/.cargo/ignore" | grep -v "^#" | grep -v "^$" | sort -u)
     fi
-    
+
     # Combine ignore and restricted lists
     local combined_ignore_list=""
     if [[ -n "$ignore_list" ]]; then
@@ -222,11 +222,11 @@ install_pkg_cargo_locked() {
             combined_ignore_list="$restricted_list"
         fi
     fi
-    
+
     # Filter out packages that are in the ignore list
     for pkg in "${pkgs[@]}"; do
         local skip=false
-        
+
         # Check against ignore list
         if [[ -n "$combined_ignore_list" ]]; then
             while IFS= read -r ignore_pkg; do
@@ -238,21 +238,21 @@ install_pkg_cargo_locked() {
                 fi
             done <<< "$combined_ignore_list"
         fi
-        
+
         # Check if binary already exists (optional warning, not blocking)
         if [[ "$skip" == false ]] && [[ -n "$installed_list" ]]; then
             if echo "$installed_list" | grep -q "^${pkg}$"; then
                 warning "$pkg binary already exists in ~/.cargo/bin (will be updated if different version)"
             fi
         fi
-        
+
         if [[ "$skip" == true ]]; then
             warning "$pkg is in the ignore list -- skipping"
         else
             filtered_pkgs+=("$pkg")
         fi
     done
-    
+
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
         trace sudo -u $DELEVATED_USER /home/$DELEVATED_USER/.cargo/bin/cargo install "${filtered_pkgs[@]}" --locked

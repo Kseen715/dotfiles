@@ -24,24 +24,24 @@ NC='\033[0m' # No Color
 
 # Enhanced logging functions with colors
 info() {
-    printf "${CYAN}[INFO]${NC}\t%s\n" "$*"
+    printf "${CYAN}%-8s${NC}%s\n" "[INFO]" "$*"
 }
 
 warning() {
-    printf "${YELLOW}[WARN]${NC}\t%s\n" "$*" >&2
+    printf "${YELLOW}%-8s${NC}%s\n" "[WARN]" "$*" >&2
 }
 
 error() {
-    printf "${RED}[ERROR]${NC}\t%s\n" "$*" >&2
+    printf "${RED}%-8s${NC}%s\n" "[ERROR]" "$*" >&2
     exit 1
 }
 
 success() {
-    printf "${GREEN}[DONE]${NC}\t%s\n" "$*"
+    printf "${GREEN}%-8s${NC}%s\n" "[DONE]" "$*"
 }
 
 trace() {
-    printf "${NC}[BASH]${NC}\t%s\n" "$*"
+    printf "${NC}%-8s${NC}%s\n" "[SHELL]" "$*"
     bash -c "$*"
     return $?
 }
@@ -80,7 +80,7 @@ install_or_update_git_repo() {
     local repo_url="$2"
     local repo_dir="$3"
     local clone_args="${4:-}"  # Optional additional arguments like --depth 1
-    
+
     if [ -d "$repo_dir" ]; then
         info "$repo_name repository directory exists, checking repository..."
         local current_remote=$(git -C "$repo_dir" remote get-url origin 2>/dev/null || echo "")
@@ -106,7 +106,7 @@ install_or_update_git_repo() {
 install_pkg_pacman() {
     local pkgs=("$@")
     local filtered_pkgs=()
-    
+
     # Extract IgnorePkg entries from pacman.conf
     local ignore_list=""
     if [[ -f /etc/pacman.conf ]]; then
@@ -115,7 +115,7 @@ install_pkg_pacman() {
                      sed 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//' | \
                      tr ' ' '\n' | sort -u)
     fi
-    
+
     # Filter out packages that are in the ignore list
     for pkg in "${pkgs[@]}"; do
         local skip=false
@@ -130,14 +130,14 @@ install_pkg_pacman() {
                 fi
             done <<< "$ignore_list"
         fi
-        
+
         if [[ "$skip" == true ]]; then
             warning "$pkg is in the ignore list -- skipping"
         else
             filtered_pkgs+=("$pkg")
         fi
     done
-    
+
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
         trace sudo pacman -S --needed --noconfirm "${filtered_pkgs[@]}"
@@ -147,7 +147,7 @@ install_pkg_pacman() {
 install_pkg_aur() {
     local pkgs=("$@")
     local filtered_pkgs=()
-    
+
     # Extract IgnorePkg entries from pacman.conf
     local ignore_list=""
     if [[ -f /etc/pacman.conf ]]; then
@@ -156,7 +156,7 @@ install_pkg_aur() {
                      sed 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//' | \
                      tr ' ' '\n' | sort -u)
     fi
-    
+
     # Filter out packages that are in the ignore list
     for pkg in "${pkgs[@]}"; do
         local skip=false
@@ -171,14 +171,14 @@ install_pkg_aur() {
                 fi
             done <<< "$ignore_list"
         fi
-        
+
         if [[ "$skip" == true ]]; then
             warning "$pkg is in the ignore list -- skipping"
         else
             filtered_pkgs+=("$pkg")
         fi
     done
-    
+
     # Install filtered packages if any remain
     if [[ ${#filtered_pkgs[@]} -gt 0 ]]; then
         trace sudo -u "$DELEVATED_USER" $AUR_HELPER -S --needed --noconfirm "${filtered_pkgs[@]}"
