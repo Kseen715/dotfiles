@@ -1,3 +1,5 @@
+# v0.1.0
+
 # detect cpu vendor and model
 CPU_VENDOR="" # GenuineIntel, AuthenticAMD
 CPU_MODEL=""

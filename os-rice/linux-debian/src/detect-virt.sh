@@ -1,3 +1,5 @@
+# v0.1.0
+
 VIRT=""
 # Detect virtualizations (VMware, VirtualBox, QEMU, etc.)
 if command -v lscpu &>/dev/null; then

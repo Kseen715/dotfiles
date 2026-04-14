@@ -27,7 +27,7 @@ install_or_update_zsh_plugin() {
         info "Current remote for $plugin_name: $current_remote"
         if [ "$current_remote" = "$plugin_repo" ] || [ "$current_remote" = "$plugin_repo.git" ] || [ "$current_remote" = "${plugin_repo%.git}" ]; then
             info "Updating $plugin_name plugin..."
-            if ! trace "git -C "$plugin_dir" diff --quiet" || ! trace "git -C "$plugin_dir" diff --cached --quiet"; then
+            if ! trace git -C "$plugin_dir" diff --quiet || ! trace git -C "$plugin_dir" diff --cached --quiet; then
                 info "Changes detected in repository. Resetting to clean state..."
                 trace git -C "$plugin_dir" reset --hard HEAD && trace git -C "$plugin_dir" clean -fd
             fi
