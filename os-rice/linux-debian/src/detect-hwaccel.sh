@@ -1,4 +1,4 @@
-# v0.1.2
+# v0.1.3
 
 GPU_VENDOR=""
 GPU_MODEL=""
@@ -115,7 +115,10 @@ if command -v lspci &>/dev/null; then
         # Create comma-separated vendor list (for backward compatibility)
         if [[ ${#detected_vendors[@]} -gt 0 ]]; then
             GPU_VENDOR=$(IFS=","; echo "${detected_vendors[*]}")
-            GPU_MODEL=$(IFS=" | "; echo "${detected_models[*]}")
+            GPU_MODEL="${detected_models[0]:-}"
+            for model in "${detected_models[@]:1}"; do
+                GPU_MODEL+=" | $model"
+            done
             
             info "Detected $GPU_COUNT GPU(s):"
             for vendor in "${detected_vendors[@]}"; do
@@ -311,7 +314,7 @@ detect_system_name_inxi() {
 # Detect NPU vendor and model
 if command -v dmesg &>/dev/null; then
     # Get dmesg output and look for NPU-related entries
-    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bnpu\b|rknpu|neural.*processing|rockchip.*npu\b|mali.*npu|ethos.*npu|hexagon.*npu|qualcomm.*npu|intel.*npu|mediatek.*npu|amlogic.*npu")
+    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bnpu\b|rknpu|neural.*processing|rockchip.*npu\b|mali.*npu|ethos.*npu|hexagon.*npu|qualcomm.*npu|intel_npu|mediatek.*npu|amlogic.*npu")
     
     if [[ -n "$dmesg_output" ]]; then
         declare -A npu_vendor_count
@@ -339,8 +342,8 @@ if command -v dmesg &>/dev/null; then
                 fi
             fi
             
-            # Skip lines that are just power supply lookups or property failures (noise)
-            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present"; then
+            # Skip lines that are just power supply lookups, property failures, or ACPI table entries (noise)
+            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present\|ACPI:"; then
                 continue
             fi
             
@@ -380,8 +383,8 @@ if command -v dmesg &>/dev/null; then
                 else
                     npu_model="Qualcomm NPU"
                 fi
-            # Intel NPU detection
-            elif echo "$line" | grep -i -q "intel.*npu"; then
+            # Intel NPU detection (intel_npu is the kernel driver name for Meteor Lake+)
+            elif echo "$line" | grep -i -q "intel_npu"; then
                 npu_vendor="Intel"
                 npu_model="Intel NPU"
             # MediaTek NPU detection
@@ -433,7 +436,10 @@ if command -v dmesg &>/dev/null; then
         # Create comma-separated vendor list
         if [[ ${#detected_npu_vendors[@]} -gt 0 ]]; then
             NPU_VENDOR=$(IFS=","; echo "${detected_npu_vendors[*]}")
-            NPU_MODEL=$(IFS=" | "; echo "${detected_npu_models[*]}")
+            NPU_MODEL="${detected_npu_models[0]:-}"
+            for model in "${detected_npu_models[@]:1}"; do
+                NPU_MODEL+=" | $model"
+            done
             
             info "Detected $NPU_COUNT NPU(s) via dmesg:"
             for vendor in "${detected_npu_vendors[@]}"; do

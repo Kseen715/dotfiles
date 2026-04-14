@@ -1,4 +1,4 @@
-# v0.1.2
+# v0.1.3
 
 GPU_VENDOR=""
 GPU_MODEL=""
@@ -69,19 +69,19 @@ normalize_vendor() {
 if command -v lspci &>/dev/null; then
     # Get all GPU devices (VGA compatible controllers and 3D controllers)
     gpu_devices=$(lspci -mm | grep -E "VGA compatible controller|3D controller")
-    
+
     if [[ -n "$gpu_devices" ]]; then
         declare -A vendor_count
         declare -a detected_vendors
         declare -a detected_models
-        
+
         # Process each GPU device
         while IFS= read -r line; do
             # Extract vendor and device information
             # lspci -mm format: "slot" "class" "vendor" "device" "subsystem_vendor" "subsystem_device"
             vendor=$(echo "$line" | cut -d'"' -f6)
             device=$(echo "$line" | cut -d'"' -f8)
-            
+
             # Fallback to regular lspci format if -mm parsing fails
             if [[ -z "$vendor" || -z "$device" ]]; then
                 # Try alternative parsing
@@ -89,10 +89,10 @@ if command -v lspci &>/dev/null; then
                 vendor=$(echo "$gpu_info" | awk '{print $1}')
                 device=$(echo "$gpu_info" | sed "s/^$vendor //")
             fi
-            
+
             if [[ -n "$vendor" ]]; then
                 normalized_vendor=$(normalize_vendor "$vendor $device")
-                
+
                 # Count occurrences of each vendor
                 if [[ -z "${vendor_count[$normalized_vendor]}" ]]; then
                     vendor_count[$normalized_vendor]=1
@@ -100,23 +100,26 @@ if command -v lspci &>/dev/null; then
                 else
                     ((vendor_count[$normalized_vendor]++))
                 fi
-                
+
                 # Store full model information
                 if [[ -n "$device" ]]; then
                     detected_models+=("$vendor $device")
                 else
                     detected_models+=("$vendor")
                 fi
-                
+
                 ((GPU_COUNT++))
             fi
         done <<< "$gpu_devices"
-        
+
         # Create comma-separated vendor list (for backward compatibility)
         if [[ ${#detected_vendors[@]} -gt 0 ]]; then
             GPU_VENDOR=$(IFS=","; echo "${detected_vendors[*]}")
-            GPU_MODEL=$(IFS=" | "; echo "${detected_models[*]}")
-            
+            GPU_MODEL="${detected_models[0]:-}"
+            for model in "${detected_models[@]:1}"; do
+                GPU_MODEL+=" | $model"
+            done
+
             info "Detected $GPU_COUNT GPU(s):"
             for vendor in "${detected_vendors[@]}"; do
                 count=${vendor_count[$vendor]}
@@ -126,7 +129,7 @@ if command -v lspci &>/dev/null; then
                     info "  - $vendor GPU (x$count)"
                 fi
             done
-            
+
             if [[ -n "$GPU_MODEL" ]]; then
                 info "GPU model(s): $GPU_MODEL"
             fi
@@ -134,7 +137,7 @@ if command -v lspci &>/dev/null; then
             warning "No GPU vendors could be identified"
         fi
     fi
-    
+
     # Additional detection methods for edge cases
     if [[ -z "$GPU_VENDOR" ]] && command -v glxinfo &>/dev/null; then
         # info "Trying alternative detection with glxinfo..."
@@ -150,7 +153,7 @@ if command -v lspci &>/dev/null; then
             fi
         fi
     fi
-    
+
     # Try /proc/driver/nvidia/version for NVIDIA detection
     if [[ -z "$GPU_VENDOR" ]] && [[ -f "/proc/driver/nvidia/version" ]]; then
         # info "NVIDIA driver detected via /proc filesystem"
@@ -163,7 +166,7 @@ if command -v lspci &>/dev/null; then
             fi
         fi
     fi
-    
+
     # Try /sys/class/drm for additional detection
     if [[ -z "$GPU_VENDOR" ]] && [[ -d "/sys/class/drm" ]]; then
         # info "Trying detection via DRM subsystem..."
@@ -171,7 +174,7 @@ if command -v lspci &>/dev/null; then
             if [[ -f "$card" ]]; then
                 vendor_id=$(cat "$card" 2>/dev/null)
                 device_id=$(cat "$(dirname "$card")/device" 2>/dev/null)
-                
+
                 case "$vendor_id" in
                     "0x10de") # NVIDIA
                         GPU_VENDOR="NVIDIA"
@@ -192,15 +195,15 @@ if command -v lspci &>/dev/null; then
                 esac
             fi
         done
-        
+
         if [[ -n "$GPU_VENDOR" ]]; then
             info "Detected GPU via DRM: $GPU_VENDOR"
         fi
     fi
-    
+
 else
     warning "lspci command not found, unable to detect GPU vendor"
-    
+
     # Try alternative detection methods when lspci is not available
     if command -v glxinfo &>/dev/null; then
         # info "Trying detection with glxinfo..."
@@ -229,7 +232,7 @@ if [[ -z "$GPU_VENDOR" ]] && command -v dmesg &>/dev/null; then
     if [[ -n "$mali_info" ]]; then
         # Look for Mali GPU model information
         mali_model=""
-        
+
         # Check for panfrost driver with GPU model info
         panfrost_line=$(echo "$mali_info" | grep -i "panfrost.*gpu.*mali-g" | head -1)
         if [[ -n "$panfrost_line" ]]; then
@@ -239,7 +242,7 @@ if [[ -z "$GPU_VENDOR" ]] && command -v dmesg &>/dev/null; then
                 mali_model="ARM $(echo "$mali_model" | tr '[:lower:]' '[:upper:]')"
             fi
         fi
-        
+
         # Fallback: check for generic mali driver
         if [[ -z "$mali_model" ]]; then
             mali_line=$(echo "$mali_info" | grep -i "mali.*gpu" | head -1)
@@ -247,7 +250,7 @@ if [[ -z "$GPU_VENDOR" ]] && command -v dmesg &>/dev/null; then
                 mali_model="ARM Mali GPU"
             fi
         fi
-        
+
         if [[ -n "$mali_model" ]]; then
             GPU_VENDOR="ARM"
             GPU_MODEL="$mali_model"
@@ -311,20 +314,20 @@ detect_system_name_inxi() {
 # Detect NPU vendor and model
 if command -v dmesg &>/dev/null; then
     # Get dmesg output and look for NPU-related entries
-    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bnpu\b|rknpu|neural.*processing|rockchip.*npu\b|mali.*npu|ethos.*npu|hexagon.*npu|qualcomm.*npu|intel.*npu|mediatek.*npu|amlogic.*npu")
-    
+    dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bnpu\b|rknpu|neural.*processing|rockchip.*npu\b|mali.*npu|ethos.*npu|hexagon.*npu|qualcomm.*npu|intel_npu|mediatek.*npu|amlogic.*npu")
+
     if [[ -n "$dmesg_output" ]]; then
         declare -A npu_vendor_count
         declare -a detected_npu_vendors
         declare -a detected_npu_models
         declare -A unique_npu_devices  # Track unique NPU devices by address/identifier
-        
+
         # Process each NPU-related dmesg line
         while IFS= read -r line; do
             npu_vendor=""
             npu_model=""
             device_identifier=""
-            
+
             # For Rockchip NPU, always use a consistent identifier regardless of device address
             if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
                 device_identifier="rockchip_npu_0"
@@ -338,12 +341,12 @@ if command -v dmesg &>/dev/null; then
                     device_identifier=$(echo "$line" | sed "s/\[.*\] *//" | sed "s/^[[:space:]]*//" | awk "{print \$1 \$2}" | head -c 30)
                 fi
             fi
-            
-            # Skip lines that are just power supply lookups or property failures (noise)
-            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present"; then
+
+            # Skip lines that are just power supply lookups, property failures, or ACPI table entries (noise)
+            if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present\|ACPI:"; then
                 continue
             fi
-            
+
             # Rockchip NPU detection
             if echo "$line" | grep -i -q "rknpu\|rockchip.*npu"; then
                 npu_vendor="Rockchip"
@@ -380,8 +383,8 @@ if command -v dmesg &>/dev/null; then
                 else
                     npu_model="Qualcomm NPU"
                 fi
-            # Intel NPU detection
-            elif echo "$line" | grep -i -q "intel.*npu"; then
+            # Intel NPU detection (intel_npu is the kernel driver name for Meteor Lake+)
+            elif echo "$line" | grep -i -q "intel_npu"; then
                 npu_vendor="Intel"
                 npu_model="Intel NPU"
             # MediaTek NPU detection
@@ -405,13 +408,13 @@ if command -v dmesg &>/dev/null; then
                 npu_vendor="Unknown"
                 npu_model="Unknown NPU"
             fi
-            
+
             if [[ -n "$npu_vendor" && -n "$device_identifier" ]]; then
                 # Only count each unique device once
                 device_key="${npu_vendor}_${device_identifier}"
                 if [[ -z "${unique_npu_devices[$device_key]}" ]]; then
                     unique_npu_devices[$device_key]=1
-                    
+
                     # Count occurrences of each vendor
                     if [[ -z "${npu_vendor_count[$npu_vendor]}" ]]; then
                         npu_vendor_count[$npu_vendor]=1
@@ -419,22 +422,25 @@ if command -v dmesg &>/dev/null; then
                     else
                         ((npu_vendor_count[$npu_vendor]++))
                     fi
-                    
+
                     # Store full model information (only once per unique device)
                     if [[ -n "$npu_model" ]]; then
                         detected_npu_models+=("$npu_model")
                     fi
-                    
+
                     ((NPU_COUNT++))
                 fi
             fi
         done <<< "$dmesg_output"
-        
+
         # Create comma-separated vendor list
         if [[ ${#detected_npu_vendors[@]} -gt 0 ]]; then
             NPU_VENDOR=$(IFS=","; echo "${detected_npu_vendors[*]}")
-            NPU_MODEL=$(IFS=" | "; echo "${detected_npu_models[*]}")
-            
+            NPU_MODEL="${detected_npu_models[0]:-}"
+            for model in "${detected_npu_models[@]:1}"; do
+                NPU_MODEL+=" | $model"
+            done
+
             info "Detected $NPU_COUNT NPU(s) via dmesg:"
             for vendor in "${detected_npu_vendors[@]}"; do
                 count=${npu_vendor_count[$vendor]}
@@ -444,7 +450,7 @@ if command -v dmesg &>/dev/null; then
                     info "  - $vendor NPU (x$count)"
                 fi
             done
-            
+
             if [[ -n "$NPU_MODEL" ]]; then
                 info "NPU model(s): $NPU_MODEL"
             fi
@@ -458,7 +464,7 @@ fi
 # Check for NPU-specific device files and drivers
 if [[ -z "$NPU_VENDOR" ]]; then
     # info "Trying additional NPU detection methods..."
-    
+
     # Check for Rockchip NPU device files
     if [[ -c "/dev/rknpu" ]] || [[ -d "/sys/class/rknpu" ]]; then
         NPU_VENDOR="Rockchip"
@@ -466,7 +472,7 @@ if [[ -z "$NPU_VENDOR" ]]; then
         NPU_COUNT=1
         info "Rockchip NPU detected via device files"
     fi
-    
+
     # Check for loaded NPU kernel modules
     if command -v lsmod &>/dev/null; then
         npu_modules=$(lsmod | grep -i -E "rknpu|npu|neural")
@@ -494,7 +500,7 @@ if [[ -z "$NPU_VENDOR" ]]; then
             done <<< "$npu_modules"
         fi
     fi
-    
+
     # Check /proc/device-tree for NPU nodes (ARM-based systems)
     if [[ -d "/proc/device-tree" ]]; then
         npu_nodes=$(find /proc/device-tree -name "*npu*" -o -name "*neural*" 2>/dev/null)
@@ -539,19 +545,19 @@ fi
 if command -v dmesg &>/dev/null; then
     # Get dmesg output and look for VPU-related entries
     dmesg_output=$(dmesg 2>/dev/null | grep -i -E "\bvpu\b|video.*processing|rockchip.*vpu\b|hantro|rkvdec|rkvenc|vdec|venc|cedrus.*vpu|allwinner.*vpu|mediatek.*vpu|imx.*vpu|amlogic.*vpu|meson.*vpu|venus.*vpu|qualcomm.*vpu")
-    
+
     if [[ -n "$dmesg_output" ]]; then
         declare -A vpu_vendor_count
         declare -a detected_vpu_vendors
         declare -a detected_vpu_models
         declare -A unique_vpu_devices  # Track unique VPU devices by address/identifier
-        
+
         # Process each VPU-related dmesg line
         while IFS= read -r line; do
             vpu_vendor=""
             vpu_model=""
             device_identifier=""
-            
+
             # For Rockchip VPU, always use a consistent identifier regardless of device address
             if echo "$line" | grep -i -q "rockchip.*vpu\|hantro\|rkvdec\|rkvenc"; then
                 # Create unique identifier based on VPU type
@@ -574,12 +580,12 @@ if command -v dmesg &>/dev/null; then
                     device_identifier=$(echo "$line" | sed "s/\[.*\] *//" | sed "s/^[[:space:]]*//" | awk "{print \$1 \$2}" | head -c 30)
                 fi
             fi
-            
+
             # Skip lines that are just power supply lookups or property failures (noise)
             if echo "$line" | grep -i -q "looking up.*supply\|supply.*property.*failed\|could not add device link\|debugfs.*already present"; then
                 continue
             fi
-            
+
             # Rockchip VPU detection
             if echo "$line" | grep -i -q "rockchip.*vpu\|hantro\|rkvdec\|rkvenc"; then
                 vpu_vendor="Rockchip"
@@ -685,13 +691,13 @@ if command -v dmesg &>/dev/null; then
                 vpu_vendor="Unknown"
                 vpu_model="Unknown VPU"
             fi
-            
+
             if [[ -n "$vpu_vendor" && -n "$device_identifier" ]]; then
                 # Only count each unique device once
                 device_key="${vpu_vendor}_${device_identifier}"
                 if [[ -z "${unique_vpu_devices[$device_key]}" ]]; then
                     unique_vpu_devices[$device_key]=1
-                    
+
                     # Count occurrences of each vendor
                     if [[ -z "${vpu_vendor_count[$vpu_vendor]}" ]]; then
                         vpu_vendor_count[$vpu_vendor]=1
@@ -699,22 +705,22 @@ if command -v dmesg &>/dev/null; then
                     else
                         ((vpu_vendor_count[$vpu_vendor]++))
                     fi
-                    
+
                     # Store full model information (only once per unique device)
                     if [[ -n "$vpu_model" ]]; then
                         detected_vpu_models+=("$vpu_model")
                     fi
-                    
+
                     ((VPU_COUNT++))
                 fi
             fi
         done <<< "$dmesg_output"
-        
+
         # Create comma-separated vendor list
         if [[ ${#detected_vpu_vendors[@]} -gt 0 ]]; then
             VPU_VENDOR=$(IFS=","; echo "${detected_vpu_vendors[*]}")
             VPU_MODEL=$(IFS=","; echo "${detected_vpu_models[*]}")
-            
+
             info "Detected $VPU_COUNT VPU(s) via dmesg:"
             for vendor in "${detected_vpu_vendors[@]}"; do
                 count=${vpu_vendor_count[$vendor]}
@@ -724,7 +730,7 @@ if command -v dmesg &>/dev/null; then
                     info "  - $vendor VPU (x$count)"
                 fi
             done
-            
+
             if [[ -n "$VPU_MODEL" ]]; then
                 info "VPU model(s): $VPU_MODEL"
             fi
@@ -738,7 +744,7 @@ fi
 # Check for VPU-specific device files and drivers
 if [[ -z "$VPU_VENDOR" ]]; then
     # info "Trying additional VPU detection methods..."
-    
+
     # Check for Rockchip VPU device files
     if [[ -c "/dev/rkvdec" ]] || [[ -c "/dev/rkvenc" ]] || [[ -d "/sys/class/video4linux" ]]; then
         # Check if it's actually a Rockchip VPU by looking at driver info
@@ -766,7 +772,7 @@ if [[ -z "$VPU_VENDOR" ]]; then
                 fi
             fi
         done
-        
+
         # Fallback: check for rkvdec/rkvenc device files directly
         if [[ $vpu_found -eq 0 ]]; then
             if [[ -c "/dev/rkvdec" ]] || [[ -c "/dev/rkvenc" ]]; then
@@ -783,7 +789,7 @@ if [[ -z "$VPU_VENDOR" ]]; then
             fi
         fi
     fi
-    
+
     # Check for loaded VPU kernel modules
     if command -v lsmod &>/dev/null; then
         vpu_modules=$(lsmod | grep -i -E "rkvdec|rkvenc|hantro|cedrus|venus|vpu|video.*codec")
@@ -835,7 +841,7 @@ if [[ -z "$VPU_VENDOR" ]]; then
             done <<< "$vpu_modules"
         fi
     fi
-    
+
     # Check /proc/device-tree for VPU nodes (ARM-based systems)
     if [[ -d "/proc/device-tree" ]]; then
         vpu_nodes=$(find /proc/device-tree -name "*vpu*" -o -name "*vdec*" -o -name "*venc*" -o -name "*video*codec*" 2>/dev/null)
