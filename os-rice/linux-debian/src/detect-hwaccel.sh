@@ -474,11 +474,12 @@ if [[ -z "$NPU_VENDOR" ]]; then
     fi
     
     # Check for loaded NPU kernel modules
+    # Extract module names only (skip lsmod header) and match "npu" as a token,
+    # not as a substring — e.g. "uinput" contains "npu" but must NOT match.
     if command -v lsmod &>/dev/null; then
-        npu_modules=$(lsmod | grep -i -E "rknpu|npu|neural")
+        npu_modules=$(lsmod | awk 'NR>1 {print $1}' | grep -i -E "rknpu|intel_npu|^npu$|^npu_|_npu$|_npu_|neural_npu")
         if [[ -n "$npu_modules" ]]; then
-            while IFS= read -r module_line; do
-                module_name=$(echo "$module_line" | awk '{print $1}')
+            while IFS= read -r module_name; do
                 case "$module_name" in
                     *rknpu*|*rockchip*npu*)
                         if [[ -z "$NPU_VENDOR" ]]; then
@@ -488,7 +489,15 @@ if [[ -z "$NPU_VENDOR" ]]; then
                             info "Rockchip NPU detected via kernel module: $module_name"
                         fi
                         ;;
-                    *npu*|*neural*)
+                    *intel_npu*)
+                        if [[ -z "$NPU_VENDOR" ]]; then
+                            NPU_VENDOR="Intel"
+                            NPU_MODEL="Intel NPU"
+                            NPU_COUNT=1
+                            info "Intel NPU detected via kernel module: $module_name"
+                        fi
+                        ;;
+                    npu|npu_*|*_npu|*_npu_*|*neural_npu*)
                         if [[ -z "$NPU_VENDOR" ]]; then
                             NPU_VENDOR="Unknown"
                             NPU_MODEL="Unknown NPU"
