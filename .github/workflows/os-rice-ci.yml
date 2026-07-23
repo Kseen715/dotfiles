@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["debian:stable-slim", "alpine:latest", "archlinux:latest", "fedora:latest"]
+        image: ["ubuntu:jammy", "ubuntu:noble", "ubuntu:resolute", "debian:stable-slim", "alpine:latest", "archlinux:latest", "fedora:latest"]
     steps:
       - uses: actions/checkout@v4
       - name: Double-run install on ${{ matrix.image }}
