@@ -1,0 +1,5 @@
+# servicemap — logical service name -> real unit name. Rows only where a name
+# actually differs across inits (§8); unlisted names pass through unchanged.
+#
+# Example (uncomment/adjust per target init as needed):
+# NetworkManager = networkmanager

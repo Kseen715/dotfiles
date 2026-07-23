@@ -1,0 +1,32 @@
+name: os-rice CI
+
+on:
+  push:
+    branches: [main] # main only — feature branches are covered by their PR run
+    tags: ["**"] # every tag (release gating)
+  pull_request: # every PR (feature-branch commits land here, not in push)
+  workflow_call: # lets release.yml run this as a prerequisite gate
+
+jobs:
+  # Fast, no-container gate: POSIX lint (dash -n + shellcheck) + unit tests.
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dash, shellcheck, zsh
+        run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh
+      - name: Lint + unit tests
+        run: sh os-rice/test/run.sh
+
+  # The idempotency matrix: install the rice TWICE per distro image; the double
+  # run must be all-skips with no duplicate PATH entries (DESIGN §9).
+  idempotency-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:stable-slim", "alpine:latest", "archlinux:latest", "fedora:latest"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Double-run install on ${{ matrix.image }}
+        run: OSR_TEST_IMAGES="${{ matrix.image }}" sh os-rice/test/matrix.sh gruvbox

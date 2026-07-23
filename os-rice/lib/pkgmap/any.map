@@ -1,0 +1,11 @@
+# any.map — logical name -> spec, shared across all package managers.
+# Rows here are for provider-tagged (non-native) installs (§4). A per-distro map
+# (apt.map, pacman.map, ...) overrides a row here when a distro differs.
+#
+# Format:  <logical name> = <spec>
+#   spec with no method:   native package name(s), space-separated (one-to-many)
+#   script:<url> [args]    pipe a remote installer to sh, args forwarded
+#   source:<builder-fn>    build via a shell function in scope
+
+# starship prompt — official install script, non-interactive.
+starship = script:https://starship.rs/install.sh --yes

@@ -1,0 +1,3 @@
+# gruvbox — a minimal shell rice (MVP). One line per module; add an app = add a
+# line. See DESIGN "Manifest format".
+zsh

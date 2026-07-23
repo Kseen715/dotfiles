@@ -1,0 +1,18 @@
+# starship.toml — nord rice prompt. Rice-owned: swapped on rice switch (§6).
+add_newline = true
+palette = "nord"
+
+format = "$directory$git_branch$git_status$character"
+
+[palettes.nord]
+frost = "#88c0d0"
+snow = "#eceff4"
+aurora = "#a3be8c"
+red = "#bf616a"
+
+[directory]
+style = "bold frost"
+
+[character]
+success_symbol = "[](bold aurora)"
+error_symbol = "[](bold red)"

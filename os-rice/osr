@@ -1,0 +1,33 @@
+#!/bin/sh
+# osr — front-end CLI for the os-rice harness.
+#
+#   osr install <rice> [--user <name>] [--verbose]   full install of a rice
+#   osr switch  <rice> [--user <name>] [--verbose]   move to a rice (§6):
+#                                                    additive packages, the
+#                                                    rice-owned 90-* config and
+#                                                    wallpaper are replaced;
+#                                                    00-env / aliases / installed
+#                                                    packages are left untouched.
+#   osr list                                         list available rices
+#
+# switch and install share one idempotent engine (install.sh): because installs
+# never uninstall and install_layer overwrites only os-rice-owned layers, "move
+# A -> B" is just applying B on top of A.
+set -eu
+
+OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+_cmd=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$_cmd" in
+    install) exec "$OSR_SELF_DIR/install.sh" "$@" ;;
+    switch)  OSR_MODE=switch; export OSR_MODE; exec "$OSR_SELF_DIR/install.sh" "$@" ;;
+    list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
+    -h|--help|"")
+        sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+        ;;
+    *)
+        echo "osr: unknown command '$_cmd' (try: install, switch, list)" >&2
+        exit 1
+        ;;
+esac

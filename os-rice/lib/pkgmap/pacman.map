@@ -1,0 +1,5 @@
+# pacman.map — logical name -> real Arch package(s).
+# Only rows where the name differs (§1); unlisted names pass through unchanged.
+
+build = base-devel
+dev-headers = openssl pkgconf

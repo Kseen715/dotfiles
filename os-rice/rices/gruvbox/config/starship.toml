@@ -1,0 +1,18 @@
+# starship.toml — gruvbox rice prompt. Rice-owned: swapped on rice switch (§6).
+add_newline = true
+palette = "gruvbox"
+
+format = "$directory$git_branch$git_status$character"
+
+[palettes.gruvbox]
+love = "#fb4934"
+gold = "#fabd2f"
+pine = "#83a598"
+foam = "#8ec07c"
+
+[directory]
+style = "bold gold"
+
+[character]
+success_symbol = "[](bold foam)"
+error_symbol = "[](bold love)"
