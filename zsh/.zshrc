@@ -128,6 +128,7 @@ alias s='f() { sudo $@};f'
 
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
 
+export STARSHIP_LOG=error  # silence scan_timeout warns without slowing scans
 eval "$(starship init zsh)"
 
 if command -v brew &>/dev/null; then
