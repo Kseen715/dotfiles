@@ -88,6 +88,21 @@ answer for "max compatible with barebone systems." Cost: rewrite bash-isms
 (`[[ ]]` → `[ ]`, arrays → space-lists or `while read`). Validate every module
 under `dash` / busybox `ash`, not just bash.
 
+### CLI output is ASCII-only
+
+Every byte the tool writes to the terminal is 7-bit ASCII — no Unicode spinners
+(`⠋⠙⠹`), box-drawing, em-dashes, or checkmark glyphs (`✔`/`✗`) in program output.
+Barebone targets (busybox on a fresh Alpine, a serial console, a `LANG=C`
+non-UTF-8 locale, a minimal `TERM`) mangle non-ASCII into mojibake — this design
+already carries one such corruption (`✗` rendered as `�’` in §3). ASCII removes
+the whole class of locale/encoding bugs for free. Concretely: spinner frames
+`-\|/`, success `[ok]`, failure `[!!]`, separators `|`/`-`. Color via ANSI SGR is
+fine (still ASCII bytes) and stays gated on `[ -t 1 ]`.
+
+> Scope: this governs **program output**, not this document — arrows and dashes
+> in the prose/tables here are fine. Enforce in CI with a non-ASCII grep over
+> `lib/` + `modules/` string literals.
+
 ### No compiled C binary (for now)
 
 The C idea was about bootstrap primitives ("compile a helper binary to not
@@ -162,9 +177,9 @@ dev-headers = libssl-dev      dev-headers = openssl-devel pkgconf
 ```
 
 ```sh
-# lib/pkg.sh
-pkg_install() {                     # pkg_install build zsh
-  set -- $(_pkgmap "$@")            # expand logical -> real, one-to-many
+# lib/pkg.sh — native batch: the group that §4's method-dispatch calls with
+# already-resolved names. Distro variance is exactly this one case statement.
+_via_native() {                     # _via_native build-essential zsh
   case "$OSR_PKG" in
     apt)    apt-get install -y "$@" ;;
     dnf)    dnf install -y "$@" ;;
@@ -173,26 +188,79 @@ pkg_install() {                     # pkg_install build zsh
     xbps)   xbps-install -y "$@" ;;
   esac
 }
+```
 
-_pkgmap() {                         # POSIX: while/for + grep, no assoc arrays
+Name resolution (`_pkgmap`, logical→real) is §1a; the top-level `pkg_install`
+that groups by install *method* and batches the native rows through `_via_native`
+is §4. Modules only ever say `pkg_install build`.
+
+Five verbs cover ~everything: `pkg_install`, `pkg_installed`, `pkg_refresh`,
+`pkg_add_repo`, `pkg_remove`. The table absorbs every distro's splitting; a
+central table (not inline `case` per module) wins — one place, only rows for
+packages that differ.
+
+### 1a. Facet qualifiers — `name@facet`, most-specific wins (G6, G8)
+
+`OSR_PKG` (apt/dnf/pacman) is not the only axis of variance. Two more bite in
+practice:
+
+- **Release version (G6).** A package's *install method* can differ by distro
+  *release*, not just distro: `ghostty` is native on Ubuntu noble (24.04) but
+  must build from source on jammy (22.04). One `apt.map` shared across all
+  Ubuntu releases can't say that.
+- **CPU arch (G8).** Native pkg managers already resolve arch themselves — this
+  bites only artifact-fetching providers (`tarball:`/`source:`/`github`) that
+  name a specific asset (`go1.22.linux-amd64.tar.gz`).
+
+Both are handled by **one mechanism**: a map key may carry an optional `@facet`
+qualifier, and the resolver checks the most specific match first, falling back to
+the bare name. No qualifier = today's behavior, zero cost for the common case —
+a qualified row exists *only* where that facet actually diverges (same ethos as
+§1's "only rows that differ").
+
+```
+# apt.map
+ghostty            = source:build-ghostty                 # default for apt
+ghostty@noble      = ghostty                              # 24.04 ships it -> native
+ghostty@resolute   = ghostty
+# jammy has no row -> falls through to the source: default
+
+go                 = tarball:https://go.dev/dl/go1.22.linux-${OSR_ARCH_DEB}.tar.gz
+zig@aarch64        = source:build-zig                     # no prebuilt for arm64
+```
+
+```sh
+_pkgmap() {                          # facet order: codename > version > arch > bare
   for name; do
-    line=$(grep "^$name[[:space:]]*=" "$OSR_LIB/pkgmap/$OSR_PKG.map" 2>/dev/null)
+    line=""
+    for key in "$name@$OSR_CODENAME" "$name@$OSR_VERSION_ID" "$name@$OSR_ARCH" "$name"; do
+      line=$(grep "^$key[[:space:]]*=" "$OSR_LIB/pkgmap/$OSR_PKG.map" 2>/dev/null) && break
+    done
     if [ -n "$line" ]; then
-      printf '%s ' "${line#*= }"    # RHS may be several packages
+      # RHS may interpolate ${OSR_ARCH*}; eval only the value, not arbitrary input.
+      eval "printf '%s ' \"${line#*= }\""
     else
-      printf '%s ' "$name"          # no mapping -> use name as-is
+      printf '%s ' "$name"
     fi
   done
 }
 ```
 
-Five verbs cover ~everything: `pkg_install`, `pkg_installed`, `pkg_refresh`,
-`pkg_add_repo`, `pkg_remove`. Modules say `pkg_install build`; the table absorbs
-every distro's splitting.
+**Free properties worth noting:**
+- The §4 idempotency probe follows for free — the tag drives the probe, and a
+  qualified row resolves to a different tag per release/arch, so the skip check
+  changes with it automatically.
+- A version/arch that flips to `source:`/`tarball:` needs a build toolchain
+  (jammy ghostty → zig). Keep that **out of `rice.list`** (which is
+  version/arch-agnostic and logic-free) — the build function declares its own
+  prerequisite (`pkg_install zig` at its top), so the qualifier never forces a
+  conditional into the manifest.
 
-> Open question: package-*name* differences — central `pkgmap` table (chosen)
-> vs inline `case` per module. Central table wins: one place, only for packages
-> that differ.
+> Ceiling: explicit per-release rows, not version *ranges* (`foo <24.04`).
+> Ranges need a POSIX version-compare — add `sort -V` only if hand-listing 1–2
+> old releases per package ever becomes unmaintainable. Likewise arch: two
+> naming schemes (`OSR_ARCH`, `OSR_ARCH_DEB`); add a third alias var only when a
+> third upstream convention (`x64`, …) forces it — no general arch-name mapper.
 
 ---
 
@@ -223,11 +291,29 @@ Colors and spinners are achievable in POSIX. A real **byte-level progress bar is
 not** — `apt`/`pacman` own their stdout and don't report parseable progress.
 Fighting that is a time sink for a jittery result. So:
 
-- **Step progress** (honest, easy, looks pro): `[03/12] zsh ✔` — module count is
-  known from the manifest. This is the progress bar that actually works.
+- **Two-level step progress** (honest, easy, looks pro): `[03/12] zsh | 4/6 [ok]`.
+  Outer `[03/12]` = module count from the manifest (exact, pre-known). Inner
+  `4/6` = steps *within* the current module, its total known the instant the
+  module starts from a static `grep -c '^[[:space:]]*run_step' modules/zsh.sh`
+  (every visible step routes through `run_step`, so that count is authoritative).
+  This is the progress bar that actually works, at the granularity that shows
+  even the small steps.
+  - **Skipped branch counts as finished.** Executed `run_step`s tick +1; guarded
+    ones that don't fire (§2 idempotency: `chsh` only if needed, plugin clone
+    only if absent) don't. At module end, `step_finish_module` fast-forwards the
+    inner counter to its total, so the inner bar always reaches `6/6` and skipped
+    work renders `[ok] skipped`. The occasional jump (`4/6 -> 6/6`) is the honest
+    signal a guard skipped work — not a stall.
+  - **Why not an exact global pre-count?** Conditionals + loops (N plugins) mean
+    the true total isn't knowable without running, and a dry-run pre-pass counts
+    guarded steps the real run then skips — so "exact" drifts anyway. Two-level
+    sidesteps it: outer is exact, inner is locally exact per module.
+  - **Lint rule this depends on:** a raw `git clone`/`curl` not wrapped in
+    `run_step` is invisible to the count. Grep for install-ish verbs outside
+    `run_step` in CI (cheap) so the convention stays a rule, not a habit.
 - **Spinner** wraps long *silent* steps (clone, download, build): run in the
-  background, capture output to a per-run logfile, animate `⠋⠙⠹…` on `\r`, print
-  `✔`/`�’` on completion. On failure, dump the log tail.
+  background, capture output to a per-run logfile, animate `-\|/` on `\r`, print
+  `[ok]`/`[!!]` on completion. On failure, dump the log tail.
 - **Auto-degrade:** everything keys off `[ -t 1 ]`. TTY → spinners + hidden
   output. Piped / CI / `--verbose` → plain streamed lines, no escape junk in
   logs. This is what makes it both fancy *and* re-runnable-into-a-logfile.
@@ -240,7 +326,7 @@ run_step() {                         # run_step "Cloning oh-my-zsh" git clone ..
     ( "$@" ) >>"$OSR_LOG" 2>&1 & pid=$!
     _spin "$pid" "$desc"
     wait "$pid" || { tail -n 20 "$OSR_LOG"; error "$desc failed"; }
-    printf '\r%b✔%b %s\n' "$GREEN" "$NC" "$desc"
+    printf '\r%b[ok]%b %s\n' "$GREEN" "$NC" "$desc"
   else
     info "$desc"; "$@" || error "$desc failed"   # non-tty: current trace behavior
   fi
@@ -356,6 +442,26 @@ config/foot/                  foot.ini includes foot-colors.ini (rice-owned)
   blind append (`case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac`), so
   a re-run never duplicates entries.
 
+### 5a. System config paths vary by distro *family* (G7)
+
+Most of the layering above is `$HOME`/XDG — stable across distros. The variance
+is a narrow set of **system** config, and it varies by distro *family*, not
+per-package: `/etc/default/foo` (Debian) vs `/etc/conf.d/foo` (OpenRC/Alpine)
+vs `/etc/sysconfig/foo` (RHEL). Because it's family-wide, a per-package map
+(a "confmap" mirroring `pkgmap`) is the wrong shape — it'd be rows of identical
+values. Instead resolve the base dir **once in `detect.sh`** as `OSR_ETC_DEFAULT`
+(the same detect-once move the whole design rests on); modules write to
+`"$OSR_ETC_DEFAULT/foo"`, never a literal path.
+
+- **Prefer a drop-in file over editing the package's own config.** Drop a *new*
+  file into the conventional `.d/` dir (whose location is the thing that varies)
+  rather than rewriting a package-owned file — this extends §5's "write only what
+  it owns" from `$HOME` to system config.
+- The rare genuinely-per-package-*and*-per-distro path oddball gets an inline
+  `case "$OSR_DISTRO"` in that one module — §1's own logic: a central table is
+  for variance that's common (package *names*); path divergence is rare, so
+  inline is the lazy-correct choice.
+
 ---
 
 ## 6. Rice switching — additive for packages, replace for owned config
@@ -457,6 +563,21 @@ what G5 below argues against.
   to `script:`/`git:` install, one method), not config; only `.zshrc` +
   `starship.toml` are the config layer (§5). Split the two so a rice never
   vendors 640 files.
+- **G6 — install method varies by distro *release*.** `ghostty` is native on
+  noble, source-built on jammy. One `apt.map` across all Ubuntu releases can't
+  say it → `name@release` qualifier (§1a), `OSR_CODENAME`/`OSR_VERSION_ID` in
+  detect.
+- **G7 — system config paths vary by distro family** (`/etc/default` vs
+  `/etc/conf.d` vs `/etc/sysconfig`) → resolve `OSR_ETC_DEFAULT` once in detect,
+  prefer drop-in files (§5a).
+- **G8 — artifact-fetching providers are arch-specific** (`*-x86_64` vs
+  `*-aarch64`, Go's `amd64`). Native pkg managers self-resolve arch; tarball/
+  source/github don't → `OSR_ARCH`/`OSR_ARCH_DEB` + `name@arch` qualifier (§1a).
+- **G9 — a rice has no way to declare hardware/OS preconditions** → `require:`
+  manifest directive + `lib/preflight.sh`, checked before any mutation (§10).
+- **G10 — "GPU present + Vulkan actually initializes" can't be proven pre-install**
+  (the prober is itself a package) → cheap `require: gpu:present` gate up front +
+  a functional probe as an early module (§10).
 
 ### The migration wound, concretely
 
@@ -551,6 +672,67 @@ as fallback, QEMU reserved for the DE/service smoke test. Container matrix +
 
 ---
 
+## 10. Rice preconditions — declare requirements, fail before mutation
+
+A rice can demand things of the host (an arch, an init, a real GPU). Discovering
+the mismatch **halfway through** — after packages are installed — is the bad
+outcome. So requirements are declared as data in the manifest and checked up
+front. Two tiers, split by cost and by whether the check touches the system.
+
+### Tier 1 — `require:` (cheap, declarative, pre-mutation)
+
+A `require:` directive in `rice.list`; the runner parses it and errors before
+step 1, exiting non-zero **before anything is written**. This actively
+strengthens the §2 safety contract — fail clean, touch nothing.
+
+```
+# rices/arch-hyprland-glass/rice.list
+require: arch:x86_64          # x86_64-only rice -> fail on arm instead of 404ing a tarball
+require: init:systemd
+require: gpu:present          # a real GPU exists at all
+base
+zsh
+hyprland
+```
+
+Predicates stay small, cheap, and **data-only** (no installs):
+
+| predicate                    | check                                      |
+|------------------------------|--------------------------------------------|
+| `arch:<m>`                   | `uname -m` (or `OSR_ARCH_DEB`)             |
+| `init:<i>`                   | `OSR_INIT`                                 |
+| `distro:<d>` / `release:<c>` | `OSR_DISTRO` / `OSR_CODENAME` (ties to G6) |
+| `cmd:<bin>`                  | `command -v`                               |
+| `gpu:present`                | `/dev/dri/renderD*` or a GPU in `lspci`    |
+
+`lib/preflight.sh` dispatches each; unmet → `error "rice needs <pred>; detected …"`.
+Preflight runs on `osr switch <rice>` too — you can't switch into a rice the
+hardware can't run.
+
+### Tier 2 — functional capability probe (real init, as an early module)
+
+"GPU present" is cheap; "Vulkan actually initializes" is not — the tool that
+proves it (`vulkaninfo`) is itself a package you haven't installed yet, and a
+true probe **touches the system**, which collides with "fail before mutation".
+So functional capability is *not* a `require:` predicate — it's an **early
+module** (`modules/gpu-vulkan.sh`, first in the rice) that does real, idempotent
+work:
+
+```
+detect GPU  ->  install minimal driver + loader + prober (mesa, vulkan-loader, vulkan-tools)
+            ->  headless probe: `vulkaninfo --summary` (or `vkcube --c 1`)
+            ->  parse for a REAL hardware device, reject software fallback (llvmpipe/lavapipe)
+            ->  device initializes: proceed  |  errors / software-only: hard-fail with the driver diagnostic
+```
+
+This "bring it up to the point where we can decide, then go or error" is exactly
+the ask. It stays honest: the probe installs only its **own** prerequisites
+(which a Vulkan rice needs anyway), never rice-specific packages. `require:
+gpu:vulkan` in a manifest is sugar meaning "ensure the `gpu-vulkan` probe module
+runs early and hard."
+
+---
+
 ## Module example (target)
 
 `zsh.sh` written **once**, POSIX, distro-agnostic — compare to the three pasted
@@ -604,7 +786,7 @@ bootstrap binary; Windows.
 - [ ] Modules run under `dash` / busybox `ash`, not just bash.
 - [ ] `bootstrap.sh` finds a downloader (curl || wget || busybox wget) on
       minimal Alpine + minimal Debian; no compiled binary needed.
-- [ ] Running the rice **twice** → second run is all `✔ skipped`, zero errors,
+- [ ] Running the rice **twice** → second run is all `[ok] skipped`, zero errors,
       and `$PATH` has **no duplicated entries**.
 - [ ] `osr switch other-rice` changes the prompt + wallpaper while leaving
       `00-env`, aliases, and every installed package untouched.
@@ -644,9 +826,5 @@ bootstrap binary; Windows.
 
 ## Open Questions
 
-- Idempotency as the hard contract for `install.sh <rice>` — confirmed yes; make
-  it a documented rule and lint modules against raw mutation where practical.
-- `pkgmap` rows only for packages that differ (chosen) vs exhaustive maps —
-  keep minimal.
 - Layer taxonomy beyond `00/10/20/90/99` — is a two-digit numeric prefix enough
   ordering headroom for every config, or will some need sub-layers?
