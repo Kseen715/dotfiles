@@ -1,0 +1,7 @@
+# xbps.map — logical name -> real Void Linux package(s).
+# Only rows where the name actually differs from the logical name (§1); anything
+# not listed passes through unchanged (zsh, git, curl, lsd, foot, unzip,
+# fontconfig, fd are all identical on xbps, so they need no row).
+
+build = base-devel
+dev-headers = openssl-devel pkgconf

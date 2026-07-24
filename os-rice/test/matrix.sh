@@ -16,7 +16,7 @@ HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
 
 RICE=${1:-gruvbox}
-IMAGES=${OSR_TEST_IMAGES:-"ubuntu:jammy ubuntu:noble ubuntu:resolute debian:stable-slim alpine:latest archlinux:latest fedora:latest"}
+IMAGES=${OSR_TEST_IMAGES:-"ubuntu:jammy ubuntu:noble ubuntu:resolute debian:stable-slim alpine:latest archlinux:latest fedora:latest ghcr.io/void-linux/void-glibc-full:latest"}
 ENGINE=$(command -v podman 2>/dev/null || command -v docker 2>/dev/null || true)
 [ -n "$ENGINE" ] || { echo "no container engine (podman/docker) found" >&2; exit 1; }
 
