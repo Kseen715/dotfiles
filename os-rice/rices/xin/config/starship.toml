@@ -1,0 +1,19 @@
+# starship.toml — xin rice prompt. Rice-owned: swapped on rice switch (§6).
+# Palette is the original linux-rhel foot colors (dark, red/blue accent).
+add_newline = true
+palette = "xin"
+
+format = "$directory$git_branch$git_status$character"
+
+[palettes.xin]
+love = "#f0424b"
+gold = "#f3e659"
+pine = "#3292dc"
+foam = "#55dc28"
+
+[directory]
+style = "bold pine"
+
+[character]
+success_symbol = "[](bold foam)"
+error_symbol = "[](bold love)"

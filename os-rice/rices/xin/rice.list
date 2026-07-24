@@ -1,0 +1,7 @@
+# xin — the modern replacement for the old linux-rhel bundle. Distro-agnostic:
+# these same modules install on Fedora/RHEL (dnf), Debian/Ubuntu (apt), Arch,
+# Alpine and Void. rust is listed first as a toolchain prerequisite (manifest
+# order is the dependency graph, §4). foot ships its own rice-owned palette below.
+rust
+zsh
+foot
