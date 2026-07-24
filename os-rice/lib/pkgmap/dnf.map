@@ -6,3 +6,7 @@
 build = gcc gcc-c++ make
 dev-headers = openssl-devel pkgconf-pkg-config
 fd = fd-find
+
+# Fedora has no official starship package -> official install script (fastfetch
+# IS native on Fedora, so it passes through).
+starship = script:https://starship.rs/install.sh --yes

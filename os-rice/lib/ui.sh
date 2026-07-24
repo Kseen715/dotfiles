@@ -30,14 +30,16 @@ step_prefix() {
     printf '[%02d/%02d] ' "$OSR_STEP_N" "$OSR_STEP_TOTAL"
 }
 
-# _spin <pid> <desc> — animate a braille spinner on \r until pid exits.
+# _spin <pid> <desc> — animate an ASCII spinner on \r until pid exits. ASCII-only
+# program output (§3): the frames render in any TERM/locale, no mojibake.
 _spin() {
     _sp_pid=$1
     _sp_desc=$2
-    _sp_frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    _sp_frames='|/-\'
+    _sp_n=${#_sp_frames}
     while kill -0 "$_sp_pid" 2>/dev/null; do
         _sp_i=1
-        while [ "$_sp_i" -le 10 ]; do
+        while [ "$_sp_i" -le "$_sp_n" ]; do
             _sp_c=$(printf '%s' "$_sp_frames" | cut -c "$_sp_i")
             printf '\r%b%s%b %s' "$OSR_CYAN" "$_sp_c" "$OSR_NC" "$_sp_desc"
             kill -0 "$_sp_pid" 2>/dev/null || break
@@ -57,9 +59,9 @@ run_step() {
         _rs_pid=$!
         _spin "$_rs_pid" "$_rs_desc"
         if wait "$_rs_pid"; then
-            printf '\r%b✔%b %s\n' "$OSR_GREEN" "$OSR_NC" "$_rs_desc"
+            printf '\r%b[ok]%b %s\n' "$OSR_GREEN" "$OSR_NC" "$_rs_desc"
         else
-            printf '\r%b✗%b %s\n' "$OSR_RED" "$OSR_NC" "$_rs_desc"
+            printf '\r%b[!!]%b %s\n' "$OSR_RED" "$OSR_NC" "$_rs_desc"
             tail -n 20 "$OSR_LOG" >&2
             error "$_rs_desc failed"
         fi

@@ -24,7 +24,7 @@ enable_service() {
         systemd)
             if systemctl is-enabled "$_es_svc" >/dev/null 2>&1 \
                && systemctl is-active "$_es_svc" >/dev/null 2>&1; then
-                info "$_es_svc already enabled + running — skipping"
+                info "$_es_svc already enabled + running - skipping"
                 return 0
             fi
             as_root systemctl enable --now "$_es_svc" ;;
@@ -37,7 +37,7 @@ enable_service() {
         sysvinit)
             as_root update-rc.d "$_es_svc" enable
             as_root service "$_es_svc" start ;;
-        *)  warn "enable_service: unknown init '$OSR_INIT' — skipping $_es_svc" ;;
+        *)  warn "enable_service: unknown init '$OSR_INIT' - skipping $_es_svc" ;;
     esac
 }
 
@@ -47,7 +47,7 @@ disable_service() {
     case "$OSR_INIT" in
         systemd)
             systemctl is-enabled "$_ds_svc" >/dev/null 2>&1 || {
-                info "$_ds_svc already disabled — skipping"; return 0; }
+                info "$_ds_svc already disabled - skipping"; return 0; }
             as_root systemctl disable --now "$_ds_svc" ;;
         openrc)
             as_root rc-service "$_ds_svc" stop
@@ -57,6 +57,6 @@ disable_service() {
         sysvinit)
             as_root service "$_ds_svc" stop
             as_root update-rc.d "$_ds_svc" disable ;;
-        *)  warn "disable_service: unknown init '$OSR_INIT' — skipping $_ds_svc" ;;
+        *)  warn "disable_service: unknown init '$OSR_INIT' - skipping $_ds_svc" ;;
     esac
 }

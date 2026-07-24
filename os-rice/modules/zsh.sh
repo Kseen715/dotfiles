@@ -35,7 +35,7 @@ _zsh_bin=$(command -v zsh || true)
 if [ -z "$_zsh_bin" ]; then
     :
 elif ! command -v chsh >/dev/null 2>&1; then
-    warn "chsh not available — leaving login shell unchanged (set it manually)"
+    warn "chsh not available - leaving login shell unchanged (set it manually)"
 elif [ "$(osr_user_shell "$OSR_USER")" != "$_zsh_bin" ]; then
     run_step "Setting default shell to zsh" as_root chsh -s "$_zsh_bin" "$OSR_USER"
 fi

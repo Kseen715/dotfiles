@@ -1,0 +1,9 @@
+# portage.map — logical name -> real Gentoo package atom(s).
+# Only rows where the name actually differs (§1); bare names (zsh, git, curl,
+# lsd, foot, fastfetch, unzip) resolve to unique atoms and pass through unchanged.
+#
+# Gentoo has no "build-essential" meta: the toolchain (gcc) is already in the
+# @system set of every stage3, so `build` maps to gcc (present -> skipped, §2).
+
+build = sys-devel/gcc
+dev-headers = dev-libs/openssl

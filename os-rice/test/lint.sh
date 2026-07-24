@@ -37,6 +37,27 @@ else
     echo "shellcheck: not installed — skipping"
 fi
 
+# ASCII-only program output (§3): every byte the installer writes to the
+# terminal must be 7-bit ASCII so barebone TERM/locales never mangle it into
+# mojibake. Comments are exempt (prose may use §/em-dashes), so skip comment
+# lines; flag any high byte (0x80-0xFF) on a code line. LC_ALL=C keeps the byte
+# class portable across gawk/mawk/busybox awk.
+echo "ASCII-only program output (non-comment lines):"
+# Scope: the installer program (lib + modules + runners), not the test harness
+# (matrix.sh legitimately keeps em-dashes in trailing comments).
+ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
+ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" -name '*.sh' 2>/dev/null)"
+_ascii_hits=$(LC_ALL=C awk '
+    /^[[:space:]]*#/ { next }
+    /[\200-\377]/    { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0 }
+' $ASCII_FILES 2>/dev/null)
+if [ -n "$_ascii_hits" ]; then
+    printf '%s\n' "$_ascii_hits" >&2
+    FAILED=1
+else
+    echo "  ok   (no non-ASCII bytes in program output)"
+fi
+
 if command -v zsh >/dev/null 2>&1; then
     echo "zsh -n (rc.d + rice themes):"
     for f in $(find "$REPO/zsh/rc.d" "$OSR_ROOT/rices" -name '*.zsh' 2>/dev/null); do

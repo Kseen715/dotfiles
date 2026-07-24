@@ -8,7 +8,9 @@
 #                                                    wallpaper are replaced;
 #                                                    00-env / aliases / installed
 #                                                    packages are left untouched.
+#   osr module  <name>... [--user <name>]            install module(s), no rice
 #   osr list                                         list available rices
+#   osr modules                                      list available modules
 #
 # switch and install share one idempotent engine (install.sh): because installs
 # never uninstall and install_layer overwrites only os-rice-owned layers, "move
@@ -22,12 +24,14 @@ _cmd=${1:-}
 case "$_cmd" in
     install) exec "$OSR_SELF_DIR/install.sh" "$@" ;;
     switch)  OSR_MODE=switch; export OSR_MODE; exec "$OSR_SELF_DIR/install.sh" "$@" ;;
+    module)  exec "$OSR_SELF_DIR/install.sh" --module "$@" ;;
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
+    modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
     -h|--help|"")
-        sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, list)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, module, list, modules)" >&2
         exit 1
         ;;
 esac

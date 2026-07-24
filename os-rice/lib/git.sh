@@ -13,14 +13,14 @@ install_or_update_git_repo() {
         _gr_remote=$(as_user git -C "$_gr_dir" remote get-url origin 2>/dev/null || echo "")
         if [ "$_gr_remote" = "$_gr_url" ] || [ "$_gr_remote" = "$_gr_url.git" ] || [ "$_gr_remote" = "${_gr_url%.git}" ]; then
             if ! as_user git -C "$_gr_dir" diff --quiet 2>/dev/null || ! as_user git -C "$_gr_dir" diff --cached --quiet 2>/dev/null; then
-                info "$_gr_name has local changes — resetting to clean state"
+                info "$_gr_name has local changes - resetting to clean state"
                 as_user git -C "$_gr_dir" reset --hard HEAD >/dev/null 2>&1
                 as_user git -C "$_gr_dir" clean -fd >/dev/null 2>&1
             fi
             as_user git -C "$_gr_dir" pull --ff-only
             check_error $? "failed to update $_gr_name"
         else
-            info "$_gr_name points at a different remote — recloning"
+            info "$_gr_name points at a different remote - recloning"
             rm -rf "$_gr_dir"
             as_user git clone "$@" "$_gr_url" "$_gr_dir"
             check_error $? "failed to clone $_gr_name"
@@ -41,7 +41,7 @@ install_zsh_plugin() {
 # installed program, not config — one install method, never vendored).
 install_omz() {
     if [ -d "$OSR_HOME/.oh-my-zsh" ]; then
-        info "oh-my-zsh already installed — skipping"
+        info "oh-my-zsh already installed - skipping"
         return 0
     fi
     # Patch out the installer's interactive bits (launch zsh / chsh) so it stays

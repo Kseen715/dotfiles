@@ -37,11 +37,12 @@ find_downloader() {
 
 # detect_pkg — echo the native package manager, for pulling git if it is missing.
 detect_pkg() {
-    for _p in apt-get dnf pacman apk xbps-install; do
+    for _p in apt-get dnf pacman apk xbps-install emerge; do
         if command -v "$_p" >/dev/null 2>&1; then
             case "$_p" in
                 apt-get) echo apt ;;
                 xbps-install) echo xbps ;;
+                emerge) echo portage ;;
                 *) echo "$_p" ;;
             esac
             return 0
@@ -54,13 +55,14 @@ run_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
 
 ensure_git() {
     command -v git >/dev/null 2>&1 && return 0
-    log "git not found — installing via $(detect_pkg)"
+    log "git not found - installing via $(detect_pkg)"
     case "$(detect_pkg)" in
         apt)    run_root env DEBIAN_FRONTEND=noninteractive apt-get update -q && run_root env DEBIAN_FRONTEND=noninteractive apt-get install -y git ;;
         dnf)    run_root dnf install -y git ;;
         pacman) run_root pacman -Sy --needed --noconfirm git ;;
         apk)    run_root apk add git ;;
         xbps)   run_root xbps-install -y git ;;
+        portage) run_root emerge --quiet --noreplace --getbinpkg dev-vcs/git ;;
         *)      die "no package manager found to install git" ;;
     esac
 }

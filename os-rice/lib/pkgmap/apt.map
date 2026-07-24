@@ -6,7 +6,29 @@ build = build-essential
 dev-headers = libssl-dev pkg-config
 fd = fd-find
 
-# lsd landed in Ubuntu repos in 23.04; jammy (22.04) has no native package, so
-# install the official prebuilt .deb there (§1a facet row, G6). Every newer
-# release + Debian keeps the native `lsd` and needs no row.
-lsd@jammy = source:build_lsd_deb
+# Native-first (§1a G6): prefer the distro package so it updates via apt; fall
+# back to a downloaded binary / install script only on releases that lack it.
+# Availability was checked per release; a row exists ONLY where native is absent.
+#
+#             lsd      starship   fastfetch
+#   bullseye  none     none       none        (Debian 11)
+#   bookworm  native   none       none        (Debian 12)
+#   trixie    native   native     native      (Debian 13)
+#   jammy     none     none       none        (Ubuntu 22.04)
+#   noble     native   none       none        (Ubuntu 24.04)
+#   resolute  native   native     native      (Ubuntu 26.04)
+
+# bullseye (Debian 11) has dpkg 1.20, which can't read modern zstd-compressed
+# .debs -> use the release tarball binary (-> /usr/local/bin) there instead.
+lsd@bullseye = source:build_lsd_tarball
+lsd@jammy    = source:build_lsd_deb
+
+fastfetch@bullseye = source:build_fastfetch_tarball
+fastfetch@bookworm = source:build_fastfetch_deb
+fastfetch@jammy    = source:build_fastfetch_deb
+fastfetch@noble    = source:build_fastfetch_deb
+
+starship@bullseye = script:https://starship.rs/install.sh --yes
+starship@bookworm = script:https://starship.rs/install.sh --yes
+starship@jammy    = script:https://starship.rs/install.sh --yes
+starship@noble    = script:https://starship.rs/install.sh --yes

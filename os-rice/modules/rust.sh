@@ -23,7 +23,7 @@ run_step "Installing build tools (cc, curl)" pkg_install build curl
 # there, converge silently — no network round-trip, so a second run all-skips.
 _rust_cargo="$OSR_HOME/.cargo/bin/cargo"
 if as_user test -x "$_rust_cargo"; then
-    info "Rust already installed ($_rust_cargo) — skipping"
+    info "Rust already installed ($_rust_cargo) - skipping"
 else
     run_step "Installing Rust via rustup" osr_install_rustup
 fi

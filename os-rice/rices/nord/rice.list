@@ -1,3 +1,4 @@
 # nord — same modules as gruvbox, different rice-owned theme. Proves the switch
 # asymmetry: packages accrete, only 90-* config is replaced (§6).
 zsh
+fastfetch

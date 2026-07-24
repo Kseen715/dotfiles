@@ -4,7 +4,9 @@
 #   install.sh gruvbox                 rice OSR_USER (auto-resolved)
 #   install.sh --user alice gruvbox    rice a specific user (user-for-user, §8)
 #   install.sh --verbose gruvbox       stream output, no spinners
+#   install.sh --module zsh foot       install specific module(s), no rice
 #   install.sh --list                  list available rices
+#   install.sh --list-modules          list available modules
 #
 # POSIX sh throughout — runs under dash / busybox ash, not just bash (§Decisions).
 set -eu
@@ -25,12 +27,16 @@ done
 
 usage() {
     cat <<EOF
-Usage: install.sh [--user <name>] [--verbose] [--list] <rice>
+Usage:
+  install.sh [--user <name>] [--verbose] <rice>     install a rice
+  install.sh --module [--user <name>] <name>...     install module(s), no rice
+  install.sh --list                                 list available rices
+  install.sh --list-modules                         list available modules
 
   <rice>            name of a directory under os-rice/rices/
-  --user <name>     account to rice (default: invoking user, §8)
+  --module          treat positionals as module names, not a rice
+  --user <name>     account to install for (default: invoking user)
   --verbose         stream command output instead of spinners
-  --list            list available rices and exit
 EOF
 }
 
@@ -41,26 +47,30 @@ list_rices() {
     done
 }
 
+list_modules() {
+    for _f in "$OSR_ROOT"/modules/*.sh; do
+        [ -f "$_f" ] || continue
+        _b=$(basename "$_f")
+        printf '  %s\n' "${_b%.sh}"
+    done
+}
+
 # --- argument parsing --------------------------------------------------------
 OSR_ARG_USER=""
-OSR_RICE=""
+OSR_MODULE_MODE=""
+OSR_POS=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --user)    OSR_ARG_USER=${2:?--user needs a name}; shift 2 ;;
-        --verbose) OSR_VERBOSE=1; export OSR_VERBOSE; shift ;;
-        --list)    echo "Available rices:"; list_rices; exit 0 ;;
-        -h|--help) usage; exit 0 ;;
-        -*)        error "unknown option: $1" ;;
-        *)         OSR_RICE=$1; shift ;;
+        --user)         OSR_ARG_USER=${2:?--user needs a name}; shift 2 ;;
+        --verbose)      OSR_VERBOSE=1; export OSR_VERBOSE; shift ;;
+        --module)       OSR_MODULE_MODE=1; shift ;;
+        --list)         echo "Available rices:"; list_rices; exit 0 ;;
+        --list-modules) echo "Available modules:"; list_modules; exit 0 ;;
+        -h|--help)      usage; exit 0 ;;
+        -*)             error "unknown option: $1" ;;
+        *)              OSR_POS="$OSR_POS $1"; shift ;;
     esac
 done
-
-[ -n "$OSR_RICE" ] || { usage >&2; error "no rice specified"; }
-
-OSR_RICE_DIR="$OSR_ROOT/rices/$OSR_RICE"
-OSR_MANIFEST="$OSR_RICE_DIR/rice.list"
-[ -f "$OSR_MANIFEST" ] || error "rice not found: $OSR_RICE (try --list)"
-export OSR_RICE OSR_RICE_DIR
 
 # --- detection + identity ----------------------------------------------------
 osr_detect
@@ -77,20 +87,42 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && [ -t 0 ]; then
     fi
 fi
 
-# --- manifest parse ----------------------------------------------------------
-# Strip `#` comments and surrounding whitespace; collect module lines and the
-# single `config:` directive. Module count is the progress denominator (§3).
+# --- resolve what to run: a rice manifest, or explicit --module names --------
 OSR_MODULES=""
 OSR_CONFIGS=""
-while IFS= read -r _line || [ -n "$_line" ]; do
-    _line=${_line%%#*}
-    _line=$(printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-    [ -n "$_line" ] || continue
-    case "$_line" in
-        config:*) OSR_CONFIGS="$OSR_CONFIGS ${_line#config:}" ;;
-        *)        OSR_MODULES="$OSR_MODULES $_line" ;;
-    esac
-done < "$OSR_MANIFEST"
+if [ -n "$OSR_MODULE_MODE" ]; then
+    # Explicit module install: positionals are module names, there is no rice.
+    # Rice-owned config guards inside modules ([ -f "$OSR_RICE_DIR/..." ]) fall
+    # through with OSR_RICE_DIR empty, and configs/wallpaper are skipped below.
+    OSR_MODULES=$OSR_POS
+    [ -n "$OSR_MODULES" ] || { usage >&2; error "no module specified"; }
+    OSR_RICE=""; OSR_RICE_DIR=""; export OSR_RICE OSR_RICE_DIR
+    for _m in $OSR_MODULES; do
+        [ -f "$OSR_ROOT/modules/$_m.sh" ] || error "module not found: $_m (try --list-modules)"
+    done
+else
+    # Rice install: exactly one positional names a rices/<rice>/ directory.
+    OSR_RICE=""
+    for _p in $OSR_POS; do
+        [ -z "$OSR_RICE" ] || error "only one rice may be given (got '$OSR_RICE' and '$_p')"
+        OSR_RICE=$_p
+    done
+    [ -n "$OSR_RICE" ] || { usage >&2; error "no rice specified"; }
+    OSR_RICE_DIR="$OSR_ROOT/rices/$OSR_RICE"
+    [ -f "$OSR_RICE_DIR/rice.list" ] || error "rice not found: $OSR_RICE (try --list)"
+    export OSR_RICE OSR_RICE_DIR
+    # Strip `#` comments + whitespace; collect module lines and `config:` dirs.
+    # Module count is the progress denominator (§3).
+    while IFS= read -r _line || [ -n "$_line" ]; do
+        _line=${_line%%#*}
+        _line=$(printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$_line" ] || continue
+        case "$_line" in
+            config:*) OSR_CONFIGS="$OSR_CONFIGS ${_line#config:}" ;;
+            *)        OSR_MODULES="$OSR_MODULES $_line" ;;
+        esac
+    done < "$OSR_RICE_DIR/rice.list"
+fi
 
 OSR_STEP_TOTAL=0
 for _m in $OSR_MODULES; do OSR_STEP_TOTAL=$((OSR_STEP_TOTAL + 1)); done
@@ -112,13 +144,17 @@ for _m in $OSR_MODULES; do
     run_module "$_m"
 done
 
-# --- copy rice-owned configs + wallpaper -------------------------------------
-for _c in $OSR_CONFIGS; do
-    apply_config "$_c"
-done
-apply_wallpaper
+# --- copy rice-owned configs + wallpaper (rice mode only) --------------------
+if [ -z "$OSR_MODULE_MODE" ]; then
+    for _c in $OSR_CONFIGS; do
+        apply_config "$_c"
+    done
+    apply_wallpaper
+fi
 
-if [ "${OSR_MODE:-install}" = "switch" ]; then
+if [ -n "$OSR_MODULE_MODE" ]; then
+    success "module(s) installed:$OSR_MODULES"
+elif [ "${OSR_MODE:-install}" = "switch" ]; then
     success "switched to rice '$OSR_RICE' (packages accreted, rice config replaced)"
 else
     success "rice '$OSR_RICE' installed"

@@ -54,7 +54,7 @@ apply_config() {
     _ac_name=$1
     _ac_src="$OSR_RICE_DIR/config/$_ac_name"
     if [ ! -d "$_ac_src" ]; then
-        warn "config '$_ac_name' not found in rice ($_ac_src) — skipping"
+        warn "config '$_ac_name' not found in rice ($_ac_src) - skipping"
         return 0
     fi
     _ac_dst="$OSR_HOME/.config/$_ac_name"
@@ -87,6 +87,6 @@ apply_wallpaper() {
     elif command -v feh >/dev/null 2>&1; then
         as_user feh --bg-scale "$_wp" >/dev/null 2>&1 || warn "feh failed to set wallpaper"
     else
-        info "no wallpaper setter (headless) — recorded $_wp"
+        info "no wallpaper setter (headless) - recorded $_wp"
     fi
 }

@@ -7,5 +7,8 @@
 #   script:<url> [args]    pipe a remote installer to sh, args forwarded
 #   source:<builder-fn>    build via a shell function in scope
 
-# starship prompt — official install script, non-interactive.
-starship = script:https://starship.rs/install.sh --yes
+# starship prompt is native on arch/alpine/void/gentoo + recent Debian/Ubuntu, so
+# it passes through to the native package (updatable). Only the distros/releases
+# that lack it carry a `script:` fallback row: dnf.map (Fedora) and apt.map
+# (Ubuntu jammy/noble). Keeping it native-by-default honors §1's "no identity
+# rows" — the exception is tagged, not the common case.

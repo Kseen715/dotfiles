@@ -1,6 +1,7 @@
 # gruvbox — shell + KDE/Plasma gruvbox desktop rice. One line per module; add an
 # app = add a line. See DESIGN "Manifest format".
 zsh
+fastfetch
 
 # Rice-owned XDG theme config, copied to ~/.config on install/switch (§5/§6).
 # GTK theme selection, font rendering, and xsettings for GTK apps under KDE.

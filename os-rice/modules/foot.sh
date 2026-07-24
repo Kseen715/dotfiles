@@ -19,23 +19,23 @@ FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/$FONT_VERSIO
 # cosmetic asset never aborts the rice or breaks the §2 rerun contract.
 osr_install_nerd_font() {
     if command -v fc-list >/dev/null 2>&1 && as_user fc-list 2>/dev/null | grep -qi "JetBrainsMono.*Nerd"; then
-        info "JetBrains Mono Nerd Font already installed — skipping"
+        info "JetBrains Mono Nerd Font already installed - skipping"
         return 0
     fi
     if ! command -v unzip >/dev/null 2>&1; then
-        warn "unzip not available — skipping Nerd Font install"
+        warn "unzip not available - skipping Nerd Font install"
         return 0
     fi
     _ff_dir="$OSR_HOME/.local/share/fonts"
     _ff_zip="${TMPDIR:-/tmp}/$FONT_NAME-$$.zip"
     as_user mkdir -p "$_ff_dir"
     if ! osr_download "$FONT_URL" "$_ff_zip"; then
-        warn "failed to download Nerd Font ($FONT_URL) — skipping"
+        warn "failed to download Nerd Font ($FONT_URL) - skipping"
         rm -f "$_ff_zip"
         return 0
     fi
     if ! as_user unzip -o "$_ff_zip" -d "$_ff_dir" >/dev/null 2>&1; then
-        warn "failed to unzip Nerd Font — skipping"
+        warn "failed to unzip Nerd Font - skipping"
         rm -f "$_ff_zip"
         return 0
     fi

@@ -16,7 +16,13 @@ HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(cd -- "$HERE/../.." && pwd)
 
 RICE=${1:-gruvbox}
-IMAGES=${OSR_TEST_IMAGES:-"ubuntu:jammy ubuntu:noble ubuntu:resolute debian:stable-slim alpine:latest archlinux:latest fedora:latest ghcr.io/void-linux/void-glibc-full:latest"}
+# Default per-commit matrix: fast, binary-package distros covering 5 package
+# managers (apt/dnf/pacman/apk/xbps) + 3 inits. Gentoo (portage) is a SUPPORTED
+# target — detect.sh/pkg.sh/portage.map handle it, see test/unit/portage_dispatch.sh
+# — but it compiles from source (tree sync + rust builds), too slow/heavy for the
+# per-commit loop (DESIGN §9). Run it on demand:
+#   OSR_TEST_IMAGES="gentoo/stage3:latest" sh test/matrix.sh gruvbox
+IMAGES=${OSR_TEST_IMAGES:-"ubuntu:jammy ubuntu:noble ubuntu:resolute debian:11 debian:12 debian:13 alpine:latest archlinux:latest fedora:latest ghcr.io/void-linux/void-glibc-full:latest"}
 ENGINE=$(command -v podman 2>/dev/null || command -v docker 2>/dev/null || true)
 [ -n "$ENGINE" ] || { echo "no container engine (podman/docker) found" >&2; exit 1; }
 

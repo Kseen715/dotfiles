@@ -33,8 +33,10 @@ _pkgmap_one() {
             [ -f "$_pm_map" ] || continue
             _pm_line=$(grep "^[[:space:]]*${_pm_key}[[:space:]]*=" "$_pm_map" 2>/dev/null | head -n 1)
             if [ -n "$_pm_line" ]; then
-                # strip up to and including the first '='; trim surrounding space
-                _pm_rhs=$(printf '%s' "${_pm_line#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                # strip up to and including the first '='; drop a trailing inline
+                # ` # comment` (whitespace before # required, so `a#b` survives);
+                # then trim surrounding space.
+                _pm_rhs=$(printf '%s' "${_pm_line#*=}" | sed 's/[[:space:]]#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
                 printf '%s' "$_pm_rhs"
                 return 0
             fi
@@ -48,12 +50,16 @@ _pkgmap_one() {
 # _native_installed <realpkg> — true if the package is present.
 _native_installed() {
     case "$OSR_PKG" in
-        apt)    dpkg -s "$1" >/dev/null 2>&1 ;;
-        dnf)    rpm -q "$1" >/dev/null 2>&1 ;;
-        pacman) pacman -Q "$1" >/dev/null 2>&1 ;;
-        apk)    apk info -e "$1" >/dev/null 2>&1 ;;
-        xbps)   xbps-query "$1" >/dev/null 2>&1 ;;
-        *)      return 1 ;;
+        apt)     dpkg -s "$1" >/dev/null 2>&1 ;;
+        dnf)     rpm -q "$1" >/dev/null 2>&1 ;;
+        pacman)  pacman -Q "$1" >/dev/null 2>&1 ;;
+        apk)     apk info -e "$1" >/dev/null 2>&1 ;;
+        xbps)    xbps-query "$1" >/dev/null 2>&1 ;;
+        # portage: qlist (portage-utils) is exact + fast; portageq is always in
+        # a stage3 but needs a resolvable atom, so it is the fallback.
+        portage) if command -v qlist >/dev/null 2>&1; then qlist -I -e "$1" >/dev/null 2>&1
+                 else portageq has_version / "$1" >/dev/null 2>&1; fi ;;
+        *)       return 1 ;;
     esac
 }
 
@@ -61,10 +67,11 @@ _native_installed() {
 # override user-defined package state).
 _native_held() {
     case "$OSR_PKG" in
-        apt)    apt-mark showhold 2>/dev/null | grep -qx "$1" ;;
-        pacman) grep -E '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null | grep -qw "$1" ;;
-        dnf)    grep -rl -E "^[[:space:]]*exclude=.*\b$1\b" /etc/dnf/dnf.conf /etc/yum.repos.d 2>/dev/null | grep -q . ;;
-        *)      return 1 ;;
+        apt)     apt-mark showhold 2>/dev/null | grep -qx "$1" ;;
+        pacman)  grep -E '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null | grep -qw "$1" ;;
+        dnf)     grep -rl -E "^[[:space:]]*exclude=.*\b$1\b" /etc/dnf/dnf.conf /etc/yum.repos.d 2>/dev/null | grep -q . ;;
+        portage) grep -rhw "$1" /etc/portage/package.mask 2>/dev/null | grep -qv '^[[:space:]]*#' ;;
+        *)       return 1 ;;
     esac
 }
 
@@ -74,9 +81,9 @@ _via_native() {
     _todo=""
     for _p in "$@"; do
         if _native_installed "$_p"; then
-            info "$_p already installed — skipping"
+            info "$_p already installed - skipping"
         elif _native_held "$_p"; then
-            warn "$_p is held/pinned — skipping"
+            warn "$_p is held/pinned - skipping"
         else
             _todo="$_todo $_p"
         fi
@@ -85,17 +92,20 @@ _via_native() {
     # Refresh the package index once per run, lazily — only when we are actually
     # about to install (a fresh container/box has no lists yet).
     if [ -z "${_OSR_REFRESHED:-}" ]; then
-        pkg_refresh || warn "package index refresh failed — continuing"
+        pkg_refresh || warn "package index refresh failed - continuing"
         _OSR_REFRESHED=1
     fi
     # shellcheck disable=SC2086  # intentional word-split into a package list
     case "$OSR_PKG" in
-        apt)    as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y $_todo ;;
-        dnf)    as_root dnf install -y $_todo ;;
-        pacman) as_root pacman -S --needed --noconfirm $_todo ;;
-        apk)    as_root apk add $_todo ;;
-        xbps)   as_root xbps-install -y $_todo ;;
-        *)      error "no native installer for OSR_PKG='$OSR_PKG'" ;;
+        apt)     as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y $_todo ;;
+        dnf)     as_root dnf install -y $_todo ;;
+        pacman)  as_root pacman -S --needed --noconfirm $_todo ;;
+        apk)     as_root apk add $_todo ;;
+        xbps)    as_root xbps-install -y $_todo ;;
+        # portage builds from source; --getbinpkg prefers the official binhost
+        # (fast, falls back to source), --noreplace makes a rerun a no-op (§2).
+        portage) as_root emerge --quiet --noreplace --getbinpkg $_todo ;;
+        *)       error "no native installer for OSR_PKG='$OSR_PKG'" ;;
     esac
     check_error $? "native install failed:$_todo"
 }
@@ -109,7 +119,7 @@ _via_script() {
     _vs_url=$1
     shift
     if command -v "$_vs_name" >/dev/null 2>&1; then
-        info "$_vs_name already present (script) — skipping"
+        info "$_vs_name already present (script) - skipping"
         return 0
     fi
     info "installing $_vs_name via script installer"
@@ -124,7 +134,7 @@ _via_source() {
     _vsrc_name=$1
     _vsrc_fn=$2
     if command -v "$_vsrc_name" >/dev/null 2>&1; then
-        info "$_vsrc_name already present (source) — skipping"
+        info "$_vsrc_name already present (source) - skipping"
         return 0
     fi
     command -v "$_vsrc_fn" >/dev/null 2>&1 \
@@ -171,7 +181,7 @@ pkg_install() {
             native)  ;;  # already handled in pass 1
             script)  _via_script "$_name" ${_rhs#script:} ;;
             source)  _via_source "$_name" "${_rhs#source:}" ;;
-            *)       error "provider '${_rhs%%:*}:' not yet implemented ($_name) — MVP covers native/script/source" ;;
+            *)       error "provider '${_rhs%%:*}:' not yet implemented ($_name) - MVP covers native/script/source" ;;
         esac
     done
     return 0
@@ -189,12 +199,18 @@ pkg_installed() {
 # pkg_refresh — refresh the package index (idempotent).
 pkg_refresh() {
     case "$OSR_PKG" in
-        apt)    as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q ;;
-        dnf)    as_root dnf -q makecache ;;
-        pacman) as_root pacman -Sy --noconfirm ;;
-        apk)    as_root apk update ;;
-        xbps)   as_root xbps-install -S ;;
-        *)      error "no refresh verb for OSR_PKG='$OSR_PKG'" ;;
+        apt)     as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q ;;
+        dnf)     as_root dnf -q makecache ;;
+        pacman)  as_root pacman -Sy --noconfirm ;;
+        apk)     as_root apk update ;;
+        xbps)    as_root xbps-install -S ;;
+        # portage: getuto provisions the binary-package signing keyring (the
+        # official binhost sets verify-signature=true) so --getbinpkg works;
+        # emerge-webrsync grabs a tree snapshot (faster than rsync --sync).
+        portage) command -v getuto >/dev/null 2>&1 && as_root getuto >/dev/null 2>&1 || :
+                 if command -v emerge-webrsync >/dev/null 2>&1; then as_root emerge-webrsync
+                 else as_root emerge --sync --quiet; fi ;;
+        *)       error "no refresh verb for OSR_PKG='$OSR_PKG'" ;;
     esac
 }
 
@@ -211,15 +227,16 @@ pkg_remove() {
     [ -n "$_rm" ] || return 0
     # shellcheck disable=SC2086
     case "$OSR_PKG" in
-        apt)    as_root apt-get remove -y $_rm ;;
-        dnf)    as_root dnf remove -y $_rm ;;
-        pacman) as_root pacman -R --noconfirm $_rm ;;
-        apk)    as_root apk del $_rm ;;
-        xbps)   as_root xbps-remove -y $_rm ;;
+        apt)     as_root apt-get remove -y $_rm ;;
+        dnf)     as_root dnf remove -y $_rm ;;
+        pacman)  as_root pacman -R --noconfirm $_rm ;;
+        apk)     as_root apk del $_rm ;;
+        xbps)    as_root xbps-remove -y $_rm ;;
+        portage) as_root emerge --deselect --quiet $_rm && as_root emerge --depclean --quiet ;;
     esac
 }
 
 # pkg_add_repo — placeholder for the repo: provider (G1). Not in MVP.
 pkg_add_repo() {
-    error "pkg_add_repo (repo: provider) is not yet implemented — see DESIGN G1"
+    error "pkg_add_repo (repo: provider) is not yet implemented - see DESIGN G1"
 }
