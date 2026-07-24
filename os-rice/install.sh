@@ -19,7 +19,7 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES
 # presence keeps the runner working while the harness is built up slice by slice.
 . "$OSR_LIB/ui.sh"
 . "$OSR_LIB/log.sh"
-for _lib in detect user net pkg git service config; do
+for _lib in detect user net pkg git service config build; do
     [ -f "$OSR_LIB/$_lib.sh" ] && . "$OSR_LIB/$_lib.sh"
 done
 

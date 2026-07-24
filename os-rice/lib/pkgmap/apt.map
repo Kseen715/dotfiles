@@ -5,3 +5,8 @@
 build = build-essential
 dev-headers = libssl-dev pkg-config
 fd = fd-find
+
+# lsd landed in Ubuntu repos in 23.04; jammy (22.04) has no native package, so
+# install the official prebuilt .deb there (§1a facet row, G6). Every newer
+# release + Debian keeps the native `lsd` and needs no row.
+lsd@jammy = source:build_lsd_deb

@@ -13,17 +13,32 @@
 # _pkgmap_one <name> — echo the RHS mapped for <name>, or <name> unchanged when
 # no row exists (the common case stays zero-effort, §1). Distro map wins over
 # the shared any.map.
+#
+# Facet qualifiers (§1a): a map key may carry an optional @facet, and the most
+# specific match wins — codename > version_id > arch > bare name. This is how a
+# package's install *method* can differ by distro release (`lsd@jammy`) or CPU
+# arch, not just by package manager (G6/G8). A qualified row exists only where
+# that facet actually diverges, so the common case is still zero-effort.
 _pkgmap_one() {
     _pm_name=$1
-    for _pm_map in "$OSR_LIB/pkgmap/$OSR_PKG.map" "$OSR_LIB/pkgmap/any.map"; do
-        [ -f "$_pm_map" ] || continue
-        _pm_line=$(grep "^[[:space:]]*$_pm_name[[:space:]]*=" "$_pm_map" 2>/dev/null | head -n 1)
-        if [ -n "$_pm_line" ]; then
-            # strip up to and including the first '='; trim surrounding space
-            _pm_rhs=$(printf '%s' "${_pm_line#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-            printf '%s' "$_pm_rhs"
-            return 0
-        fi
+    # Candidate keys, most specific first. Facet values are empty on distros
+    # that don't report them (${VAR:+...} drops the key entirely then); package
+    # names + facet values carry no spaces, so an unquoted expansion is safe.
+    for _pm_key in \
+        ${OSR_CODENAME:+"$_pm_name@$OSR_CODENAME"} \
+        ${OSR_VERSION_ID:+"$_pm_name@$OSR_VERSION_ID"} \
+        ${OSR_ARCH:+"$_pm_name@$OSR_ARCH"} \
+        "$_pm_name"; do
+        for _pm_map in "$OSR_LIB/pkgmap/$OSR_PKG.map" "$OSR_LIB/pkgmap/any.map"; do
+            [ -f "$_pm_map" ] || continue
+            _pm_line=$(grep "^[[:space:]]*${_pm_key}[[:space:]]*=" "$_pm_map" 2>/dev/null | head -n 1)
+            if [ -n "$_pm_line" ]; then
+                # strip up to and including the first '='; trim surrounding space
+                _pm_rhs=$(printf '%s' "${_pm_line#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+                printf '%s' "$_pm_rhs"
+                return 0
+            fi
+        done
     done
     printf '%s' "$_pm_name"
 }
