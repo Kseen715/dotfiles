@@ -1,0 +1,4 @@
+# Rice-owned yazi theme (90, §6): the glass rice uses catppuccin-mocha to match
+# its overall look (flavor shipped in dotfiles/yazi/flavors/catppuccin-mocha.yazi).
+[flavor]
+dark = "catppuccin-mocha"

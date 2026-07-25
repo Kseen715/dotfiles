@@ -1,0 +1,8 @@
+# catppuccin — minimal rice carrying the catppuccin-mocha theme (formerly the
+# dotfiles yazi default, now selectable as its own rice). Same shell modules as
+# nord/xin; the theme lives entirely in config/ (starship palette + yazi flavor
+# + zsh 90-theme). See DESIGN "Manifest format".
+starship
+zsh
+fastfetch
+yazi

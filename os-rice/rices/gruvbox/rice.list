@@ -3,6 +3,7 @@
 starship
 zsh
 fastfetch
+yazi
 
 # Rice-owned XDG theme config, copied to ~/.config on install/switch (§5/§6).
 # GTK theme selection, font rendering, and xsettings for GTK apps under KDE.

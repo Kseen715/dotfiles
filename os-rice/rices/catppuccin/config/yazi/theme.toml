@@ -1,0 +1,4 @@
+# Rice-owned yazi theme (90, §6): selects the catppuccin-mocha flavor shipped in
+# dotfiles/yazi/flavors/catppuccin-mocha.yazi. Swapped on rice switch.
+[flavor]
+dark = "catppuccin-mocha"
