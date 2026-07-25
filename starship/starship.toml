@@ -1,3 +1,13 @@
+# Shared BASE starship config for every os-rice rice. The ONLY thing that varies
+# per rice is the color palette: os-rice composes the installed
+# ~/.config/starship.toml as this body with the `[palettes.theme]` table at the
+# bottom replaced by the active rice's colors
+# (rices/<rice>/config/starship.palette.toml). Edit prompt structure/symbols
+# here; edit per-rice colors there. Themed styles below reference the palette
+# names accent/success/error/secondary rather than hardcoded colors.
+add_newline = true
+palette = "theme"
+
 format = """$os\
 $username\
 $hostname\
@@ -10,12 +20,12 @@ $character"""
 [username]
 show_always = true
 format = '[$user ]($style)'
-style_user = "green"
+style_user = "success"
 disabled = false
 
 [os]
 disabled = false
-style = 'cyan'
+style = 'accent'
 
 [os.symbols]
 Alpaquita = " "
@@ -69,11 +79,12 @@ format = "[$duration]($style) "
 style = "white bold"
 
 [character]
-success_symbol = "[](bold blue)"
-error_symbol = "[✗](bold red)"
+success_symbol = "[](bold success)"
+error_symbol = "[✗](bold error)"
 disabled = false
 
 [directory]
+style = "bold accent"
 format = "[$path]($style)[$read_only]($read_only_style) "
 truncation_length = 2
 truncation_symbol = "…/"
@@ -102,6 +113,7 @@ symbol = " "
 format = '[$symbol$channel]($style) '
 
 [git_branch]
+style = "bold secondary"
 symbol = " "
 format = '[$symbol$branch(:$remote_branch)]($style) '
 
@@ -505,3 +517,14 @@ disabled = false
 symbol = " "
 format = '[$symbol($version )]($style)'
 disabled = false
+
+# --- theme palette (rice-owned) ----------------------------------------------
+# The ONE thing that varies per rice. os-rice replaces THIS table with the active
+# rice's colors (rices/<rice>/config/starship.palette.toml) when composing the
+# installed config. Keep it LAST in this file — the composer strips from this
+# header to EOF. Standalone (uncomposed), these defaults keep the prompt working.
+[palettes.theme]
+accent = "cyan"
+success = "green"
+error = "red"
+secondary = "yellow"

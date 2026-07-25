@@ -70,7 +70,11 @@ when stdout is not a TTY, so piping to a logfile stays clean).
   is the progress-bar denominator).
 - **A package that differs per distro:** add a row to `lib/pkgmap/<mgr>.map`.
 - **A new rice:** new `rices/<name>/` with a `rice.list`, a
-  `config/zsh/90-theme.zsh`, a `config/starship.toml`, and `wallpapers/`.
+  `config/zsh/90-theme.zsh`, a `config/starship.palette.toml` (colors only — the
+  prompt structure is the shared `starship/starship.toml` base), and `wallpapers/`.
+- **A rice's prompt colors:** edit `rices/<name>/config/starship.palette.toml`
+  (`accent`/`success`/`error`/`secondary`). The shared prompt layout/symbols live
+  once in the dotfiles base `starship/starship.toml`; os-rice composes the two.
 
 ## Testing
 

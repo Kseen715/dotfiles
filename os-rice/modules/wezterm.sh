@@ -1,8 +1,10 @@
 # modules/wezterm.sh — WezTerm terminal + Nerd/emoji fonts + dotfiles config. ONE
-# copy, POSIX (was .../modules/wezterm.sh). Config is applied by the dotfiles
-# repo's own wezterm/install.sh when present. Available module (foot is the
-# rice's default terminal).
+# copy, POSIX. `.wezterm.lua` is dotfiles-owned config (§5), installed via the
+# layered install_layer helper (was: shelling out to the legacy wezterm/install.sh).
+# foot is the rice's default terminal; wezterm is an available module.
 run_step "Installing WezTerm" pkg_install wezterm ttf-jetbrains-mono-nerd noto-fonts-emoji
-if [ -x "$OSR_DOTFILES/wezterm/install.sh" ]; then
-    run_step "Installing WezTerm dotfiles" as_user "$OSR_DOTFILES/wezterm/install.sh" -y
+run_step "Installing JetBrains Mono Nerd Font" osr_install_nerd_font JetBrainsMono
+
+if [ -f "$OSR_DOTFILES/wezterm/.wezterm.lua" ]; then
+    install_layer "$OSR_DOTFILES/wezterm/.wezterm.lua" "$OSR_HOME/.wezterm.lua"
 fi

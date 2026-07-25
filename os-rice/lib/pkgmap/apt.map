@@ -20,13 +20,13 @@ fd = fd-find
 
 # bullseye (Debian 11) has dpkg 1.20, which can't read modern zstd-compressed
 # .debs -> use the release tarball binary (-> /usr/local/bin) there instead.
-lsd@bullseye = source:build_lsd_tarball
-lsd@jammy    = source:build_lsd_deb
+lsd@bullseye = source:provide_lsd_tarball
+lsd@jammy    = source:provide_lsd_deb
 
-fastfetch@bullseye = source:build_fastfetch_tarball
-fastfetch@bookworm = source:build_fastfetch_deb
-fastfetch@jammy    = source:build_fastfetch_deb
-fastfetch@noble    = source:build_fastfetch_deb
+fastfetch@bullseye = source:provide_fastfetch_tarball
+fastfetch@bookworm = source:provide_fastfetch_deb
+fastfetch@jammy    = source:provide_fastfetch_deb
+fastfetch@noble    = source:provide_fastfetch_deb
 
 starship@bullseye = script:https://starship.rs/install.sh --yes
 starship@bookworm = script:https://starship.rs/install.sh --yes
@@ -40,21 +40,22 @@ serie = cargo:serie          # not packaged on Debian/Ubuntu
 
 # gh + btop are native on every release EXCEPT Debian 11 (bullseye) -> upstream
 # release tarball there (bullseye's old dpkg can't take modern .debs anyway).
-gh@bullseye   = source:build_gh_tarball
-btop@bullseye = source:build_btop_tarball
+gh@bullseye   = source:provide_gh_tarball
+btop@bullseye = source:provide_btop_tarball
 
 # zig is native only on Ubuntu 25.10 (resolute); Debian + older Ubuntu build from
 # the official ziglang.org tarball. ghostty likewise: native on resolute, else
 # built from source (heavy). Build-dep name splits for the ghostty source path.
-zig = source:build_zig
+zig = source:provide_zig
 zig@resolute = zig
 # ghostty: native on 25.10 (resolute); community .deb on the releases the
 # ghostty-ubuntu installer supports (Ubuntu 24.04 noble, Debian 13 trixie); Zig
 # source build on the rest (jammy/bullseye/bookworm - no community binary).
-ghostty = source:build_ghostty
+ghostty = source:provide_ghostty
 ghostty@resolute = ghostty
-ghostty@noble = source:build_ghostty_deb
-ghostty@trixie = source:build_ghostty_deb
+ghostty@noble = source:provide_ghostty_deb
+ghostty@trixie = source:provide_ghostty_deb
 xz = xz-utils
 gtk4-dev = libgtk-4-dev
 libadwaita-dev = libadwaita-1-dev
+amneziavpn = source:provide_amneziavpn

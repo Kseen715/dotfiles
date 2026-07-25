@@ -19,7 +19,8 @@ apply_rice() {
     seed_once     "$OSR_DOTFILES/zsh/rc.d/00-env.zsh"     "$RC/00-env.zsh" >/dev/null
     install_layer "$OSR_DOTFILES/zsh/rc.d/20-aliases.zsh" "$RC/20-aliases.zsh" >/dev/null
     install_layer "$OSR_RICE_DIR/config/zsh/90-theme.zsh" "$RC/90-theme.zsh" >/dev/null
-    install_layer "$OSR_RICE_DIR/config/starship.toml"    "$OSR_HOME/.config/starship.toml" >/dev/null
+    compose_starship_config "$OSR_DOTFILES/starship/starship.toml" \
+        "$OSR_RICE_DIR/config/starship.palette.toml" "$OSR_HOME/.config/starship.toml" >/dev/null
     seed_empty "$RC/99-local.zsh"
     apply_wallpaper >/dev/null
 }
@@ -31,7 +32,11 @@ echo 'alias mine="echo local"' >> "$RC/99-local.zsh"
 apply_rice nord
 
 assert_contains "$RC/90-theme.zsh" nord "90-theme swapped to nord"
-assert_contains "$OSR_HOME/.config/starship.toml" nord "starship.toml swapped to nord"
+# The composed starship.toml carries the base body AND the nord palette colors;
+# the gruvbox accent must be gone (only the palette swaps, base stays).
+assert_contains "$OSR_HOME/.config/starship.toml" "88c0d0" "starship palette swapped to nord colors"
+assert_contains "$OSR_HOME/.config/starship.toml" 'palette = "theme"' "starship base body composed in"
+refute_contains "$OSR_HOME/.config/starship.toml" "fabd2f" "old gruvbox accent gone after switch"
 assert_contains "$OSR_HOME/.config/osr/wallpaper" nord "wallpaper swapped to nord"
 assert_contains "$RC/00-env.zsh" MY_MACHINE_VAR "00-env untouched (user territory)"
 assert_contains "$RC/99-local.zsh" "alias mine" "99-local untouched (user territory)"

@@ -21,7 +21,7 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES
 # presence keeps the runner working while the harness is built up slice by slice.
 . "$OSR_LIB/ui.sh"
 . "$OSR_LIB/log.sh"
-for _lib in detect user net pkg git service config build preflight; do
+for _lib in detect user net pkg git service config fonts build preflight; do
     [ -f "$OSR_LIB/$_lib.sh" ] && . "$OSR_LIB/$_lib.sh"
 done
 
@@ -29,12 +29,14 @@ usage() {
     cat <<EOF
 Usage:
   install.sh [--user <name>] [--verbose] <rice>     install a rice
-  install.sh --module [--user <name>] <name>...     install module(s), no rice
+  install.sh --module [--theme <rice>] <name>...    install module(s), no rice
   install.sh --list                                 list available rices
   install.sh --list-modules                         list available modules
 
   <rice>            name of a directory under os-rice/rices/
   --module          treat positionals as module names, not a rice
+  --theme <rice>    (--module only) which rice supplies the 90-theme layers;
+                    interactive picker if omitted, default rice if no TTY
   --user <name>     account to install for (default: invoking user)
   --verbose         stream command output instead of spinners
 EOF
@@ -57,11 +59,13 @@ list_modules() {
 
 # --- argument parsing --------------------------------------------------------
 OSR_ARG_USER=""
+OSR_ARG_THEME=""
 OSR_MODULE_MODE=""
 OSR_POS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --user)         OSR_ARG_USER=${2:?--user needs a name}; shift 2 ;;
+        --theme)        OSR_ARG_THEME=${2:?--theme needs a rice name}; shift 2 ;;
         --verbose)      OSR_VERBOSE=1; export OSR_VERBOSE; shift ;;
         --module)       OSR_MODULE_MODE=1; shift ;;
         --list)         echo "Available rices:"; list_rices; exit 0 ;;
@@ -93,15 +97,17 @@ OSR_CONFIGS=""
 OSR_REQUIRES=""
 if [ -n "$OSR_MODULE_MODE" ]; then
     # Explicit module install: positionals are module names, there is no rice.
-    # Rice-owned config guards inside modules ([ -f "$OSR_RICE_DIR/..." ]) fall
-    # through with OSR_RICE_DIR empty, and configs/wallpaper are skipped below.
+    # A standalone module still gets rice-owned 90-theme layers: resolve which
+    # rice supplies them (--theme > interactive picker > default rice, §6), then
+    # a module's `[ -f "$OSR_RICE_DIR/config/..." ]` theme guards fire normally.
     OSR_MODULES=$OSR_POS
     [ -n "$OSR_MODULES" ] || { usage >&2; error "no module specified"; }
-    OSR_RICE=""; OSR_RICE_DIR=""; export OSR_RICE OSR_RICE_DIR
     for _m in $OSR_MODULES; do
         [ -f "$OSR_ROOT/modules/$_m.sh" ] || error "module not found: $_m (try --list-modules)"
     done
+    osr_resolve_theme_rice "$OSR_ARG_THEME"
 else
+    [ -z "$OSR_ARG_THEME" ] || warn "--theme is ignored outside --module mode (the rice defines its own theme)"
     # Rice install: exactly one positional names a rices/<rice>/ directory.
     OSR_RICE=""
     for _p in $OSR_POS; do

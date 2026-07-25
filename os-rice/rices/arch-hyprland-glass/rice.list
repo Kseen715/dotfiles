@@ -12,7 +12,7 @@ require: init:systemd
 require: gpu:present
 
 # --- AUR bootstrap ------------------------------------------------------------
-# paru first: it is source:build_paru, and every aur: row below dispatches
+# paru first: it is source:provide_paru, and every aur: row below dispatches
 # through it (manifest order is the dependency graph, §4).
 paru
 
@@ -30,11 +30,15 @@ gpu-drivers
 vmware-init
 
 # --- shell + CLI --------------------------------------------------------------
+# starship before zsh: zsh's 90-theme.zsh wires the prompt in (manifest order is
+# the dependency graph, §4). starship owns its Nerd Font + rice starship.toml.
+starship
 zsh
 micro
 htop
 btop
 fastfetch
+yazi
 
 # --- Wayland + Hyprland core --------------------------------------------------
 wayland

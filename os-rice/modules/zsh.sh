@@ -2,7 +2,10 @@
 # distro-agnostic: the package line goes through pkg_install/pkgmap, everything
 # else is shared (§Module example). Sourced by install.sh with OSR_* in scope.
 
-run_step "Installing zsh and tools" pkg_install zsh git curl lsd starship
+# starship (prompt) + its Nerd Font + starship.toml theme live in modules/starship.sh
+# so manifest order lists starship before zsh. zsh only wires the prompt in via
+# its rice-owned 90-theme.zsh (`eval "$(starship init zsh)"`).
+run_step "Installing zsh and tools" pkg_install zsh git curl lsd
 
 run_step "Installing oh-my-zsh" install_omz
 run_step "Installing zsh-autosuggestions" \
@@ -16,12 +19,10 @@ seed_once     "$OSR_DOTFILES/zsh/rc.d/00-env.zsh"     "$OSR_RCDIR/00-env.zsh"
 install_layer "$OSR_DOTFILES/zsh/rc.d/10-omz.zsh"     "$OSR_RCDIR/10-omz.zsh"
 install_layer "$OSR_DOTFILES/zsh/rc.d/20-aliases.zsh" "$OSR_RCDIR/20-aliases.zsh"
 
-# rice-owned prompt theme + starship config, swapped on rice switch (§6).
-if [ -f "$OSR_RICE_DIR/config/zsh/90-theme.zsh" ]; then
+# rice-owned prompt theme, swapped on rice switch (§6). starship.toml is owned by
+# modules/starship.sh (G5), not here.
+if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/zsh/90-theme.zsh" ]; then
     install_layer "$OSR_RICE_DIR/config/zsh/90-theme.zsh" "$OSR_RCDIR/90-theme.zsh"
-fi
-if [ -f "$OSR_RICE_DIR/config/starship.toml" ]; then
-    install_layer "$OSR_RICE_DIR/config/starship.toml" "$OSR_HOME/.config/starship.toml"
 fi
 
 seed_empty "$OSR_RCDIR/99-local.zsh"

@@ -1,0 +1,8 @@
+# xin palette — rice-owned colors composed onto the shared starship base (§6).
+# The ONLY per-rice starship difference: prompt structure/symbols live in the
+# dotfiles base (starship/starship.toml).
+[palettes.theme]
+accent = "cyan"
+success = "green"
+error = "red"
+secondary = "yellow"

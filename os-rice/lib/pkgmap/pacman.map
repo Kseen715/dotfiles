@@ -4,13 +4,14 @@
 build = base-devel
 dev-headers = openssl pkgconf
 gh = github-cli
+i3 = i3-wm
 
 # --- AUR method rows (§4) — hyprland-glass rice, Arch-only ---------------------
-# paru is the chicken/egg helper: built from source (source:build_paru); list it
+# paru is the chicken/egg helper: built from source (source:provide_paru); list it
 # before any aur: package in the manifest (order is the dependency graph, §4).
 # Everything below installs via the detected helper (paru/yay) as OSR_USER; the
 # logical name maps to the real AUR package where they differ (e.g. *-bin).
-paru = source:build_paru
+paru = source:provide_paru
 
 # DE / desktop AUR packages
 wleave = aur:wleave

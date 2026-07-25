@@ -15,4 +15,4 @@ starship = script:https://starship.rs/install.sh --yes
 go = golang
 docker = moby-engine
 serie = cargo:serie          # no native serie on Fedora
-ghostty = source:build_ghostty_copr   # Fedora COPR community binary (scottames/ghostty)
+ghostty = source:provide_ghostty_copr   # Fedora COPR community binary (scottames/ghostty)

@@ -1,5 +1,6 @@
 # gruvbox — shell + KDE/Plasma gruvbox desktop rice. One line per module; add an
 # app = add a line. See DESIGN "Manifest format".
+starship
 zsh
 fastfetch
 

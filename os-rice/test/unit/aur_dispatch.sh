@@ -28,7 +28,7 @@ pacman() {
     if [ "$1" = "-Q" ]; then [ "$2" = "steam" ] && return 0 || return 1; fi
     return 0
 }
-# paru present so _osr_aur_helper resolves it; build_paru present (unused here).
+# paru present so _osr_aur_helper resolves it; provide_paru present (unused here).
 command() {
     if [ "$1" = "-v" ]; then
         case "$2" in paru) return 0 ;; yay) return 1 ;; *) return 0 ;; esac

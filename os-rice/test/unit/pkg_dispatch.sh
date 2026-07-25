@@ -17,19 +17,19 @@ _native_held()      { [ "$1" = "vim" ]; }       # vim held/pinned
 as_root() { echo "NATIVE $*" >>"$OUT"; }
 as_user() { echo "USER $*" >>"$OUT"; }
 osr_fetch_stdout() { echo "true"; }
-build_paru() { echo "BUILD-PARU" >>"$OUT"; }
+provide_paru() { echo "BUILD-PARU" >>"$OUT"; }
 _pkgmap_one() {
     case "$1" in
-        paru)     echo "source:build_paru" ;;
+        paru)     echo "source:provide_paru" ;;
         starship) echo "script:https://example/install.sh --yes" ;;
         build)    echo "build-essential" ;;
         *)        echo "$1" ;;
     esac
 }
-# starship/paru absent so probes fire; build_paru present.
+# starship/paru absent so probes fire; provide_paru present.
 command() {
     if [ "$1" = "-v" ]; then
-        case "$2" in starship|paru) return 1 ;; build_paru) return 0 ;; *) return 0 ;; esac
+        case "$2" in starship|paru) return 1 ;; provide_paru) return 0 ;; *) return 0 ;; esac
     fi
 }
 

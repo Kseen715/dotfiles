@@ -169,7 +169,7 @@ _via_cargo() {
 # (makepkg refuses to run as root). Probe: pacman -Q, since AUR packages register
 # in the pacman DB just like native ones (command -v is unreliable — the binary
 # name often differs from the package, e.g. visual-studio-code-insiders-bin ->
-# code-insiders). paru itself is a source:build_paru row listed BEFORE any aur:
+# code-insiders). paru itself is a source:provide_paru row listed BEFORE any aur:
 # package (manifest order is the dependency graph, §4).
 
 # _osr_aur_helper — echo the available AUR helper (paru preferred), or "".

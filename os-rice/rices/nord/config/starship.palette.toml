@@ -1,0 +1,7 @@
+# nord palette — rice-owned colors composed onto the shared starship base (§6).
+# Prompt structure/symbols live in the dotfiles base (starship/starship.toml).
+[palettes.theme]
+accent = "#88c0d0"
+success = "#a3be8c"
+error = "#bf616a"
+secondary = "#eceff4"

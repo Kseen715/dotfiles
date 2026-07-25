@@ -8,7 +8,12 @@
 #                                                    wallpaper are replaced;
 #                                                    00-env / aliases / installed
 #                                                    packages are left untouched.
-#   osr module  <name>... [--user <name>]            install module(s), no rice
+#   osr module  <name>... [--theme <rice>]           install module(s), no rice;
+#                                                    --theme picks which rice
+#                                                    supplies the 90-theme layers
+#                                                    (interactive picker if
+#                                                    omitted, default rice if no
+#                                                    TTY).
 #   osr list                                         list available rices
 #   osr modules                                      list available modules
 #
@@ -28,7 +33,7 @@ case "$_cmd" in
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
     modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
     -h|--help|"")
-        sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "osr: unknown command '$_cmd' (try: install, switch, module, list, modules)" >&2

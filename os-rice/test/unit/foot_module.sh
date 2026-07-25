@@ -8,7 +8,7 @@ OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
 OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB OSR_DOTFILES OSR_PKG=dnf
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
-. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"
+. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"; . "$OSR_LIB/fonts.sh"
 . "$HERE/../lib.sh"
 
 OUT=$(mktemp)

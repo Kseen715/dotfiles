@@ -3,8 +3,11 @@
 # Alpine and Void. rust is listed first as a toolchain prerequisite (manifest
 # order is the dependency graph, §4). foot ships its own rice-owned palette below.
 rust
+starship
 zsh
 fastfetch
 btop
 htop
 ncdu
+amnezia-vpn
+yazi

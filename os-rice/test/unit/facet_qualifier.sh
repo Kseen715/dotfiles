@@ -15,12 +15,12 @@ cat >"$TMPLIB/pkgmap/apt.map" <<'EOF'
 foo = foo-bare
 foo@aarch64 = foo-arm
 foo@22.04 = foo-jammy-ver
-foo@jammy = source:build_foo
+foo@jammy = source:provide_foo
 EOF
 
 # codename beats version beats arch beats bare.
 OSR_CODENAME=jammy; OSR_VERSION_ID=22.04; OSR_ARCH=aarch64
-assert_eq "source:build_foo" "$(_pkgmap_one foo)" "codename facet wins (most specific)"
+assert_eq "source:provide_foo" "$(_pkgmap_one foo)" "codename facet wins (most specific)"
 
 OSR_CODENAME=noble; OSR_VERSION_ID=22.04; OSR_ARCH=aarch64
 assert_eq "foo-jammy-ver" "$(_pkgmap_one foo)" "version facet wins when codename absent"
