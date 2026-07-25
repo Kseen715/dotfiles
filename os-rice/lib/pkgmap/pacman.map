@@ -3,3 +3,30 @@
 
 build = base-devel
 dev-headers = openssl pkgconf
+gh = github-cli
+
+# --- AUR method rows (§4) — hyprland-glass rice, Arch-only ---------------------
+# paru is the chicken/egg helper: built from source (source:build_paru); list it
+# before any aur: package in the manifest (order is the dependency graph, §4).
+# Everything below installs via the detected helper (paru/yay) as OSR_USER; the
+# logical name maps to the real AUR package where they differ (e.g. *-bin).
+paru = source:build_paru
+
+# DE / desktop AUR packages
+wleave = aur:wleave
+wlogout = aur:wlogout
+luminance = aur:luminance
+bibata-cursor-theme = aur:bibata-cursor-theme-bin
+xf86-video-vmware = aur:xf86-video-vmware-git
+captdriver = aur:captdriver-git
+mda-lv2 = aur:mda-lv2-git
+libdeep-filter-ladspa = aur:libdeep_filter_ladspa-bin
+waydroid-image-gapps = aur:waydroid-image-gapps
+
+# Application AUR packages
+amneziavpn = aur:amneziavpn-bin
+onlyoffice = aur:onlyoffice-bin
+vscode-insiders = aur:visual-studio-code-insiders-bin
+yandex-browser = aur:yandex-browser
+zen-browser = aur:zen-browser-bin
+steam-aur = aur:steam

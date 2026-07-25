@@ -1,0 +1,78 @@
+# arch-hyprland-glass — the Hyprland "glass" desktop, salvaged from the legacy
+# linux-arch-x86_64-hyprland-glass bundle into the DRY os-rice framework.
+# One line per module; manifest order IS the dependency graph (§4): paru (the
+# AUR helper, built from source) comes before any aur: package, toolchains
+# before their consumers. Each module installs its package(s) via pkg_install
+# and copies its own rice-owned config from this rice's config/ dir (§5/§6).
+#
+# Arch/x86_64/systemd only — declared up front so a mismatched host fails clean
+# before any mutation (§10). gpu:present gates the Hyprland DE on a real GPU.
+require: arch:x86_64
+require: init:systemd
+require: gpu:present
+
+# --- AUR bootstrap ------------------------------------------------------------
+# paru first: it is source:build_paru, and every aur: row below dispatches
+# through it (manifest order is the dependency graph, §4).
+paru
+
+# --- base ---------------------------------------------------------------------
+git-base
+openssh
+zip
+pacman-multilib
+networkmanager
+
+# --- hardware (real-GPU / kernel dependent; validated on hardware, not CI) ----
+dkms
+cpu-microcodes
+gpu-drivers
+vmware-init
+
+# --- shell + CLI --------------------------------------------------------------
+zsh
+micro
+htop
+btop
+fastfetch
+
+# --- Wayland + Hyprland core --------------------------------------------------
+wayland
+hyprland
+sddm
+hyprpaper
+hyprpicker
+hyprlock
+hyprcursor
+hypridle
+
+# --- bar / launcher / notifications / clipboard -------------------------------
+waybar
+wleave
+mako
+gtklock
+wofi
+cliphist
+
+# --- audio --------------------------------------------------------------------
+qpwgraph
+easyeffects
+
+# --- display / misc DE --------------------------------------------------------
+luminance
+nwg-displays
+printer
+foot
+nautilus
+kate
+
+# --- applications -------------------------------------------------------------
+celluloid
+firefox
+vscode-insiders
+discord
+telegram
+obs-studio
+qbittorrent
+amnezia-vpn
+steam

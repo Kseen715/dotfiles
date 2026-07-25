@@ -4,5 +4,7 @@
 # order is the dependency graph, §4). foot ships its own rice-owned palette below.
 rust
 zsh
-foot
 fastfetch
+btop
+htop
+ncdu

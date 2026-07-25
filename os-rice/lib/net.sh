@@ -17,10 +17,26 @@ osr_downloader() {
     fi
 }
 
+# osr_ensure_downloader — guarantee a downloader exists, installing curl via the
+# native package manager when none is present. Makes download-backed providers
+# (tarball/script/deb) work on a minimal box even when invoked standalone (e.g.
+# `osr module gh` on a fresh image where the rice's curl was never installed).
+osr_ensure_downloader() {
+    [ -n "$(osr_downloader)" ] && return 0
+    # This is a side-effect install; its output must go to stderr so it never
+    # pollutes a fetch stream (osr_fetch_stdout's stdout IS the payload, often
+    # piped straight into `sh`/`bash`).
+    if command -v pkg_install >/dev/null 2>&1; then
+        pkg_install curl >&2
+    fi
+    [ -n "$(osr_downloader)" ] || error "no downloader found (need curl, wget, or busybox)"
+}
+
 # osr_download <url> <dest> — fetch url to dest with whatever downloader exists.
 osr_download() {
     _dl_url=$1
     _dl_dest=$2
+    osr_ensure_downloader
     case "$(osr_downloader)" in
         curl)        curl -fsSL -o "$_dl_dest" "$_dl_url" ;;
         wget)        wget -qO "$_dl_dest" "$_dl_url" ;;
@@ -32,6 +48,7 @@ osr_download() {
 # osr_fetch_stdout <url> — stream a URL to stdout (for `curl | sh` installers).
 osr_fetch_stdout() {
     _fs_url=$1
+    osr_ensure_downloader
     case "$(osr_downloader)" in
         curl)        curl -fsSL "$_fs_url" ;;
         wget)        wget -qO- "$_fs_url" ;;

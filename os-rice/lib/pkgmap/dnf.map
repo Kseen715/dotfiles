@@ -10,3 +10,9 @@ fd = fd-find
 # Fedora has no official starship package -> official install script (fastfetch
 # IS native on Fedora, so it passes through).
 starship = script:https://starship.rs/install.sh --yes
+
+# Native name differences + provider fallbacks (native-first, checked per distro).
+go = golang
+docker = moby-engine
+serie = cargo:serie          # no native serie on Fedora
+ghostty = source:build_ghostty_copr   # Fedora COPR community binary (scottames/ghostty)

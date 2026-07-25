@@ -21,7 +21,7 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES
 # presence keeps the runner working while the harness is built up slice by slice.
 . "$OSR_LIB/ui.sh"
 . "$OSR_LIB/log.sh"
-for _lib in detect user net pkg git service config build; do
+for _lib in detect user net pkg git service config build preflight; do
     [ -f "$OSR_LIB/$_lib.sh" ] && . "$OSR_LIB/$_lib.sh"
 done
 
@@ -90,6 +90,7 @@ fi
 # --- resolve what to run: a rice manifest, or explicit --module names --------
 OSR_MODULES=""
 OSR_CONFIGS=""
+OSR_REQUIRES=""
 if [ -n "$OSR_MODULE_MODE" ]; then
     # Explicit module install: positionals are module names, there is no rice.
     # Rice-owned config guards inside modules ([ -f "$OSR_RICE_DIR/..." ]) fall
@@ -118,10 +119,17 @@ else
         _line=$(printf '%s' "$_line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
         [ -n "$_line" ] || continue
         case "$_line" in
-            config:*) OSR_CONFIGS="$OSR_CONFIGS ${_line#config:}" ;;
-            *)        OSR_MODULES="$OSR_MODULES $_line" ;;
+            require:*) OSR_REQUIRES="$OSR_REQUIRES ${_line#require:}" ;;
+            config:*)  OSR_CONFIGS="$OSR_CONFIGS ${_line#config:}" ;;
+            *)         OSR_MODULES="$OSR_MODULES $_line" ;;
         esac
     done < "$OSR_RICE_DIR/rice.list"
+
+    # Preconditions (§10 Tier 1): fail clean before any mutation if the host
+    # can't run this rice. Runs on switch too — you can't switch into a rice the
+    # hardware can't support.
+    # shellcheck disable=SC2086  # intentional word-split over predicates
+    [ -n "$OSR_REQUIRES" ] && osr_preflight $OSR_REQUIRES
 fi
 
 OSR_STEP_TOTAL=0

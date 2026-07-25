@@ -5,3 +5,8 @@
 
 build = build-base
 dev-headers = openssl-dev pkgconf
+gh = github-cli
+ghostty = source:build_ghostty   # no native ghostty on Alpine
+gtk4-dev = gtk4.0-dev
+libadwaita-dev = libadwaita-dev
+gettext = gettext-dev
