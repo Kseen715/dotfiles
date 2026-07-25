@@ -5,3 +5,5 @@
 
 build = base-devel
 dev-headers = openssl-devel pkgconf
+gh = github-cli
+serie = cargo:serie          # no native serie on Void

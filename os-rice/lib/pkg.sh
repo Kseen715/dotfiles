@@ -144,6 +144,58 @@ _via_source() {
     check_error $? "source build failed for $_vsrc_name"
 }
 
+# --- cargo provider (cargo install) ------------------------------------------
+# Spec: cargo:<crate>  — install a Rust crate as OSR_USER into ~/.cargo/bin,
+# --locked for reproducibility. Requires a toolchain, so list `rust` BEFORE any
+# cargo: row in the rice/module (manifest order is the dependency graph, §4).
+# Probe: the resulting binary exists in ~/.cargo/bin (§2).
+_via_cargo() {
+    _vca_name=$1
+    _vca_crate=$2
+    _vca_cargo="$OSR_HOME/.cargo/bin/cargo"
+    if as_user test -x "$OSR_HOME/.cargo/bin/$_vca_name"; then
+        info "$_vca_name already present (cargo) - skipping"
+        return 0
+    fi
+    as_user test -x "$_vca_cargo" \
+        || error "cargo not found for $_vca_name - install 'rust' before any cargo: package"
+    info "installing $_vca_name via cargo ($_vca_crate)"
+    as_user "$_vca_cargo" install --locked "$_vca_crate"
+    check_error $? "cargo install failed for $_vca_name"
+}
+
+# --- aur provider (AUR helper: paru/yay) -------------------------------------
+# Spec: aur:<pkg>  — install an AUR package via the detected helper, as OSR_USER
+# (makepkg refuses to run as root). Probe: pacman -Q, since AUR packages register
+# in the pacman DB just like native ones (command -v is unreliable — the binary
+# name often differs from the package, e.g. visual-studio-code-insiders-bin ->
+# code-insiders). paru itself is a source:build_paru row listed BEFORE any aur:
+# package (manifest order is the dependency graph, §4).
+
+# _osr_aur_helper — echo the available AUR helper (paru preferred), or "".
+# Resolved lazily at install time, not in detect.sh: paru is built mid-run, so a
+# helper detected once up front would miss it.
+_osr_aur_helper() {
+    if command -v paru >/dev/null 2>&1; then echo paru
+    elif command -v yay >/dev/null 2>&1; then echo yay
+    else echo ""; fi
+}
+
+_via_aur() {
+    _va_name=$1                          # logical name (skip messaging)
+    _va_pkg=$2                           # real AUR package to install
+    if pacman -Q "$_va_pkg" >/dev/null 2>&1; then
+        info "$_va_pkg already installed (aur) - skipping"
+        return 0
+    fi
+    _va_helper=$(_osr_aur_helper)
+    [ -n "$_va_helper" ] \
+        || error "no AUR helper (paru/yay) for $_va_name - install 'paru' before any aur: package"
+    info "installing $_va_pkg via $_va_helper (AUR)"
+    as_user "$_va_helper" -S --needed --noconfirm "$_va_pkg"
+    check_error $? "AUR install failed for $_va_pkg"
+}
+
 # --- verbs -------------------------------------------------------------------
 
 # _spec_method <rhs> — echo the provider method of a resolved spec, or "native".
@@ -181,7 +233,9 @@ pkg_install() {
             native)  ;;  # already handled in pass 1
             script)  _via_script "$_name" ${_rhs#script:} ;;
             source)  _via_source "$_name" "${_rhs#source:}" ;;
-            *)       error "provider '${_rhs%%:*}:' not yet implemented ($_name) - MVP covers native/script/source" ;;
+            cargo)   _via_cargo  "$_name" "${_rhs#cargo:}" ;;
+            aur)     _via_aur    "$_name" "${_rhs#aur:}" ;;
+            *)       error "provider '${_rhs%%:*}:' not yet implemented ($_name) - covers native/script/source/cargo/aur" ;;
         esac
     done
     return 0
@@ -191,7 +245,8 @@ pkg_install() {
 pkg_installed() {
     _rhs=$(_pkgmap_one "$1")
     case "$_rhs" in
-        script:*|source:*|cargo:*|aur:*) command -v "$1" >/dev/null 2>&1 ;;
+        aur:*)               pacman -Q "${_rhs#aur:}" >/dev/null 2>&1 ;;
+        script:*|source:*|cargo:*) command -v "$1" >/dev/null 2>&1 ;;
         *)  for _p in $_rhs; do _native_installed "$_p" || return 1; done ;;
     esac
 }
