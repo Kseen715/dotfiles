@@ -146,6 +146,44 @@ compose_starship_config() {
     rm -f "$_cs_tmp"
 }
 
+# _osr_foot_knows_theme_sections — true when the installed foot understands the
+# `[colors-dark]` palette section (foot >= 1.26). An absent or unparseable foot
+# answers no, which is the safe direction: `[colors]` is accepted by every foot
+# version, `[colors-dark]` only by new ones.
+_osr_foot_knows_theme_sections() {
+    command -v foot >/dev/null 2>&1 || return 1
+    _fk_ver=$(foot --version 2>/dev/null | sed -n 's/^foot version: \([0-9][0-9.]*\).*/\1/p')
+    [ -n "$_fk_ver" ] || return 1
+    _fk_maj=${_fk_ver%%.*}
+    _fk_min=${_fk_ver#"$_fk_maj"}; _fk_min=${_fk_min#.}; _fk_min=${_fk_min%%.*}
+    [ -n "$_fk_min" ] || _fk_min=0
+    case "$_fk_maj$_fk_min" in *[!0-9]*) return 1 ;; esac
+    [ "$_fk_maj" -gt 1 ] && return 0
+    [ "$_fk_maj" -eq 1 ] && [ "$_fk_min" -ge 26 ]
+}
+
+# install_foot_palette <src> <dst> — install a foot palette layer, adapting the
+# section name to the installed foot (§9: degrade, never break the terminal).
+#
+# foot 1.26 renamed the palette sections (`[colors]` -> `[colors-dark]`,
+# `[colors2]` -> `[colors-light]`). The old names still work but log a
+# deprecation warning on every start; older foot, meanwhile, rejects
+# `[colors-dark]` as an invalid section name and refuses to start at all. Across
+# distros both versions are in the wild, so the palettes are written with the
+# current name and downgraded here for a foot that predates it.
+install_foot_palette() {
+    _fp_src=$1
+    _fp_dst=$2
+    if _osr_foot_knows_theme_sections; then
+        backup_copy "$_fp_src" "$_fp_dst"
+        return 0
+    fi
+    _fp_tmp="${TMPDIR:-/tmp}/osr-foot-colors-$$.ini"
+    sed 's/^\[colors-dark\]$/[colors]/; s/^\[colors-light\]$/[colors2]/' "$_fp_src" >"$_fp_tmp"
+    backup_copy "$_fp_tmp" "$_fp_dst"
+    rm -f "$_fp_tmp"
+}
+
 # apply_config <name> — copy a rice-owned config dir (rices/<rice>/config/<name>)
 # into ~/.config/<name>, backing up once. Used by the manifest `config:`
 # directive for DE configs (§5). Falls back gracefully if the dir is absent.

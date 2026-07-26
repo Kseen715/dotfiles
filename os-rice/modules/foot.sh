@@ -20,9 +20,11 @@ run_step "Installing JetBrains Mono Nerd Font" osr_install_nerd_font JetBrainsMo
 install_layer "$OSR_DOTFILES/foot/foot.ini" "$OSR_HOME/.config/foot/foot.ini"
 
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
-# dotfiles default covers a rice that ships no palette.
+# dotfiles default covers a rice that ships no palette. install_foot_palette,
+# not install_layer: the palette section was renamed in foot 1.26, so the file
+# is adapted to the foot that was just installed.
 if [ -f "$OSR_RICE_DIR/config/foot/foot-colors.ini" ]; then
-    install_layer "$OSR_RICE_DIR/config/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
+    install_foot_palette "$OSR_RICE_DIR/config/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
 elif [ -f "$OSR_DOTFILES/foot/foot-colors.ini" ]; then
-    install_layer "$OSR_DOTFILES/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
+    install_foot_palette "$OSR_DOTFILES/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
 fi
