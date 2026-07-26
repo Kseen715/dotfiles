@@ -22,6 +22,67 @@ _osr_install_tarball_bin() {
     rm -rf "$_it_tmp"
 }
 
+# _osr_install_zip_bins <url> <binary>... — the .zip counterpart of
+# _osr_install_tarball_bin, for upstreams that ship no tarball (yazi). Fetches
+# the archive, finds each named binary anywhere inside, and installs them to
+# /usr/local/bin. Unlike the tarball helper this RETURNS non-zero instead of
+# calling error(), so a caller with a fallback path can catch the failure.
+_osr_install_zip_bins() {
+    _iz_url=$1; shift
+    command -v unzip >/dev/null 2>&1 || pkg_install unzip
+    command -v unzip >/dev/null 2>&1 || { warn "unzip not available for $_iz_url"; return 1; }
+    _iz_tmp=$(mktemp -d)
+    osr_download "$_iz_url" "$_iz_tmp/pkg.zip" \
+        || { rm -rf "$_iz_tmp"; warn "failed to download $_iz_url"; return 1; }
+    unzip -q -o "$_iz_tmp/pkg.zip" -d "$_iz_tmp" \
+        || { rm -rf "$_iz_tmp"; warn "failed to extract $_iz_url"; return 1; }
+    for _iz_bin in "$@"; do
+        _iz_path=$(find "$_iz_tmp" -type f -name "$_iz_bin" | head -n 1)
+        [ -n "$_iz_path" ] || { rm -rf "$_iz_tmp"; warn "$_iz_bin not found in $_iz_url"; return 1; }
+        as_root install -m 0755 "$_iz_path" "/usr/local/bin/$_iz_bin" \
+            || { rm -rf "$_iz_tmp"; warn "failed to install $_iz_bin"; return 1; }
+    done
+    rm -rf "$_iz_tmp"
+}
+
+# provide_yazi_bin — Yazi from its official prebuilt release archive
+# (github.com/sxyazi/yazi/releases), falling back to `cargo install` (the crates
+# route upstream documents: https://yazi-rs.github.io/docs/installation/#crates).
+# Upstream ships one .zip per target holding BOTH binaries — `yazi` (the TUI) and
+# `ya` (its package/plugin CLI, which modules/yazi.sh's package.toml layer needs)
+# — so install the pair from either route. The gnu asset is the glibc build;
+# arches with no asset (or a release/download that fails) take the cargo path.
+#
+# The fallback is inside one builder, not a chain across map rows (DESIGN rejects
+# those): the row still resolves to exactly one method, and cargo only runs when
+# the binary route is genuinely unavailable on this target.
+provide_yazi_bin() {
+    case "$OSR_ARCH" in
+        x86_64)  _yz_a=x86_64-unknown-linux-gnu ;;
+        aarch64) _yz_a=aarch64-unknown-linux-gnu ;;
+        *)       _yz_a="" ;;
+    esac
+    if [ -n "$_yz_a" ]; then
+        # Subshell: github_latest calls error() (a hard exit) when the API is
+        # unreachable — catching it here keeps that a fallback, not a dead run.
+        _yz_tag=$(github_latest sxyazi/yazi 2>/dev/null) || _yz_tag=""   # e.g. v26.5.6
+        if [ -n "$_yz_tag" ]; then
+            info "installing yazi $_yz_tag from the upstream release binary"
+            _osr_install_zip_bins \
+                "https://github.com/sxyazi/yazi/releases/download/${_yz_tag}/yazi-${_yz_a}.zip" \
+                yazi ya && return 0
+        fi
+        warn "yazi release binary unavailable ($_yz_a) - falling back to cargo"
+    else
+        warn "no yazi release binary for arch $OSR_ARCH - falling back to cargo"
+    fi
+    # Needs the toolchain: list `rust` before `yazi` in the rice when the target
+    # can land here (manifest order is the dependency graph, §4). _via_cargo
+    # carries its own §2 probe and the "install 'rust' first" error.
+    _via_cargo yazi yazi-fm      # the TUI
+    _via_cargo ya   yazi-cli     # the `ya` plugin/package CLI
+}
+
 # provide_paru — bootstrap the paru AUR helper from the AUR (source:provide_paru).
 # The chicken/egg package: the one AUR package that cannot come *from* an AUR
 # helper. Clone its PKGBUILD and makepkg it as OSR_USER (makepkg refuses root);
