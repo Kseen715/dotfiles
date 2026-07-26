@@ -1,0 +1,91 @@
+# ghostty/config — dotfiles-owned Ghostty base config (§5, the 10-layer).
+# Installed to ~/.config/ghostty/config and overwritten on update. It carries NO
+# colors: the palette lives in ~/.config/ghostty/ghostty-theme, included at the
+# very bottom, so a rice switch swaps only that file (§6) — the same base/theme
+# split foot.ini + foot-colors.ini use.
+#
+# Keys marked "1.1+" / "1.2+" need at least that Ghostty release; an older build
+# logs a config error and keeps running with its default (§9: degrade, never
+# break the terminal).
+
+# --- font ---------------------------------------------------------------------
+# Same Nerd Font as foot/wezterm — remote starship prompts render their glyphs.
+font-family = JetBrainsMono Nerd Font
+font-size = 11
+
+# --- window -------------------------------------------------------------------
+background-opacity = 0.75
+# Blend text in linear space so light-on-dark glyphs keep their weight over a
+# transparent background (1.1+). A rice may raise/lower opacity or add blur in
+# its theme layer, which is included last and therefore wins.
+alpha-blending = linear-corrected
+window-padding-x = 4
+window-padding-y = 2
+window-padding-balance = true
+# An accidental ctrl+d / close on a live ssh session is expensive: confirm when a
+# surface still has a running command.
+confirm-close-surface = true
+mouse-hide-while-typing = true
+
+cursor-style = block
+cursor-style-blink = true
+
+# --- scrollback ---------------------------------------------------------------
+# Bytes, not lines (default 10 MB). 100 MB so a remote build/journal dump stays
+# scrollable instead of being trimmed mid-session.
+scrollback-limit = 100000000
+
+# --- ssh: terminfo ------------------------------------------------------------
+# The single biggest ssh papercut: Ghostty's own terminfo entry (xterm-ghostty)
+# does not exist on the remote host, so a naive TERM passthrough breaks clear,
+# less, htop and every curses program with "unknown terminal type".
+#
+# shell-integration-features ssh-env/ssh-terminfo (1.2+) fix it at the source:
+#   ssh-env      wraps ssh to export a sane TERM (and keeps TERM_PROGRAM etc.)
+#   ssh-terminfo installs xterm-ghostty on the remote host on first connect,
+#                so the FULL feature set (styled underlines, true color) works
+#   sudo         carries TERMINFO through sudo, so a remote `sudo htop` is not
+#                the same breakage one privilege level down
+# The value is a toggle list, not a replacement: features named here are turned
+# on and everything unnamed (cursor, title, path) keeps its default.
+shell-integration = detect
+shell-integration-features = ssh-env,ssh-terminfo,sudo
+
+# Manual fallback for a host ssh-terminfo cannot write to (no tic, read-only
+# /usr/share/terminfo, jump host), run once per host:
+#   infocmp -x xterm-ghostty | ssh HOST -- tic -x -
+# Last resort for an appliance/BusyBox host where even that fails: uncomment the
+# line below to hand every remote a terminfo name that is universally present.
+# term = xterm-256color
+
+# --- ssh: clipboard -----------------------------------------------------------
+# OSC 52 is the only way a remote tmux/vim/yazi reaches the LOCAL clipboard, so
+# writes are allowed outright. Reads stay behind a prompt on purpose: a remote
+# host being able to silently exfiltrate whatever you last copied (passwords,
+# tokens) is a real risk, and "ask" keeps that a deliberate act.
+clipboard-write = allow
+clipboard-read = ask
+# Bracketed-paste guard: a multi-line or control-char paste (the classic
+# "curl | sh" clickjack) is confirmed before it reaches the remote shell.
+clipboard-paste-protection = true
+clipboard-trim-trailing-spaces = true
+copy-on-select = clipboard
+
+# --- ssh: misc ----------------------------------------------------------------
+# These three are already Ghostty defaults; they are restated because they are
+# what makes a remote session behave, so a future default flip stays visible
+# here: OSC 8 hyperlinks from remote tooling stay clickable, and a new split
+# starts in the LOCAL cwd rather than a stale remote path.
+link-url = true
+window-inherit-working-directory = true
+window-inherit-font-size = true
+
+# Defaults worth knowing rather than rebinding: ctrl+shift+o / ctrl+shift+e split
+# right / down, ctrl+shift+t new tab, ctrl+shift+c / ctrl+shift+v clipboard,
+# ctrl+shift+, reload config. Each split is its own login shell, so a split of an
+# ssh session starts local — reconnect explicitly.
+
+# --- rice-owned palette (90-theme, swapped on rice switch) --------------------
+# '?' = optional: a rice that ships no palette leaves Ghostty on its own default
+# rather than failing to start. Relative to this file's directory.
+config-file = ?ghostty-theme

@@ -1,0 +1,27 @@
+# xin Ghostty palette — rice-owned theme layer (90-*, swapped on rice switch,
+# §6). Included last by the dotfiles-owned ghostty/config, so anything set here
+# wins over the base. Mirrors this rice's foot palette (config/foot/
+# foot-colors.ini) — foot and ghostty are the same terminal, twice.
+
+background = #181818
+foreground = #ffffff
+cursor-color = #ffffff
+selection-background = #303030
+selection-foreground = #ffffff
+
+palette = 0=#1e1e1e
+palette = 1=#be0f17
+palette = 2=#338716
+palette = 3=#d4c310
+palette = 4=#185b8f
+palette = 5=#a12b84
+palette = 6=#578f8d
+palette = 7=#bbbbbb
+palette = 8=#525252
+palette = 9=#f0424b
+palette = 10=#55dc28
+palette = 11=#f3e659
+palette = 12=#3292dc
+palette = 13=#d45eb7
+palette = 14=#90bbba
+palette = 15=#ededed
