@@ -5,7 +5,7 @@
 # (rices/<rice>/config/starship.palette.toml). Edit prompt structure/symbols
 # here; edit per-rice colors there. Themed styles below reference the palette
 # names accent/success/error/secondary rather than hardcoded colors.
-add_newline = true
+add_newline = false
 palette = "theme"
 
 format = """$os\
