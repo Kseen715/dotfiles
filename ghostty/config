@@ -14,7 +14,7 @@ font-family = JetBrainsMono Nerd Font
 font-size = 11
 
 # --- window -------------------------------------------------------------------
-background-opacity = 0.75
+background-opacity = 0.85
 # Blend text in linear space so light-on-dark glyphs keep their weight over a
 # transparent background (1.1+). A rice may raise/lower opacity or add blur in
 # its theme layer, which is included last and therefore wins.
