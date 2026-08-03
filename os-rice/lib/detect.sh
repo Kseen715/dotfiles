@@ -251,11 +251,14 @@ osr_detect_ram() {
     fi
 
     _dmi=""
-    if command -v dmidecode >/dev/null 2>&1; then
-        _dmi=$(_osr_dmi17 dmidecode)
+    _dmidec=$(command -v dmidecode 2>/dev/null) || _dmidec=""
+    if [ -n "$_dmidec" ]; then
+        _dmi=$(_osr_dmi17 "$_dmidec")
         # Unprivileged: retry through a cached sudo ticket (-n never prompts).
+        # Pass the resolved path: sudo's secure_path would otherwise pick a
+        # different dmidecode than the one PATH selected.
         if [ -z "$_dmi" ] && command -v sudo >/dev/null 2>&1; then
-            _dmi=$(_osr_dmi17 sudo -n dmidecode)
+            _dmi=$(_osr_dmi17 sudo -n "$_dmidec")
         fi
     fi
     if [ -n "$_dmi" ]; then
