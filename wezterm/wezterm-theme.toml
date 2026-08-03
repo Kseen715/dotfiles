@@ -1,0 +1,20 @@
+# wezterm/wezterm-theme.toml — dotfiles DEFAULT WezTerm palette (§6 fallback).
+# Used only when the installed rice ships no config/wezterm/wezterm-theme.toml of
+# its own. Installed to ~/.config/wezterm/colors/osr-rice.toml, which the
+# dotfiles-owned .wezterm.lua selects with color_scheme = "osr-rice". Same 16
+# colors as the default ghostty/foot palettes, so all three terminals look
+# identical on an unthemed host.
+
+[metadata]
+name = "osr-rice"
+
+[colors]
+background = "#181818"
+foreground = "#ffffff"
+cursor_bg = "#ffffff"
+cursor_border = "#ffffff"
+cursor_fg = "#181818"
+selection_bg = "#303030"
+selection_fg = "#ffffff"
+ansi = ["#1e1e1e", "#be0f17", "#338716", "#d4c310", "#185b8f", "#a12b84", "#578f8d", "#bbbbbb"]
+brights = ["#525252", "#f0424b", "#55dc28", "#f3e659", "#3292dc", "#d45eb7", "#90bbba", "#ededed"]

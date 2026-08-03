@@ -1,0 +1,18 @@
+# nord WezTerm palette — rice-owned theme layer (90-*, swapped on rice switch,
+# §6). Installed to ~/.config/wezterm/colors/osr-rice.toml; the dotfiles-owned
+# .wezterm.lua selects it with color_scheme = "osr-rice". Same 16 colors as this
+# rice's ghostty palette (config/ghostty/ghostty-theme).
+
+[metadata]
+name = "osr-rice"
+
+[colors]
+background = "#2e3440"
+foreground = "#d8dee9"
+cursor_bg = "#d8dee9"
+cursor_border = "#d8dee9"
+cursor_fg = "#2e3440"
+selection_bg = "#434c5e"
+selection_fg = "#eceff4"
+ansi = ["#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0"]
+brights = ["#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4"]

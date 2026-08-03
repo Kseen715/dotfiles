@@ -17,6 +17,3 @@ docker = moby-engine
 serie = cargo:serie          # no native serie on Fedora
 ghostty = source:provide_ghostty_copr   # Fedora COPR community binary (scottames/ghostty)
 
-# yazi: upstream prebuilt binary (sxyazi/yazi releases), `cargo install` as the
-# in-builder fallback. Installs both `yazi` and `ya` either way.
-yazi = source:provide_yazi_bin

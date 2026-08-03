@@ -27,7 +27,18 @@ config.check_for_updates = false
 
 -- Appearance
 config.default_cursor_style = "BlinkingBlock"
-config.window_decorations = "INTEGRATED_BUTTONS | RESIZE"
+-- Decorations under GNOME: mutter implements NO server-side decorations for
+-- Wayland clients, so TITLE draws nothing there (wezterm#6296) and the only
+-- chrome available is wezterm's own INTEGRATED_BUTTONS - whose blank tab-bar
+-- area does not initiate a window move under mutter either (wezterm#6025).
+-- Running under XWayland instead hands decorations back to mutter: real
+-- titlebar, real buttons, draggable. Free here - the displays are 1x, and
+-- mutter's xwayland-native-scaling covers the scaled case.
+-- Drop enable_wayland=false on a compositor whose Wayland CSD behaves (sway,
+-- Hyprland); Super+drag moves the window whatever this is set to.
+config.enable_wayland = false
+config.window_decorations = "TITLE | RESIZE"
+-- config.window_decorations = "INTEGRATED_BUTTONS | RESIZE"
 -- config.window_decorations = "NONE | RESIZE"
 config.initial_cols = 120
 config.initial_rows = 30
@@ -304,20 +315,33 @@ config.keys = {
 	},
 }
 
-config.color_scheme = "Apple System Colors"
+-- Palette: the rice-owned theme layer os-rice installs as
+-- ~/.config/wezterm/colors/osr-rice.toml (swapped on rice switch). When it is
+-- absent -- an un-riced host, or Windows -- fall back to a built-in scheme
+-- instead of letting wezterm complain about an unknown scheme name.
+--
+-- The path is spelled out from home_dir, and color_scheme_dirs is set to match,
+-- because wezterm.config_dir is the dir holding THIS file: for ~/.wezterm.lua
+-- that is $HOME, so both the check and wezterm's own scheme search would look in
+-- $HOME/colors and never find the palette.
+local osr_colors_dir = wezterm.home_dir .. "/.config/wezterm/colors"
+local osr_scheme = io.open(osr_colors_dir .. "/osr-rice.toml")
+if osr_scheme then
+	osr_scheme:close()
+	config.color_scheme_dirs = { osr_colors_dir }
+	config.color_scheme = "osr-rice"
+else
+	config.color_scheme = "Apple System Colors"
+end
 -- config.color_scheme = "Astrodark (Gogh)" -- too bright
 -- config.color_scheme = "Breath Silverfox (Gogh)"
 -- config.color_scheme = "Campbell (Gogh)" -- classy pwsh
 -- config.color_scheme = "darkmoss (base16)" -- candy warm
 -- config.color_scheme = "GruvboxDarkHard"
 
+-- Window chrome only: background/cursor/selection come from the palette above,
+-- so a rice switch actually changes them.
 config.colors = {
-	background = "#000000",
-	cursor_border = "#555555",
-	cursor_fg = "None",
-	cursor_bg = "#777777",
-	-- selection_fg = '#281733',
-
 	tab_bar = {
 		background = "#010203",
 		active_tab = {

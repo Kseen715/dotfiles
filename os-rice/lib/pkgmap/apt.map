@@ -60,4 +60,3 @@ gtk4-dev = libgtk-4-dev
 libadwaita-dev = libadwaita-1-dev
 amneziavpn = source:provide_amneziavpn
 
-yazi = source:provide_yazi_bin

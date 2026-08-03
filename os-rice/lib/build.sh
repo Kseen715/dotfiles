@@ -45,6 +45,17 @@ _osr_install_zip_bins() {
     rm -rf "$_iz_tmp"
 }
 
+# _osr_pkgconfig_path — echo PKG_CONFIG_PATH with the distro's standard .pc dirs
+# appended. A pkg-config from Homebrew/conda/nix shadows the system one on PATH
+# and searches ONLY its own prefix (`pkg-config --variable pc_path pkg-config`
+# shows just the brew dirs), so a source build fails on system libs that ARE
+# installed - wayland-client for wezterm, gtk4 for ghostty. Appending the standard
+# dirs costs nothing when the system pkg-config is in use: they are already its
+# defaults, and dirs that do not exist are ignored.
+_osr_pkgconfig_path() {
+    printf '%s' "${PKG_CONFIG_PATH:+$PKG_CONFIG_PATH:}/usr/lib/$(uname -m)-linux-gnu/pkgconfig:/usr/lib64/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+}
+
 # provide_yazi_bin — Yazi from its official prebuilt release archive
 # (github.com/sxyazi/yazi/releases), falling back to `cargo install` (the crates
 # route upstream documents: https://yazi-rs.github.io/docs/installation/#crates).
@@ -176,9 +187,77 @@ provide_ghostty() {
     _gh_src="$_gh_tmp/ghostty-${_gh_ver}"
     _gh_zig=$(cat "$_gh_src/.zig-version" 2>/dev/null | tr -d '[:space:]')
     provide_zig "$_gh_zig"          # exact Zig version Ghostty requires
-    ( cd "$_gh_src" && as_root zig build -p /usr -Doptimize=ReleaseFast ) \
+    ( cd "$_gh_src" && as_root env PKG_CONFIG_PATH="$(_osr_pkgconfig_path)" \
+        zig build -p /usr -Doptimize=ReleaseFast ) \
         || { rm -rf "$_gh_tmp"; error "ghostty build failed"; }
     rm -rf "$_gh_tmp"
+}
+
+# provide_wezterm — build WezTerm from source, the route upstream documents
+# (https://wezterm.org/install/source.html). No AppImage/flatpak: the source
+# build is the ONLY install method here, so every distro gets the same binary
+# from the same recipe. Heavy (a full Rust workspace compile) - a real-desktop
+# concern, §9, not part of the container matrix.
+#
+# Needs a toolchain: list `rust` BEFORE `wezterm` in the rice (manifest order is
+# the dependency graph, §4). Upstream's own build deps come from the repo's
+# ./get-deps, which detects the distro and installs them - one script instead of
+# a per-distro dep list duplicated into every pkgmap.
+# Idempotency is _via_source's `command -v wezterm` probe (§2).
+provide_wezterm() {
+    pkg_install build git
+    _wt_cargo="$OSR_HOME/.cargo/bin/cargo"
+    as_user test -x "$_wt_cargo" \
+        || error "cargo not found - install 'rust' before wezterm (manifest order, section 4)"
+
+    # A failed build KEEPS the checkout (see below), so a retry reuses it: no
+    # second 15-minute compile from scratch after a transient registry/network
+    # blip. Only a successful install cleans it up.
+    _wt_src="${TMPDIR:-/tmp}/osr-wezterm-src"
+    if [ -f "$_wt_src/Cargo.toml" ]; then
+        info "reusing the existing wezterm checkout ($_wt_src) - rebuild is incremental"
+    else
+        as_user rm -rf "$_wt_src"
+        # --branch=main is what upstream documents for a source build; the
+        # submodules (freetype/harfbuzz/... vendored deps) are not optional.
+        as_user git clone --depth=1 --branch=main --recursive \
+            https://github.com/wezterm/wezterm.git "$_wt_src" || error "failed to clone wezterm"
+    fi
+    ( cd "$_wt_src" && as_user git submodule update --init --recursive ) \
+        || error "wezterm submodule checkout failed"
+    # get-deps needs root to install, but ends with a `rustc --version` check -
+    # and the toolchain is OSR_USER's, not root's (§8 user-for-user). sudo resets
+    # PATH, so root does not see ~/.cargo/bin; and the cargo/rustc SHIMS resolve
+    # the actual toolchain through RUSTUP_HOME, which for root is /root/.rustup
+    # (empty -> "could not choose a version of rustc to run"). Point all three at
+    # OSR_USER's toolchain, or get-deps exits 1 on a box where the deps installed
+    # fine. Root-for-root installs are already correct; this is the delta.
+    ( cd "$_wt_src" && as_root env \
+        PATH="$OSR_HOME/.cargo/bin:$PATH" \
+        RUSTUP_HOME="$OSR_HOME/.rustup" \
+        CARGO_HOME="$OSR_HOME/.cargo" \
+        ./get-deps ) \
+        || error "wezterm get-deps failed"
+    # PKG_CONFIG_PATH: see _osr_pkgconfig_path - a shadowing pkg-config (brew et
+    # al) otherwise fails the wayland-sys build script on a box that HAS the libs.
+    ( cd "$_wt_src" && as_user env PKG_CONFIG_PATH="$(_osr_pkgconfig_path)" \
+        "$_wt_cargo" build --release ) \
+        || error "wezterm build failed (checkout kept at $_wt_src - rerun to resume)"
+
+    for _wt_b in wezterm wezterm-gui wezterm-mux-server; do
+        as_root install -m 0755 "$_wt_src/target/release/$_wt_b" "/usr/local/bin/$_wt_b" \
+            || error "failed to install $_wt_b"
+    done
+    # Desktop entry + icon so a DE launcher finds it. Cosmetic: warn, never fail.
+    if [ -f "$_wt_src/assets/wezterm.desktop" ]; then
+        as_root install -Dm 0644 "$_wt_src/assets/wezterm.desktop" \
+            /usr/local/share/applications/org.wezfurlong.wezterm.desktop \
+            || warn "failed to install the wezterm desktop entry"
+        as_root install -Dm 0644 "$_wt_src/assets/icon/terminal.png" \
+            /usr/local/share/icons/hicolor/128x128/apps/org.wezfurlong.wezterm.png \
+            || warn "failed to install the wezterm icon"
+    fi
+    as_user rm -rf "$_wt_src"
 }
 
 # provide_gh_tarball — GitHub CLI from its release tarball (single static binary),

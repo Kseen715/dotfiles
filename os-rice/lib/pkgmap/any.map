@@ -12,3 +12,14 @@
 # that lack it carry a `script:` fallback row: dnf.map (Fedora) and apt.map
 # (Ubuntu jammy/noble). Keeping it native-by-default honors §1's "no identity
 # rows" — the exception is tagged, not the common case.
+
+# wezterm is built from source on EVERY target (no AppImage, no flatpak): one
+# recipe, one binary, everywhere. Upstream's ./get-deps installs the per-distro
+# build deps, so this row needs no distro variants; the toolchain does not come
+# for free, so list `rust` before `wezterm` in a rice (§4). Verified on Ubuntu
+# (apt) — see test/unit/wezterm_module.sh + DESIGN §9.
+wezterm = source:provide_wezterm
+
+# yazi: upstream prebuilt binary (sxyazi/yazi releases), `cargo install` as the
+# in-builder fallback. Installs both `yazi` and `ya` either way.
+yazi = source:provide_yazi_bin
