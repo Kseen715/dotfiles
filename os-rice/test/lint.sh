@@ -11,14 +11,21 @@ REPO=$(cd -- "$OSR_ROOT/.." && pwd)
 SH_CHECKER=$(command -v dash || command -v sh)
 FAILED=0
 
-echo "POSIX sh syntax ($SH_CHECKER -n):"
+# Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR).
+. "$OSR_ROOT/lib/ui.sh"
+sec()    { printf '%b%s%b\n' "$OSR_CYAN" "$*" "$OSR_NC"; }
+p_ok()   { printf '  %bok%b   %s\n' "$OSR_GREEN" "$OSR_NC" "$*"; }
+p_warn() { printf '  %bWARN%b %s\n' "$OSR_YELLOW" "$OSR_NC" "$*"; }
+p_fail() { printf '  %bFAIL%b %s\n' "$OSR_RED" "$OSR_NC" "$*" >&2; }
+
+sec "POSIX sh syntax ($SH_CHECKER -n):"
 SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
 SH_FILES="$SH_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" "$OSR_ROOT/test" -name '*.sh' 2>/dev/null)"
 for f in $SH_FILES; do
     if "$SH_CHECKER" -n "$f" 2>/dev/null; then
-        printf '  ok   %s\n' "${f#"$REPO"/}"
+        p_ok "${f#"$REPO"/}"
     else
-        printf '  FAIL %s\n' "${f#"$REPO"/}" >&2
+        p_fail "${f#"$REPO"/}"
         "$SH_CHECKER" -n "$f" || true
         FAILED=1
     fi
@@ -33,16 +40,16 @@ if command -v shellcheck >/dev/null 2>&1; then
     # repo-controlled paths; SC2015 the `grep -q X && ok || fail` test idiom;
     # SC2329 module stubs called indirectly by the code under test.
     SC_EXCLUDE=SC1090,SC1091,SC1003,SC1087,SC2016,SC2034,SC2044,SC2015,SC2329
-    echo "shellcheck -s sh:"
+    sec "shellcheck -s sh:"
     for f in $SH_FILES; do
         if shellcheck -s sh -e "$SC_EXCLUDE" "$f" >/dev/null 2>&1; then
-            printf '  ok   %s\n' "${f#"$REPO"/}"
+            p_ok "${f#"$REPO"/}"
         else
-            printf '  WARN %s (shellcheck findings)\n' "${f#"$REPO"/}"
+            p_warn "${f#"$REPO"/} (shellcheck findings)"
         fi
     done
 else
-    echo "shellcheck: not installed — skipping"
+    p_warn "shellcheck: not installed - skipping"
 fi
 
 # ASCII-only program output (§3): every byte the installer writes to the
@@ -50,7 +57,7 @@ fi
 # mojibake. Comments are exempt (prose may use §/em-dashes), so skip comment
 # lines; flag any high byte (0x80-0xFF) on a code line. LC_ALL=C keeps the byte
 # class portable across gawk/mawk/busybox awk.
-echo "ASCII-only program output (non-comment lines):"
+sec "ASCII-only program output (non-comment lines):"
 # Scope: the installer program (lib + modules + runners), not the test harness
 # (matrix.sh legitimately keeps em-dashes in trailing comments).
 ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
@@ -64,21 +71,26 @@ if [ -n "$_ascii_hits" ]; then
     printf '%s\n' "$_ascii_hits" >&2
     FAILED=1
 else
-    echo "  ok   (no non-ASCII bytes in program output)"
+    p_ok "(no non-ASCII bytes in program output)"
 fi
 
 if command -v zsh >/dev/null 2>&1; then
-    echo "zsh -n (rc.d + rice themes):"
+    sec "zsh -n (rc.d + rice themes):"
     for f in $(find "$REPO/zsh/rc.d" "$OSR_ROOT/rices" -name '*.zsh' 2>/dev/null); do
         if zsh -n "$f" 2>/dev/null; then
-            printf '  ok   %s\n' "${f#"$REPO"/}"
+            p_ok "${f#"$REPO"/}"
         else
-            printf '  FAIL %s\n' "${f#"$REPO"/}" >&2
+            p_fail "${f#"$REPO"/}"
             FAILED=1
         fi
     done
 else
-    echo "zsh: not installed — skipping zsh -n"
+    p_warn "zsh: not installed - skipping zsh -n"
 fi
 
-[ "$FAILED" -eq 0 ] && echo "lint: PASS" || { echo "lint: FAIL" >&2; exit 1; }
+if [ "$FAILED" -eq 0 ]; then
+    printf '%blint: PASS%b\n' "$OSR_GREEN" "$OSR_NC"
+else
+    printf '%blint: FAIL%b\n' "$OSR_RED" "$OSR_NC" >&2
+    exit 1
+fi
