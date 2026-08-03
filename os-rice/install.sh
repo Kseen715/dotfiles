@@ -122,7 +122,8 @@ if [ "${OSR_RAM_CHANNELS:-0}" -gt 0 ];   then _ram="$_ram channels=$OSR_RAM_CHAN
 if [ -n "$_ram" ];                       then info "$_ram"; fi
 
 _accel=""
-if [ -n "$OSR_GPU_VENDOR" ]; then _accel="gpu=$OSR_GPU_VENDOR"; fi
+if [ -n "$OSR_GPU_MODEL" ];  then _accel="gpu=$OSR_GPU_MODEL"
+elif [ -n "$OSR_GPU_VENDOR" ]; then _accel="gpu=$OSR_GPU_VENDOR"; fi
 if [ -n "$OSR_NPU_VENDOR" ]; then _accel="${_accel:+$_accel }npu=$OSR_NPU_VENDOR"; fi
 if [ -n "$_accel" ];         then info "hwaccel: $_accel"; fi
 

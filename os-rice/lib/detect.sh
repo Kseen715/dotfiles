@@ -151,17 +151,27 @@ osr_detect_cpu() {
 # osr_detect_gpu — GPU vendor list + count via lspci, falling back to sysfs DRM
 # PCI vendor IDs (works with no lspci, e.g. minimal containers/headless).
 osr_detect_gpu() {
-    OSR_GPU_VENDOR=""; OSR_GPU_COUNT=0
-    _gv=""
+    OSR_GPU_VENDOR=""; OSR_GPU_MODEL=""; OSR_GPU_COUNT=0
+    _gv=""; _gm=""
     if command -v lspci >/dev/null 2>&1; then
         _lines=$(lspci -mm 2>/dev/null | grep -E "VGA compatible controller|3D controller" || true)
         _oldifs=$IFS; IFS='
 '
         for _l in $_lines; do
             [ -n "$_l" ] || continue
-            _vendor=$(printf '%s' "$_l" | cut -d'"' -f6)
-            _dev=$(printf '%s' "$_l" | cut -d'"' -f8)
-            _gv=$(_osr_uniq_add "$_gv" "$(_osr_norm_gpu "$_vendor $_dev")")
+            # lspci -mm quoting: "class" "vendor" "device" "subsys-vendor" ...
+            _vendor=$(printf '%s' "$_l" | cut -d'"' -f4)
+            _dev=$(printf '%s' "$_l" | cut -d'"' -f6)
+            _vt=$(_osr_norm_gpu "$_vendor $_dev")
+            _gv=$(_osr_uniq_add "$_gv" "$_vt")
+            # lspci names a chip by codename with the marketing name bracketed
+            # ("Kaby Lake-S GT2 [HD Graphics 630]") — the bracket is the part
+            # anyone recognizes, so prefer it and fall back to the whole string.
+            _model=$_dev
+            case "$_model" in *"["*"]"*) _model=${_model#*[}; _model=${_model%%]*} ;; esac
+            # Don't stutter "Intel Intel Arc A770".
+            case "$_model" in "$_vt"*) ;; *) _model="$_vt $_model" ;; esac
+            _gm="${_gm:+$_gm, }$_model"
             OSR_GPU_COUNT=$((OSR_GPU_COUNT + 1))
         done
         IFS=$_oldifs
@@ -181,7 +191,8 @@ osr_detect_gpu() {
         done
     fi
     OSR_GPU_VENDOR=$_gv
-    export OSR_GPU_VENDOR OSR_GPU_COUNT
+    OSR_GPU_MODEL=$_gm
+    export OSR_GPU_VENDOR OSR_GPU_MODEL OSR_GPU_COUNT
 }
 
 # _osr_dmi17 <cmd...> — echo type-17 DMI records, or nothing. Unprivileged
@@ -265,8 +276,8 @@ osr_detect_npu() {
 '
         for _l in $_lines; do
             [ -n "$_l" ] || continue
-            _vendor=$(printf '%s' "$_l" | cut -d'"' -f6)
-            _dev=$(printf '%s' "$_l" | cut -d'"' -f8)
+            _vendor=$(printf '%s' "$_l" | cut -d'"' -f4)
+            _dev=$(printf '%s' "$_l" | cut -d'"' -f6)
             OSR_NPU_VENDOR=$(_osr_uniq_add "$OSR_NPU_VENDOR" "$(_osr_norm_gpu "$_vendor $_dev")")
             OSR_NPU_COUNT=$((OSR_NPU_COUNT + 1))
         done

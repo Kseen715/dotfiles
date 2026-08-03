@@ -45,6 +45,14 @@ osr_detect_gpu
 assert_eq "2" "$OSR_GPU_COUNT" "two GPU devices counted via lspci"
 assert_contains_str "$OSR_GPU_VENDOR" "Intel" "Intel GPU normalized"
 assert_contains_str "$OSR_GPU_VENDOR" "NVIDIA" "NVIDIA GPU normalized"
+assert_eq "Intel UHD Graphics 630, NVIDIA GeForce RTX 3080" "$OSR_GPU_MODEL" "models joined, vendor prefixed once"
+
+# Intel iGPU the way lspci really names it: codename first, marketing name in [].
+mkfake lspci 'cat <<EOF
+00:02.0 "VGA compatible controller" "Intel Corporation" "Kaby Lake-S GT2 [HD Graphics 630]" -r04 -p00 "Gigabyte" "Device d000"
+EOF'
+osr_detect_gpu
+assert_eq "Intel HD Graphics 630" "$OSR_GPU_MODEL" "bracketed marketing name preferred over codename"
 
 # --- GPU sysfs fallback: no lspci, fake DRM tree (AMD) -----------------------
 mkfake lspci 'exit 1'                    # no usable lspci (host's real one must not leak in)

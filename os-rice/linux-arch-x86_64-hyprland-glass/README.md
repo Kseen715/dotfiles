@@ -15,9 +15,10 @@ legacy source deleted. The files kept here are the ones whose **correctness can
 only be validated on real hardware or a VM** (per DESIGN §9), so they stay as an
 un-validated reference until a real-machine / QEMU smoke test confirms the port:
 
-- **GPU / kernel / VM**: `modules/gpu-drivers.sh` (+ `.md`), `src/detect-gpu.sh`
-  (exhaustive NVIDIA/AMD generation matrix — the new port covers only mainstream
-  current families), `modules/{dkms,cpu-microcodes,vmware-init,waydroid}.sh`.
+- **GPU / kernel / VM**: `modules/gpu-drivers.sh` (+ `.md`),
+  `modules/{dkms,cpu-microcodes,vmware-init,waydroid}.sh`. (Hardware detection
+  itself now lives only in `lib/detect.sh`; the legacy `src/detect-gpu.sh` and
+  `linux-debian/src/detect-hwaccel.sh` probes are deleted.)
 - **Display-manager / compositor runtime**: `modules/{sddm,hyprland}.sh` and the
   Hyprland/Wayland DE modules (`waybar`, `wofi`, `mako`, `wleave`, `wlogout`,
   `hyprlock`, `hyprpaper`, `hypridle`, `hyprpicker`, `hyprcursor`, `gtklock`,
