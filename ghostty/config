@@ -69,7 +69,7 @@ clipboard-read = ask
 # "curl | sh" clickjack) is confirmed before it reaches the remote shell.
 clipboard-paste-protection = true
 clipboard-trim-trailing-spaces = true
-copy-on-select = clipboard
+copy-on-select = false
 
 # --- ssh: misc ----------------------------------------------------------------
 # These three are already Ghostty defaults; they are restated because they are
