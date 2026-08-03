@@ -32,7 +32,15 @@ un-validated reference until a real-machine / QEMU smoke test confirms the port:
   install + config copy are ported and container-verified, but a live
   compositor/display is needed to confirm end-to-end behavior.
 - **Un-ported system helpers** (no framework equivalent yet):
-  `setup-mirrors.sh`, `setup-swap.sh`, `pulseaudio-to-pipewire.sh`.
+  `setup-mirrors.sh`, `setup-swap.sh`.
+  (`pulseaudio-to-pipewire.sh` is gone: it is now the pair of mirror-image
+  modules `os-rice/modules/{pipewire,pulseaudio}.sh` — each removes the rival
+  stack, then installs its own; `pipewire` is listed in the rice, `pulseaudio`
+  is the available alternative, never both. `pulseaudio.sh` keeps the *core*
+  `pipewire` package (xdg-desktop-portal-wlr needs it) and removes only the
+  pulse/jack/alsa shims + wireplumber. `test/unit/audio_switch.sh` covers the
+  mirror symmetry and the pacman-only guard; **the actual swap on a live
+  session is unverified** — real audio hardware is needed.)
   (`build-amneziavpn-client.sh` is gone: it is `provide_amneziavpn_source` in
   `os-rice/lib/build.sh` now — the LAST-RESORT tail of `provide_amneziavpn`,
   taken only when the upstream release binary is unavailable (no asset for the

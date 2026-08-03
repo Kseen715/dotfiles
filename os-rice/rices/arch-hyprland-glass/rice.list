@@ -59,6 +59,10 @@ wofi
 cliphist
 
 # --- audio --------------------------------------------------------------------
+# pipewire first: it swaps PulseAudio/JACK out, and the patchbay/EQ below are
+# PipeWire clients (manifest order is the dependency graph, §4). Its mirror,
+# `pulseaudio`, is the available alternative — never list both.
+pipewire
 qpwgraph
 easyeffects
 

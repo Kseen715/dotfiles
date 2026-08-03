@@ -271,13 +271,19 @@ pkg_refresh() {
 }
 
 # pkg_remove <names...> — remove native packages (providers own their own).
+# Absent packages are filtered out, not passed down: every native remover errors
+# on an unknown package, which would make a first run fatal for any module that
+# removes a stack it is replacing (§2 - a no-op must stay a no-op).
 pkg_remove() {
     _rm=""
     for _name in "$@"; do
         _rhs=$(_pkgmap_one "$_name")
         case "$_rhs" in
             *:*) warn "pkg_remove skips non-native $_name ($_rhs)" ;;
-            *)   _rm="$_rm $_rhs" ;;
+            *)   for _p in $_rhs; do
+                     if _native_installed "$_p"; then _rm="$_rm $_p"
+                     else info "$_p not installed - nothing to remove"; fi
+                 done ;;
         esac
     done
     [ -n "$_rm" ] || return 0
