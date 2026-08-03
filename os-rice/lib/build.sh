@@ -351,24 +351,130 @@ provide_lsd_deb() {
 # needs root to place a privileged helper. Driven headless (-p minimal, no X;
 # --accept-* + -c skip every prompt) into /opt/AmneziaVPN, then symlinked onto
 # PATH as `amneziavpn` so _via_source's `command -v amneziavpn` probe (§4) sees
-# it and a rerun is a no-op. x86_64 only — upstream ships no other Linux arch.
+# it and a rerun is a no-op.
+#
+# The release is x86_64-only and can be missing/unreachable, so this builder ends
+# in provide_amneziavpn_source — the LAST-RESORT route (a heavy Qt build), never
+# taken while a ready binary exists. Same shape as provide_yazi_bin: the fallback
+# lives inside ONE builder, not as a chain across map rows (DESIGN rejects those).
 provide_amneziavpn() {
-    [ "$OSR_ARCH" = x86_64 ] || error "no AmneziaVPN Linux build for arch $OSR_ARCH"
-    _av_tag=$(github_latest amnezia-vpn/amnezia-client)   # e.g. 4.8.21.0 (no v)
-    _av_dir=/opt/AmneziaVPN
-    _av_tmp=$(mktemp -d)
-    osr_download \
-        "https://github.com/amnezia-vpn/amnezia-client/releases/download/${_av_tag}/AmneziaVPN_${_av_tag}_linux_x64.tar" \
-        "$_av_tmp/amnezia.tar" || { rm -rf "$_av_tmp"; error "failed to download AmneziaVPN $_av_tag"; }
-    tar -xf "$_av_tmp/amnezia.tar" -C "$_av_tmp" \
-        || { rm -rf "$_av_tmp"; error "failed to extract AmneziaVPN $_av_tag"; }
-    _av_bin=$(find "$_av_tmp" -type f -name '*.bin' | head -n 1)
-    [ -n "$_av_bin" ] || { rm -rf "$_av_tmp"; error "AmneziaVPN installer not found in tarball"; }
-    chmod +x "$_av_bin"
-    as_root "$_av_bin" install --root "$_av_dir" \
-        --accept-licenses --accept-messages --confirm-command -p minimal
-    _av_rc=$?
-    rm -rf "$_av_tmp"
-    check_error "$_av_rc" "AmneziaVPN headless install failed"
-    as_root ln -sf "$_av_dir/AmneziaVPN" /usr/local/bin/amneziavpn
+    if [ "$OSR_ARCH" != x86_64 ]; then
+        warn "no AmneziaVPN release binary for arch $OSR_ARCH - falling back to the source build"
+        provide_amneziavpn_source
+        return $?
+    fi
+    # Subshell: github_latest calls error() (a hard exit) when the API is
+    # unreachable — catching it here keeps that a fallback, not a dead run.
+    _av_tag=$(github_latest amnezia-vpn/amnezia-client 2>/dev/null) || _av_tag=""  # e.g. 4.8.21.0 (no v)
+    if [ -n "$_av_tag" ]; then
+        _av_dir=/opt/AmneziaVPN
+        _av_tmp=$(mktemp -d)
+        if osr_download \
+            "https://github.com/amnezia-vpn/amnezia-client/releases/download/${_av_tag}/AmneziaVPN_${_av_tag}_linux_x64.tar" \
+            "$_av_tmp/amnezia.tar" \
+           && tar -xf "$_av_tmp/amnezia.tar" -C "$_av_tmp"; then
+            _av_bin=$(find "$_av_tmp" -type f -name '*.bin' | head -n 1)
+        else
+            _av_bin=""
+        fi
+        if [ -n "$_av_bin" ]; then
+            chmod +x "$_av_bin"
+            as_root "$_av_bin" install --root "$_av_dir" \
+                --accept-licenses --accept-messages --confirm-command -p minimal
+            _av_rc=$?
+            rm -rf "$_av_tmp"
+            # A release that downloaded but refused to install is a broken target,
+            # not a "no binary available" case — a 40-minute build won't fix it.
+            check_error "$_av_rc" "AmneziaVPN headless install failed"
+            as_root ln -sf "$_av_dir/AmneziaVPN" /usr/local/bin/amneziavpn
+            return 0
+        fi
+        rm -rf "$_av_tmp"
+    fi
+    warn "AmneziaVPN release binary unavailable (tag='${_av_tag:-unresolved}') - falling back to the source build. Have God with you: a full Qt/QML compile and link, plus its conan deps, can be >24GB RSS observed. Lower OSR_BUILD_JOBS or add swap if it OOMs."
+    provide_amneziavpn_source
+}
+
+# provide_amneziavpn_source — build the AmneziaVPN client from source, the route
+# upstream documents (README "Hacking guide"). Salvaged from the legacy
+# linux-arch-x86_64-hyprland-glass/build-amneziavpn-client.sh, with two fixes the
+# legacy script needs: upstream DELETED deploy/build_linux.sh (it is deploy/build.sh
+# now), and that wrapper only finds Qt in the Qt-online-installer layout
+# (~/Qt, /opt/Qt) - never a distro Qt6. It is a thin cmake configure+build and
+# never installs anything, so drive cmake directly instead: same three commands,
+# no env-var gymnastics, and `cmake --install` puts the tree where the shipped
+# systemd unit already expects it (/opt/AmneziaVPN/bin/AmneziaVPN-service).
+#
+# NOT a route of its own: nothing maps to it. It is the last resort inside
+# provide_amneziavpn, reached only when the release binary is unavailable (no
+# asset for this arch, or GitHub unreachable). Arch keeps aur:amneziavpn-bin —
+# the same release binary, pacman-tracked — and never lands here.
+# HEAVY, and a real-desktop concern (§9): a full Qt/QML app plus its conan deps.
+# Linking is the peak - >24GB RSS observed - so OSR_BUILD_JOBS caps build
+# parallelism (default 1: one link at a time). Raise it on a box with the RAM.
+provide_amneziavpn_source() {
+    # The caller's §2 probe is `command -v amneziavpn`; this catches the other
+    # half — a prebuilt install that left AmneziaVPN on PATH under its own name.
+    if command -v AmneziaVPN >/dev/null 2>&1; then
+        info "AmneziaVPN already installed - skipping the source build"
+        return 0
+    fi
+    [ "$OSR_ARCH" = x86_64 ] || warn "AmneziaVPN upstream builds/tests x86_64 only - building on $OSR_ARCH anyway"
+    # Qt 6.10+ with the components client/ + service/ ask for (Quick, Svg,
+    # QuickControls2, Core5Compat, RemoteObjects, LinguistTools, DBus). No
+    # qt6-webengine: the legacy script's list predates the QML client, nothing
+    # links it now and it is the single largest dep in that list.
+    pkg_install build cmake git conan openssl \
+        qt6-base qt6-declarative qt6-svg qt6-tools qt6-5compat qt6-remoteobjects qt6-wayland
+
+    # A failed build KEEPS the checkout so a retry resumes instead of recompiling
+    # from scratch (same contract as provide_wezterm).
+    _as_src="${TMPDIR:-/tmp}/osr-amneziavpn-src"
+    if [ -f "$_as_src/CMakeLists.txt" ]; then
+        info "reusing the existing amnezia-client checkout ($_as_src) - rebuild is incremental"
+        # Only the reuse path needs this; --recursive already did it on a fresh clone.
+        ( cd "$_as_src" && as_user git submodule update --init --recursive ) \
+            || error "amnezia-client submodule checkout failed"
+    else
+        as_user rm -rf "$_as_src"
+        as_user git clone --depth 1 --recursive \
+            https://github.com/amnezia-vpn/amnezia-client.git "$_as_src" \
+            || error "failed to clone amnezia-client"
+    fi
+
+    # Configure + build as OSR_USER: cmake's conan provider writes ~/.conan2 and
+    # pulls the prebuilt recipes, which must NOT land in root's home (§8).
+    # CMAKE_PREFIX_PATH=/usr points it at the distro Qt6.
+    as_user cmake -S "$_as_src" -B "$_as_src/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH=/usr \
+        -DCMAKE_INSTALL_PREFIX=/opt/AmneziaVPN \
+        || error "amnezia-client cmake configure failed"
+    as_user env CMAKE_BUILD_PARALLEL_LEVEL="${OSR_BUILD_JOBS:-1}" \
+        cmake --build "$_as_src/build" \
+        || error "amnezia-client build failed (checkout kept at $_as_src - rerun to resume; OOM? lower OSR_BUILD_JOBS or add swap)"
+    as_root cmake --install "$_as_src/build" --component AmneziaVPN \
+        || error "amnezia-client install failed"
+
+    # What upstream's deploy/data/linux/post_install.sh does, minus the SteamOS
+    # and killall branches: the component drops the unit/desktop/icon at the
+    # prefix root, and something has to place them.
+    as_root install -Dm 0644 /opt/AmneziaVPN/AmneziaVPN.desktop /usr/share/applications/AmneziaVPN.desktop \
+        || warn "failed to install the AmneziaVPN desktop entry"
+    as_root install -Dm 0644 /opt/AmneziaVPN/AmneziaVPN.png /usr/share/pixmaps/AmneziaVPN.png \
+        || warn "failed to install the AmneziaVPN icon"
+    # Exec=AmneziaVPN in the .desktop, and the rice autostart probes `AmneziaVPN`;
+    # `amneziavpn` matches what provide_amneziavpn puts on PATH. Both, one binary.
+    as_root ln -sf /opt/AmneziaVPN/bin/AmneziaVPN /usr/local/bin/AmneziaVPN
+    as_root ln -sf /opt/AmneziaVPN/bin/AmneziaVPN /usr/local/bin/amneziavpn
+    # The privileged helper the client talks to. systemd-only unit, so no
+    # enable_service() on other inits - the client is simply unusable there.
+    if [ "$OSR_INIT" = systemd ]; then
+        as_root install -m 0644 /opt/AmneziaVPN/AmneziaVPN.service /etc/systemd/system/AmneziaVPN.service
+        as_root systemctl daemon-reload
+        enable_service AmneziaVPN
+    else
+        warn "AmneziaVPN ships a systemd unit only - the background service is not enabled on $OSR_INIT"
+    fi
+    as_user rm -rf "$_as_src"
 }

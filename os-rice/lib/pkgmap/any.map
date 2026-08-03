@@ -23,3 +23,5 @@ wezterm = source:provide_wezterm
 # yazi: upstream prebuilt binary (sxyazi/yazi releases), `cargo install` as the
 # in-builder fallback. Installs both `yazi` and `ya` either way.
 yazi = source:provide_yazi_bin
+
+amneziavpn = source:provide_amneziavpn

@@ -32,8 +32,16 @@ un-validated reference until a real-machine / QEMU smoke test confirms the port:
   install + config copy are ported and container-verified, but a live
   compositor/display is needed to confirm end-to-end behavior.
 - **Un-ported system helpers** (no framework equivalent yet):
-  `setup-mirrors.sh`, `setup-swap.sh`, `pulseaudio-to-pipewire.sh`,
-  `build-amneziavpn-client.sh`.
+  `setup-mirrors.sh`, `setup-swap.sh`, `pulseaudio-to-pipewire.sh`.
+  (`build-amneziavpn-client.sh` is gone: it is `provide_amneziavpn_source` in
+  `os-rice/lib/build.sh` now — the LAST-RESORT tail of `provide_amneziavpn`,
+  taken only when the upstream release binary is unavailable (no asset for the
+  arch, or GitHub unreachable). No module, no map row of its own; Arch stays on
+  `aur:amneziavpn-bin`. It drops the dead `deploy/build_linux.sh` call —
+  upstream deleted that script — and drives cmake directly.
+  `test/unit/amneziavpn_source.sh` covers the ordering and the recipe;
+  **the compile itself is unverified**: linking needs >24GB RAM, which this
+  machine does not have.)
 
 Once validated on hardware, the corresponding new modules supersede these and
 this folder can be removed. Any deleted legacy file is recoverable from git
