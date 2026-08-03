@@ -433,6 +433,7 @@ config/hypr/hyprland.conf     source = ./00-env.conf    # user monitors/input
 config/waybar/                config.jsonc + 90-theme.css (rice-owned)
 config/foot/                  foot.ini includes foot-colors.ini (rice-owned)
 config/btop/                  btop.conf selects themes/rice.theme (rice-owned)
+config/serie/                 config.toml is pure palette (rice-owned)
 ```
 
 **Two seeding rules matter:**

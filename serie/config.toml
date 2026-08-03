@@ -1,0 +1,59 @@
+# serie/config.toml — dotfiles DEFAULT serie theme (§6 fallback). Used only when
+# the installed rice ships no config/serie/config.toml of its own. Same 16 colors
+# as the default foot/ghostty palettes, so serie matches the terminal on an
+# unthemed host.
+
+# fg/bg are left at "Reset" (the terminal's own colors), so serie inherits the
+# terminal background and stays transparent.
+
+[color]
+fg = "Reset"
+bg = "Reset"
+
+list_selected_fg = "#ffffff"
+list_selected_bg = "#303030"
+list_ref_paren_fg = "#525252"
+list_ref_branch_fg = "#55dc28"
+list_ref_remote_branch_fg = "#f0424b"
+list_ref_tag_fg = "#f3e659"
+list_ref_stash_fg = "#d45eb7"
+list_head_fg = "#90bbba"
+list_subject_fg = "Reset"
+list_name_fg = "#578f8d"
+list_hash_fg = "#d4c310"
+list_date_fg = "#a12b84"
+list_match_fg = "#181818"
+list_match_bg = "#f3e659"
+
+detail_label_fg = "#bbbbbb"
+detail_name_fg = "#90bbba"
+detail_date_fg = "#d45eb7"
+detail_email_fg = "#3292dc"
+detail_hash_fg = "#f3e659"
+detail_ref_branch_fg = "#55dc28"
+detail_ref_remote_branch_fg = "#f0424b"
+detail_ref_tag_fg = "#f3e659"
+detail_file_change_add_fg = "#55dc28"
+detail_file_change_modify_fg = "#f3e659"
+detail_file_change_delete_fg = "#f0424b"
+detail_file_change_move_fg = "#d45eb7"
+
+ref_selected_fg = "#ffffff"
+ref_selected_bg = "#303030"
+
+help_block_title_fg = "#55dc28"
+help_key_fg = "#f3e659"
+
+virtual_cursor_fg = "#90bbba"
+status_input_fg = "#ffffff"
+status_input_transient_fg = "#525252"
+status_info_fg = "#90bbba"
+status_success_fg = "#55dc28"
+status_warn_fg = "#f3e659"
+status_error_fg = "#f0424b"
+divider_fg = "#525252"
+
+# Commit graph edge colors, cycled per branch. edge/background stay at their
+# transparent defaults so the graph image blends into the terminal.
+[graph.color]
+branches = ["#f0424b", "#55dc28", "#f3e659", "#3292dc", "#d45eb7", "#90bbba"]
