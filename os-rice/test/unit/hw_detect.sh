@@ -38,7 +38,7 @@ assert_contains_str "$OSR_GPU_VENDOR" "Intel" "Intel GPU normalized"
 assert_contains_str "$OSR_GPU_VENDOR" "NVIDIA" "NVIDIA GPU normalized"
 
 # --- GPU sysfs fallback: no lspci, fake DRM tree (AMD) -----------------------
-rm -f "$BIN/lspci"                       # force the sysfs path
+mkfake lspci 'exit 1'                    # no usable lspci (host's real one must not leak in)
 DRM=$(mktemp -d); OSR_DRM="$DRM"; export OSR_DRM
 mkdir -p "$DRM/card0/device"; printf '0x1002\n' > "$DRM/card0/device/vendor"   # AMD
 osr_detect_gpu

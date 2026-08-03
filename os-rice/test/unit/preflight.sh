@@ -38,7 +38,7 @@ else fail "unknown predicate should not fail the run"; fi
 
 # gpu:present with no GPU -> error.
 OSR_GPU_COUNT=0
-OUT=$( OSR_DRM=/nonexistent osr_preflight gpu:present 2>&1 ) && RC=0 || RC=$?
+OUT=$( OSR_DRI=/nonexistent osr_preflight gpu:present 2>&1 ) && RC=0 || RC=$?
 assert_eq 1 "$RC" "gpu:present errors when no GPU detected"
 
 finish

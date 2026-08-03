@@ -12,7 +12,7 @@
 #   distro:<d>     OSR_DISTRO matches
 #   release:<c>    OSR_CODENAME or OSR_VERSION_ID matches
 #   cmd:<bin>      command -v <bin> succeeds
-#   gpu:present    a GPU exists (/dev/dri/renderD* or OSR_GPU_COUNT > 0)
+#   gpu:present    a GPU exists ($OSR_DRI:-/dev/dri/renderD* or OSR_GPU_COUNT > 0)
 
 # osr_preflight_check <predicate> — true if the host satisfies it. Detection
 # vars (OSR_*) are set by osr_detect; run preflight after it.
@@ -32,7 +32,8 @@ osr_preflight_check() {
             command -v "$_pf_val" >/dev/null 2>&1 ;;
         gpu:present)
             [ "${OSR_GPU_COUNT:-0}" -gt 0 ] && return 0
-            for _pf_d in /dev/dri/renderD*; do [ -e "$_pf_d" ] && return 0; done
+            # OSR_DRI overrides the render-node dir (tests; mirrors OSR_DRM in detect.sh)
+            for _pf_d in "${OSR_DRI:-/dev/dri}"/renderD*; do [ -e "$_pf_d" ] && return 0; done
             return 1 ;;
         *)
             warn "unknown require predicate '$_pf_pred' - ignoring"; return 0 ;;

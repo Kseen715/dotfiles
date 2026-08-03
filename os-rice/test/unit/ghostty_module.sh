@@ -36,7 +36,7 @@ printf '# RICE-PALETTE-MARKER\nbackground = #123456\n' >"$RICE/config/ghostty/gh
 
 assert_contains "$OUT" 'PKG ghostty unzip fontconfig' "installs ghostty + font deps via pkg_install"
 assert_contains "$OSR_HOME/.config/ghostty/config" 'JetBrainsMono' "config installed (dotfiles-owned base)"
-assert_contains "$OSR_HOME/.config/ghostty/config" '^background-opacity = 0.75$' "base sets 0.75 transparency"
+assert_contains "$OSR_HOME/.config/ghostty/config" '^background-opacity = 0.85$' "base sets 0.85 transparency"
 assert_contains "$OSR_HOME/.config/ghostty/config" 'ssh-terminfo' "base enables ssh terminfo shell integration"
 assert_contains "$OSR_HOME/.config/ghostty/config" '^clipboard-write = allow$' "base allows OSC 52 writes from remote hosts"
 assert_contains "$OSR_HOME/.config/ghostty/config" '^config-file = ?ghostty-theme$' "base includes the rice palette layer"
