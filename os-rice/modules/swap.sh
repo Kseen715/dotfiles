@@ -1,0 +1,245 @@
+# modules/swap.sh — memory: zram first, disk swap only for the rest. ONE copy,
+# POSIX (was .../linux-arch-x86_64-hyprland-glass/setup-swap.sh, which hard-coded
+# a 24G /swapfile regardless of RAM, free disk, or the swap already present).
+#
+# Sizing, all MiB. Inputs are files/commands so the whole plan is mockable:
+# OSR_MEMINFO, OSR_PROC_SWAPS, OSR_SWAPFILE, OSR_FSTAB, OSR_ZRAM_CONF,
+# OSR_SYSCTL_CONF. The four knobs below are the only policy dials.
+#
+#   zram   RAM <  24G -> RAM <= 8G: cover RAM in full (it compresses ~2-3x, so
+#                        this costs far less than its nominal size and keeps a
+#                        small box off the disk entirely)
+#                        RAM >  8G: min(RAM/2, 8G) - past that the CPU cost of
+#                        compressing outweighs the pages saved
+#          RAM >= 24G -> NONE. There is nothing to rescue: the box is not going
+#                        to thrash, and zram's swap device would compete with
+#                        the disk swap that suspend-to-disk resumes from.
+#   disk   RAM <= 16G  -> RAM: sized so hibernation/hybrid-sleep can write the
+#                        whole image (needs `resume=` on the kernel cmdline too;
+#                        this module sizes the space, it does not edit the
+#                        bootloader)
+#          RAM >  16G  -> 16G: hibernating 24G+ means writing 24G+ on every
+#                        sleep - not worth the disk or the wait, so this is
+#                        plain overflow swap and hibernation is off the table
+#   priority    zram 100, disk swapfile 10 - both live at once, and the kernel
+#                        fills the higher priority first: pages go to RAM-speed
+#                        compressed swap and only spill to the disk when zram is
+#                        full. (A swap PARTITION keeps whatever priority its own
+#                        fstab line gives it; that line is the user's, not ours.)
+#   swappiness  zram present -> 100 + page-cluster=0 (compressed swap is cheap
+#                        and single-page, so lean on it - the disk stays out of
+#                        the way by priority, not by a timid swappiness)
+#               no zram      -> 10 (disk swap under a game/compile is stutter;
+#                        keep it for emergencies, not for routine reclaim)
+#
+# An existing swap PARTITION counts in full toward the disk target; only the
+# remainder becomes a swapfile on the root fs (the system drive, normally the
+# fastest one). That file is capped at half the free space there and rounded up
+# to whole GiB; a deficit under 1G buys nothing, so no file is made.
+
+# A container/WSL guest does not own the memory it runs on - the host does.
+case "${OSR_VIRT:-none}" in
+    docker|podman|lxc|lxc-libvirt|systemd-nspawn|wsl|openvz)
+        info "swap: ${OSR_VIRT} guest - the host owns swap/zram, skipping"
+        return 0 ;;
+esac
+
+OSR_SWAPFILE=${OSR_SWAPFILE:-/swapfile}
+_swap_meminfo=${OSR_MEMINFO:-/proc/meminfo}
+_swap_swaps=${OSR_PROC_SWAPS:-/proc/swaps}
+_swap_fstab=${OSR_FSTAB:-/etc/fstab}
+_swap_zconf=${OSR_ZRAM_CONF:-/etc/systemd/zram-generator.conf}
+_swap_sysctl=${OSR_SYSCTL_CONF:-/etc/sysctl.d/99-osr-swap.conf}
+
+# Policy knobs (MiB). Override in the environment to retune without editing.
+_swap_zram_off_at=${OSR_ZRAM_OFF_AT:-24576}    # RAM at/above which zram is off
+_swap_hib_max=${OSR_HIBERNATE_MAX_RAM:-16384}  # largest RAM still sized to hibernate
+_swap_disk_cap=${OSR_SWAP_MAX:-16384}          # overflow-only swap above that
+_swap_file_prio=${OSR_SWAPFILE_PRIO:-10}       # below zram's 100: zram fills first
+_swap_reserve=${OSR_SWAP_RESERVE:-2048}        # free space the swapfile must leave behind
+
+# _swap_gib_up <mib> — round up to a whole GiB.
+_swap_gib_up() { echo $(( ($1 + 1023) / 1024 * 1024 )); }
+
+# swap_plan — read the machine, set SWAP_RAM / SWAP_RAM_TIER / SWAP_ZRAM_WANT / SWAP_DISK_WANT /
+# SWAP_HAVE_{ZRAM,PART,FILE} / SWAP_FREE / SWAP_FILE_WANT. Pure measurement +
+# arithmetic: it mutates nothing, so the unit test can call it per fixture.
+swap_plan() {
+    [ -r "$_swap_meminfo" ] || error "swap: cannot read $_swap_meminfo"
+    SWAP_RAM=$(awk '/^MemTotal:/ { print int($2 / 1024); exit }' "$_swap_meminfo")
+    [ -n "$SWAP_RAM" ] && [ "$SWAP_RAM" -gt 0 ] || error "swap: no MemTotal in $_swap_meminfo"
+
+    # Tier on the INSTALLED size, not MemTotal: the kernel/firmware reserve a
+    # few hundred MiB, so a 24G machine reports ~23.4G and would fall a tier
+    # short. RAM ships in 2GiB steps, so rounding up to the next 2GiB recovers
+    # the number on the spec sheet without ever inventing a tier.
+    SWAP_RAM_TIER=$(( (SWAP_RAM + 2047) / 2048 * 2048 ))
+
+    if [ "$SWAP_RAM_TIER" -ge "$_swap_zram_off_at" ]; then
+        SWAP_ZRAM_WANT=0
+    elif [ "$SWAP_RAM_TIER" -le 8192 ]; then
+        SWAP_ZRAM_WANT=$SWAP_RAM_TIER
+    elif [ $((SWAP_RAM_TIER / 2)) -gt 8192 ]; then
+        SWAP_ZRAM_WANT=8192
+    else
+        SWAP_ZRAM_WANT=$((SWAP_RAM_TIER / 2))
+    fi
+
+    if [ "$SWAP_RAM_TIER" -le "$_swap_hib_max" ]; then
+        SWAP_DISK_WANT=$SWAP_RAM_TIER          # hibernation image fits
+    else
+        SWAP_DISK_WANT=$_swap_disk_cap         # overflow only, no hibernation
+    fi
+
+    # zram is cheap and page-at-a-time; disk swap under load is stutter.
+    if [ "$SWAP_ZRAM_WANT" -gt 0 ]; then SWAP_SWAPPINESS=100; else SWAP_SWAPPINESS=10; fi
+
+    # What is active now. /proc/swaps sizes are KiB; zram shows up as a
+    # "partition" named /dev/zramN, so match the name before the type.
+    SWAP_HAVE_ZRAM=0; SWAP_HAVE_PART=0; SWAP_HAVE_FILE=0
+    if [ -r "$_swap_swaps" ]; then
+        read -r SWAP_HAVE_ZRAM SWAP_HAVE_PART SWAP_HAVE_FILE <<EOF
+$(awk 'NR > 1 { m = int($3 / 1024)
+                if ($1 ~ /^\/dev\/zram/)  z += m
+                else if ($2 == "partition") p += m
+                else                        f += m }
+       END { printf "%d %d %d\n", z + 0, p + 0, f + 0 }' "$_swap_swaps")
+EOF
+    fi
+
+    SWAP_FREE=$(df -Pk "$(dirname "$OSR_SWAPFILE")" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
+    [ -n "$SWAP_FREE" ] || SWAP_FREE=0
+
+    _sp_need=$((SWAP_DISK_WANT - SWAP_HAVE_PART))
+    [ "$_sp_need" -gt 0 ] || _sp_need=0
+    _sp_need=$(_swap_gib_up "$_sp_need")
+    # The current swapfile is deleted before a new one is written, so its blocks
+    # are free space too. Two limits, whichever bites first: never take more than
+    # half of what is available (a ratio, for big disks), and always leave
+    # _swap_reserve behind (an absolute floor - half of a nearly-full disk is
+    # still not enough room to survive an update).
+    _sp_avail=$(( SWAP_FREE + SWAP_HAVE_FILE ))
+    _sp_cap=$(( _sp_avail / 2 ))
+    _sp_room=$(( _sp_avail - _swap_reserve ))
+    [ "$_sp_cap" -le "$_sp_room" ] || _sp_cap=$_sp_room
+    [ "$_sp_cap" -ge 0 ] || _sp_cap=0
+    if [ "$_sp_need" -gt "$_sp_cap" ]; then
+        warn "swap: want ${_sp_need}M of swapfile but only ${_sp_cap}M is spendable on $(dirname "$OSR_SWAPFILE") - capping"
+        _sp_need=$(( _sp_cap / 1024 * 1024 ))
+    fi
+    [ "$_sp_need" -ge 1024 ] || _sp_need=0
+    SWAP_FILE_WANT=$_sp_need
+}
+
+# _swap_zram_conf — the zram-generator drop-in for the computed size. A literal
+# size, not an expression, so the plan and the config can never disagree.
+# ponytail: after a RAM change, re-run this module to resize.
+_swap_zram_conf() {
+    printf '# managed by os-rice (modules/swap.sh)\n[zram0]\nzram-size = %s\ncompression-algorithm = zstd\nswap-priority = 100\n' \
+        "$SWAP_ZRAM_WANT"
+}
+
+_swap_apply_zram() {
+    _swap_zram_conf | as_root tee "$_swap_zconf" >/dev/null
+    as_root systemctl daemon-reload
+    as_root systemctl restart systemd-zram-setup@zram0.service
+}
+
+# _swap_disable_zram — tear down zram we configured earlier (a RAM upgrade past
+# the threshold, or a retuned knob). Only ever removes OUR drop-in.
+_swap_disable_zram() {
+    as_root rm -f "$_swap_zconf"
+    as_root systemctl daemon-reload
+    as_root swapoff /dev/zram0
+}
+
+# --- sysctl: how hard the kernel leans on whatever swap it ended up with -----
+_swap_sysctl_conf() {
+    printf '# managed by os-rice (modules/swap.sh)\nvm.swappiness = %s\n' "$SWAP_SWAPPINESS"
+    # zram is single-page and cheap: reading ahead 8 pages per fault only wastes
+    # decompression. Irrelevant (and unset) when swap is a disk.
+    [ "$SWAP_ZRAM_WANT" -gt 0 ] && printf 'vm.page-cluster = 0\n'
+    return 0
+}
+
+_swap_apply_sysctl() {
+    _swap_sysctl_conf | as_root tee "$_swap_sysctl" >/dev/null
+    as_root sysctl -p "$_swap_sysctl"
+}
+
+# _swap_make_file — (re)create the swapfile at SWAP_FILE_WANT MiB and enable it.
+# chattr +C on the empty file is the btrfs requirement (no CoW, no compression);
+# it is a harmless no-op on ext4/xfs. mkswap --file allocates the file itself on
+# util-linux >= 2.38; older ones need the dd fallback.
+_swap_make_file() {
+    as_root sh -c "
+        set -e
+        swapoff '$OSR_SWAPFILE' 2>/dev/null || true
+        rm -f '$OSR_SWAPFILE'
+        touch '$OSR_SWAPFILE'
+        chattr +C '$OSR_SWAPFILE' 2>/dev/null || true
+        chmod 600 '$OSR_SWAPFILE'
+        mkswap -U clear --size ${SWAP_FILE_WANT}M --file '$OSR_SWAPFILE' 2>/dev/null || {
+            dd if=/dev/zero of='$OSR_SWAPFILE' bs=1M count=$SWAP_FILE_WANT
+            chmod 600 '$OSR_SWAPFILE'
+            mkswap '$OSR_SWAPFILE'
+        }
+        swapon --priority $_swap_file_prio '$OSR_SWAPFILE'
+    "
+}
+
+# ensure_line writes as OSR_USER; /etc/fstab needs root, so append it here.
+_swap_add_fstab() {
+    printf '%s none swap defaults,pri=%s 0 0\n' "$OSR_SWAPFILE" "$_swap_file_prio" |
+        as_root tee -a "$_swap_fstab" >/dev/null
+}
+
+swap_plan
+info "swap: ram=${SWAP_RAM}M | zram want=${SWAP_ZRAM_WANT}M have=${SWAP_HAVE_ZRAM}M | disk want=${SWAP_DISK_WANT}M have partition=${SWAP_HAVE_PART}M file=${SWAP_HAVE_FILE}M free=${SWAP_FREE}M -> swapfile ${SWAP_FILE_WANT}M"
+
+# --- zram (systemd-only: zram-generator is a systemd generator) ---------------
+if [ "$SWAP_ZRAM_WANT" -eq 0 ]; then
+    info "swap: ${SWAP_RAM}M RAM is at/above the ${_swap_zram_off_at}M zram threshold - no zram (keeps suspend-to-disk clean)"
+    if [ "$SWAP_HAVE_ZRAM" -gt 0 ] || [ -f "$_swap_zconf" ]; then
+        run_step "Disabling zram" _swap_disable_zram
+    fi
+elif [ "${OSR_INIT:-}" = systemd ]; then
+    run_step "Installing zram-generator" pkg_install zram-generator
+    if [ "$SWAP_HAVE_ZRAM" -gt 0 ] && [ "$(cat "$_swap_zconf" 2>/dev/null)" = "$(_swap_zram_conf)" ]; then
+        info "zram already active at ${SWAP_ZRAM_WANT}M, skipping"
+    else
+        run_step "Configuring zram (${SWAP_ZRAM_WANT}M)" _swap_apply_zram
+    fi
+else
+    warn "swap: zram-generator needs systemd (init=${OSR_INIT:-unknown}) - skipping zram"
+fi
+
+# --- disk swap ---------------------------------------------------------------
+if [ "$SWAP_FILE_WANT" -eq 0 ]; then
+    info "swap: ${SWAP_HAVE_PART}M of swap partition covers the ${SWAP_DISK_WANT}M target, no swapfile needed"
+elif [ "$SWAP_HAVE_FILE" -eq "$SWAP_FILE_WANT" ]; then
+    info "swap: $OSR_SWAPFILE already ${SWAP_FILE_WANT}M, skipping"
+else
+    run_step "Creating $OSR_SWAPFILE (${SWAP_FILE_WANT}M)" _swap_make_file
+    if grep -q "^[[:space:]]*$OSR_SWAPFILE[[:space:]]" "$_swap_fstab" 2>/dev/null; then
+        info "swap: $OSR_SWAPFILE already in $_swap_fstab"
+    else
+        run_step "Adding $OSR_SWAPFILE to $_swap_fstab" _swap_add_fstab
+    fi
+fi
+
+# --- swappiness --------------------------------------------------------------
+if [ "$(cat "$_swap_sysctl" 2>/dev/null)" = "$(_swap_sysctl_conf)" ]; then
+    info "swap: vm.swappiness already $SWAP_SWAPPINESS, skipping"
+else
+    run_step "Setting vm.swappiness=$SWAP_SWAPPINESS" _swap_apply_sysctl
+fi
+
+# Hibernation is a property of the DISK swap only - zram cannot hold the image.
+_swap_disk_total=$((SWAP_HAVE_PART + SWAP_FILE_WANT))
+[ "$SWAP_FILE_WANT" -gt 0 ] || _swap_disk_total=$((SWAP_HAVE_PART + SWAP_HAVE_FILE))
+if [ "$_swap_disk_total" -ge "$SWAP_RAM" ]; then
+    info "swap: ${_swap_disk_total}M of disk swap >= RAM - hibernation fits (add resume=<swap dev> [+ resume_offset= for a swapfile] to the kernel cmdline to actually use it)"
+else
+    info "swap: ${_swap_disk_total}M of disk swap < ${SWAP_RAM}M RAM - suspend-to-RAM only, no hibernation"
+fi

@@ -60,3 +60,7 @@ gtk4-dev = libgtk-4-dev
 libadwaita-dev = libadwaita-1-dev
 amneziavpn = source:provide_amneziavpn
 
+
+# zram-generator: Arch/Fedora/Void name it after the generator, Debian/Ubuntu
+# prefix it with systemd- (modules/swap.sh).
+zram-generator = systemd-zram-generator

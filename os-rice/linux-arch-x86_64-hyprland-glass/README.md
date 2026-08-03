@@ -32,7 +32,21 @@ un-validated reference until a real-machine / QEMU smoke test confirms the port:
   install + config copy are ported and container-verified, but a live
   compositor/display is needed to confirm end-to-end behavior.
 - **Un-ported system helpers** (no framework equivalent yet):
-  `setup-mirrors.sh`, `setup-swap.sh`.
+  `setup-mirrors.sh`.
+  (`setup-swap.sh` is gone: it is `os-rice/modules/swap.sh` now — it *measures*
+  the machine instead of hard-coding a 24G `/swapfile`. zram: full RAM at <=8G,
+  `min(RAM/2, 8G)` up to 24G, and **none at/above 24G** — a box that big never
+  thrashes, and a zram swap device only gets in the way of resuming from disk.
+  Disk swap: RAM-sized while RAM <= 32G so hibernation/hybrid-sleep fits (the
+  `resume=` cmdline is still yours to set), 16G flat above that — writing 64G+
+  on every sleep is not worth it. An existing swap **partition** counts in full
+  toward that target and only the remainder becomes a swapfile on the root fs,
+  capped at half the free space there. `vm.swappiness` follows: 100 (+
+  `page-cluster=0`) with zram, 10 without, so a game or a compile never stutters
+  into a disk swap it did not need. `test/unit/swap_sizing.sh`
+  covers the tiers/caps/skips against fixture `/proc/{meminfo,swaps}`; **the
+  real `mkswap`/`swapon`/zram restart is unverified** — a container guest is a
+  no-op by design (the host owns its memory), so this needs hardware or QEMU.)
   (`pulseaudio-to-pipewire.sh` is gone: it is now the pair of mirror-image
   modules `os-rice/modules/{pipewire,pulseaudio}.sh` — each removes the rival
   stack, then installs its own; `pipewire` is listed in the rice, `pulseaudio`
