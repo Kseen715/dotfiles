@@ -33,6 +33,7 @@ enable_service() { echo "SERVICE $*" >>"$OUT"; }
 github_latest() { [ "${TAG_RC:-0}" = 0 ] || return 1; echo 4.8.21.0; }
 osr_download() { echo "DL $1" >>"$OUT"; return "${DL_RC:-0}"; }
 # The extracted QtIFW installer: created only when the download "succeeded".
+# shellcheck disable=SC2154  # _av_tmp is set by the module under test
 tar() { [ "${DL_RC:-0}" = 0 ] || return 1; : >"$_av_tmp/AmneziaVPN.bin"; }
 
 # --- map rows: the source build is nobody's route; it is reached, not selected -

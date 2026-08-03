@@ -36,7 +36,7 @@ else
 fi
 # A shadowing pkg-config (brew/conda/nix) searches only its own prefix, so the
 # build must be handed the system .pc dirs explicitly.
-case "$(PKG_CONFIG_PATH= _osr_pkgconfig_path)" in
+case "$(PKG_CONFIG_PATH='' _osr_pkgconfig_path)" in
     "/usr/lib/$(uname -m)-linux-gnu/pkgconfig:"*) ok "pkgconfig path leads with the system multiarch dir" ;;
     *) fail "pkgconfig path missing the system multiarch dir" ;;
 esac
