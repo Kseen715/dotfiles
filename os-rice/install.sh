@@ -80,7 +80,6 @@ done
 osr_detect
 osr_resolve_user "$OSR_ARG_USER"
 info "distro=$OSR_DISTRO pkg=$OSR_PKG init=$OSR_INIT user=$OSR_USER home=$OSR_HOME"
-
 # Warm the sudo credential for the whole run so escalating steps don't each
 # prompt (§7). Best-effort and interactive-only: root-for-root and non-root
 # user-space rices (§8) need no sudo, and CI/containers run as root — so a
@@ -90,6 +89,42 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && [ -t 0 ]; then
         ( while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done ) &
     fi
 fi
+
+# Hardware lines: only report facets that were actually detected (§7). Printed
+# after the sudo warm-up because DMI (RAM type/speed/slots) needs root — retry
+# the probe now that a ticket may exist.
+if [ "${OSR_RAM_STICKS:-0}" -eq 0 ]; then
+    # Subshell: a failed install (no perms, no net) must not abort the run —
+    # the RAM line just degrades to the size from /proc/meminfo.
+    # Only worth installing where SMBIOS exists at all (the entry point is
+    # present-but-unreadable for non-root; most ARM SoCs have no DMI tables).
+    if ! command -v dmidecode >/dev/null 2>&1 &&
+       [ -e /sys/firmware/dmi/tables/smbios_entry_point ]; then
+        ( pkg_install dmidecode ) || true
+    fi
+    osr_detect_ram
+fi
+_hw=""
+if [ -n "$OSR_CPU_MODEL" ];         then _hw="cpu=$OSR_CPU_MODEL"; fi
+_hw="${_hw:+$_hw }arch=$OSR_CPU_ARCH"
+if [ "${OSR_CPU_CORES:-0}" -gt 0 ]; then _hw="$_hw cores=$OSR_CPU_CORES"; fi
+# Threads only when SMT actually doubles them up — "cores=4 threads=4" is noise.
+if [ "${OSR_CPU_THREADS:-0}" -gt "${OSR_CPU_CORES:-0}" ]; then _hw="$_hw threads=$OSR_CPU_THREADS"; fi
+if [ "$OSR_VIRT" != none ];         then _hw="$_hw virt=$OSR_VIRT"; fi
+info "$_hw"
+
+_ram=""
+if [ -n "$OSR_RAM_TOTAL" ];              then _ram="ram=$OSR_RAM_TOTAL"; fi
+if [ -n "$OSR_RAM_TYPE" ];               then _ram="${_ram:+$_ram }$OSR_RAM_TYPE"; fi
+if [ -n "$OSR_RAM_SPEED" ];              then _ram="${_ram:+$_ram }$OSR_RAM_SPEED"; fi
+if [ "${OSR_RAM_STICKS:-0}" -gt 0 ];     then _ram="$_ram sticks=$OSR_RAM_STICKS"; fi
+if [ "${OSR_RAM_CHANNELS:-0}" -gt 0 ];   then _ram="$_ram channels=$OSR_RAM_CHANNELS"; fi
+if [ -n "$_ram" ];                       then info "$_ram"; fi
+
+_accel=""
+if [ -n "$OSR_GPU_VENDOR" ]; then _accel="gpu=$OSR_GPU_VENDOR"; fi
+if [ -n "$OSR_NPU_VENDOR" ]; then _accel="${_accel:+$_accel }npu=$OSR_NPU_VENDOR"; fi
+if [ -n "$_accel" ];         then info "hwaccel: $_accel"; fi
 
 # --- resolve what to run: a rice manifest, or explicit --module names --------
 OSR_MODULES=""

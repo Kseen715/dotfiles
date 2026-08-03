@@ -88,16 +88,18 @@ osr_detect() {
     # Hardware facets (§7): absorb the legacy detect-cpu/virt/hwaccel bash into
     # bounded POSIX probes. Silent + command-guarded so a minimal box never errors.
     osr_detect_cpu
+    osr_detect_ram
     osr_detect_gpu
+    osr_detect_npu
     osr_detect_virt
 
     [ -n "$OSR_PKG" ] || warn "could not detect a package manager (OSR_DISTRO='$OSR_DISTRO')"
 }
 
 # --- hardware detection (POSIX port of linux-debian/src/detect-*.sh) ----------
-# Sets OSR_CPU_*, OSR_GPU_*, OSR_VIRT. Bounded to what rices consume (CPU id, GPU
-# vendor, virtualization); the legacy NPU/VPU/Mali SoC probing is intentionally
-# not ported (YAGNI — add a probe when a rice needs it). Primary paths use
+# Sets OSR_CPU_*, OSR_RAM_*, OSR_GPU_*, OSR_NPU_*, OSR_VIRT. Bounded to what
+# rices consume (CPU id, RAM, GPU/NPU vendor, virtualization); legacy Mali SoC probing is
+# intentionally not ported (YAGNI — add a probe when a rice needs it). Primary paths use
 # mockable commands (lscpu/lspci/systemd-detect-virt) so detection is testable;
 # the sysfs DRM dir is overridable via OSR_DRM for the same reason.
 
@@ -126,17 +128,24 @@ _osr_norm_gpu() {
 
 # osr_detect_cpu — vendor / model / arch / core count via lscpu (POSIX).
 osr_detect_cpu() {
-    OSR_CPU_VENDOR=""; OSR_CPU_MODEL=""; OSR_CPU_ARCH="$OSR_ARCH"; OSR_CPU_CORES=0
+    OSR_CPU_VENDOR=""; OSR_CPU_MODEL=""; OSR_CPU_ARCH="$OSR_ARCH"
+    OSR_CPU_CORES=0; OSR_CPU_THREADS=0
     if command -v lscpu >/dev/null 2>&1; then
         _cpu=$(lscpu 2>/dev/null)
         OSR_CPU_VENDOR=$(printf '%s\n' "$_cpu" | awk -F: '/^Vendor ID:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
         OSR_CPU_MODEL=$(printf '%s\n' "$_cpu"  | awk -F: '/^Model name:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
         _ca=$(printf '%s\n' "$_cpu"            | awk -F: '/^Architecture:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
         [ -n "$_ca" ] && OSR_CPU_ARCH="$_ca"
-        _cc=$(printf '%s\n' "$_cpu"            | awk -F: '/^CPU\(s\):/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
-        [ -n "$_cc" ] && OSR_CPU_CORES="$_cc"
+        # `CPU(s)` is the logical count (threads). Physical cores = sockets ×
+        # cores-per-socket; falls back to threads on a CPU without SMT info.
+        _ct=$(printf '%s\n' "$_cpu"            | awk -F: '/^CPU\(s\):/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
+        [ -n "$_ct" ] && OSR_CPU_THREADS="$_ct"
+        _cps=$(printf '%s\n' "$_cpu"           | awk -F: '/^Core\(s\) per socket:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
+        _sock=$(printf '%s\n' "$_cpu"          | awk -F: '/^Socket\(s\):/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
+        if [ -n "$_cps" ]; then OSR_CPU_CORES=$(( _cps * ${_sock:-1} )); fi
     fi
-    export OSR_CPU_VENDOR OSR_CPU_MODEL OSR_CPU_ARCH OSR_CPU_CORES
+    if [ "$OSR_CPU_CORES" -eq 0 ]; then OSR_CPU_CORES=$OSR_CPU_THREADS; fi
+    export OSR_CPU_VENDOR OSR_CPU_MODEL OSR_CPU_ARCH OSR_CPU_CORES OSR_CPU_THREADS
 }
 
 # osr_detect_gpu — GPU vendor list + count via lspci, falling back to sysfs DRM
@@ -173,6 +182,97 @@ osr_detect_gpu() {
     fi
     OSR_GPU_VENDOR=$_gv
     export OSR_GPU_VENDOR OSR_GPU_COUNT
+}
+
+# _osr_dmi17 <cmd...> — echo type-17 DMI records, or nothing. Unprivileged
+# dmidecode still prints its banner ("# dmidecode 3.6", "Scanning /dev/mem") on
+# stdout while failing, so emptiness is not a usable signal: demand a real
+# record instead, otherwise the sudo retry would never fire.
+_osr_dmi17() {
+    _o=$("$@" -t 17 2>/dev/null || true)
+    case "$_o" in *"Memory Device"*) printf '%s\n' "$_o" ;; esac
+}
+
+# osr_detect_ram — total size from /proc/meminfo (always readable), plus
+# type/speed/stick/channel counts from DMI type 17 when dmidecode can run
+# without prompting (root, or an already-cached sudo). Every field stays empty
+# when unavailable; callers omit what they didn't get. Paths are overridable
+# (OSR_MEMINFO) and dmidecode is a PATH command, so both halves are mockable.
+osr_detect_ram() {
+    OSR_RAM_TOTAL=""; OSR_RAM_TYPE=""; OSR_RAM_SPEED=""
+    OSR_RAM_STICKS=0; OSR_RAM_CHANNELS=0
+
+    _mi=${OSR_MEMINFO:-/proc/meminfo}
+    if [ -r "$_mi" ]; then
+        _kb=$(awk '/^MemTotal:/{print $2; exit}' "$_mi" 2>/dev/null || true)
+        # Two decimals, integer math only: MemTotal is always a bit under the
+        # installed size (firmware/kernel reservations), so 8GiB reads 7.19 —
+        # showing the fraction makes that visible instead of surprising.
+        if [ -n "$_kb" ]; then
+            OSR_RAM_TOTAL=$(printf '%d.%02dGiB' \
+                "$((_kb / 1048576))" "$(( (_kb % 1048576) * 100 / 1048576 ))")
+        fi
+    fi
+
+    _dmi=""
+    if command -v dmidecode >/dev/null 2>&1; then
+        _dmi=$(_osr_dmi17 dmidecode)
+        # Unprivileged: retry through a cached sudo ticket (-n never prompts).
+        if [ -z "$_dmi" ] && command -v sudo >/dev/null 2>&1; then
+            _dmi=$(_osr_dmi17 sudo -n dmidecode)
+        fi
+    fi
+    if [ -n "$_dmi" ]; then
+        # One pass over the type-17 records: a slot counts only once its Size
+        # line shows a number ("No Module Installed" = empty slot), and the
+        # Type/Speed/Locator lines that follow belong to that populated slot.
+        _r=$(printf '%s\n' "$_dmi" | awk '
+            /^Memory Device/ { pop = 0 }
+            $1 == "Size:" { pop = ($2 ~ /^[0-9]+$/); if (pop) sticks++ }
+            pop && $1 == "Type:" && type == "" && $2 ~ /^[A-Za-z]/ && $2 != "Unknown" { type = $2 }
+            pop && /Speed:/ { for (i = 1; i < NF; i++)
+                                  if ($i == "Speed:" && $(i+1) ~ /^[0-9]+$/ && $(i+1)+0 > speed) speed = $(i+1)+0 }
+            pop && /Locator:/ && match($0, /Channel ?[A-Za-z0-9]/) { ch[substr($0, RSTART + 7)] = 1 }
+            END { n = 0; for (k in ch) n++
+                  printf "%d %s %d %d\n", sticks+0, (type == "" ? "-" : type), speed+0, n }')
+        IFS=' ' read -r OSR_RAM_STICKS OSR_RAM_TYPE OSR_RAM_SPEED OSR_RAM_CHANNELS <<EOF
+$_r
+EOF
+        if [ "$OSR_RAM_TYPE" = "-" ]; then OSR_RAM_TYPE=""; fi
+        if [ "$OSR_RAM_SPEED" = 0 ]; then OSR_RAM_SPEED=""; else OSR_RAM_SPEED="${OSR_RAM_SPEED}MT/s"; fi
+    fi
+    export OSR_RAM_TOTAL OSR_RAM_TYPE OSR_RAM_SPEED OSR_RAM_STICKS OSR_RAM_CHANNELS
+}
+
+# osr_detect_npu — NPUs / dedicated accelerators. Kernel accel subsystem first
+# (/sys/class/accel, driven by intel_vpu / amdxdna), then lspci's "Processing
+# accelerators" class. Dir overridable via OSR_ACCEL for testability.
+osr_detect_npu() {
+    OSR_NPU_VENDOR=""; OSR_NPU_COUNT=0
+    for _af in "${OSR_ACCEL:-/sys/class/accel}"/accel*/device/vendor; do
+        [ -f "$_af" ] || continue
+        read -r _id < "$_af" 2>/dev/null || continue
+        case "$_id" in
+            0x8086) _n=Intel ;; 0x1022|0x1002) _n=AMD ;; 0x10de) _n=NVIDIA ;;
+            *)      _n=Unknown ;;
+        esac
+        OSR_NPU_VENDOR=$(_osr_uniq_add "$OSR_NPU_VENDOR" "$_n")
+        OSR_NPU_COUNT=$((OSR_NPU_COUNT + 1))
+    done
+    if [ -z "$OSR_NPU_VENDOR" ] && command -v lspci >/dev/null 2>&1; then
+        _lines=$(lspci -mm 2>/dev/null | grep -E "Processing accelerators" || true)
+        _oldifs=$IFS; IFS='
+'
+        for _l in $_lines; do
+            [ -n "$_l" ] || continue
+            _vendor=$(printf '%s' "$_l" | cut -d'"' -f6)
+            _dev=$(printf '%s' "$_l" | cut -d'"' -f8)
+            OSR_NPU_VENDOR=$(_osr_uniq_add "$OSR_NPU_VENDOR" "$(_osr_norm_gpu "$_vendor $_dev")")
+            OSR_NPU_COUNT=$((OSR_NPU_COUNT + 1))
+        done
+        IFS=$_oldifs
+    fi
+    export OSR_NPU_VENDOR OSR_NPU_COUNT
 }
 
 # osr_detect_virt — virtualization/container tech; prefers systemd-detect-virt,

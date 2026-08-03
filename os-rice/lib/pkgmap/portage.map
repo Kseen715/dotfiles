@@ -7,3 +7,4 @@
 
 build = sys-devel/gcc
 dev-headers = dev-libs/openssl
+dmidecode = sys-apps/dmidecode
