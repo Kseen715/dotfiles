@@ -22,7 +22,7 @@ gpu_case() {
     : >"$OUT"
     mkfake lspci "printf '01:00.0 \"VGA compatible controller\" \"%s\" \"%s\" -ra1 \"Sub\" \"Device 1\"\n' '$2' '$1'"
     osr_detect_gpu
-    . "$OSR_ROOT/modules/gpu-drivers.sh"
+    . "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
 }
 
 # --- chip codename extraction (detect.sh) ------------------------------------
@@ -107,7 +107,7 @@ mkfake lspci 'cat <<EOF
 01:00.0 "3D controller" "NVIDIA Corporation" "AD107M [GeForce RTX 4060 Max-Q]" -ra1 "Sub" "Device 2"
 EOF'
 osr_detect_gpu
-. "$OSR_ROOT/modules/gpu-drivers.sh"
+. "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
 assert_contains "$OUT" 'vulkan-intel' "hybrid laptop: Intel iGPU served"
 assert_contains "$OUT" 'nvidia-open-dkms' "hybrid laptop: NVIDIA dGPU served"
 
@@ -115,7 +115,7 @@ assert_contains "$OUT" 'nvidia-open-dkms' "hybrid laptop: NVIDIA dGPU served"
 gpu_case 'Navi 33 [Radeon RX 7600]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
 : >"$OUT"
 OSR_PKG=apt
-. "$OSR_ROOT/modules/gpu-drivers.sh"
+. "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
 assert_contains "$OUT" 'vulkan-radeon' "module still runs off Arch instead of skipping"
 OSR_PKG=pacman
 

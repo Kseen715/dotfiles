@@ -55,7 +55,7 @@ RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
 mkdir -p "$RICE/config/wezterm"
 printf '# RICE-PALETTE-MARKER\n[colors]\nbackground = "#123456"\n' >"$RICE/config/wezterm/wezterm-theme.toml"
 
-. "$OSR_ROOT/modules/wezterm.sh"
+. "$OSR_ROOT/modules/wezterm.sh" >/dev/null 2>&1
 
 assert_contains "$OUT" 'PKG wezterm unzip fontconfig' "installs wezterm + font deps via pkg_install"
 assert_contains "$OSR_HOME/.wezterm.lua" 'wezterm.config_builder' "base .wezterm.lua installed (dotfiles-owned)"
@@ -69,7 +69,7 @@ rm -rf "$OSR_HOME" "$RICE"
 OSR_HOME=$(mktemp -d); export OSR_HOME
 RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/wezterm
 
-. "$OSR_ROOT/modules/wezterm.sh"
+. "$OSR_ROOT/modules/wezterm.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/wezterm/colors/osr-rice.toml" '^name = "osr-rice"$' \
     "dotfiles default palette used when rice ships none"

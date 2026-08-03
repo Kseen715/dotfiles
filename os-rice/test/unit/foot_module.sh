@@ -38,7 +38,7 @@ RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
 mkdir -p "$RICE/config/foot"
 printf '[colors-dark]\n# RICE-PALETTE-MARKER\n' >"$RICE/config/foot/foot-colors.ini"
 
-. "$OSR_ROOT/modules/foot.sh"
+. "$OSR_ROOT/modules/foot.sh" >/dev/null 2>&1
 
 assert_contains "$OUT" 'PKG foot unzip fontconfig' "installs foot + font deps via pkg_install"
 assert_contains "$OSR_HOME/.config/foot/foot.ini" 'JetBrainsMono' "foot.ini installed (dotfiles-owned base)"
@@ -54,7 +54,7 @@ FAKE_FOOT_VERSION=1.25.0
 OSR_HOME=$(mktemp -d); export OSR_HOME
 RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/foot
 
-. "$OSR_ROOT/modules/foot.sh"
+. "$OSR_ROOT/modules/foot.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" 'regular0' "dotfiles default palette used when rice ships none"
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" '^\[colors\]$' "palette section downgraded for foot < 1.26"

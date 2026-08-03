@@ -32,7 +32,7 @@ RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
 mkdir -p "$RICE/config/ghostty"
 printf '# RICE-PALETTE-MARKER\nbackground = #123456\n' >"$RICE/config/ghostty/ghostty-theme"
 
-. "$OSR_ROOT/modules/ghostty.sh"
+. "$OSR_ROOT/modules/ghostty.sh" >/dev/null 2>&1
 
 assert_contains "$OUT" 'PKG ghostty unzip fontconfig' "installs ghostty + font deps via pkg_install"
 assert_contains "$OSR_HOME/.config/ghostty/config" 'JetBrainsMono' "config installed (dotfiles-owned base)"
@@ -48,7 +48,7 @@ rm -rf "$OSR_HOME" "$RICE"
 OSR_HOME=$(mktemp -d); export OSR_HOME
 RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/ghostty
 
-. "$OSR_ROOT/modules/ghostty.sh"
+. "$OSR_ROOT/modules/ghostty.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/ghostty/ghostty-theme" '^palette = 0=' "dotfiles default palette used when rice ships none"
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
