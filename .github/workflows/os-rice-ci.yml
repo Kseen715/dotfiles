@@ -7,6 +7,9 @@ on:
   pull_request: # every PR (feature-branch commits land here, not in push)
   workflow_call: # lets release.yml run this as a prerequisite gate
 
+permissions:
+  contents: read
+
 jobs:
   # Fast, no-container gate: POSIX lint (dash -n + shellcheck) + unit tests.
   lint-and-unit:
