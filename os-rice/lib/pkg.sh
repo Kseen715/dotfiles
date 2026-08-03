@@ -229,6 +229,7 @@ pkg_install() {
     # Pass 2: dispatch provider-tagged specs, in original manifest order.
     for _name in "$@"; do
         _rhs=$(_pkgmap_one "$_name")
+        # shellcheck disable=SC2086  # script: intentionally word-splits into args
         case "$(_spec_method "$_rhs")" in
             native)  ;;  # already handled in pass 1
             script)  _via_script "$_name" ${_rhs#script:} ;;

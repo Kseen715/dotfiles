@@ -25,9 +25,17 @@ for f in $SH_FILES; do
 done
 
 if command -v shellcheck >/dev/null 2>&1; then
+    # Excluded codes are structural false positives for this codebase, not
+    # findings to fix: SC1090/SC1091 dynamic sources; SC1003 the ASCII spinner
+    # frames '|/-\'; SC1087 `$var[` inside a bracket-expression regex (sh has
+    # no arrays); SC2016 the single-quoted in-container script in matrix.sh;
+    # SC2034 vars a sourced lib reads (NO_COLOR, OSR_*); SC2044 find loops over
+    # repo-controlled paths; SC2015 the `grep -q X && ok || fail` test idiom;
+    # SC2329 module stubs called indirectly by the code under test.
+    SC_EXCLUDE=SC1090,SC1091,SC1003,SC1087,SC2016,SC2034,SC2044,SC2015,SC2329
     echo "shellcheck -s sh:"
     for f in $SH_FILES; do
-        if shellcheck -s sh -e SC1090,SC1091 "$f" >/dev/null 2>&1; then
+        if shellcheck -s sh -e "$SC_EXCLUDE" "$f" >/dev/null 2>&1; then
             printf '  ok   %s\n' "${f#"$REPO"/}"
         else
             printf '  WARN %s (shellcheck findings)\n' "${f#"$REPO"/}"
@@ -47,6 +55,7 @@ echo "ASCII-only program output (non-comment lines):"
 # (matrix.sh legitimately keeps em-dashes in trailing comments).
 ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
 ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" -name '*.sh' 2>/dev/null)"
+# shellcheck disable=SC2086  # intentional word-split into a file list
 _ascii_hits=$(LC_ALL=C awk '
     /^[[:space:]]*#/ { next }
     /[\200-\377]/    { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0 }
