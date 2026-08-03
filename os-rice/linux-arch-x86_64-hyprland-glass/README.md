@@ -15,8 +15,13 @@ legacy source deleted. The files kept here are the ones whose **correctness can
 only be validated on real hardware or a VM** (per DESIGN §9), so they stay as an
 un-validated reference until a real-machine / QEMU smoke test confirms the port:
 
-- **GPU / kernel / VM**: `modules/gpu-drivers.sh` (+ `.md`),
-  `modules/{dkms,cpu-microcodes,vmware-init,waydroid}.sh`. (Hardware detection
+- **GPU / kernel / VM**: `modules/{dkms,cpu-microcodes,vmware-init,waydroid}.sh`.
+  (`gpu-drivers.sh` is gone: the whole generation matrix — NVIDIA
+  open/570xx/470xx/390xx/340xx/nouveau, AMD amdgpu/r600/r300/amber, Intel
+  iris/crocus/amber — now lives in `os-rice/modules/gpu-drivers.sh` with
+  `test/unit/gpu_drivers.sh` covering it per family. `gpu-drivers.md` stays: its
+  per-driver-version reliability notes are hardware findings, not code.)
+  (Hardware detection
   itself now lives only in `lib/detect.sh`; the legacy `src/detect-gpu.sh` and
   `linux-debian/src/detect-hwaccel.sh` probes are deleted.)
 - **Display-manager / compositor runtime**: `modules/{sddm,hyprland}.sh` and the

@@ -150,9 +150,15 @@ osr_detect_cpu() {
 
 # osr_detect_gpu — GPU vendor list + count via lspci, falling back to sysfs DRM
 # PCI vendor IDs (works with no lspci, e.g. minimal containers/headless).
+#
+# Also records the chip *codename* per device in OSR_GPU_DEVICES (newline-
+# separated "vendor|chip" rows). The vendor alone can't pick a driver: an NVIDIA
+# card needs open-dkms, the 570xx/470xx/390xx/340xx legacy branch or nouveau
+# depending on generation, and the codename ("GA104", "Navi 22", "CAYMAN") is the
+# only thing lspci gives us to tell them apart. Read it with osr_gpu_chip().
 osr_detect_gpu() {
-    OSR_GPU_VENDOR=""; OSR_GPU_MODEL=""; OSR_GPU_COUNT=0
-    _gv=""; _gm=""
+    OSR_GPU_VENDOR=""; OSR_GPU_MODEL=""; OSR_GPU_COUNT=0; OSR_GPU_DEVICES=""
+    _gv=""; _gm=""; _gd=""
     if command -v lspci >/dev/null 2>&1; then
         _lines=$(lspci -mm 2>/dev/null | grep -E "VGA compatible controller|3D controller" || true)
         _oldifs=$IFS; IFS='
@@ -172,6 +178,13 @@ osr_detect_gpu() {
             # Don't stutter "Intel Intel Arc A770".
             case "$_model" in "$_vt"*) ;; *) _model="$_vt $_model" ;; esac
             _gm="${_gm:+$_gm, }$_model"
+            # The codename is what's left of the bracket ("Navi 22 [Radeon RX
+            # 6700 XT]" -> "Navi 22"); unbracketed strings are already one
+            # ("Cezanne", "Device 2482" for a chip this lspci is too old to name).
+            _chip=$_dev
+            case "$_chip" in *" ["*) _chip=${_chip%% [*} ;; esac
+            _gd="${_gd:+$_gd
+}$_vt|$_chip"
             OSR_GPU_COUNT=$((OSR_GPU_COUNT + 1))
         done
         IFS=$_oldifs
@@ -187,12 +200,24 @@ osr_detect_gpu() {
             esac
             [ -n "$_n" ] || continue
             _gv=$(_osr_uniq_add "$_gv" "$_n")
+            # sysfs knows the vendor id, never the codename — empty chip, which
+            # every family classifier reads as "unknown" -> current-gen driver.
+            _gd="${_gd:+$_gd
+}$_n|"
             OSR_GPU_COUNT=$((OSR_GPU_COUNT + 1))
         done
     fi
     OSR_GPU_VENDOR=$_gv
     OSR_GPU_MODEL=$_gm
-    export OSR_GPU_VENDOR OSR_GPU_MODEL OSR_GPU_COUNT
+    OSR_GPU_DEVICES=$_gd
+    export OSR_GPU_VENDOR OSR_GPU_MODEL OSR_GPU_COUNT OSR_GPU_DEVICES
+}
+
+# osr_gpu_chip <vendor> — echo the chip codename of the first <vendor> GPU, or
+# "" when unknown (no lspci, or a device lspci couldn't name).
+osr_gpu_chip() {
+    printf '%s\n' "${OSR_GPU_DEVICES:-}" \
+        | awk -F'|' -v v="$1" '$1 == v { print $2; exit }'
 }
 
 # _osr_dmi17 <cmd...> — echo type-17 DMI records, or nothing. Unprivileged

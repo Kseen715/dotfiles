@@ -79,7 +79,10 @@ done
 # --- detection + identity ----------------------------------------------------
 osr_detect
 osr_resolve_user "$OSR_ARG_USER"
-info "distro=$OSR_DISTRO pkg=$OSR_PKG init=$OSR_INIT user=$OSR_USER home=$OSR_HOME"
+# VERSION_ID is absent on rolling releases (Arch/Void/Gentoo) — the ${:+} just
+# drops the suffix there, no special-casing needed.
+info "distro=$OSR_DISTRO${OSR_VERSION_ID:+-$OSR_VERSION_ID} pkg=$OSR_PKG init=$OSR_INIT user=$OSR_USER home=$OSR_HOME"
+info "kernel=$(uname -r)"
 # Warm the sudo credential for the whole run so escalating steps don't each
 # prompt (§7). Best-effort and interactive-only: root-for-root and non-root
 # user-space rices (§8) need no sudo, and CI/containers run as root — so a
