@@ -87,3 +87,8 @@ webkit2gtk-4.1 = libwebkit2gtk41
 xorg-xmodmap = xmodmap
 # Void names the LDAC codec library after the upstream project.
 libldac = ldacBT
+
+# Void drops the API version from glib's package name; the `gsettings` binary
+# modules/evolution.sh drives lives in it, same as Arch's glib2. `dconf` and the
+# evolution trio keep their upstream names and need no rows.
+glib2 = glib

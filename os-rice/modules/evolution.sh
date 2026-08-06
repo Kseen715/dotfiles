@@ -20,9 +20,21 @@
 #
 # evolution-ews is the Exchange/Office365 backend — the single most common reason
 # an account cannot be added at all, and it is a separate package everywhere.
+#
+# The two support packages are what §1 below actually runs on, and they are the
+# reason this list is not just "evolution":
+#
+#   dconf   the GSettings *backend*. Without it GSettings falls back to the
+#           memory backend and every `gsettings set` is discarded at logout.
+#   glib2   ships the `gsettings` binary itself. Arch/Fedora call it glib2, Void
+#           and Alpine glib, Debian/Ubuntu split it out as libglib2.0-bin — and
+#           Debian has no `dconf` binary package at all, only dconf-cli +
+#           dconf-gsettings-backend. All of that is absorbed by pkgmap rows (§1),
+#           so this list stays one list.
 
 run_step "Installing Evolution" pkg_install \
-    evolution evolution-data-server evolution-ews dconf gsettings-desktop-schemas
+    evolution evolution-data-server evolution-ews \
+    dconf glib2 gsettings-desktop-schemas
 
 # --- 1. GSettings -------------------------------------------------------------
 #

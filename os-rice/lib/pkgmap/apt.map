@@ -127,3 +127,16 @@ gvfs-afc = gvfs-backends
 # vscode has no Debian-archive package (Microsoft ships its own apt repo), so
 # there is deliberately no row: pkg_install would fail loudly rather than
 # install something that only looks like VS Code.
+
+# --- evolution (modules/evolution.sh) -----------------------------------------
+# The evolution/evolution-data-server/evolution-ews trio keeps its upstream names
+# in Debian main (bullseye through trixie, jammy through resolute), so only the
+# two support packages need rows.
+#
+# There is no binary package called `dconf` on Debian — the source package splits
+# into dconf-cli (the tool) and dconf-gsettings-backend (the settings backend the
+# module's `gsettings set` calls need in order to persist anything).
+dconf = dconf-cli dconf-gsettings-backend
+# Debian keeps the GLib command-line tools out of the runtime library package, so
+# nothing pulls in `gsettings` implicitly the way glib2 does on Arch/Fedora.
+glib2 = libglib2.0-bin
