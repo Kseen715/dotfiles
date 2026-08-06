@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/pacman-multilib.sh — enable Arch's [multilib] repo (needed for 32-bit
 # packages: steam, lib32-*). ONE copy, POSIX (was .../modules/pacman-multilib.sh).
 # Arch-specific by nature; idempotent — the repo is added only once, then the

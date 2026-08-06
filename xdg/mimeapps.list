@@ -1,0 +1,24 @@
+# ~/.config/mimeapps.list — seeded once by modules/xdg.sh, then yours.
+# Without this file (and without desktop-file-utils' database) "Open With" is
+# empty and xdg-open falls back to whatever it can guess.
+
+[Default Applications]
+inode/directory=thunar.desktop
+text/plain=micro.desktop
+text/html=firefox.desktop
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+x-scheme-handler/about=firefox.desktop
+x-scheme-handler/unknown=firefox.desktop
+application/pdf=org.pwmt.zathura.desktop
+image/png=nsxiv.desktop
+image/jpeg=nsxiv.desktop
+image/gif=nsxiv.desktop
+image/webp=nsxiv.desktop
+video/mp4=mpv.desktop
+video/x-matroska=mpv.desktop
+audio/mpeg=mpv.desktop
+audio/flac=mpv.desktop
+application/zip=xarchiver.desktop
+application/x-tar=xarchiver.desktop
+application/x-7z-compressed=xarchiver.desktop

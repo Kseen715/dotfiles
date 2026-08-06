@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/kate.sh — Kate text editor + dotfiles config. ONE copy, POSIX
 # (was .../apps/kate.sh). katerc is dotfiles-owned config (§5).
 run_step "Installing Kate" pkg_install kate

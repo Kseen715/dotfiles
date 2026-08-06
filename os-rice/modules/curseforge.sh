@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/curseforge.sh — CurseForge (AUR). POSIX port of .../apps/curseforge.sh.
 # CurseForge's PKGBUILD ships broken checksums, so it needs helper flags the
 # generic aur: provider doesn't carry (--nosign + makepkg --skipchecksums) —

@@ -1,0 +1,8 @@
+# rosemuted palette — rice-owned colors composed onto the shared starship base
+# (§6). The ONLY per-rice starship difference: prompt structure/symbols live in
+# the dotfiles base (starship/starship.toml).
+[palettes.theme]
+accent = "#d98cae"
+success = "#9fb08a"
+error = "#e2655e"
+secondary = "#d9b48f"

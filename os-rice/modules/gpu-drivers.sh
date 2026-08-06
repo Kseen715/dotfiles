@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/gpu-drivers.sh — GPU drivers + Vulkan/OpenCL/VA-API stack for every
 # detected GPU, across every generation the Arch repos and AUR still carry:
 # NVIDIA Blackwell..Curie, AMD Navi..R100, Intel Xe..gen3, plus the VM vendors.

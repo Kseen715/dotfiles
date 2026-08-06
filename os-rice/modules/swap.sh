@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/swap.sh — memory: zram first, disk swap only for the rest. ONE copy,
 # POSIX (was .../linux-arch-x86_64-hyprland-glass/setup-swap.sh, which hard-coded
 # a 24G /swapfile regardless of RAM, free disk, or the swap already present).

@@ -121,6 +121,127 @@ unset _f
 EOF
 }
 
+# install_xprofile_loader <dir> <xprofile> — own a marked loader block in
+# ~/.xprofile that sources <dir>/*.sh in lexical order (§5), the same shape as
+# install_zsh_loader. ~/.xprofile is read by every display manager and by
+# ~/.xinitrc, and it is the only place session-wide env (XDG_CURRENT_DESKTOP,
+# toolkit theme vars, Java/Firefox workarounds) reaches GUI apps started by the
+# WM. It is a single unavoidable file, so os-rice owns only its block and the
+# real content lives in layered drop-ins:
+#
+#   00-env.sh   user/machine  seeded once
+#   10-*.sh     dotfiles      session env, overwritten on update
+#   90-theme.sh rice          toolkit theme vars, swapped on rice switch
+#   99-local.sh machine       seeded empty, never touched
+install_xprofile_loader() {
+    _ix_dir=$1
+    _ix_file=$2
+    ensure_block "$_ix_file" "xprofile-loader" <<EOF
+for _f in "$_ix_dir"/*.sh; do [ -r "\$_f" ] && . "\$_f"; done
+unset _f
+EOF
+}
+
+# compose_json_config <base> <rice-fragment> <dst> — build an installed JSON
+# config from the dotfiles base with the rice's keys merged over it (§5 by
+# composition, same idea as compose_starship_config).
+#
+# Several editors (VS Code, micro, ...) keep everything in one settings.json and
+# have no include mechanism, so the ownership split cannot be two files on disk:
+# the base carries behaviour, the rice carries the theme keys, and the installed
+# file is generated output. Edit the base or the fragment, never the result.
+#
+# Falls back to installing the base unthemed when python3 is missing, because a
+# missing merge tool is a cosmetic loss, not a reason to fail a rice (§9).
+compose_json_config() {
+    _cj_base=$1
+    _cj_frag=$2
+    _cj_dst=$3
+    [ -f "$_cj_base" ] || error "compose_json_config: base not found: $_cj_base"
+    if [ ! -f "$_cj_frag" ] || ! command -v python3 >/dev/null 2>&1; then
+        [ -f "$_cj_frag" ] || info "no rice fragment for $(basename "$_cj_dst") - installing the base"
+        command -v python3 >/dev/null 2>&1 \
+            || warn "python3 not available - installing $(basename "$_cj_dst") without the rice theme"
+        install_layer "$_cj_base" "$_cj_dst"
+        return 0
+    fi
+    _cj_tmp="${TMPDIR:-/tmp}/osr-json-$$.json"
+    python3 - "$_cj_base" "$_cj_frag" > "$_cj_tmp" <<'PYEOF'
+import json, sys
+base = json.load(open(sys.argv[1]))
+base.update(json.load(open(sys.argv[2])))
+json.dump(base, sys.stdout, indent=2, ensure_ascii=False)
+sys.stdout.write("\n")
+PYEOF
+    backup_copy "$_cj_tmp" "$_cj_dst"
+    rm -f "$_cj_tmp"
+}
+
+# --- Mozilla profiles (Firefox / Thunderbird) --------------------------------
+#
+# Mozilla apps keep their settings in a randomly-named profile directory, so
+# there is no fixed path to install a layer into: `install_layer` has nothing to
+# aim at until a profile exists. These two helpers resolve the real directories
+# and write the same two files into each one.
+#
+#   user.js          prefs applied at every start (ours, overwrite-on-update)
+#   chrome/userChrome.css  the theme layer (rice-owned, swapped on switch §6)
+#
+# userChrome.css only takes effect with
+# toolkit.legacyUserProfileCustomizations.stylesheets=true, which the shipped
+# user.js sets — the two must be installed together or the theme silently does
+# nothing.
+
+# osr_mozilla_profiles <app-dir> — echo every profile directory under <app-dir>
+# (e.g. ~/.mozilla/firefox). Reads profiles.ini when present, and falls back to
+# globbing *.default* so a profile created before profiles.ini is written still
+# gets the layer. Echoes nothing when the app has never been run.
+osr_mozilla_profiles() {
+    _mp_root=$1
+    [ -d "$_mp_root" ] || return 0
+    if [ -f "$_mp_root/profiles.ini" ]; then
+        # `Path=` is relative to the root unless IsRelative=0; absolute paths
+        # start with / and are echoed unchanged.
+        sed -n 's/^[[:space:]]*Path=//p' "$_mp_root/profiles.ini" | while read -r _mp_p; do
+            case "$_mp_p" in
+                /*) [ -d "$_mp_p" ] && printf '%s\n' "$_mp_p" ;;
+                *)  [ -d "$_mp_root/$_mp_p" ] && printf '%s\n' "$_mp_root/$_mp_p" ;;
+            esac
+        done
+    else
+        for _mp_d in "$_mp_root"/*.default* "$_mp_root"/*.dev-edition*; do
+            [ -d "$_mp_d" ] && printf '%s\n' "$_mp_d"
+        done
+    fi
+}
+
+# install_mozilla_layer <app-dir> <user.js|""> <userChrome.css|""> — install the
+# prefs and/or theme into every profile of a Mozilla app. A profile-less app
+# (never launched) is not an error: it warns and returns, because the alternative
+# is guessing a profile name that the app would then ignore.
+install_mozilla_layer() {
+    _ml_root=$1
+    _ml_js=$2
+    _ml_css=$3
+    _ml_n=0
+    for _ml_p in $(osr_mozilla_profiles "$_ml_root"); do
+        _ml_n=$((_ml_n + 1))
+        if [ -n "$_ml_js" ] && [ -f "$_ml_js" ]; then
+            install_layer "$_ml_js" "$_ml_p/user.js"
+        fi
+        if [ -n "$_ml_css" ] && [ -f "$_ml_css" ]; then
+            as_user mkdir -p "$_ml_p/chrome"
+            install_layer "$_ml_css" "$_ml_p/chrome/userChrome.css"
+        fi
+    done
+    if [ "$_ml_n" -eq 0 ]; then
+        warn "no profile under $_ml_root yet - launch the app once, then rerun this module"
+    else
+        info "applied Mozilla layer to $_ml_n profile(s) under $_ml_root"
+    fi
+    return 0
+}
+
 # compose_starship_config <base> <palette-fragment> <dst> — build the installed
 # starship.toml from the shared dotfiles base + a rice's palette. starship.toml
 # has no include mechanism (unlike foot.ini), so the §5 base/theme split is

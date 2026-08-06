@@ -64,3 +64,66 @@ amneziavpn = source:provide_amneziavpn
 # zram-generator: Arch/Fedora/Void name it after the generator, Debian/Ubuntu
 # prefix it with systemd- (modules/swap.sh).
 zram-generator = systemd-zram-generator
+
+# --- i3/X11 desktop (rices/void-i3-rosemuted) ---------------------------------
+# The i3 rice is validated on Void; these rows are name mapping only, so the same
+# manifest resolves on Debian/Ubuntu too. Debian bundles most X client utilities
+# into two packages, which is exactly the one-to-many case pkgmap exists for (§1).
+xorg-xinit = xinit
+xorg-xrandr = x11-xserver-utils
+xorg-xset = x11-xserver-utils
+xorg-xsetroot = x11-xserver-utils
+xorg-xprop = x11-utils
+xorg-xev = x11-utils
+xorg-xkill = x11-utils
+xorg-xdpyinfo = x11-utils
+xorg-xinput = xinput
+xorg-xauth = xauth
+xorg-fonts-misc = xfonts-base
+gnome-disks = gnome-disk-utility
+gdk-pixbuf2 = libgdk-pixbuf-2.0-0
+vulkan-icd-loader = libvulkan1
+libva-mesa-driver = mesa-va-drivers
+mesa-vdpau = mesa-vdpau-drivers
+noto-fonts = fonts-noto
+noto-fonts-emoji = fonts-noto-color-emoji
+noto-fonts-cjk = fonts-noto-cjk
+ttf-liberation = fonts-liberation
+ttf-dejavu = fonts-dejavu
+gstreamer = libgstreamer1.0-0
+gst-plugins-base = gstreamer1.0-plugins-base
+gst-plugins-good = gstreamer1.0-plugins-good
+gst-plugins-bad = gstreamer1.0-plugins-bad
+gst-plugins-ugly = gstreamer1.0-plugins-ugly
+gst-libav = gstreamer1.0-libav
+gst-plugin-pipewire = gstreamer1.0-pipewire
+gvfs-nfs = gvfs-backends
+gvfs-smb = gvfs-backends
+gvfs-mtp = gvfs-backends
+gvfs-gphoto2 = gvfs-backends
+gvfs-afc = gvfs-backends
+gvfs-goa = gvfs-backends
+polkit-gnome = policykit-1-gnome
+network-manager-applet = network-manager-gnome
+lm_sensors = lm-sensors
+i3lock-color = i3lock
+gtk-dark-theme = gnome-themes-extra
+libva-utils = vainfo
+
+# Soname-versioned Debian library packages (libpoppler-glib8, libheif1, libjxl0.11,
+# ...) are deliberately NOT mapped here: the name changes with every release and
+# the thumbnailers/pixbuf loaders pull them in as dependencies anyway.
+
+# --- i3 desktop, second pass (name mapping only) ------------------------------
+xorg-xmodmap = x11-xserver-utils
+p7zip = p7zip-full
+unrar = unrar-free
+sane = sane-utils
+gutenprint = printer-driver-gutenprint
+cups-pdf = printer-driver-cups-pdf
+cpupower = linux-cpupower
+lm_sensors = lm-sensors
+gvfs-afc = gvfs-backends
+# vscode has no Debian-archive package (Microsoft ships its own apt repo), so
+# there is deliberately no row: pkg_install would fail loudly rather than
+# install something that only looks like VS Code.

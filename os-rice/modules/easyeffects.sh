@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/easyeffects.sh — EasyEffects audio effects + its LADSPA/LV2 plugin set.
 # ONE copy, POSIX (was .../modules/easyeffects.sh). Two AUR plugins (mda-lv2,
 # libdeep-filter-ladspa) come through the aur: rows in pacman.map.

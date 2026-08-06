@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/git-base.sh — git + core CLI tools (git, wget, editors, man). The base
 # every later module and the user relies on. Native everywhere; ONE copy, POSIX
 # (was linux-arch-x86_64-hyprland-glass/modules/git.sh, bash+pacman).

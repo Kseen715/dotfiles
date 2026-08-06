@@ -1,0 +1,34 @@
+/* gtk.css — rice-owned GTK4 accents (void-i3-rosemuted). Swapped on switch (§6).
+ *
+ * Adwaita-dark supplies the neutral chrome; this file only re-tints the parts
+ * that carry the accent colour, which is why no GTK theme has to be vendored.
+ * @define-color overrides work on Adwaita because it reads these named colours.
+ */
+
+@define-color theme_selected_bg_color #d98cae;
+@define-color theme_selected_fg_color #1c1f20;
+@define-color accent_bg_color #d98cae;
+@define-color accent_fg_color #1c1f20;
+@define-color accent_color #d98cae;
+@define-color theme_bg_color #1c1f20;
+@define-color theme_base_color #24282a;
+@define-color theme_fg_color #e8dfe1;
+@define-color theme_text_color #e8dfe1;
+@define-color insensitive_fg_color #8d8386;
+@define-color borders #34393b;
+@define-color warning_color #d9b48f;
+@define-color error_color #e2655e;
+@define-color success_color #9fb08a;
+@define-color destructive_color #e2655e;
+
+/* Focus rings read as grey on Adwaita-dark; make them the accent. */
+*:focus-visible {
+    outline-color: alpha(@accent_color, 0.6);
+}
+
+/* Selection inside text views/entries, which does not follow the named colour
+ * on every widget. */
+selection {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}

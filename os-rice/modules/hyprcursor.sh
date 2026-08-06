@@ -1,3 +1,4 @@
+# session: wayland
 # modules/hyprcursor.sh — hyprcursor + Bibata cursor theme (AUR). ONE copy, POSIX
 # (was .../modules/hyprcursor.sh). The theme is copied into the user's icon dir;
 # gsettings/flatpak overrides are best-effort (only when those tools exist).

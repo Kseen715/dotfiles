@@ -1,0 +1,73 @@
+# dunst/dunstrc — dotfiles-owned base layer (os-rice §5).
+# Geometry and behaviour only. Colors, fonts and the frame live in
+# ~/.config/dunst/dunstrc.d/90-theme.conf, which the rice owns and dunst merges
+# after this file (later files win).
+
+[global]
+    monitor = 0
+    follow = mouse
+
+    width = (280, 440)
+    height = (0, 300)
+    origin = top-right
+    offset = (16, 16)
+    scale = 0
+    notification_limit = 8
+
+    progress_bar = true
+    progress_bar_height = 8
+    progress_bar_frame_width = 0
+    progress_bar_min_width = 180
+    progress_bar_max_width = 400
+
+    indicate_hidden = yes
+    separator_height = 6
+    padding = 14
+    horizontal_padding = 16
+    text_icon_padding = 12
+    frame_width = 2
+    gap_size = 6
+    idle_threshold = 120
+
+    markup = full
+    format = "<b>%s</b>\n%b"
+    alignment = left
+    vertical_alignment = center
+    show_age_threshold = 60
+    ellipsize = middle
+    ignore_newline = no
+    stack_duplicates = true
+    hide_duplicate_count = false
+    show_indicators = no
+
+    enable_recursive_icon_lookup = true
+    icon_theme = "Papirus-Dark, Adwaita"
+    icon_position = left
+    min_icon_size = 24
+    max_icon_size = 48
+
+    sticky_history = yes
+    history_length = 40
+
+    dmenu = /usr/bin/rofi -dmenu -p dunst
+    browser = /usr/bin/xdg-open
+    always_run_script = true
+    title = Dunst
+    class = Dunst
+    corner_radius = 12
+    ignore_dbusclose = false
+    force_xwayland = false
+    force_xinerama = false
+
+    mouse_left_click = do_action, close_current
+    mouse_middle_click = close_all
+    mouse_right_click = close_current
+
+[urgency_low]
+    timeout = 5
+
+[urgency_normal]
+    timeout = 10
+
+[urgency_critical]
+    timeout = 0

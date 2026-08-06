@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/cpu-microcodes.sh — CPU microcode package for the detected vendor. ONE
 # copy, POSIX (was .../modules/cpu-microcodes.sh). Uses OSR_CPU_VENDOR from
 # detect.sh. Hardware-dependent: correct only on the machine it runs on (§9).

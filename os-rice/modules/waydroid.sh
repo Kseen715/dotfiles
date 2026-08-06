@@ -1,3 +1,4 @@
+# session: wayland
 # modules/waydroid.sh — Waydroid (Android in a container) + GApps image + the
 # ARM translation layer for the detected CPU. POSIX port of .../modules/waydroid.sh.
 # Needs a real kernel (binder), systemd, and network -> validated on hardware,

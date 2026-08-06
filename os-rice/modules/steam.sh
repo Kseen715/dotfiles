@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/steam.sh — Steam (native, from the [multilib] repo — enable it with the
 # pacman-multilib module first). POSIX port of .../apps/steam.sh. Adds the
 # Wayland-scaling env var to the user's .bashrc (idempotent via ensure_line) and,

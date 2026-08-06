@@ -1,5 +1,21 @@
 # servicemap — logical service name -> real unit name. Rows only where a name
 # actually differs across inits (§8); unlisted names pass through unchanged.
 #
-# Example (uncomment/adjust per target init as needed):
-# NetworkManager = networkmanager
+# Format:  <logical>[@<init>] = <real unit>
+#   The @init-qualified row wins over the bare row for that init (most specific
+#   match first, like pkgmap's facets in §1a). Use the qualifier whenever the
+#   unit name differs *per init* rather than globally — a bare row would then
+#   break every other init.
+#
+# Void/runit names its daemons after the binary; systemd names them after the
+# service. These are the two that actually bite a desktop install: without them
+# `enable_service bluetooth` links a non-existent /etc/sv/bluetooth on Void and
+# the Bluetooth applet finds no adapter.
+bluetooth@runit = bluetoothd
+cups@runit = cupsd
+
+# Debian/Ubuntu name the CUPS unit after the daemon too, but sysvinit and
+# systemd hosts there both accept `cups`, so no row is needed for them.
+
+# modules/printer.sh enables the Samba daemon for network printer discovery.
+smb@runit = smbd

@@ -1,0 +1,4 @@
+# Rice-owned yazi theme (90, §6): selects the rosemuted flavor shipped in
+# dotfiles/yazi/flavors/rosemuted.yazi (ANSI, terminal-native). Swapped on switch.
+[flavor]
+dark = "rosemuted"

@@ -1,0 +1,24 @@
+/* rofi/config.rasi — dotfiles-owned base layer (os-rice §5).
+ * Behaviour and default theme selection only; every color lives in the
+ * rice-owned colors.rasi that launcher.rasi and powermenu.rasi @import.
+ */
+
+configuration {
+    modi:                "drun,run,window,emoji";
+    show-icons:          true;
+    icon-theme:          "Papirus-Dark";
+    drun-display-format: "{name}";
+    display-drun:        "apps";
+    display-run:         "run";
+    display-window:      "window";
+    display-emoji:       "emoji";
+    sidebar-mode:        false;
+    hide-scrollbar:      true;
+    disable-history:     false;
+    sort:                true;
+    matching:            "fuzzy";
+    terminal:            "ghostty";
+    kb-cancel:           "Escape,Super+d";
+}
+
+@theme "~/.config/rofi/launcher.rasi"

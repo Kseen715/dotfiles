@@ -1,0 +1,118 @@
+# void-i3-rosemuted — a full i3/X11 desktop in a muted rose dark palette.
+# Colors and layout are derived from github.com/dcindallas/dots-new (Base16
+# Twilight bases + that setup's pink rofi accent), pulled toward rose/muted.
+#
+# One line per module; manifest order IS the dependency graph (§4):
+#   xorg -> i3 -> compositor -> bar/launcher/notify -> glue -> theming -> apps
+# The glue block (§3 of i3-sugg) is the difference between "i3 starts" and
+# "every app behaves" — do not reorder it below the applications.
+#
+# Validated against the Void (xbps) package index; see ../../i3-void-packages.md
+# for the component -> package writeup and for what Void does not ship.
+# Dropping the two require: lines and filling pacman.map/apt.map is all it takes
+# to run this manifest elsewhere — nothing in the modules is Void-specific.
+require: distro:void
+require: arch:x86_64
+
+# --- base ---------------------------------------------------------------------
+git-base
+openssh
+zip
+networkmanager
+
+# --- X session core -----------------------------------------------------------
+# xorg installs the server, the X utils, dbus + elogind, and lays down the
+# layered ~/.xprofile every GUI app inherits its env from.
+xorg
+i3
+picom
+lightdm
+
+# --- bar / launcher / notifications / lock / wallpaper ------------------------
+polybar
+rofi
+dunst
+i3lock
+feh
+copyq
+flameshot
+arandr
+redshift
+input
+fcitx5
+
+# --- the invisible glue (i3-sugg §3) ------------------------------------------
+# Skip any of these and something breaks silently: root prompts do nothing,
+# file dialogs open blank, "Move to Trash" errors, credentials are never saved.
+polkit-agent
+xdg
+gvfs
+disks
+archives
+keyring
+thumbnails
+codecs
+
+# --- theming (i3 has no settings daemon — nothing applies a theme without it) --
+theming
+
+# --- audio / hardware ----------------------------------------------------------
+# audio, not pipewire: modules/pipewire.sh is the Arch-only PulseAudio swap.
+audio
+blueman
+brightnessctl
+power
+printer
+
+# --- network services ----------------------------------------------------------
+# avahi before printer discovery and kdeconnect: both find peers over mDNS.
+avahi
+ufw
+kdeconnect
+
+# --- shell + CLI ---------------------------------------------------------------
+# starship before zsh: zsh's 90-theme.zsh wires the prompt in (§4).
+starship
+zsh
+micro
+htop
+btop
+fastfetch
+yazi
+
+# --- files + terminal ----------------------------------------------------------
+thunar
+ghostty
+
+# --- applications --------------------------------------------------------------
+# firefox carries a low-RAM user.js layer; viewers backs the mimeapps.list that
+# modules/xdg.sh seeds, so "Open With" never names a program that is missing.
+# evolution is the mail client and is themed (gsettings + a private GTK theme);
+# `thunderbird` is the available alternative - listing both would install two
+# clients fighting over the mailto: handler.
+firefox
+evolution
+viewers
+celluloid
+vlc
+telegram
+qbittorrent
+obs-studio
+vscode
+flatpak
+
+# No `config:` lines: every theme layer in this rice is installed by the module
+# that owns the app it belongs to (modules/theming.sh takes the GTK/Qt/xsettingsd
+# files), so a `--module` install lands themed too, not only a full rice run.
+
+# Not listed on purpose:
+#   pipewire, pacman-multilib, dkms, cpu-microcodes, gpu-drivers  Arch-only
+#   discord, gradia, localsend, onlyoffice                       Flatpak on Void
+#   vscode-insiders                                              AUR-only; the
+#     portable `vscode` module installs Void's Code - OSS build instead
+#   dnscrypt                                                     available, but
+#     swapping the resolver is a per-machine decision (see the module header)
+#   thunderbird                                                  available; the
+#     rice ships evolution as its one mail client
+#   xidlehook                                                    needs `rust`
+#     first (xbps.map maps it to cargo:); i3lock uses xautolock instead

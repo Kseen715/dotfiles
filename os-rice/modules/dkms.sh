@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/dkms.sh — DKMS + kernel headers for every installed kernel flavor. ONE
 # copy, POSIX (was .../modules/dkms.sh). Headers must match the *running* kernel,
 # so this is validated on hardware, not in CI (§9). Arch-only (kernel package

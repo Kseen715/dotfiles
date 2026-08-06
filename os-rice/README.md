@@ -57,6 +57,16 @@ when stdout is not a TTY, so piping to a logfile stays clean).
   logical names, installs the native batch first, then dispatches tagged rows —
   each provider owns its own idempotency probe. Untagged names pass through
   unchanged, so the common case needs no map row.
+- **Every module declares its session.** The first line of each module is
+  `# session: x11`, `# session: wayland` or `# session: x11+wayland`, enforced by
+  `test/lint.sh`. CLI/system modules are display-server agnostic and so carry
+  `x11+wayland`. This is what makes "can this rice move to X11?" a grep instead
+  of a reading exercise:
+  `grep -l '^# session: wayland' os-rice/modules/*.sh`.
+- **Service name, per init.** `servicemap` rows may carry an `@<init>`
+  qualifier and the most specific match wins, so one `enable_service bluetooth`
+  reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit — no
+  module ever branches on the init system.
 - **Idempotent by contract.** Run a rice 100× and it converges; a second run is
   all `✔ skipped`, zero errors. Guards (`pkg_installed`, `ensure_line`,
   `ensure_block`, `backup_copy`, guard-style PATH) replace raw mutation.
@@ -76,6 +86,19 @@ when stdout is not a TTY, so piping to a logfile stays clean).
 - **A rice's prompt colors:** edit `rices/<name>/config/starship.palette.toml`
   (`accent`/`success`/`error`/`secondary`). The shared prompt layout/symbols live
   once in the dotfiles base `starship/starship.toml`; os-rice composes the two.
+
+## Desktops
+
+| rice | what it is |
+| ---- | ---------- |
+| `arch-hyprland-glass` | Wayland/Hyprland "glass" desktop, Arch + systemd only |
+| `void-i3-rosemuted` | i3/X11 desktop in a muted rose dark palette, validated on Void |
+| `xin` `catppuccin` `gruvbox` `nord` | shell/CLI rices (no DE) |
+
+The i3 desktop is documented in two files: [`i3-sugg.md`](i3-sugg.md) is the
+distro-agnostic component checklist (what an X11 desktop needs and why), and
+[`i3-void-packages.md`](i3-void-packages.md) maps every one of those components
+to its real Void `xbps` package — including the ones Void does not ship.
 
 ## Testing
 

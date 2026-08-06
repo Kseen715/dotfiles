@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/docker.sh — Docker engine. ONE copy, POSIX, distro-agnostic (was
 # linux-debian/modules/docker.sh, which added docker.com's apt repo for
 # docker-ce). Native-first: install the distro's engine package (`docker.io` on

@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/zsh.sh — zsh + prompt + layered rc.d config. ONE copy, POSIX,
 # distro-agnostic: the package line goes through pkg_install/pkgmap, everything
 # else is shared (§Module example). Sourced by install.sh with OSR_* in scope.

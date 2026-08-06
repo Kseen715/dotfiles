@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/inxi.sh — inxi system information tool. ONE copy, POSIX,
 # distro-agnostic (was linux-debian/modules/inxi.sh). Native on every target.
 

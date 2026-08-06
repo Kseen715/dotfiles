@@ -1,3 +1,4 @@
+# session: wayland
 # modules/cliphist.sh — cliphist clipboard history + wofi image preview helper.
 # ONE copy, POSIX (was .../modules/cliphist.sh). ripgrep backs the search; the
 # wofi image thumbnailer is a small upstream script fetched to /usr/local/bin.

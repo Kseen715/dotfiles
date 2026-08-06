@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/ghostty.sh — Ghostty terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic (was linux-debian/modules/ghostty.sh,
 # a from-source Zig build). Native-first: native on arch/void and recent Ubuntu;

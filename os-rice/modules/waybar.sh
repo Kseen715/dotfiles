@@ -1,3 +1,4 @@
+# session: wayland
 # modules/waybar.sh — Waybar status bar + rice-owned config. ONE copy, POSIX
 # (was .../modules/waybar.sh). gsimplecal (calendar popup) and ddcutil (monitor
 # brightness via the custom ddc module) are companions the config invokes.

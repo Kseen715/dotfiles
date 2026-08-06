@@ -1,0 +1,42 @@
+# betterlockscreenrc — rice-owned lock screen colors (void-i3-rosemuted).
+# Swapped on rice switch (§6). betterlockscreen is a wrapper around
+# i3lock-color, so these are i3lock-color's argument colors in RRGGBBAA.
+#
+# The wallpaper cache is primed by modules/i3lock.sh; `betterlockscreen -u <img>`
+# rebuilds it after changing the image.
+
+display_on=0
+span_image=false
+lock_timeout=300
+fx_list=(dim blur dimblur pixel dimpixel color)
+dim_level=45
+blur_level=2
+pixel_scale=10,1000
+solid_color=1c1f20
+wallpaper_cmd="feh --no-fehbg --bg-fill"
+quiet=false
+
+# theme
+loginbox=1c1f20cc
+loginshadow=00000000
+locktext="rosemuted"
+font="JetBrainsMono Nerd Font"
+ringcolor=d98caeff
+ringvercolor=8fb3b0ff
+ringwrongcolor=e2655eff
+insidecolor=24282a66
+insidevercolor=24282a99
+insidewrongcolor=e2655e33
+separatorcolor=00000000
+keyhlcolor=f15495ff
+bshlcolor=d3877aff
+timecolor=e8dfe1ff
+greetercolor=b3a8abff
+layoutcolor=8d8386ff
+verifcolor=8fb3b0ff
+wrongcolor=e2655eff
+modifcolor=d9b48fff
+bgcolor=1c1f20ff
+time_format="%H:%M"
+veriftext="checking..."
+wrongtext="nope"

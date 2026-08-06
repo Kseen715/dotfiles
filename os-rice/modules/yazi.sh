@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/yazi.sh — Yazi file manager + layered config. ONE copy, POSIX,
 # distro-agnostic. Config split by ownership (§5):
 #

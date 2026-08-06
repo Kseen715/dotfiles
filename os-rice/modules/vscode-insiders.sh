@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/vscode-insiders.sh — VS Code Insiders (AUR) + coding fonts. ONE copy,
 # POSIX (was .../apps/vscode-insiders.sh). Maps vscode-insiders ->
 # aur:visual-studio-code-insiders-bin.

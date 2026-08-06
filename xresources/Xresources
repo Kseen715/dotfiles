@@ -1,0 +1,18 @@
+! ~/.Xresources — dotfiles-owned base (os-rice §5).
+! Font rendering and DPI only. The rice's color block is appended to this file
+! by modules/theming.sh (Xresources has no per-user include worth relying on),
+! so the installed ~/.Xresources is base + palette, regenerated on rice switch.
+
+Xft.antialias:  1
+Xft.hinting:    1
+Xft.hintstyle:  hintslight
+Xft.rgba:       rgb
+Xft.lcdfilter:  lcddefault
+Xft.autohint:   0
+! X11 has no per-monitor scaling; set one DPI and live with it (i3-sugg §4.6).
+Xft.dpi:        96
+
+Xcursor.size:   24
+
+! i3lock-color / xterm fallbacks read these when nothing else sets them.
+*.termName:     xterm-256color

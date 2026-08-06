@@ -1,0 +1,102 @@
+/* rofi/launcher.rasi — dotfiles-owned layout (os-rice §5).
+ * Structure only. @bg/@fg/@accent/... are defined by the rice-owned
+ * colors.rasi, so switching rices repaints this without touching the layout.
+ */
+
+@import "colors.rasi"
+
+* {
+    font:             "JetBrainsMono Nerd Font Medium 11";
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+window {
+    transparency:    "real";
+    location:        center;
+    anchor:          center;
+    width:           620px;
+    border:          2px;
+    border-color:    @accent;
+    border-radius:   14px;
+    background-color: @bg;
+    padding:         0px;
+    children:        [ mainbox ];
+}
+
+mainbox {
+    children: [ inputbar, message, listview ];
+    spacing:  0px;
+    padding:  16px;
+}
+
+inputbar {
+    children:         [ prompt, entry ];
+    background-color: @bg-alt;
+    border-radius:    10px;
+    padding:          10px 14px;
+    spacing:          10px;
+    margin:           0px 0px 12px 0px;
+}
+
+prompt {
+    text-color: @accent;
+    str:        "";
+}
+
+entry {
+    placeholder:            "search";
+    placeholder-color:      @fg-muted;
+    cursor:                 text;
+}
+
+message {
+    padding: 0px;
+    border:  0px;
+}
+
+listview {
+    columns:      1;
+    lines:        8;
+    spacing:      4px;
+    cycle:        true;
+    dynamic:      true;
+    scrollbar:    false;
+    fixed-height: true;
+}
+
+element {
+    padding:       8px 12px;
+    border-radius: 10px;
+    spacing:       12px;
+    cursor:        pointer;
+}
+
+element normal normal   { text-color: @fg; }
+element alternate normal { text-color: @fg; }
+element selected normal {
+    background-color: @accent;
+    text-color:       @bg;
+}
+element normal urgent, element alternate urgent { text-color: @urgent; }
+element selected urgent {
+    background-color: @urgent;
+    text-color:       @bg;
+}
+element normal active, element alternate active { text-color: @accent; }
+element selected active {
+    background-color: @accent-dim;
+    text-color:       @bg;
+}
+
+element-icon {
+    size:             24px;
+    vertical-align:   0.5;
+    background-color: transparent;
+}
+
+element-text {
+    vertical-align:   0.5;
+    background-color: transparent;
+    text-color:       inherit;
+}

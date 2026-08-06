@@ -1,0 +1,65 @@
+/* rofi/powermenu.rasi — dotfiles-owned layout for scripts/rofi-powermenu.sh
+ * (the wleave/wlogout replacement, i3-sugg §2). Colors come from the rice.
+ */
+
+@import "colors.rasi"
+
+* {
+    font:             "JetBrainsMono Nerd Font Medium 12";
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+window {
+    transparency:     "real";
+    location:         center;
+    anchor:           center;
+    width:            420px;
+    border:           2px;
+    border-color:     @accent;
+    border-radius:    14px;
+    background-color: @bg;
+    children:         [ mainbox ];
+}
+
+mainbox {
+    children: [ inputbar, listview ];
+    padding:  16px;
+    spacing:  12px;
+}
+
+inputbar {
+    children:         [ prompt ];
+    background-color: @bg-alt;
+    border-radius:    10px;
+    padding:          10px 14px;
+}
+
+prompt {
+    text-color:       @accent;
+    horizontal-align: 0.5;
+}
+
+listview {
+    columns: 5;
+    lines:   1;
+    spacing: 8px;
+}
+
+element {
+    padding:          14px 0px;
+    border-radius:    10px;
+    background-color: @bg-alt;
+    cursor:           pointer;
+}
+
+element-text {
+    horizontal-align: 0.5;
+    vertical-align:   0.5;
+    text-color:       inherit;
+}
+
+element selected {
+    background-color: @accent;
+    text-color:       @bg;
+}

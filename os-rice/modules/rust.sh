@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/rust.sh — Rust toolchain via rustup. ONE copy, POSIX, distro-agnostic
 # (was linux-rhel/modules/rust.sh, bash + hand-rolled `sudo -u`). The compiler +
 # curl come from pkg_install (`build` maps per distro through pkgmap); rustup

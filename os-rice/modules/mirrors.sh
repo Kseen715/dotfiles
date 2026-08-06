@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/mirrors.sh — rank the distro's package mirrors by speed. POSIX port of
 # the legacy standalone .../setup-mirrors.sh, the last un-ported helper of the
 # hyprland-glass bundle. It was a script you ran by hand before the installer;

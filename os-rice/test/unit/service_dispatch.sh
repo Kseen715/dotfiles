@@ -21,6 +21,12 @@ done
 PATH="$BIN:$PATH"; export PATH
 as_root() { "$@"; }
 
+# runit only links a service that actually exists on disk (an unpackaged one
+# would leave a dangling link runsvdir complains about forever), so point the
+# lookup at a fixture dir instead of the host's /etc/sv.
+SVDIR="$BIN/sv"; mkdir -p "$SVDIR/NetworkManager"
+OSR_SV_DIR=$SVDIR; export OSR_SV_DIR
+
 check() {  # <init> <expected substring>
     : > "$OUT"; OSR_INIT=$1; export OSR_INIT
     enable_service NetworkManager >/dev/null 2>&1 || true
@@ -28,7 +34,13 @@ check() {  # <init> <expected substring>
 }
 check systemd  "systemctl enable --now NetworkManager"
 check openrc   "rc-update add NetworkManager default"
-check runit    "ln -s /etc/sv/NetworkManager /var/service/NetworkManager"
+check runit    "ln -s $SVDIR/NetworkManager /var/service/NetworkManager"
+
+# The guard itself: a service the distro does not package must warn, not leave a
+# dangling /var/service link behind.
+: > "$OUT"; OSR_INIT=runit; export OSR_INIT
+enable_service definitely-not-packaged >/dev/null 2>&1 || true
+refute_contains "$OUT" "definitely-not-packaged" "runit skips a service with no /etc/sv entry"
 check sysvinit "update-rc.d NetworkManager enable"
 
 rm -rf "$BIN"

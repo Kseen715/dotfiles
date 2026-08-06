@@ -74,6 +74,26 @@ else
     p_ok "(no non-ASCII bytes in program output)"
 fi
 
+# Every module declares which display server it supports on its first line, so
+# `grep -l '^# session: wayland' modules/*.sh` answers "what breaks if I move
+# this rice to X11" without reading 97 files. Enforced, because a marker that is
+# only usually there is not something a rice author can rely on.
+sec "module session markers (# session: x11 | wayland | x11+wayland):"
+_marker_bad=""
+for f in "$OSR_ROOT"/modules/*.sh; do
+    [ -f "$f" ] || continue
+    case "$(head -n 1 "$f")" in
+        "# session: x11"|"# session: wayland"|"# session: x11+wayland") ;;
+        *) _marker_bad="$_marker_bad ${f#"$REPO"/}" ;;
+    esac
+done
+if [ -n "$_marker_bad" ]; then
+    for f in $_marker_bad; do p_fail "$f: missing or invalid '# session:' first line"; done
+    FAILED=1
+else
+    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') modules declare a session)"
+fi
+
 if command -v zsh >/dev/null 2>&1; then
     sec "zsh -n (rc.d + rice themes):"
     for f in $(find "$REPO/zsh/rc.d" "$OSR_ROOT/rices" -name '*.zsh' 2>/dev/null); do

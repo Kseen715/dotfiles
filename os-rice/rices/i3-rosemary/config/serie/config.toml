@@ -1,0 +1,57 @@
+# rosemuted serie theme — rice-owned theme layer (90-*, swapped on rice switch, §6).
+# Same 16 colors as this rice's ghostty/Xresources palettes.
+
+# fg/bg are left at "Reset" (the terminal's own colors), so serie inherits the
+# terminal background and stays transparent.
+
+[color]
+fg = "Reset"
+bg = "Reset"
+
+list_selected_fg = "#e8dfe1"
+list_selected_bg = "#34393b"
+list_ref_paren_fg = "#4e5456"
+list_ref_branch_fg = "#9fb08a"
+list_ref_remote_branch_fg = "#e2655e"
+list_ref_tag_fg = "#d9b48f"
+list_ref_stash_fg = "#d98cae"
+list_head_fg = "#8fb3b0"
+list_subject_fg = "Reset"
+list_name_fg = "#8fb3b0"
+list_hash_fg = "#d9b48f"
+list_date_fg = "#a86a84"
+list_match_fg = "#1c1f20"
+list_match_bg = "#d9b48f"
+
+detail_label_fg = "#b3a8ab"
+detail_name_fg = "#8fb3b0"
+detail_date_fg = "#d98cae"
+detail_email_fg = "#8f95bd"
+detail_hash_fg = "#d9b48f"
+detail_ref_branch_fg = "#9fb08a"
+detail_ref_remote_branch_fg = "#e2655e"
+detail_ref_tag_fg = "#d9b48f"
+detail_file_change_add_fg = "#9fb08a"
+detail_file_change_modify_fg = "#d9b48f"
+detail_file_change_delete_fg = "#e2655e"
+detail_file_change_move_fg = "#d98cae"
+
+ref_selected_fg = "#e8dfe1"
+ref_selected_bg = "#34393b"
+
+help_block_title_fg = "#9fb08a"
+help_key_fg = "#d9b48f"
+
+virtual_cursor_fg = "#8fb3b0"
+status_input_fg = "#e8dfe1"
+status_input_transient_fg = "#4e5456"
+status_info_fg = "#8fb3b0"
+status_success_fg = "#9fb08a"
+status_warn_fg = "#d9b48f"
+status_error_fg = "#e2655e"
+divider_fg = "#4e5456"
+
+# Commit graph edge colors, cycled per branch. edge/background stay at their
+# transparent defaults so the graph image blends into the terminal.
+[graph.color]
+branches = ["#e2655e", "#9fb08a", "#d9b48f", "#8f95bd", "#d98cae", "#8fb3b0"]

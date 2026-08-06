@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/pipewire.sh — PipeWire audio stack, replacing PulseAudio/JACK. ONE
 # copy, POSIX (was .../linux-arch-x86_64-hyprland-glass/pulseaudio-to-pipewire.sh).
 # Mirror image of modules/pulseaudio.sh: the two are mutually exclusive, listing

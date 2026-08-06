@@ -65,3 +65,29 @@ vscode-insiders = aur:visual-studio-code-insiders-bin
 yandex-browser = aur:yandex-browser
 zen-browser = aur:zen-browser-bin
 steam-aur = aur:steam
+
+# --- i3/X11 desktop (rices/void-i3-rosemuted) ---------------------------------
+# The i3 rice is validated on Void; these rows are name mapping only, so the same
+# manifest resolves on Arch too. X client utils already carry Arch's `xorg-*`
+# names as their logical names, so they need no rows here (§1: no identity rows).
+gnome-disks = gnome-disk-utility
+gtk-dark-theme = gnome-themes-extra gtk-engine-murrine
+nerd-fonts-symbols = ttf-nerd-fonts-symbols
+gsimplecal = aur:gsimplecal
+android-file-transfer = aur:android-file-transfer
+raw-thumbnailer = aur:raw-thumbnailer
+xidlehook = aur:xidlehook
+betterlockscreen = aur:betterlockscreen
+autotiling = aur:autotiling
+
+# --- i3 desktop, second pass (name mapping only, Void is the validated target)
+# Arch calls the distro VS Code build `code` (the MS-branded one is the AUR
+# `visual-studio-code-bin`; modules/vscode-insiders.sh is the Insiders channel).
+vscode = code
+keyd = aur:keyd
+kbdd = aur:kbdd
+libinput-gestures = aur:libinput-gestures
+rofimoji = aur:rofimoji
+ncpamixer = aur:ncpamixer
+batsignal = aur:batsignal
+poweralertd = aur:poweralertd

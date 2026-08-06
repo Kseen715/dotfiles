@@ -1,3 +1,4 @@
+# session: x11+wayland
 # modules/sddm.sh — SDDM display manager + the rice's "glass" QML theme. ONE copy,
 # POSIX (was .../modules/sddm.sh). Theme + conf live in system paths (as_root);
 # the service is enabled through enable_service (§8). DE/display module: installs

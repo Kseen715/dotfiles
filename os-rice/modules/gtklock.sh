@@ -1,3 +1,4 @@
+# session: wayland
 # modules/gtklock.sh — gtklock GTK screen locker + rice-owned config. ONE copy,
 # POSIX (was .../modules/gtklock.sh). style.css carries a {{WALLPAPER_PATH}}
 # placeholder the legacy sed-substituted at install; we resolve it to the rice's

@@ -2,8 +2,88 @@
 # Only rows where the name actually differs from the logical name (§1); anything
 # not listed passes through unchanged (zsh, git, curl, lsd, foot, unzip,
 # fontconfig, fd are all identical on xbps, so they need no row).
+#
+# Every row below was checked against the real repository index
+# (repo-default.voidlinux.org/current{,/nonfree,/multilib} x86_64-repodata), not
+# from memory. See i3-void-packages.md for the full component -> package writeup.
 
 build = base-devel
 dev-headers = openssl-devel pkgconf
 gh = github-cli
 serie = cargo:serie          # no native serie on Void
+
+# --- X11 session core ---------------------------------------------------------
+# Void does not prefix X client utilities: Arch's xorg-xrandr is just xrandr.
+xorg-xinit = xinit
+xorg-xrandr = xrandr
+xorg-xset = xset
+xorg-xsetroot = xsetroot
+xorg-xprop = xprop
+xorg-xev = xev
+xorg-xkill = xkill
+xorg-xdpyinfo = xdpyinfo
+xorg-xinput = xinput
+xorg-xauth = xauth
+xorg-fonts-misc = font-misc-misc
+
+# --- capitalised upstream names ----------------------------------------------
+thunar = Thunar
+copyq = CopyQ
+mangohud = MangoHud
+obs-studio = obs
+
+# --- plain name differences ---------------------------------------------------
+sshfs = fuse-sshfs
+gnome-disks = gnome-disk-utility
+gsimplecal = gsimplecal-gtk3
+android-file-transfer = android-file-transfer-linux
+gdk-pixbuf2 = gdk-pixbuf
+vulkan-icd-loader = vulkan-loader
+libva-mesa-driver = mesa-vaapi
+noto-fonts = noto-fonts-ttf
+ttf-liberation = liberation-fonts-ttf
+ttf-dejavu = dejavu-fonts-ttf
+nerd-fonts-symbols = nerd-fonts-symbols-ttf
+
+# GStreamer 1.x carries the API version in the package name on Void.
+gstreamer = gstreamer1
+gst-plugins-base = gst-plugins-base1
+gst-plugins-good = gst-plugins-good1
+gst-plugins-bad = gst-plugins-bad1
+gst-plugins-ugly = gst-plugins-ugly1
+# No separate package: Void builds the PipeWire GStreamer element into pipewire.
+gst-plugin-pipewire = pipewire
+
+# Void ships no mesa VDPAU drivers; libvdpau-va-gl bridges VDPAU onto VA-API,
+# which is what actually gets used on Intel/AMD here.
+mesa-vdpau = libvdpau-va-gl
+
+# gvfs has no NFS backend on Void (afc/afp/cdda/goa/gphoto2/mtp/smb only) —
+# NFS is a kernel mount via nfs-utils, so the logical name resolves to that.
+gvfs-nfs = nfs-utils
+
+# raw-thumbnailer is absent; the gdk-pixbuf loader gives RAW previews instead,
+# which is what tumbler falls back to anyway.
+raw-thumbnailer = libopenraw-pixbuf-loader
+
+# GTK theme engine + a real dark theme (adw-gtk3/Catppuccin are not packaged).
+gtk-dark-theme = gnome-themes-extra gtk-engine-murrine
+
+# --- not packaged: provider rows ---------------------------------------------
+# xidlehook (the --not-when-audio idle daemon) has no Void package. This row
+# makes `xidlehook` installable, but it needs a Rust toolchain, so list `rust`
+# BEFORE it in a rice (§4). The default i3lock module uses the packaged
+# xautolock + xss-lock instead and never triggers this row.
+xidlehook = cargo:xidlehook
+
+# --- existing modules that assumed Arch names --------------------------------
+# modules/networkmanager.sh installs `networkmanager libnm lib32-libnm`.
+networkmanager = NetworkManager
+lib32-libnm = libnm-32bit
+# modules/telegram.sh pulls the WebKit runtime for its built-in browser view.
+webkit2gtk-4.1 = libwebkit2gtk41
+
+# --- input, power, apps (the second i3 desktop pass) --------------------------
+xorg-xmodmap = xmodmap
+# Void names the LDAC codec library after the upstream project.
+libldac = ldacBT

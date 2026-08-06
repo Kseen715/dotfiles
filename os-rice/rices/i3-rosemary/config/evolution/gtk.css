@@ -1,0 +1,225 @@
+/* gtk.css — rice-owned Evolution theme (void-i3-rosemuted), installed as the
+ * private GTK theme ~/.local/share/themes/osr-evolution/gtk-3.0/gtk.css and
+ * selected by the .desktop override's GTK_THEME=osr-evolution.
+ *
+ * Why a private theme and not ~/.config/gtk-3.0/gtk.css: GTK3 CSS has no
+ * per-application selector, so every rule below would otherwise restyle every
+ * GTK app on the machine. Evolution is the one app that needs this much
+ * surgery, and it should pay for it alone.
+ *
+ * The import pulls GTK's built-in Adwaita-dark out of its own resource bundle,
+ * so this file is a diff against a real theme, not a theme from scratch.
+ */
+
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+@define-color rm_bg      #1c1f20;
+@define-color rm_bg_alt  #24282a;
+@define-color rm_sel     #34393b;
+@define-color rm_muted   #8d8386;
+@define-color rm_fg      #e8dfe1;
+@define-color rm_accent  #d98cae;
+@define-color rm_border  #2b2f31;
+
+@define-color theme_bg_color @rm_bg;
+@define-color theme_base_color @rm_bg;
+@define-color theme_fg_color @rm_fg;
+@define-color theme_text_color @rm_fg;
+@define-color theme_selected_bg_color @rm_accent;
+@define-color theme_selected_fg_color @rm_bg;
+@define-color insensitive_fg_color @rm_muted;
+@define-color borders @rm_border;
+
+/* ── Chrome ──────────────────────────────────────────────────────────────────
+ * Evolution stacks a menu bar, a tool bar, a search bar and a status bar. Flatten
+ * what is left after gsettings hides the rest, so the app reads as one surface
+ * instead of five stripes.
+ */
+window, .background, headerbar, toolbar, .toolbar, menubar {
+    background-color: @rm_bg;
+    color: @rm_fg;
+    border-color: @rm_border;
+    box-shadow: none;
+}
+
+headerbar {
+    min-height: 42px;
+    padding: 0 6px;
+    border-bottom: 1px solid @rm_border;
+}
+
+toolbar, .toolbar {
+    padding: 6px 8px;
+    border: none;
+}
+
+/* Kill the 1990s bevels between panes; a single hairline is enough. */
+frame, frame > border, .frame,
+scrolledwindow, scrolledwindow undershoot,
+paned > separator {
+    border: none;
+    box-shadow: none;
+    background-image: none;
+}
+paned > separator {
+    background-color: @rm_border;
+    min-width: 1px;
+    min-height: 1px;
+}
+
+/* ── Buttons: flat until you touch them ─────────────────────────────────────── */
+button {
+    background-image: none;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 6px 10px;
+    box-shadow: none;
+    color: @rm_fg;
+    transition: background-color 120ms ease-out;
+}
+button:hover  { background-color: @rm_bg_alt; }
+button:active,
+button:checked {
+    background-color: @rm_accent;
+    color: @rm_bg;
+}
+button.suggested-action {
+    background-color: @rm_accent;
+    color: @rm_bg;
+    border-color: transparent;
+}
+button.destructive-action {
+    background-color: #e2655e;
+    color: @rm_bg;
+}
+button:disabled {
+    background-color: transparent;
+    color: @rm_muted;
+}
+
+/* ── Entries + the search bar ───────────────────────────────────────────────── */
+entry, .entry, searchbar entry {
+    background-color: @rm_bg_alt;
+    background-image: none;
+    color: @rm_fg;
+    border: 1px solid @rm_border;
+    border-radius: 8px;
+    padding: 6px 10px;
+    box-shadow: none;
+}
+entry:focus, .entry:focus {
+    border-color: @rm_accent;
+    box-shadow: inset 0 0 0 1px @rm_accent;
+}
+entry selection { background-color: @rm_accent; color: @rm_bg; }
+
+/* ── Folder tree + message list ─────────────────────────────────────────────── */
+treeview.view, .view, list, list row {
+    background-color: @rm_bg;
+    color: @rm_fg;
+    border-color: @rm_border;
+}
+/* Row height is the other half of "modern": Evolution's default is cramped. */
+treeview.view {
+    -GtkTreeView-grid-line-width: 0;
+    -GtkTreeView-tree-line-width: 0;
+    -GtkTreeView-vertical-separator: 4;
+    -GtkTreeView-horizontal-separator: 8;
+}
+treeview.view:hover { background-color: @rm_bg_alt; }
+treeview.view:selected,
+treeview.view:selected:focus,
+list row:selected {
+    background-color: @rm_accent;
+    color: @rm_bg;
+}
+/* Unread mail is the only thing allowed to shout in the list. */
+treeview.view:not(:selected) .cell:not(:disabled) { color: @rm_fg; }
+
+/* Column headers: label, not button. */
+treeview.view header button {
+    background-color: @rm_bg;
+    color: @rm_muted;
+    border: none;
+    border-bottom: 1px solid @rm_border;
+    border-radius: 0;
+    padding: 6px 8px;
+    font-weight: 500;
+}
+
+/* The left switcher (Mail / Calendar / Contacts / Tasks). */
+.sidebar, .sidebar-pane, #e-shell-switcher {
+    background-color: @rm_bg;
+    border-right: 1px solid @rm_border;
+}
+
+/* ── Notebook tabs (composer, preferences) ──────────────────────────────────── */
+notebook > header {
+    background-color: @rm_bg;
+    border-color: @rm_border;
+}
+notebook > header > tabs > tab {
+    background-color: transparent;
+    color: @rm_muted;
+    border: none;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 14px;
+    min-height: 0;
+}
+notebook > header > tabs > tab:checked {
+    color: @rm_fg;
+    box-shadow: inset 0 -2px @rm_accent;
+}
+
+/* ── Scrollbars: thin, and out of the way until hovered ─────────────────────── */
+scrollbar {
+    background-color: transparent;
+    border: none;
+}
+scrollbar slider {
+    background-color: @rm_sel;
+    border: 4px solid transparent;
+    border-radius: 10px;
+    min-width: 8px;
+    min-height: 8px;
+}
+scrollbar slider:hover { background-color: @rm_muted; }
+
+/* ── Popovers, menus, tooltips ──────────────────────────────────────────────── */
+popover, popover.background, menu, .menu, .context-menu {
+    background-color: @rm_bg_alt;
+    color: @rm_fg;
+    border: 1px solid @rm_border;
+    border-radius: 10px;
+    padding: 4px;
+}
+menuitem:hover, .menuitem:hover {
+    background-color: @rm_accent;
+    color: @rm_bg;
+    border-radius: 6px;
+}
+tooltip, tooltip.background {
+    background-color: @rm_bg_alt;
+    color: @rm_fg;
+    border: 1px solid @rm_border;
+    border-radius: 8px;
+}
+
+/* ── Progress + spinners carry the accent ───────────────────────────────────── */
+progressbar progress, levelbar block.filled {
+    background-color: @rm_accent;
+    border-color: @rm_accent;
+    border-radius: 4px;
+}
+spinner { color: @rm_accent; }
+
+/* ── Attachment bar + info bars ─────────────────────────────────────────────── */
+.attachment-bar, infobar, .info {
+    background-color: @rm_bg_alt;
+    color: @rm_fg;
+    border: none;
+    border-radius: 10px;
+}
+infobar.warning { box-shadow: inset 3px 0 #d9b48f; }
+infobar.error   { box-shadow: inset 3px 0 #e2655e; }
