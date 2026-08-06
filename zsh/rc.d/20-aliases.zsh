@@ -12,6 +12,26 @@ alias s='f() { sudo $@ };f'
 
 ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
 
+# cargo() — route `cargo install` and `cargo install-update` through
+# cargo-binstall (prebuilt binaries instead of source builds), each with a
+# source-build fallback for crates binstall cannot resolve. install-update gets
+# it via the shim os-rice modules/rust.sh installs from dotfiles/cargo/; without
+# the shim, or without binstall, every branch is a plain passthrough.
+cargo() {
+  local shim=~/.local/bin/cargo-binstall-shim
+  if [[ $1 == install-update && -x $shim ]] && (( $+commands[cargo-binstall] )); then
+    command cargo install-update -r $shim "${@:2}"
+  elif [[ $1 == install && "${*:2}" != *--path* && "${*:2}" != *--git* ]] && (( $+commands[cargo-binstall] )); then
+    # binstall compiles from source itself when a crate has no prebuilt binary,
+    # but bails outright when it cannot resolve the crate at all ("wezterm is not
+    # found") — hence the fallback to a real source install.
+    # --path/--git builds are local sources binstall can't fetch: passthrough.
+    command cargo binstall --no-confirm "${@:2}" || command cargo "$@"
+  else
+    command cargo "$@"
+  fi
+}
+
 # y() — yazi wrapper that cd's to the dir you quit in.
 y() {
     local tmp cwd

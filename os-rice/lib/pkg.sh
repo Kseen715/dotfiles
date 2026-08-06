@@ -159,6 +159,14 @@ _via_cargo() {
     fi
     as_user test -x "$_vca_cargo" \
         || error "cargo not found for $_vca_name - install 'rust' before any cargo: package"
+    # binstall first (modules/rust.sh installs it): a prebuilt-binary download
+    # where upstream ships one, minutes instead of a source build. Not every
+    # crate/arch has an asset, so a failure falls through to cargo install.
+    if as_user test -x "$OSR_HOME/.cargo/bin/cargo-binstall"; then
+        info "installing $_vca_name via cargo-binstall ($_vca_crate)"
+        as_user "$_vca_cargo" binstall --no-confirm "$_vca_crate" && return 0
+        warn "cargo-binstall failed for $_vca_name - falling back to a source build"
+    fi
     info "installing $_vca_name via cargo ($_vca_crate)"
     as_user "$_vca_cargo" install --locked "$_vca_crate"
     check_error $? "cargo install failed for $_vca_name"

@@ -25,6 +25,13 @@ _pkgmap_one() { case "$1" in serie) echo "cargo:serie" ;; *) echo "$1" ;; esac; 
 pkg_install serie >/dev/null 2>&1
 assert_contains "$OUT" "USER $OSR_HOME/.cargo/bin/cargo install --locked serie" "serie installed via cargo --locked as OSR_USER"
 
+# --- binstall available -> prebuilt binary instead of a source build ---------
+: >"$OUT"; : >"$OSR_HOME/.cargo/bin/cargo-binstall"; chmod +x "$OSR_HOME/.cargo/bin/cargo-binstall"
+pkg_install serie >/dev/null 2>&1
+assert_contains "$OUT" "USER $OSR_HOME/.cargo/bin/cargo binstall --no-confirm serie" "serie installed via cargo-binstall when available"
+refute_contains "$OUT" 'install --locked' "no source build when binstall succeeds"
+rm -f "$OSR_HOME/.cargo/bin/cargo-binstall"
+
 # --- crate present -> skip ---------------------------------------------------
 : >"$OUT"; : >"$OSR_HOME/.cargo/bin/serie"; chmod +x "$OSR_HOME/.cargo/bin/serie"
 CAP=$(pkg_install serie 2>&1)

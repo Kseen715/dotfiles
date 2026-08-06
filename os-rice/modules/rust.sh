@@ -17,6 +17,33 @@ osr_install_rustup() {
     check_error $? "rustup install failed"
 }
 
+# osr_install_cargo_tooling — cargo-binstall + cargo-update, the pair that turns
+# every later cargo: row into a prebuilt-binary download instead of a source
+# build. binstall comes from its own release script (installing it FROM source
+# would defeat the point), and cargo-update then rides binstall. Best-effort
+# throughout: on failure plain `cargo install` still works, so warn, never error.
+osr_install_cargo_tooling() {
+    _rust_bin="$OSR_HOME/.cargo/bin"
+    if ! as_user test -x "$_rust_bin/cargo-binstall"; then
+        osr_fetch_stdout https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
+            | as_user bash \
+            || warn "cargo-binstall install failed - cargo: packages will build from source"
+    fi
+    if ! as_user test -x "$_rust_bin/cargo-install-update"; then
+        if as_user test -x "$_rust_bin/cargo-binstall"; then
+            as_user "$_rust_bin/cargo-binstall" --no-confirm cargo-update
+        else
+            as_user "$_rust_bin/cargo" install --locked cargo-update
+        fi || warn "cargo-update install failed"
+    fi
+    # The shim 20-aliases.zsh's cargo() hands to `cargo install-update -r`:
+    # cargo-update invokes it as `<shim> install ...` and it rewrites that into a
+    # binstall call. Dotfiles-owned (§5) — it is a flag translation, not a
+    # setting, so it ships as a file rather than being generated here.
+    install_layer "$OSR_DOTFILES/cargo/cargo-binstall-shim" "$OSR_HOME/.local/bin/cargo-binstall-shim"
+    as_user chmod 0755 "$OSR_HOME/.local/bin/cargo-binstall-shim"
+}
+
 run_step "Installing build tools (cc, curl)" pkg_install build curl
 
 # Idempotency probe (§2): rustup drops cargo at ~/.cargo/bin. If it is already
@@ -27,3 +54,7 @@ if as_user test -x "$_rust_cargo"; then
 else
     run_step "Installing Rust via rustup" osr_install_rustup
 fi
+
+# Runs on every pass: internally idempotent, and it is what makes the cargo:
+# provider (lib/pkg.sh) prefer binstall over a source build.
+run_step "Installing cargo-binstall + cargo-update" osr_install_cargo_tooling

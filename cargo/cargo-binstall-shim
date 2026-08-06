@@ -1,0 +1,41 @@
+#!/bin/sh
+# Fake "cargo" for `cargo install-update -r`: routes `install` to cargo-binstall.
+#
+# cargo-update only uses binstall when the package's registry is literally
+# "crates-io" (src/main.rs: `registry_name == "crates-io"`). We install from the
+# Nexus mirror, so that branch never fires and everything gets built from source.
+# This shim rewrites the fallback `cargo install ...` invocation into a binstall
+# one; binstall still resolves versions through Nexus, but pulls the prebuilt
+# binary from the upstream release host.
+#
+# Usage: cargo install-update -ag -r ~/.local/bin/cargo-binstall-shim
+# (drop --locked: it is a build-time flag, meaningless for prebuilt binaries)
+
+[ "$1" = install ] || exec cargo "$@"
+shift
+
+orig="$*"   # kept for the source-build fallback; the loop below consumes "$@"
+args=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--root)      args="$args --roots $2"; shift 2 ;;
+		--version)   args="$args --version =$2"; shift 2 ;;
+		--registry)  shift 2 ;;                  # binstall takes it from .cargo/config.toml
+		-j)          shift 2 ;;                  # no build, no jobs
+		-f|--force)  shift ;;                    # --force passed unconditionally below
+		--locked)    shift ;;
+		--quiet)     args="$args --quiet"; shift ;;
+		*)           args="$args $1"; shift ;;
+	esac
+done
+
+# ponytail: word-splitting $args/$orig is fine here, cargo-update passes no spaces.
+# shellcheck disable=SC2086
+cargo-binstall --no-confirm --force $args && exit 0
+
+# binstall compiles from source itself when a crate merely lacks a prebuilt
+# binary, but gives up when it cannot resolve the crate at all ("wezterm is not
+# found"). Hand that case back to the real cargo, unchanged args and all, so an
+# update never silently turns into a no-op.
+# shellcheck disable=SC2086
+exec cargo install $orig
