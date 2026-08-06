@@ -5,10 +5,11 @@ whole rices. One module written **once** installs across package managers; a
 rice is a plain list of what to install. See [DESIGN.md](DESIGN.md) for the full
 rationale.
 
-> Status: **MVP**. The harness (`lib/`, `install.sh`, `osr`) and the `zsh`
-> module are complete and pass the idempotency matrix on apt/apk/pacman. The
-> legacy per-distro trees (`linux-arch-*`, `linux-debian`, `linux-rhel`) and
-> `windows-11-x86_64` are not yet migrated onto it — see *Not yet migrated*.
+> Status: **past MVP**. The harness (`lib/`, `install.sh`, `osr`) plus ~70
+> modules are complete and pass the idempotency matrix on apt/apk/pacman. Every
+> legacy per-distro tree is gone: the last one,
+> `linux-arch-x86_64-hyprland-glass/`, is now `rices/arch-hyprland-glass/` +
+> `modules/*.sh`. `windows-11-x86_64/` is untouched and still its own thing.
 
 ## Layout
 
@@ -89,7 +90,13 @@ debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).
 
 ## Not yet migrated (Out of MVP)
 
-Deliberately out of the MVP (see DESIGN "MVP scope"): the ~40 legacy arch
-modules, the `cargo:`/`aur:`/`repo:`/`tarball:`/`brew:`/`flatpak:` providers,
-layering DE configs beyond zsh, `osr prune`, and Windows. The legacy trees
-remain as-is until migrated module by module.
+Still deliberately out of scope (see DESIGN "MVP scope"): the
+`repo:`/`tarball:`/`brew:`/`flatpak:` providers, `osr prune`, and Windows —
+`windows-11-x86_64/` remains its own PowerShell tree.
+
+The legacy per-distro bash trees are done. What their migration cannot claim is
+*verification*: modules that need a GPU, a display, a real kernel or a
+hypervisor are correct-by-construction and unit-tested, but only a real machine
+or a QEMU boot exercises them end to end (DESIGN §9). See
+[rices/arch-hyprland-glass/README.md](rices/arch-hyprland-glass/README.md) for
+the list.

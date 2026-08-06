@@ -1,7 +1,8 @@
 # i3wm full desktop — component checklist (distro-agnostic)
 
-Scratch/planning doc. Not a rice, not a module. Source material: the legacy
-`linux-arch-x86_64-hyprland-glass/` bundle + current `modules/` + `rices/arch-hyprland-glass/rice.list`.
+Scratch/planning doc. Not a rice, not a module. Source material: `modules/` +
+`rices/arch-hyprland-glass/` (which is where the legacy
+`linux-arch-x86_64-hyprland-glass/` bundle ended up).
 
 Legend:
 

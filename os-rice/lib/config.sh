@@ -201,16 +201,72 @@ apply_config() {
     as_user cp -rf "$_ac_src/." "$_ac_dst/"
 }
 
-# apply_wallpaper — pick the rice's wallpaper, record it as rice-owned state, and
-# set it if a compositor/setter exists. Degrades to record-only when headless
+# --- wallpaper: one resolution, one installed copy (§6) ----------------------
+#
+# Four consumers want the same answer: hyprpaper's `preload =`, hyprland's
+# `env = WALLPAPER_PATH`, gtklock's style.css background, and apply_wallpaper's
+# recorded state. The legacy bundle let each hard-code or sed its own path (and
+# the hyprland/hyprpaper pair silently disagreed, so `$WALLPAPER_PATH` pointed at
+# a file nothing had copied). Resolve it once here, install it once into a
+# user-owned dir, and hand every consumer the same absolute path.
+
+# osr_rice_wallpaper — echo the rice's wallpaper source, "" when it ships none.
+# Extension-filtered on purpose: several rices carry a `wallpapers/*.txt`
+# "drop a real image here" placeholder, and that must resolve to "" (no
+# wallpaper) rather than to the placeholder itself.
+osr_rice_wallpaper() {
+    [ -n "${OSR_RICE_DIR:-}" ] || return 0
+    for _rw_f in "$OSR_RICE_DIR"/wallpapers/*; do
+        [ -f "$_rw_f" ] || continue
+        case "$_rw_f" in
+            *.jpg|*.jpeg|*.png|*.webp|*.bmp|*.gif|*.JPG|*.JPEG|*.PNG) ;;
+            *) continue ;;
+        esac
+        printf '%s' "$_rw_f"
+        return 0
+    done
+}
+
+# osr_install_wallpaper — copy the rice wallpaper to ~/Pictures/Wallpapers and
+# echo the installed path ("" when the rice ships none). The installed copy, not
+# the path inside the repo, is what the configs point at: the wallpaper then
+# survives moving or deleting the dotfiles checkout. Rerun-safe (§2) - an
+# identical file is left alone.
+osr_install_wallpaper() {
+    _iw_src=$(osr_rice_wallpaper)
+    [ -n "$_iw_src" ] || return 0
+    _iw_dir="$OSR_HOME/Pictures/Wallpapers"
+    _iw_dst="$_iw_dir/$(basename "$_iw_src")"
+    if [ -f "$_iw_dst" ] && command -v cmp >/dev/null 2>&1 && cmp -s "$_iw_src" "$_iw_dst"; then
+        printf '%s' "$_iw_dst"
+        return 0
+    fi
+    as_user mkdir -p "$_iw_dir"
+    as_user cp -f "$_iw_src" "$_iw_dst"
+    printf '%s' "$_iw_dst"
+}
+
+# install_wallpaper_layer <src> <dst> — install a rice-owned config layer that
+# carries the `{{WALLPAPER_PATH}}` placeholder, substituting the installed
+# wallpaper path. Same overwrite-on-update semantics as install_layer; the
+# placeholder is what keeps the path out of the rice's config files, so a rice
+# with a different image needs no module change. A rice with no wallpaper
+# substitutes empty - the config still lands, it just paints nothing.
+install_wallpaper_layer() {
+    _wl_src=$1
+    _wl_dst=$2
+    _wl_wp=$(osr_install_wallpaper)
+    _wl_tmp="${TMPDIR:-/tmp}/osr-wallpaper-layer-$$"
+    sed "s#{{WALLPAPER_PATH}}#${_wl_wp}#g" "$_wl_src" >"$_wl_tmp"
+    backup_copy "$_wl_tmp" "$_wl_dst"
+    rm -f "$_wl_tmp"
+}
+
+# apply_wallpaper — install the rice's wallpaper, record it as rice-owned state,
+# and set it if a compositor/setter exists. Degrades to record-only when headless
 # (containers, no DE) so it never fails a run (§6, §9).
 apply_wallpaper() {
-    _wp=""
-    for _f in "$OSR_RICE_DIR"/wallpapers/*; do
-        [ -f "$_f" ] || continue
-        _wp=$_f
-        break
-    done
+    _wp=$(osr_install_wallpaper)
     [ -n "$_wp" ] || return 0
 
     # Record the choice — this is what a switch swaps even with no display.

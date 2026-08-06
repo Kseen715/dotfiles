@@ -8,13 +8,10 @@ if [ -n "$OSR_RICE_DIR" ]; then
     _gd="$OSR_RICE_DIR/config/gtklock"
     [ -f "$_gd/config.ini" ] && install_layer "$_gd/config.ini" "$OSR_HOME/.config/gtklock/config.ini"
 
-    # Resolve {{WALLPAPER_PATH}} -> the rice's first wallpaper (cosmetic bg).
+    # Resolve {{WALLPAPER_PATH}} -> the installed wallpaper (cosmetic bg). Shared
+    # with hyprpaper/hyprland so all three paint the same file (config.sh).
     if [ -f "$_gd/style.css" ]; then
-        _wp=""
-        for _f in "$OSR_RICE_DIR"/wallpapers/*; do [ -f "$_f" ] && { _wp=$_f; break; }; done
-        as_user mkdir -p "$OSR_HOME/.config/gtklock"
-        sed "s#{{WALLPAPER_PATH}}#${_wp}#g" "$_gd/style.css" \
-            | as_user tee "$OSR_HOME/.config/gtklock/style.css" >/dev/null
+        install_wallpaper_layer "$_gd/style.css" "$OSR_HOME/.config/gtklock/style.css"
     fi
     # Seed the lockscreen avatar once (user territory afterwards).
     [ -f "$_gd/.face" ] && seed_once "$_gd/.face" "$OSR_HOME/.face"

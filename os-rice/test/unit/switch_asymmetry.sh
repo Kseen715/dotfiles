@@ -37,10 +37,26 @@ assert_contains "$RC/90-theme.zsh" nord "90-theme swapped to nord"
 assert_contains "$OSR_HOME/.config/starship.toml" "88c0d0" "starship palette swapped to nord colors"
 assert_contains "$OSR_HOME/.config/starship.toml" 'palette = "theme"' "starship base body composed in"
 refute_contains "$OSR_HOME/.config/starship.toml" "fabd2f" "old gruvbox accent gone after switch"
-assert_contains "$OSR_HOME/.config/osr/wallpaper" nord "wallpaper swapped to nord"
 assert_contains "$RC/00-env.zsh" MY_MACHINE_VAR "00-env untouched (user territory)"
 assert_contains "$RC/99-local.zsh" "alias mine" "99-local untouched (user territory)"
 assert_contains "$RC/20-aliases.zsh" lsd "20-aliases present (dotfiles-owned)"
 
-rm -rf "$H"
+# --- the wallpaper half of the swap ------------------------------------------
+# On its own fixture pair, because the repo's gruvbox/nord ship a
+# `wallpapers/*.txt` "drop a real image here" placeholder rather than an image -
+# and a placeholder resolves to no wallpaper at all (see wallpaper_layer.sh).
+F=$(mktemp -d)
+for r in one two; do
+    mkdir -p "$F/$r/wallpapers"
+    printf 'IMAGE-%s' "$r" >"$F/$r/wallpapers/$r.png"
+done
+OSR_RICE_DIR="$F/one"; export OSR_RICE_DIR; apply_wallpaper >/dev/null
+assert_contains "$OSR_HOME/.config/osr/wallpaper" "one.png" "wallpaper recorded for the first rice"
+OSR_RICE_DIR="$F/two"; export OSR_RICE_DIR; apply_wallpaper >/dev/null
+assert_contains "$OSR_HOME/.config/osr/wallpaper" "two.png" "wallpaper swapped on rice switch"
+[ -f "$OSR_HOME/Pictures/Wallpapers/one.png" ] \
+    && ok "the previous rice's wallpaper file is kept (additive, only the pointer swaps)" \
+    || fail "the previous rice's wallpaper file is kept (additive, only the pointer swaps)"
+
+rm -rf "$H" "$F"
 finish
