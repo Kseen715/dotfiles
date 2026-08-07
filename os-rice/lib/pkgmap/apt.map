@@ -43,12 +43,12 @@ serie = cargo:serie          # not packaged on Debian/Ubuntu
 gh@bullseye   = source:provide_gh_tarball
 btop@bullseye = source:provide_btop_tarball
 
-# zig is native only on Ubuntu 25.10 (resolute); Debian + older Ubuntu build from
+# zig is native only on Ubuntu resolute; Debian + older Ubuntu build from
 # the official ziglang.org tarball. ghostty likewise: native on resolute, else
 # built from source (heavy). Build-dep name splits for the ghostty source path.
 zig = source:provide_zig
 zig@resolute = zig
-# ghostty: native on 25.10 (resolute); community .deb on the releases the
+# ghostty: native on resolute; community .deb on the releases the
 # ghostty-ubuntu installer supports (Ubuntu 24.04 noble, Debian 13 trixie); Zig
 # source build on the rest (jammy/bullseye/bookworm - no community binary).
 ghostty = source:provide_ghostty
@@ -140,3 +140,32 @@ dconf = dconf-cli dconf-gsettings-backend
 # Debian keeps the GLib command-line tools out of the runtime library package, so
 # nothing pulls in `gsettings` implicitly the way glib2 does on Arch/Fedora.
 glib2 = libglib2.0-bin
+
+# --- thunderbird (modules/thunderbird.sh) -------------------------------------
+# Native-first as everywhere else (§1a G6): a row exists ONLY on the releases
+# that cannot give a usable Thunderbird, and the reason differs by release.
+#
+#             ships          why it can't stay native
+#   bullseye  91 ESR         Exchange/EWS needs 140+
+#   bookworm  115 ESR        same
+#   trixie    128 ESR        same
+#   jammy     115 ESR        same
+#   noble     snap stub      `thunderbird` is a transitional package whose only
+#   resolute  snap stub      job is `snap install thunderbird`; the snap moves the
+#                            profile root to ~/snap/thunderbird/common/.thunderbird,
+#                            where the module's user.js/userChrome.css layer is
+#                            read by nothing.
+#
+# A release not listed here (a future Debian/Ubuntu that ships 140+ as a real deb)
+# passes through to the archive package, and modules/thunderbird.sh's post-install
+# version guard says so if that assumption turns out wrong.
+#
+# The route is Mozilla's official tarball, NOT packages.mozilla.org/apt: that repo
+# publishes firefox only, so an apt-get install against it falls straight back to
+# the archive's snap stub - the exact thing these rows exist to avoid.
+thunderbird@bullseye = source:provide_thunderbird_tarball
+thunderbird@bookworm = source:provide_thunderbird_tarball
+thunderbird@trixie   = source:provide_thunderbird_tarball
+thunderbird@jammy    = source:provide_thunderbird_tarball
+thunderbird@noble    = source:provide_thunderbird_tarball
+thunderbird@resolute = source:provide_thunderbird_tarball

@@ -478,3 +478,66 @@ provide_amneziavpn_source() {
     fi
     as_user rm -rf "$_as_src"
 }
+
+# provide_thunderbird_tarball — Thunderbird from Mozilla's official Linux tarball
+# (download.mozilla.org), installed as a tree under /opt with a symlink and a
+# .desktop entry. The Debian/Ubuntu route, for two reasons the archive cannot fix:
+#
+#   snap     On Ubuntu 24.04+ the archive's `thunderbird` is a transitional stub
+#            whose only job is `snap install thunderbird`. The snap relocates the
+#            profile root to ~/snap/thunderbird/common/.thunderbird, so the §5/§6
+#            layer modules/thunderbird.sh writes to ~/.thunderbird is read by
+#            nothing.
+#   ESR      Debian pins an ESR (91/115/128 on bullseye..trixie). Native
+#            Exchange/EWS accounts need Thunderbird 140+.
+#
+# Not the Mozilla APT repo: packages.mozilla.org carries firefox only — asking it
+# for thunderbird silently falls through to the archive's snap stub, which is
+# exactly the thing this builder exists to avoid.
+#
+# The tarball is x86_64-only (Mozilla publishes no aarch64 Linux build), so other
+# arches get a clear error instead of a mystery 404. Clearing the snap out of the
+# way is the module's job, not this builder's - it has to happen BEFORE
+# pkg_install, or `command -v thunderbird` finds /snap/bin/thunderbird and the
+# source: probe (§4) skips the install entirely.
+provide_thunderbird_tarball() {
+    [ "$OSR_ARCH" = x86_64 ] \
+        || error "Mozilla publishes no Linux $OSR_ARCH Thunderbird build - use the distro package (an ESR without Exchange/EWS) on this arch"
+
+    pkg_install tar xz
+    _tb_tmp=$(mktemp -d)
+    info "downloading the latest Thunderbird from download.mozilla.org"
+    osr_download "https://download.mozilla.org/?product=thunderbird-latest&os=linux64&lang=en-US" \
+        "$_tb_tmp/thunderbird.tar.xz" || { rm -rf "$_tb_tmp"; error "failed to download Thunderbird"; }
+    tar -xf "$_tb_tmp/thunderbird.tar.xz" -C "$_tb_tmp" \
+        || { rm -rf "$_tb_tmp"; error "failed to extract the Thunderbird tarball"; }
+    [ -x "$_tb_tmp/thunderbird/thunderbird" ] \
+        || { rm -rf "$_tb_tmp"; error "no thunderbird binary in the tarball"; }
+    as_root rm -rf /opt/thunderbird
+    as_root mv "$_tb_tmp/thunderbird" /opt/thunderbird \
+        || { rm -rf "$_tb_tmp"; error "failed to install Thunderbird into /opt"; }
+    rm -rf "$_tb_tmp"
+    # /usr/local/bin precedes /usr/bin, so this wins over any leftover wrapper.
+    as_root ln -sf /opt/thunderbird/thunderbird /usr/local/bin/thunderbird
+
+    # The tarball ships no .desktop entry (Mozilla leaves that to packagers), so
+    # write the minimal one: without it the app has no menu entry and nothing
+    # answers mailto:.
+    as_root tee /usr/share/applications/thunderbird.desktop >/dev/null <<'DESKTOP'
+[Desktop Entry]
+Name=Thunderbird
+Comment=Send and receive mail
+Exec=/opt/thunderbird/thunderbird %u
+Icon=/opt/thunderbird/chrome/icons/default/default128.png
+Terminal=false
+Type=Application
+Categories=Network;Email;
+MimeType=x-scheme-handler/mailto;message/rfc822;
+StartupNotify=true
+StartupWMClass=thunderbird
+DESKTOP
+    command -v update-desktop-database >/dev/null 2>&1 \
+        && as_root update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
+    # /opt is root-owned, so Thunderbird's own updater cannot apply updates:
+    # `osr install thunderbird` (this builder) is the update path.
+}

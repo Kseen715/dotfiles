@@ -17,3 +17,24 @@ docker = moby-engine
 serie = cargo:serie          # no native serie on Fedora
 ghostty = source:provide_ghostty_copr   # Fedora COPR community binary (scottames/ghostty)
 
+
+# --- thunderbird (modules/thunderbird.sh) -------------------------------------
+# Native-first: a row only where the branch froze below
+# the 140 that Exchange/EWS needs. Fedora rebuilds thunderbird on every SUPPORTED
+# branch, so the current ones need nothing; an EOL branch keeps whatever it had
+# when updates stopped, and the three oldest stopped below 140.
+#
+#          last thunderbird   EWS?
+#   f38    115.16.1           no    (EOL)
+#   f39    115.16.1           no    (EOL)
+#   f40    128.10.0           no    (EOL)
+#   f41    140.3.0            yes
+#   f42    149.0.1            yes
+#   f43    152.0              yes
+#   f44    152.0              yes
+#
+# Fedora has no VERSION_CODENAME, so the facet is the version_id. The RHEL family
+# tracks the ESR too (CentOS Stream 9: 140.10) and needs no rows.
+thunderbird@38 = source:provide_thunderbird_tarball
+thunderbird@39 = source:provide_thunderbird_tarball
+thunderbird@40 = source:provide_thunderbird_tarball
