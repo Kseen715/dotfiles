@@ -23,17 +23,25 @@ assert_eq "source:provide_yandex_browser" "$(_pkgmap_one yandex-browser)" \
     "apt takes the vendor repo builder (no Debian/Ubuntu archive carries it)"
 OSR_PKG=pacman
 assert_eq "aur:yandex-browser" "$(_pkgmap_one yandex-browser)" "pacman keeps the AUR package"
-for _p in dnf xbps apk portage; do
+OSR_PKG=xbps
+assert_eq "source:provide_yandex_browser_deb" "$(_pkgmap_one yandex-browser)" \
+    "xbps unpacks the vendor .deb (Void packages it nowhere)"
+# The unpacked .deb resolves no shared libraries of its own - the closure is a row.
+assert_contains "$OSR_LIB/pkgmap/xbps.map" '^yandex-browser-deps = .*gtk+3.*nss' \
+    "the dependency closure the deb would have pulled is listed for xbps"
+for _p in dnf apk portage; do
     OSR_PKG=$_p
     assert_eq "yandex-browser" "$(_pkgmap_one yandex-browser)" \
         "$_p has no row - pkg_install fails loudly instead of installing a lookalike"
 done
 OSR_PKG=apt
-if command -v provide_yandex_browser >/dev/null 2>&1; then
-    ok "provide_yandex_browser builder is defined (source: row resolves)"
-else
-    fail "provide_yandex_browser builder missing"
-fi
+for _b in provide_yandex_browser provide_yandex_browser_deb; do
+    if command -v "$_b" >/dev/null 2>&1; then
+        ok "$_b builder is defined (source: row resolves)"
+    else
+        fail "$_b builder missing"
+    fi
+done
 
 # --- the flags layer ---------------------------------------------------------
 OSR_HOME=$(mktemp -d); export OSR_HOME

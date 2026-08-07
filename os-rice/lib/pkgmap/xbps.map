@@ -92,3 +92,11 @@ libldac = ldacBT
 # modules/evolution.sh drives lives in it, same as Arch's glib2. `dconf` and the
 # evolution trio keep their upstream names and need no rows.
 glib2 = glib
+
+# --- yandex-browser (modules/yandex-browser.sh) -------------------------------
+# Void packages no Yandex Browser (it is proprietary; not in the repo, not in
+# void-packages/nonfree), and the vendor ships deb + rpm only. The builder
+# unpacks the official .deb, so the shared-library closure the deb would have
+# pulled in as dependencies has to be installed by name here.
+yandex-browser = source:provide_yandex_browser_deb
+yandex-browser-deps = bash gtk+3 nss alsa-lib libcups libXScrnSaver libXtst at-spi2-atk libxkbcommon mesa-dri libnotify desktop-file-utils hicolor-icon-theme xdg-utils libarchive

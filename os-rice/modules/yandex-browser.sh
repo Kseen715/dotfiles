@@ -6,6 +6,8 @@
 #   pacman  aur:yandex-browser
 #   apt     source:provide_yandex_browser — the vendor's own apt repo, which no
 #           Debian/Ubuntu archive carries (yandex.ru/support/browser install docs)
+#   xbps    source:provide_yandex_browser_deb — Void packages it nowhere and the
+#           vendor ships deb/rpm only, so the .deb is unpacked into /opt
 # Anything else has no package and fails loudly rather than installing a
 # lookalike, same convention as vscode on apt.
 #

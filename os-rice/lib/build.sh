@@ -578,3 +578,73 @@ provide_yandex_browser() {
     check_error $? "failed to install yandex-browser-stable"
     as_root ln -sf /usr/bin/yandex-browser-stable /usr/local/bin/yandex-browser
 }
+
+# _yb_deb_url — echo the current yandex-browser-stable .deb URL, resolved from
+# the vendor repo's own Packages index (uncompressed, ~4 KB, one package per
+# stanza) so no version is ever hard-coded here (G4).
+_yb_deb_url() {
+    _yu_base=https://repo.yandex.ru/yandex-browser/deb
+    _yu_file=$(osr_fetch_stdout "$_yu_base/dists/stable/main/binary-amd64/Packages" \
+        | awk '/^Package: yandex-browser-stable$/ {f=1} f && /^Filename:/ {print $2; exit}')
+    [ -n "$_yu_file" ] || error "could not resolve the yandex-browser-stable .deb from the vendor index"
+    printf '%s/%s' "$_yu_base" "$_yu_file"
+}
+
+# provide_yandex_browser_deb — Yandex Browser on a target with no package of its
+# own (Void). The vendor publishes deb + rpm and nothing else, and there is no
+# void-packages template (not even in nonfree), so the only route is unpacking
+# the official .deb: it is a self-contained Chromium tree under /opt/yandex plus
+# a launcher symlink and .desktop entries, with no maintainer scripts that matter
+# outside dpkg. bsdtar reads both the outer `ar` container and the inner
+# compressed data tarball (xz today), so no dpkg/binutils is needed.
+#
+# Unpacked into a staging dir first, then ./opt and ./usr are copied into place
+# and ./etc is deliberately left behind: everything the deb puts there exists for
+# dpkg's world only - a daily cron job that runs `apt-get update`, and an
+# autostart entry whose whole job is the "make me your default browser" nag.
+#
+# The one thing dpkg's postinst did that has to be repeated: the SUID sandbox
+# helper gets its setuid bit back. bsdtar drops it when not extracting as root,
+# and Chromium refuses to start without either that or unprivileged user
+# namespaces. /usr/bin/yandex-browser-stable, which every .desktop entry execs by
+# name, is a symlink inside the archive and rides along with the ./usr copy.
+#
+# Updates: nothing owns this tree, and _via_source's `command -v` probe (§4)
+# makes a rerun a no-op, so `osr module yandex-browser` will NOT upgrade it.
+# `sudo rm -rf /opt/yandex/browser` first, then rerun, is the update path.
+provide_yandex_browser_deb() {
+    [ "$OSR_ARCH" = x86_64 ] \
+        || error "Yandex publishes no Linux $OSR_ARCH browser build (amd64 only)"
+
+    # The deb declares its shared libraries as dependencies; unpacked, nothing
+    # resolves them - the map row lists the same closure under one logical name.
+    pkg_install yandex-browser-deps
+    command -v bsdtar >/dev/null 2>&1 || error "bsdtar (libarchive) is required to unpack the Yandex Browser .deb"
+
+    _yb_url=$(_yb_deb_url)
+    _yb_tmp=$(mktemp -d)
+    info "downloading Yandex Browser ($(basename "$_yb_url"))"
+    osr_download "$_yb_url" "$_yb_tmp/yb.deb" || { rm -rf "$_yb_tmp"; error "failed to download $_yb_url"; }
+    bsdtar -xf "$_yb_tmp/yb.deb" -C "$_yb_tmp" \
+        || { rm -rf "$_yb_tmp"; error "failed to open the Yandex Browser .deb"; }
+    _yb_data=$(find "$_yb_tmp" -maxdepth 1 -name 'data.tar*' | head -n 1)
+    [ -n "$_yb_data" ] || { rm -rf "$_yb_tmp"; error "no data.tar in the Yandex Browser .deb"; }
+    mkdir -p "$_yb_tmp/root"
+    bsdtar -xf "$_yb_data" -C "$_yb_tmp/root" \
+        || { rm -rf "$_yb_tmp"; error "failed to unpack the Yandex Browser .deb"; }
+    [ -x "$_yb_tmp/root/opt/yandex/browser/yandex_browser" ] \
+        || { rm -rf "$_yb_tmp"; error "no /opt/yandex/browser/yandex_browser in the .deb - its layout changed"; }
+
+    as_root mkdir -p /opt/yandex
+    as_root rm -rf /opt/yandex/browser
+    as_root cp -a "$_yb_tmp/root/opt/yandex/browser" /opt/yandex/ \
+        || { rm -rf "$_yb_tmp"; error "failed to install Yandex Browser into /opt"; }
+    # ./usr is the launcher symlink, the two .desktop entries, icons and appdata.
+    as_root cp -a "$_yb_tmp/root/usr/." /usr/
+    rm -rf "$_yb_tmp"
+
+    as_root chmod 4755 /opt/yandex/browser/yandex_browser-sandbox
+    as_root ln -sf /opt/yandex/browser/yandex-browser /usr/local/bin/yandex-browser
+    command -v update-desktop-database >/dev/null 2>&1 \
+        && as_root update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
+}
