@@ -10,16 +10,18 @@ osr_detect() {
     OSR_INIT=""
     OSR_CODENAME=""
     OSR_VERSION_ID=""
+    OSR_VERSION=""
+    OSR_ID_LIKE=""
 
     # Distro id + release from /etc/os-release. CODENAME (jammy/noble) and
     # VERSION_ID (24.04 / RHEL's 9) drive the `name@release` map qualifier (G6).
-    _osr_like=""
     if [ -r /etc/os-release ]; then
         # ID_LIKE is absent on Debian/Arch — default-expand so `set -u` is happy.
         OSR_DISTRO=$(. /etc/os-release 2>/dev/null && printf '%s' "${ID:-}")
-        _osr_like=$(. /etc/os-release 2>/dev/null && printf '%s' "${ID_LIKE:-}")
+        OSR_ID_LIKE=$(. /etc/os-release 2>/dev/null && printf '%s' "${ID_LIKE:-}")
         OSR_CODENAME=$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_CODENAME:-}")
         OSR_VERSION_ID=$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_ID:-}")
+        OSR_VERSION=$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION:-}")
     fi
 
     # CPU arch — only artifact-fetching providers (tarball/source/github) need it;
@@ -48,7 +50,7 @@ osr_detect() {
     elif command -v emerge >/dev/null 2>&1; then
         OSR_PKG=portage
     else
-        case " $OSR_DISTRO $_osr_like " in
+        case " $OSR_DISTRO $OSR_ID_LIKE " in
             *" debian "*|*" ubuntu "*)   OSR_PKG=apt ;;
             *" fedora "*|*" rhel "*)     OSR_PKG=dnf ;;
             *" arch "*)                  OSR_PKG=pacman ;;
@@ -83,7 +85,7 @@ osr_detect() {
     esac
 
     export OSR_DISTRO OSR_PKG OSR_INIT OSR_CODENAME OSR_VERSION_ID \
-           OSR_ARCH OSR_ARCH_DEB OSR_ETC_DEFAULT
+           OSR_VERSION OSR_ID_LIKE OSR_ARCH OSR_ARCH_DEB OSR_ETC_DEFAULT
 
     # Hardware facets (§7): absorb the legacy detect-cpu/virt/hwaccel bash into
     # bounded POSIX probes. Silent + command-guarded so a minimal box never errors.
