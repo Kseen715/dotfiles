@@ -60,6 +60,10 @@ gtk4-dev = libgtk-4-dev
 libadwaita-dev = libadwaita-1-dev
 amneziavpn = source:provide_amneziavpn
 
+# Yandex Browser is in no Debian/Ubuntu archive; the vendor runs its own apt repo
+# (modules/yandex-browser.sh), which the builder adds before installing.
+yandex-browser = source:provide_yandex_browser
+
 
 # zram-generator: Arch/Fedora/Void name it after the generator, Debian/Ubuntu
 # prefix it with systemd- (modules/swap.sh).

@@ -541,3 +541,40 @@ DESKTOP
     # /opt is root-owned, so Thunderbird's own updater cannot apply updates:
     # `osr install thunderbird` (this builder) is the update path.
 }
+
+# provide_yandex_browser — Yandex Browser on Debian/Ubuntu from the vendor's own
+# apt repo (repo.yandex.ru/yandex-browser/deb), the route yandex.ru/support/
+# browser/ru/about/install documents. A repo and not the one-off
+# yandex-browser-stable_amd64.deb: the .deb writes the same source list in its
+# postinst anyway, so adding it up front is the same end state with apt-managed
+# updates from the first run.
+#
+# The key is installed armored as /etc/apt/keyrings/yandex-browser.asc and
+# referenced by signed-by=, which needs no gpg on the box (apt reads armored keys
+# by extension) and scopes the key to this one repo instead of trusting it
+# archive-wide the way the deprecated apt-key would.
+#
+# amd64-only: the repo declares i386 but ships an empty index for it, and there
+# is no arm build at all. _via_source probes `command -v yandex-browser` (§4),
+# but the package installs `yandex-browser-stable` — hence the symlink, which
+# both satisfies the probe (a rerun is a no-op) and gives the short command.
+provide_yandex_browser() {
+    [ "$OSR_ARCH" = x86_64 ] \
+        || error "Yandex publishes no Linux $OSR_ARCH browser build (amd64 only)"
+
+    _yb_key=/etc/apt/keyrings/yandex-browser.asc
+    _yb_tmp=$(mktemp)
+    info "adding the Yandex Browser apt repository"
+    osr_download https://repo.yandex.ru/yandex-browser/YANDEX-BROWSER-KEY.GPG "$_yb_tmp" \
+        || { rm -f "$_yb_tmp"; error "failed to download the Yandex Browser signing key"; }
+    as_root install -Dm 0644 "$_yb_tmp" "$_yb_key"
+    rm -f "$_yb_tmp"
+    printf 'deb [arch=amd64 signed-by=%s] https://repo.yandex.ru/yandex-browser/deb stable main\n' \
+        "$_yb_key" | as_root tee /etc/apt/sources.list.d/yandex-browser.list >/dev/null
+
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q \
+        || warn "apt-get update failed after adding the Yandex Browser repo - trying the install anyway"
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y yandex-browser-stable
+    check_error $? "failed to install yandex-browser-stable"
+    as_root ln -sf /usr/bin/yandex-browser-stable /usr/local/bin/yandex-browser
+}
