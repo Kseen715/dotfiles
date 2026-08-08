@@ -275,10 +275,16 @@ pkg_installed zsh || pkg_install zsh              # skip if present (dnf/apt nee
 ensure_line "$rc" 'eval "$(starship init sh)"'    # grep -q before append — safe on rerun
 backup_copy "$src" "$dst"                          # copies to .bak once, then overwrites; rerun-safe
 
-# only chsh if not already the login shell
-[ "$(getent passwd "$u" | cut -d: -f7)" = "$(command -v zsh)" ] \
-  || chsh -s "$(command -v zsh)" "$u"
+# only change the login shell if it isn't already zsh
+osr_shell_is "$u" "$(command -v zsh)" || osr_set_login_shell "$u" "$(command -v zsh)"
 ```
+
+`osr_set_login_shell` (lib/user.sh) exists because `chsh` is not a given:
+busybox images (Alpine) have no such applet and a minimal Fedora leaves it in
+`util-linux-user`, so a chsh-only module quietly leaves those boxes on
+`/bin/sh`. It registers the shell in `/etc/shells`, then tries `chsh` ->
+`usermod` -> a direct `/etc/passwd` rewrite, **verifying the passwd entry after
+each** rather than trusting an exit code.
 
 The existing "already installed, skipping" checks already lean this way — this
 makes it law and gives it a toolbox.
@@ -751,8 +757,7 @@ install_zsh_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-synt
 backup_copy "$DOTFILES/zsh/.zshrc"          "$HOME_U/.zshrc"
 backup_copy "$DOTFILES/starship/starship.toml" "$HOME_U/.config/starship.toml"
 
-[ "$(getent passwd "$U" | cut -d: -f7)" = "$(command -v zsh)" ] \
-  || chsh -s "$(command -v zsh)" "$U"
+osr_shell_is "$U" "$(command -v zsh)" || osr_set_login_shell "$U" "$(command -v zsh)"
 ```
 
 ---
