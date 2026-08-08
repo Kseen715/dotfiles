@@ -12,6 +12,10 @@ dev-headers = openssl-devel pkgconf
 gh = github-cli
 serie = cargo:serie          # no native serie on Void
 
+# chafa is native and current on Void (rolling, 1.18.x) - no method row. Build
+# deps only, for the provide_chafa repair path in modules/yazi.sh.
+chafa-build-deps = glib-devel freetype-devel libjpeg-turbo-devel libwebp-devel tiff-devel pkg-config
+
 # --- X11 session core ---------------------------------------------------------
 # Void does not prefix X client utilities: Arch's xorg-xrandr is just xrandr.
 xorg-xinit = xinit

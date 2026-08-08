@@ -94,6 +94,77 @@ provide_yazi_bin() {
     _via_cargo ya   yazi-cli     # the `ya` plugin/package CLI
 }
 
+# CHAFA_MIN — the chafa yazi actually needs, and the reason this builder exists.
+# Yazi drives the adapter as `chafa -f symbols --relative off --probe off
+# --polite on --passthrough none --animate off --view-size WxH <img>`, and
+# --probe landed in chafa 1.16.0 (yazi documents >= 1.16.0 for the same reason).
+# An older chafa exits on the unrecognized option, so the preview pane just stays
+# blank - no error in the UI, nothing in the log. Version, not presence, is the
+# thing to test.
+CHAFA_MIN=1.16
+
+# _chafa_version — MAJOR.MINOR of the chafa on PATH, empty when there is none.
+# `chafa --version` opens with "Chafa version 1.14.5".
+_chafa_version() {
+    command -v chafa >/dev/null 2>&1 || return 0
+    chafa --version 2>/dev/null | head -n 1 \
+        | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p'
+}
+
+# _chafa_ok — true when the chafa on PATH is >= CHAFA_MIN.
+_chafa_ok() {
+    _cok_have=$(_chafa_version)
+    [ -n "$_cok_have" ] || return 1
+    _cok_hmaj=${_cok_have%%.*}; _cok_hmin=${_cok_have#*.}
+    _cok_wmaj=${CHAFA_MIN%%.*}; _cok_wmin=${CHAFA_MIN#*.}
+    if [ "$_cok_hmaj" -ne "$_cok_wmaj" ]; then
+        [ "$_cok_hmaj" -gt "$_cok_wmaj" ]
+    else
+        [ "$_cok_hmin" -ge "$_cok_wmin" ]
+    fi
+}
+
+# provide_chafa — build chafa from the upstream release tarball, for the targets
+# whose archive is older than CHAFA_MIN (the table in apt.map). Upstream ships a
+# SOURCE tarball only - no prebuilt Linux binary anywhere - so those releases
+# have to compile, unlike every other builder here. It is a small C project:
+# glib + freetype are the only mandatory deps, PNG/GIF decode is built in
+# (LodePNG / libnsgif), and jpeg/webp/tiff come from the optional loaders in
+# chafa-build-deps so the formats a file manager actually previews all render.
+#
+# Idempotency goes BEYOND _via_source's `command -v chafa` probe (§2): presence
+# is not sufficiency here, so the builder re-checks the version itself and
+# returns early when the chafa on PATH is already new enough. That also makes it
+# safe to call directly, which modules/yazi.sh does to repair a box that already
+# had an old distro chafa - that one satisfies the probe and would otherwise
+# never be replaced. /usr/local/bin precedes /usr/bin in the default PATH, so
+# the built chafa wins even where the old package stays installed.
+provide_chafa() {
+    if _chafa_ok; then
+        info "chafa $(_chafa_version) is already >= $CHAFA_MIN - skipping the source build"
+        return 0
+    fi
+    pkg_install build chafa-build-deps tar xz
+    _cf_ver=$(github_latest hpjansson/chafa); _cf_ver=${_cf_ver#v}   # tags carry no v
+    _cf_tmp=$(mktemp -d)
+    osr_download "https://github.com/hpjansson/chafa/releases/download/${_cf_ver}/chafa-${_cf_ver}.tar.xz" \
+        "$_cf_tmp/chafa.tar.xz" || { rm -rf "$_cf_tmp"; error "failed to download chafa $_cf_ver"; }
+    tar -xf "$_cf_tmp/chafa.tar.xz" -C "$_cf_tmp" \
+        || { rm -rf "$_cf_tmp"; error "failed to extract chafa $_cf_ver"; }
+    # The dist tarball is pre-autotooled - ./configure is already generated, so
+    # no autogen.sh run and no autoconf/automake/libtool in the dep list.
+    _cf_src="$_cf_tmp/chafa-${_cf_ver}"
+    ( cd "$_cf_src" && env PKG_CONFIG_PATH="$(_osr_pkgconfig_path)" ./configure --prefix=/usr/local \
+        && make -j"${OSR_BUILD_JOBS:-$(nproc 2>/dev/null || echo 2)}" ) \
+        || { rm -rf "$_cf_tmp"; error "chafa build failed"; }
+    as_root make -C "$_cf_src" install \
+        || { rm -rf "$_cf_tmp"; error "chafa install failed"; }
+    # libchafa lands in /usr/local/lib; refresh the loader cache so the binary
+    # finds it on distros that do not scan that dir by default.
+    as_root ldconfig >/dev/null 2>&1 || true
+    rm -rf "$_cf_tmp"
+}
+
 # provide_paru — bootstrap the paru AUR helper from the AUR (source:provide_paru).
 # The chicken/egg package: the one AUR package that cannot come *from* an AUR
 # helper. Clone its PKGBUILD and makepkg it as OSR_USER (makepkg refuses root);

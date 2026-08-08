@@ -6,6 +6,11 @@ dev-headers = openssl pkgconf
 gh = github-cli
 i3 = i3-wm
 
+# chafa is native and current on Arch (rolling, 1.18.x) - no method row. Build
+# deps only, for the provide_chafa repair path in modules/yazi.sh; Arch ships
+# headers in the main package, so these are the runtime names.
+chafa-build-deps = glib2 freetype2 libjpeg-turbo libwebp libtiff pkgconf
+
 # --- AUR method rows (§4) — hyprland-glass rice, Arch-only ---------------------
 # paru is the chicken/egg helper: built from source (source:provide_paru); list it
 # before any aur: package in the manifest (order is the dependency graph, §4).

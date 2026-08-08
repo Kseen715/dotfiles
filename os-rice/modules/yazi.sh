@@ -18,6 +18,18 @@
 # protocol wins the detection.
 run_step "Installing Yazi" pkg_install yazi chafa
 
+# ...but presence is not sufficiency: yazi invokes chafa with --probe, which only
+# exists in 1.16.0+ (CHAFA_MIN, lib/build.sh), and an older one exits on the
+# unknown option leaving the preview pane blank with no error anywhere. The
+# pkgmap rows route the releases known to be behind straight to provide_chafa,
+# and this catches the rest - a box that ALREADY had an old distro chafa (which
+# satisfies pkg_install's presence probe and would never be replaced), an EOL
+# release, or an admin-pinned package. provide_chafa is a no-op when the chafa
+# on PATH is already new enough, so the guard costs one `chafa --version`.
+if ! _chafa_ok; then
+    run_step "Building chafa >= $CHAFA_MIN (yazi image previews)" provide_chafa
+fi
+
 _yazi_cfg="$OSR_HOME/.config/yazi"
 
 # Base config + declared flavor set (dotfiles-owned, overwrite-on-update §5).

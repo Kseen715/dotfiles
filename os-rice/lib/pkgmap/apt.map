@@ -33,6 +33,25 @@ starship@bookworm = script:https://starship.rs/install.sh --yes
 starship@jammy    = script:https://starship.rs/install.sh --yes
 starship@noble    = script:https://starship.rs/install.sh --yes
 
+# chafa: yazi needs >= 1.16.0 (it passes --probe, added in that release) or the
+# image preview renders nothing at all - see CHAFA_MIN in lib/build.sh. Same
+# native-first table as above, and here EVERY apt release except resolute is too
+# old, so the rows are the rule rather than the exception:
+#
+#   bullseye 1.6.0   bookworm 1.12.4   trixie   1.14.5
+#   jammy    1.8.0   noble    1.14.0   resolute 1.18.1  <- the only native row
+#
+# Upstream publishes a source tarball only (no prebuilt binary for any distro),
+# so provide_chafa compiles it - the one build here that isn't a download.
+chafa@bullseye = source:provide_chafa
+chafa@bookworm = source:provide_chafa
+chafa@trixie   = source:provide_chafa
+chafa@jammy    = source:provide_chafa
+chafa@noble    = source:provide_chafa
+# glib + freetype are chafa's mandatory deps; jpeg/webp/tiff are the optional
+# loaders worth having (PNG and GIF decode is built into chafa itself).
+chafa-build-deps = libglib2.0-dev libfreetype-dev libjpeg-dev libwebp-dev libtiff-dev pkg-config
+
 # Native name differences (Debian/Ubuntu).
 go = golang
 docker = docker.io

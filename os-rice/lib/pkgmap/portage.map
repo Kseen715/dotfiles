@@ -9,3 +9,8 @@ build = sys-devel/gcc
 dev-headers = dev-libs/openssl
 dmidecode = sys-apps/dmidecode
 glib2 = dev-libs/glib
+
+# chafa is native and current on Gentoo (media-gfx/chafa, ~current upstream), so
+# the bare name still resolves and needs no method row. Build deps only, for the
+# provide_chafa repair path in modules/yazi.sh.
+chafa-build-deps = dev-libs/glib media-libs/freetype media-libs/libjpeg-turbo media-libs/libwebp media-libs/tiff dev-util/pkgconf
