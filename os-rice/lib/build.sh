@@ -648,6 +648,14 @@ provide_yandex_browser() {
     as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y yandex-browser-stable
     check_error $? "failed to install yandex-browser-stable"
     as_root ln -sf /usr/bin/yandex-browser-stable /usr/local/bin/yandex-browser
+
+    # The postinst just wrote the vendor's OWN list for this repo, with a
+    # different signed-by than ours - which apt 3.0 (Debian 13+) refuses to parse
+    # at all, taking every later apt call on the box down with it. Our list was
+    # only ever the bootstrap; hand the repo over now that the vendor owns it.
+    _apt_prune_bootstrap_lists
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q \
+        || warn "apt-get update failed after handing the Yandex repo to the vendor list"
 }
 
 # _yb_deb_url — echo the current yandex-browser-stable .deb URL, resolved from

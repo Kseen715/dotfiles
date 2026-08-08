@@ -260,10 +260,51 @@ pkg_installed() {
     esac
 }
 
+# OSR_APT_BOOTSTRAP_LISTS — the sources.list.d files os-rice writes ITSELF, to
+# bootstrap a vendor repo that no Debian/Ubuntu archive carries. Currently just
+# the Yandex Browser one (provide_yandex_browser, lib/build.sh).
+OSR_APT_BOOTSTRAP_LISTS="/etc/apt/sources.list.d/yandex-browser.list"
+
+# _apt_prune_bootstrap_lists — drop a bootstrap list once the vendor package
+# describes the same repo itself, and do it BEFORE any apt call.
+#
+# Why this is not cosmetic: our list pins signed-by=/etc/apt/keyrings/*.asc, and
+# the vendor's postinst writes its own list for the same URI with
+# signed-by=/usr/share/keyrings/*.gpg. apt 3.0 (Debian 13+) treats a repo
+# described twice with different Signed-By values as FATAL - "Conflicting values
+# set for option Signed-By" / "The list of sources could not be read" - and it
+# refuses to parse the WHOLE source list. So one vendor install bricks apt for
+# every later module and every later apt-get the user runs by hand, with an
+# error naming a browser repo that has nothing to do with what they were doing.
+#
+# The bootstrap list has done its job by then (it exists only to reach the first
+# install; the vendor's own list keeps the package updated), and §5 says we own
+# only what we wrote - which is exactly this file. The orphaned .asc key is left
+# alone: harmless, and removing keys the admin may have repointed at is not ours
+# to do.
+_apt_prune_bootstrap_lists() {
+    [ "$OSR_PKG" = apt ] || return 0
+    for _pb_list in $OSR_APT_BOOTSTRAP_LISTS; do
+        [ -f "$_pb_list" ] || continue
+        _pb_uri=$(awk '$1 == "deb" { for (i = 2; i <= NF; i++) if ($i ~ /^https?:\/\//) { print $i; exit } }' \
+            "$_pb_list" 2>/dev/null)
+        [ -n "$_pb_uri" ] || continue
+        # Substring match on purpose: the vendor writes the URI with a trailing
+        # slash ("...deb/ stable"), and deb822 .sources files put it on a
+        # URIs: line - both still contain ours.
+        _pb_other=$(grep -rlF "$_pb_uri" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null \
+            | grep -vxF "$_pb_list" | head -n 1)
+        [ -n "$_pb_other" ] || continue
+        info "dropping $_pb_list - $_pb_other already describes $_pb_uri (two signed-by values for one repo is fatal to apt 3.0)"
+        as_root rm -f "$_pb_list"
+    done
+}
+
 # pkg_refresh — refresh the package index (idempotent).
 pkg_refresh() {
     case "$OSR_PKG" in
-        apt)     as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q ;;
+        apt)     _apt_prune_bootstrap_lists
+                 as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q ;;
         dnf)     as_root dnf -q makecache ;;
         pacman)  as_root pacman -Sy --noconfirm ;;
         apk)     as_root apk update ;;
