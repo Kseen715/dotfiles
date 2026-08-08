@@ -1,0 +1,45 @@
+# alacritty/alacritty-theme.toml — dotfiles DEFAULT Alacritty palette (§6
+# fallback). Used only when the installed rice ships no
+# config/alacritty/alacritty-theme.toml of its own. Same 16 colors as the default
+# foot and ghostty palettes, so every terminal in the repo looks identical on an
+# unthemed host.
+#
+# Imported from alacritty.toml, which deliberately sets no [colors] and no
+# window.opacity — every visual value lives here, so a rice swaps this one file
+# and nothing else (§6).
+
+[window]
+# Needs a compositor on X11 (picom under i3); without one the window is opaque.
+opacity = 0.7
+
+[colors.primary]
+background = "#181818"
+foreground = "#ffffff"
+
+[colors.cursor]
+text = "#181818"        # the glyph under the block cursor
+cursor = "#ffffff"
+
+[colors.selection]
+text = "#ffffff"
+background = "#303030"
+
+[colors.normal]
+black = "#1e1e1e"
+red = "#be0f17"
+green = "#338716"
+yellow = "#d4c310"
+blue = "#185b8f"
+magenta = "#a12b84"
+cyan = "#578f8d"
+white = "#bbbbbb"
+
+[colors.bright]
+black = "#525252"
+red = "#f0424b"
+green = "#55dc28"
+yellow = "#f3e659"
+blue = "#3292dc"
+magenta = "#d45eb7"
+cyan = "#90bbba"
+white = "#ededed"

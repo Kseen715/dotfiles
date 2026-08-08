@@ -1,0 +1,154 @@
+# alacritty/alacritty.toml — dotfiles-owned Alacritty base config (§5, the
+# 10-layer). Installed to ~/.config/alacritty/alacritty.toml and overwritten on
+# update. It carries NO colors: the palette lives in
+# ~/.config/alacritty/alacritty-theme.toml, imported at the top, so a rice switch
+# swaps only that file (§6) — the same base/theme split foot.ini +
+# foot-colors.ini use.
+#
+# WHY THIS TERMINAL EXISTS HERE. Ghostty needs OpenGL 4.3 (since 1.2) and kitty
+# needs 3.3. Intel Ironlake-era iGPUs top out at desktop GL 2.1, so both refuse
+# to start with "unable to acquire an OpenGL context for rendering". Alacritty
+# ships a GLES2 fallback renderer and picks it automatically on exactly that
+# hardware — no flags, no LIBGL_ALWAYS_SOFTWARE, and far faster than forcing
+# llvmpipe under a GPU terminal. On a modern GPU it takes the GL 3.3 path and
+# nothing here changes.
+#
+# WHAT IT COSTS. No tabs, no splits, no image protocol. Tabs and splits are the
+# WM's job on these hosts (i3 has both); image previews fall back to chafa,
+# which modules/yazi.sh installs for exactly this reason — Alacritty supports
+# neither the kitty graphics protocol nor sixel, and upstream has ruled both out.
+#
+# SCHEMA. Alacritty >= 0.13 (the YAML -> TOML migration). `[general]` arrived in
+# 0.14; modules/alacritty.sh deletes that one header line when it finds an older
+# binary, which turns `import` back into the pre-0.14 top-level key. That is why
+# `[general]` holds `import` and nothing else — keep it that way, or the
+# downgrade path moves the other keys to the top level too.
+
+[general]
+# Palette layer (rice-owned, 90-*). Imports are merged with this file, and this
+# file deliberately sets no [colors] and no window.opacity, so there is nothing
+# for the merge to fight over: the theme owns every visual value, the base owns
+# behaviour. A missing theme file is logged and skipped, not fatal (§9).
+import = ["~/.config/alacritty/alacritty-theme.toml"]
+
+# --- ssh: terminfo ------------------------------------------------------------
+# The one papercut Alacritty cannot fix for itself. Ghostty solves it with
+# `shell-integration-features = ssh-terminfo`, which installs its terminfo entry
+# on the remote host on first connect; Alacritty has no equivalent, so a remote
+# without ncurses-term answers "unknown terminal type: alacritty" and clear,
+# less, htop and every curses program break one ssh hop away.
+#
+# xterm-256color exists on literally every host. What it costs locally is styled
+# (curly/colored) underlines — true color still works, because Alacritty exports
+# COLORTERM=truecolor regardless of TERM.
+#
+# To run the full entry instead: delete this section and push terminfo once per
+# host with `infocmp -x alacritty | ssh HOST -- tic -x -`.
+[env]
+TERM = "xterm-256color"
+
+# --- window -------------------------------------------------------------------
+# window.opacity is theme-owned (see alacritty-theme.toml) so a rice can be more
+# or less transparent than the default. On X11 it needs a running compositor —
+# under i3 that is the picom module; without one the window is simply opaque,
+# which is a degrade, not a break (§9).
+[window]
+padding = { x = 4, y = 2 }
+dynamic_padding = true
+dynamic_title = true
+decorations = "full"
+
+# --- font ---------------------------------------------------------------------
+# Same Nerd Font as foot/ghostty/wezterm — remote starship prompts render their
+# glyphs. builtin_box_drawing draws box/block characters geometrically instead of
+# from the font, so tables in btop/yazi/lsd line up with no gaps.
+[font]
+size = 11.0
+builtin_box_drawing = true
+normal = { family = "JetBrainsMono Nerd Font", style = "Regular" }
+bold = { family = "JetBrainsMono Nerd Font", style = "Bold" }
+italic = { family = "JetBrainsMono Nerd Font", style = "Italic" }
+bold_italic = { family = "JetBrainsMono Nerd Font", style = "Bold Italic" }
+
+# --- scrollback ---------------------------------------------------------------
+# 100000 lines is Alacritty's ceiling (Ghostty's config sets the equivalent as a
+# 100 MB byte budget). Enough that a remote build log or journal dump stays
+# scrollable instead of being trimmed mid-session.
+[scrolling]
+history = 100000
+multiplier = 3
+
+[cursor]
+style = { shape = "Block", blinking = "On" }
+blink_interval = 500
+blink_timeout = 0        # default 5 — 0 keeps blinking instead of stopping
+unfocused_hollow = true
+
+[mouse]
+hide_when_typing = true
+
+# copy-on-select off, matching the ghostty config: the primary selection is still
+# there on middle-click, but the CLIPBOARD is only written by an explicit copy.
+[selection]
+save_to_clipboard = false
+semantic_escape_chars = ",│`|:\"' ()[]{}<>\t"
+
+# --- clipboard ----------------------------------------------------------------
+# OSC 52 is the only way a remote tmux/vim/yazi reaches the LOCAL clipboard.
+# Alacritty's default (`terminal.osc52 = "OnlyCopy"`, 0.14+) is already the
+# policy the ghostty config spells out by hand: remote writes allowed, remote
+# READS refused outright, so a remote host cannot silently exfiltrate whatever
+# you last copied. It is left unset here because the key does not exist in 0.13
+# and the default is right in both.
+
+# --- url hints ----------------------------------------------------------------
+# ctrl+shift+o labels every URL on screen; type the label to open it. Also plain
+# click, via mouse.enabled. Replaces Alacritty's built-in hint (this table is a
+# list, so declaring one entry replaces the default set) with a simpler regex
+# that avoids the unicode escapes upstream's carries. Keeping upstream's
+# ctrl+shift+o rather than ctrl+shift+u on purpose: the latter is the IBus/fcitx5
+# unicode-entry shortcut, and the fcitx5 module is in these rices.
+[[hints.enabled]]
+command = "xdg-open"
+hyperlinks = true          # OSC 8 links from remote tooling stay clickable
+post_processing = true     # trim trailing punctuation from the match
+persist = false
+regex = "(mailto:|gemini://|gopher://|https://|http://|news:|file:|git://|ssh:|ftp://)[^\\s<>\"'`{}^|]+"
+mouse = { enabled = true }
+binding = { key = "O", mods = "Control|Shift" }
+
+# --- keys ---------------------------------------------------------------------
+# Additions only. Defaults worth knowing rather than rebinding: ctrl+shift+c/v
+# clipboard, shift+insert primary paste, ctrl+shift+f / ctrl+shift+b search
+# forward/backward, ctrl+shift+space vi mode (hjkl + / to search, y to yank),
+# ctrl+shift+n new window, ctrl+plus / ctrl+minus / ctrl+0 font size, F11
+# fullscreen, shift+pageup / shift+pagedown scrollback.
+#
+# Key names are the W3C/winit ones Alacritty moved to in 0.13 ("ArrowLeft", not
+# the YAML era's "Left"); an old-style name is silently dropped, not reported.
+[keyboard]
+
+# ctrl+l only clears the visible screen; this drops the scrollback with it.
+[[keyboard.bindings]]
+key = "K"
+mods = "Control|Shift"
+action = "ClearHistory"
+
+# Word motion. Alacritty's defaults send xterm's modifyOtherKeys form
+# (ESC [ 1;3D), which zsh does not bind out of the box; ESC b / ESC f are what
+# its emacs keymap actually listens for, so alt+arrow moves by word in the shell.
+[[keyboard.bindings]]
+key = "ArrowLeft"
+mods = "Alt"
+chars = "\u001Bb"
+
+[[keyboard.bindings]]
+key = "ArrowRight"
+mods = "Alt"
+chars = "\u001Bf"
+
+# ctrl+backspace -> ^W (backward-kill-word) instead of a plain delete.
+[[keyboard.bindings]]
+key = "Backspace"
+mods = "Control"
+chars = "\u0017"

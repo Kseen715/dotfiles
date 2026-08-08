@@ -305,6 +305,54 @@ install_foot_palette() {
     rm -f "$_fp_tmp"
 }
 
+# _osr_alacritty_ver — echo "<major> <minor>" of the installed Alacritty, or ""
+# when there is none on PATH / the version line is unparseable.
+_osr_alacritty_ver() {
+    command -v alacritty >/dev/null 2>&1 || return 0
+    alacritty --version 2>/dev/null \
+        | sed -n 's/^alacritty \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p' | head -n 1
+}
+
+# install_alacritty_config <src> <dst> — install the Alacritty base config,
+# adapting it to the installed Alacritty (§9: degrade, never break the terminal).
+#
+# Alacritty 0.14 moved `import` (with live_config_reload, working_directory and
+# ipc_socket) into a new `[general]` section. Older TOML-era builds - 0.13, still
+# what Debian bookworm and Ubuntu jammy carry - reject the section outright and
+# fall back to their defaults, losing the rice palette with it. The config is
+# written in the current shape and downgraded here for an Alacritty that predates
+# it: deleting the `[general]` header alone turns `import` back into the
+# top-level key 0.13 expects, which is why that section holds `import` and
+# nothing else.
+#
+# Below 0.13 the config format was YAML (alacritty.yml) and this file is ignored
+# entirely - warn rather than pretend it landed.
+install_alacritty_config() {
+    _aa_src=$1
+    _aa_dst=$2
+    _aa_ver=$(_osr_alacritty_ver)
+    _aa_maj=${_aa_ver%% *}
+    _aa_min=${_aa_ver##* }
+    if [ -z "$_aa_ver" ]; then
+        # No parseable version (not installed yet, or a future scheme): assume
+        # current. A stray `[general]` only costs the palette on 0.13; guessing
+        # "old" would cost it on every modern build instead.
+        backup_copy "$_aa_src" "$_aa_dst"
+        return 0
+    fi
+    if [ "$_aa_maj" -eq 0 ] && [ "$_aa_min" -lt 13 ]; then
+        warn "alacritty $_aa_maj.$_aa_min predates the TOML config (0.13) - it reads alacritty.yml and will ignore $_aa_dst"
+    fi
+    if [ "$_aa_maj" -gt 0 ] || [ "$_aa_min" -ge 14 ]; then
+        backup_copy "$_aa_src" "$_aa_dst"
+        return 0
+    fi
+    _aa_tmp="${TMPDIR:-/tmp}/osr-alacritty-$$.toml"
+    sed '/^\[general\]$/d' "$_aa_src" >"$_aa_tmp"
+    backup_copy "$_aa_tmp" "$_aa_dst"
+    rm -f "$_aa_tmp"
+}
+
 # apply_config <name> — copy a rice-owned config dir (rices/<rice>/config/<name>)
 # into ~/.config/<name>, backing up once. Used by the manifest `config:`
 # directive for DE configs (§5). Falls back gracefully if the dir is absent.

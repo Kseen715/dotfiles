@@ -2,6 +2,14 @@
 # these same modules install on Fedora/RHEL (dnf), Debian/Ubuntu (apt), Arch,
 # Alpine and Void. rust is listed first as a toolchain prerequisite (manifest
 # order is the dependency graph, §4). foot ships its own rice-owned palette below.
+#
+# alacritty is the terminal here rather than ghostty: this rice runs on hosts
+# whose GPU cannot give a GPU terminal an OpenGL context (Ghostty wants 4.3,
+# kitty 3.3, an Ironlake-era iGPU tops out at 2.1), and Alacritty's GLES2
+# fallback renderer starts there. It ships this rice's palette in
+# config/alacritty/. yazi is listed after it because the two are paired: with no
+# image protocol in Alacritty, yazi previews images through the chafa that
+# modules/yazi.sh installs.
 rust
 starship
 zsh
@@ -9,4 +17,5 @@ fastfetch
 btop
 htop
 ncdu
+alacritty
 yazi

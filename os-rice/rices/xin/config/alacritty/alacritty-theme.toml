@@ -1,0 +1,43 @@
+# xin Alacritty palette — rice-owned theme layer (90-*, swapped on rice switch,
+# §6). Imported by the dotfiles-owned alacritty/alacritty.toml, which sets no
+# [colors] and no window.opacity, so everything visual is decided here.
+#
+# Mirrors this rice's foot palette (config/foot/foot-colors.ini) and its ghostty
+# palette down to the alpha: foot, ghostty and alacritty are the same terminal,
+# three times.
+
+[window]
+# = foot's alpha=0.8. Needs a compositor on X11 (picom under i3).
+opacity = 0.8
+
+[colors.primary]
+background = "#181818"
+foreground = "#ffffff"
+
+[colors.cursor]
+text = "#181818"
+cursor = "#ffffff"
+
+[colors.selection]
+text = "#ffffff"
+background = "#303030"
+
+[colors.normal]
+black = "#1e1e1e"
+red = "#be0f17"
+green = "#338716"
+yellow = "#d4c310"
+blue = "#185b8f"
+magenta = "#a12b84"
+cyan = "#578f8d"
+white = "#bbbbbb"
+
+[colors.bright]
+black = "#525252"
+red = "#f0424b"
+green = "#55dc28"
+yellow = "#f3e659"
+blue = "#3292dc"
+magenta = "#d45eb7"
+cyan = "#90bbba"
+white = "#ededed"

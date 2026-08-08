@@ -8,7 +8,15 @@
 #   theme.toml    rice-owned theme (90) — selects the flavor, swapped on switch
 #                 (§6); falls back to the dotfiles default when a rice ships none.
 
-run_step "Installing Yazi" pkg_install yazi
+# chafa is yazi's last-resort image adapter, and on several of these hosts it is
+# the ONLY one. Yazi's ladder is: kitty graphics protocol -> iTerm2 inline images
+# -> sixel -> Überzug++ -> chafa (unicode half-blocks). Ghostty and foot cover
+# the top of that ladder; Alacritty and xterm support no protocol at all, and
+# Überzug++ is in no Debian/Fedora archive - so without chafa on PATH an image
+# preview is simply blank. Yazi picks it up by presence, with no config key to
+# set, which is the whole wiring. Small (~1 MB) and harmless where a real
+# protocol wins the detection.
+run_step "Installing Yazi" pkg_install yazi chafa
 
 _yazi_cfg="$OSR_HOME/.config/yazi"
 
