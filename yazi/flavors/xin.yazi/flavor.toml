@@ -21,7 +21,12 @@ border_style  = { fg = "darkgray" }
 
 
 [tabs]
-active   = { fg = "reset", bg = "white", bold = true }
+# Anything sitting on a LIGHT background needs an explicit dark fg. "reset" is
+# the terminal's default foreground (#ffffff in this rice's Alacritty palette),
+# and ANSI "white" as a background is #bbbbbb - so "reset" on "white" paints
+# white on white and the text vanishes. The hex flavors (nord, gruvbox,
+# catppuccin) do exactly this with a dark hex; "black" is its ANSI equivalent.
+active   = { fg = "black", bg = "white", bold = true }
 inactive = { fg = "white", bg = "darkgray" }
 
 [mode]
@@ -31,13 +36,16 @@ normal_alt  = { fg = "blue", bg = "black"}
 select_main = { fg = "reset", bg = "green", bold = true }
 select_alt  = { fg = "green", bg = "black"}
 
-unset_main  = { fg = "reset", bg = "white", bold = true }
+unset_main  = { fg = "black", bg = "white", bold = true }
 unset_alt   = { fg = "white", bg = "black"}
 
 [indicator]
-parent = { fg = "reset", bg = "white" }
+# The hovered row in each pane. parent/preview are the light-background pair
+# (see [tabs] above); current keeps "reset" because ANSI blue is dark (#185b8f),
+# so the default light foreground is the readable side there.
+parent = { fg = "black", bg = "white" }
 current = { fg = "reset", bg = "blue" }
-preview = { fg = "reset", bg = "white" }
+preview = { fg = "black", bg = "white" }
 
 [status]
 sep_left  = { open = "", close = "" }
