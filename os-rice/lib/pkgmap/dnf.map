@@ -13,6 +13,10 @@ fd = fd-find
 # CHAFA_MIN on the box (an EOL release, or one pinned by the admin).
 chafa-build-deps = glib2-devel freetype-devel libjpeg-turbo-devel libwebp-devel libtiff-devel pkgconf-pkg-config
 
+# Überzug++ is in no Fedora repo (repology): source build only. See apt.map.
+ueberzugpp = source:provide_ueberzugpp
+ueberzugpp-build-deps = vips-devel libsixel-devel openssl-devel tbb-devel libxcb-devel xcb-util-image-devel wayland-devel wayland-protocols-devel extra-cmake-modules chafa-devel pkgconf-pkg-config
+
 # Fedora has no official starship package -> official install script (fastfetch
 # IS native on Fedora, so it passes through).
 starship = script:https://starship.rs/install.sh --yes

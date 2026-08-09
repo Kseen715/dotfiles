@@ -17,6 +17,12 @@ glib2 = glib                 # Alpine drops the API version (carries `gsettings`
 # a box whose chafa is older than CHAFA_MIN - Alpine <= 3.21 shipped 1.14.5.
 chafa-build-deps = glib-dev freetype-dev libjpeg-turbo-dev libwebp-dev tiff-dev pkgconf
 
+# Überzug++ is in no Alpine repo (repology): source build only. See apt.map.
+# Only the hard deps are listed - CMake FetchContent pulls CLI11/json/fmt/
+# spdlog/range-v3, which is the path upstream documents for exactly this.
+ueberzugpp = source:provide_ueberzugpp
+ueberzugpp-build-deps = vips-dev libsixel-dev openssl-dev onetbb-dev libxcb-dev xcb-util-image-dev wayland-dev wayland-protocols extra-cmake-modules chafa-dev pkgconf
+
 # thunderbird has no row and cannot get one: Alpine 3.19/3.20/3.21 ship 115/128
 # (too old for the Exchange/EWS backend), but the tarball escape hatch the apt
 # rows use is a GLIBC build - it does not run on musl, so pointing these releases

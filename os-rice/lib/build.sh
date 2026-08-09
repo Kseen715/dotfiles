@@ -165,6 +165,54 @@ provide_chafa() {
     rm -rf "$_cf_tmp"
 }
 
+# provide_ueberzugpp — build Überzug++ from the upstream release tarball, for the
+# targets that package it nowhere: Arch, Gentoo, openSUSE and NixOS carry it,
+# Debian/Ubuntu/Fedora/Void/Alpine carry nothing (repology). It is what yazi
+# actually uses on a graphical session - see the gate in modules/yazi.sh - so on
+# those distros there is no packaged route to a working image preview at all.
+#
+# Upstream installs BOTH names: the binary `ueberzug` plus a symlink `ueberzugpp`
+# (CMakeLists: file(CREATE_LINK ueberzug ... SYMBOLIC)). That symlink is the one
+# that matters, because yazi spawns exactly `ueberzugpp layer -so <driver>`.
+#
+# -DENABLE_OPENCV=OFF picks libvips for image loading instead, which is the far
+# lighter dep tree (OpenCV headers alone dwarf this whole build) - upstream
+# documents the swap. X11 and Wayland outputs are both compiled in so one recipe
+# covers every session; the gate decides whether to build at all, not which.
+# CLI11 / nlohmann-json / fmt / spdlog / range-v3 come from the distro where the
+# name is known, and CMake's FetchContent pulls whichever are missing - the
+# "Downloadable Dependencies" path upstream supports.
+provide_ueberzugpp() {
+    pkg_install build cmake ueberzugpp-build-deps
+    _uz_tag=$(github_latest jstkdng/ueberzugpp)      # e.g. v2.9.10
+    _uz_ver=${_uz_tag#v}
+    _uz_tmp=$(mktemp -d)
+    osr_download "https://github.com/jstkdng/ueberzugpp/archive/refs/tags/${_uz_tag}.tar.gz" \
+        "$_uz_tmp/ueberzugpp.tar.gz" \
+        || { rm -rf "$_uz_tmp"; error "failed to download ueberzugpp $_uz_tag"; }
+    tar -xf "$_uz_tmp/ueberzugpp.tar.gz" -C "$_uz_tmp" \
+        || { rm -rf "$_uz_tmp"; error "failed to extract ueberzugpp $_uz_tag"; }
+    _uz_src="$_uz_tmp/ueberzugpp-${_uz_ver}"
+    [ -f "$_uz_src/CMakeLists.txt" ] \
+        || { rm -rf "$_uz_tmp"; error "no CMakeLists.txt in the ueberzugpp tarball - its layout changed"; }
+    env PKG_CONFIG_PATH="$(_osr_pkgconfig_path)" cmake -S "$_uz_src" -B "$_uz_src/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DENABLE_OPENCV=OFF \
+        -DENABLE_X11=ON \
+        -DENABLE_WAYLAND=ON \
+        || { rm -rf "$_uz_tmp"; error "ueberzugpp cmake configure failed"; }
+    env CMAKE_BUILD_PARALLEL_LEVEL="${OSR_BUILD_JOBS:-$(nproc 2>/dev/null || echo 2)}" \
+        cmake --build "$_uz_src/build" \
+        || { rm -rf "$_uz_tmp"; error "ueberzugpp build failed"; }
+    as_root cmake --install "$_uz_src/build" \
+        || { rm -rf "$_uz_tmp"; error "ueberzugpp install failed"; }
+    as_root ldconfig >/dev/null 2>&1 || true
+    rm -rf "$_uz_tmp"
+    command -v ueberzugpp >/dev/null 2>&1 \
+        || error "ueberzugpp installed but not on PATH - yazi spawns it by that exact name"
+}
+
 # provide_paru — bootstrap the paru AUR helper from the AUR (source:provide_paru).
 # The chicken/egg package: the one AUR package that cannot come *from* an AUR
 # helper. Clone its PKGBUILD and makepkg it as OSR_USER (makepkg refuses root);

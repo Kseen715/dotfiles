@@ -16,6 +16,11 @@ serie = cargo:serie          # no native serie on Void
 # deps only, for the provide_chafa repair path in modules/yazi.sh.
 chafa-build-deps = glib-devel freetype-devel libjpeg-turbo-devel libwebp-devel tiff-devel pkg-config
 
+# Überzug++ is in no Void repo (repology): source build only. See apt.map. Hard
+# deps only - FetchContent supplies CLI11/json/fmt/spdlog/range-v3.
+ueberzugpp = source:provide_ueberzugpp
+ueberzugpp-build-deps = libvips-devel libsixel-devel openssl-devel tbb-devel libxcb-devel xcb-util-image-devel wayland-devel wayland-protocols extra-cmake-modules chafa-devel pkg-config
+
 # --- X11 session core ---------------------------------------------------------
 # Void does not prefix X client utilities: Arch's xorg-xrandr is just xrandr.
 xorg-xinit = xinit

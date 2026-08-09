@@ -8,14 +8,17 @@
 #   theme.toml    rice-owned theme (90) — selects the flavor, swapped on switch
 #                 (§6); falls back to the dotfiles default when a rice ships none.
 
-# chafa is yazi's last-resort image adapter, and on several of these hosts it is
-# the ONLY one. Yazi's ladder is: kitty graphics protocol -> iTerm2 inline images
-# -> sixel -> Überzug++ -> chafa (unicode half-blocks). Ghostty and foot cover
-# the top of that ladder; Alacritty and xterm support no protocol at all, and
-# Überzug++ is in no Debian/Fedora archive - so without chafa on PATH an image
-# preview is simply blank. Yazi picks it up by presence, with no config key to
-# set, which is the whole wiring. Small (~1 MB) and harmless where a real
-# protocol wins the detection.
+# Yazi's adapter ladder: kitty graphics protocol -> iTerm2 inline images ->
+# sixel -> Überzug++ -> chafa (unicode half-blocks). Ghostty and foot cover the
+# top of it; Alacritty and xterm speak no protocol at all and fall through.
+#
+# Where they fall through to is decided by the SESSION, not by what is installed
+# (yazi-adapter/src/drivers/drivers.rs): on X11 yazi returns the Überzug++ driver
+# UNCONDITIONALLY - no compositor check, no chafa fallback - and on Wayland it
+# does the same when the compositor is sway/Hyprland/niri/Wayfire. chafa is
+# reached only with no graphical session (SSH, tmux on a server) or on a Wayland
+# compositor yazi does not support. So chafa is the headless safety net, and
+# Überzug++ below is what makes previews work on a desktop.
 run_step "Installing Yazi" pkg_install yazi chafa
 
 # ...but presence is not sufficiency: yazi invokes chafa with --probe, which only
@@ -28,6 +31,34 @@ run_step "Installing Yazi" pkg_install yazi chafa
 # on PATH is already new enough, so the guard costs one `chafa --version`.
 if ! _chafa_ok; then
     run_step "Building chafa >= $CHAFA_MIN (yazi image previews)" provide_chafa
+fi
+
+# _yazi_needs_ueberzug — mirrors Drivers::matches() in yazi, in its order, so the
+# install decision matches what yazi will actually pick at runtime. Returns false
+# on a headless box (container, SSH, the test matrix), where nothing routes to
+# Überzug++ and chafa is the adapter - so no desktop-only build happens there.
+_yazi_needs_ueberzug() {
+    # The four compositors yazi's Ueberzug::supported_compositor() accepts.
+    _yz_wl=''
+    for _yz_v in "${NIRI_SOCKET:-}" "${SWAYSOCK:-}" \
+                 "${HYPRLAND_INSTANCE_SIGNATURE:-}" "${WAYFIRE_SOCKET:-}"; do
+        [ -n "$_yz_v" ] && _yz_wl=1
+    done
+    case "${XDG_SESSION_TYPE:-}" in
+        x11)     return 0 ;;
+        wayland) [ -n "$_yz_wl" ]; return $? ;;
+    esac
+    if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+        [ -n "$_yz_wl" ]; return $?
+    fi
+    [ -n "${DISPLAY:-}" ]
+}
+
+# Überzug++ draws real pixels in a terminal that has no graphics protocol of its
+# own, which is the entire reason an image preview works under Alacritty on X11.
+# Arch/Gentoo package it; everywhere else pkgmap routes to provide_ueberzugpp.
+if _yazi_needs_ueberzug; then
+    run_step "Installing Ueberzug++ (yazi image previews)" pkg_install ueberzugpp
 fi
 
 _yazi_cfg="$OSR_HOME/.config/yazi"

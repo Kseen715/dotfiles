@@ -52,6 +52,13 @@ chafa@noble    = source:provide_chafa
 # loaders worth having (PNG and GIF decode is built into chafa itself).
 chafa-build-deps = libglib2.0-dev libfreetype-dev libjpeg-dev libwebp-dev libtiff-dev pkg-config
 
+# Überzug++ is what yazi actually drives on a graphical session (X11 always,
+# Wayland under sway/Hyprland/niri/Wayfire), and no Debian/Ubuntu release
+# packages it - so the source build is the ONLY route here. chafa headers come
+# from provide_chafa's /usr/local install, which runs before this in the module.
+ueberzugpp = source:provide_ueberzugpp
+ueberzugpp-build-deps = libvips-dev libsixel-dev libssl-dev libtbb-dev libxcb1-dev libxcb-image0-dev libxcb-res0-dev libwayland-dev wayland-protocols extra-cmake-modules nlohmann-json3-dev libcli11-dev libfmt-dev libspdlog-dev librange-v3-dev pkg-config
+
 # Native name differences (Debian/Ubuntu).
 go = golang
 docker = docker.io
