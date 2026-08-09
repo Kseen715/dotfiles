@@ -18,26 +18,26 @@ _pkgmap_one() { echo serie; }   # native package -> no rust module sourced
 
 # --- scenario 1: rice ships a theme -> rice theme wins over dotfiles default --
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
-mkdir -p "$RICE/config/serie"
-printf '# RICE-THEME-MARKER\n[color]\nfg = "Reset"\n' >"$RICE/config/serie/config.toml"
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+mkdir -p "$THEME/config/serie"
+printf '# RICE-THEME-MARKER\n[color]\nfg = "Reset"\n' >"$THEME/config/serie/config.toml"
 
 . "$OSR_ROOT/modules/serie.sh"
 
 assert_contains "$OUT" 'PKG serie' "installs serie via pkg_install"
 assert_contains "$OSR_HOME/.config/serie/config.toml" 'RICE-THEME-MARKER' "rice theme overrides dotfiles default (90-theme)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 2: rice ships no theme -> dotfiles default theme used -----------
 : >"$OUT"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/serie
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/serie
 
 . "$OSR_ROOT/modules/serie.sh"
 
 assert_contains "$OSR_HOME/.config/serie/config.toml" '^\[color\]$' "dotfiles default theme used when rice ships none"
 assert_contains "$OSR_HOME/.config/serie/config.toml" '^branches = ' "graph branch colors themed too"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 rm -f "$OUT"
 finish

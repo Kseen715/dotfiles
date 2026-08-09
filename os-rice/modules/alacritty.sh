@@ -48,9 +48,9 @@ fi
 
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
 # dotfiles default covers a rice that ships no palette. In --module mode
-# OSR_RICE_DIR is whatever rice the theme picker resolved (§6).
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/alacritty/alacritty-theme.toml" ]; then
-    install_layer "$OSR_RICE_DIR/config/alacritty/alacritty-theme.toml" \
+# OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/alacritty/alacritty-theme.toml" ]; then
+    install_layer "$OSR_THEME_DIR/config/alacritty/alacritty-theme.toml" \
         "$OSR_HOME/.config/alacritty/alacritty-theme.toml"
 elif [ -f "$OSR_DOTFILES/alacritty/alacritty-theme.toml" ]; then
     install_layer "$OSR_DOTFILES/alacritty/alacritty-theme.toml" \

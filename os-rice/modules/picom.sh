@@ -14,8 +14,8 @@ if [ -f "$OSR_DOTFILES/picom/picom.conf" ]; then
     install_layer "$OSR_DOTFILES/picom/picom.conf" "$OSR_HOME/.config/picom/picom.conf"
 fi
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/picom/90-theme.conf" ]; then
-    install_layer "$OSR_RICE_DIR/config/picom/90-theme.conf" "$OSR_HOME/.config/picom/90-theme.conf"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/picom/90-theme.conf" ]; then
+    install_layer "$OSR_THEME_DIR/config/picom/90-theme.conf" "$OSR_HOME/.config/picom/90-theme.conf"
 else
     # The base @includes it unconditionally, so a rice that ships no picom theme
     # must still leave a readable file behind or picom refuses to start.

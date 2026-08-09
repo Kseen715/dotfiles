@@ -17,6 +17,6 @@ for _f in config.rasi launcher.rasi powermenu.rasi; do
     install_layer "$OSR_DOTFILES/rofi/$_f" "$_ro/$_f"
 done
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/rofi/colors.rasi" ]; then
-    install_layer "$OSR_RICE_DIR/config/rofi/colors.rasi" "$_ro/colors.rasi"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/rofi/colors.rasi" ]; then
+    install_layer "$OSR_THEME_DIR/config/rofi/colors.rasi" "$_ro/colors.rasi"
 fi

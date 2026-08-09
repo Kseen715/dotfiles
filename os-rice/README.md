@@ -23,14 +23,21 @@ os-rice/
     net.sh git.sh      download + github_latest; git repo / oh-my-zsh helpers
     service.sh         enable_service/disable_service (systemd/openrc/runit/sysv)
     config.sh          layered config: seed_once / install_layer / loader block
+    theme.sh           themes as objects: discovery, theme.list, palette (6a)
+    apply.sh           theme-only apply: the hotkey path, mutating verbs stubbed
+    reload.sh          tell the running apps to re-read their new config
+    state.sh           ~/.config/osr/state: what rice/theme/wallpaper is applied
     pkgmap/            logical name -> real package(s), per manager
     servicemap         logical service -> real unit (only where they differ)
   modules/             ONE copy each, POSIX, distro-agnostic (zsh.sh)
-  rices/<name>/        rice.list manifest + config/ (90-theme, starship) + wallpapers/
+  rices/<name>/        rice.list manifest: which PACKAGES, and which themes
+  themes/<name>/       theme.list + config/ (the 90-* layers) + wallpapers/
   install.sh           the shared runner
-  osr                  front-end CLI (install / switch / list)
+  wallpaper.sh         set/query the wallpaper of the current theme
+  osr                  front-end CLI (install / switch / theme / wallpaper / list)
   bootstrap.sh         barebone entry: find downloader, clone repo, hand off
   test/                lint + hermetic unit tests + docker idempotency matrix
+../proteus/            the GUI picker (standalone Rust crate, X11 + Wayland)
 ```
 
 ## Usage
@@ -40,8 +47,18 @@ os-rice/
 os-rice/osr install gruvbox            # install a rice for the invoking user
 os-rice/osr install --user alice nord  # rice a specific account (user-for-user)
 os-rice/osr switch nord                # move to a rice: packages accrete, only
-                                       # rice-owned 90-* config + wallpaper swap
+                                       # theme-owned 90-* config + wallpaper swap
 os-rice/osr list
+
+# Themes are separate from rices (DESIGN 6a): any theme applies onto any rice,
+# in about a second, with no packages, no network and no sudo. This is the one
+# to bind to a hotkey.
+os-rice/osr theme                      # print the theme in use
+os-rice/osr theme nord                 # apply a theme and reload the running apps
+os-rice/osr themes                     # list available themes
+os-rice/osr wallpaper ~/pic.png        # set this theme's wallpaper (remembered per theme)
+os-rice/osr wallpaper --next           # cycle to the next wallpaper
+proteus                                # the GUI picker (../proteus), X11 + Wayland
 
 # On a barebone box (no clone yet):
 curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/bootstrap.sh | sh -s -- gruvbox

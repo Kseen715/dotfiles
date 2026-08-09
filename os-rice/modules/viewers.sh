@@ -20,14 +20,14 @@ run_step "Installing document + media viewers" pkg_install \
 if [ -f "$OSR_DOTFILES/zathura/zathurarc" ]; then
     install_layer "$OSR_DOTFILES/zathura/zathurarc" "$OSR_HOME/.config/zathura/zathurarc"
 fi
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/zathura/90-theme.rc" ]; then
-    install_layer "$OSR_RICE_DIR/config/zathura/90-theme.rc" \
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/zathura/90-theme.rc" ]; then
+    install_layer "$OSR_THEME_DIR/config/zathura/90-theme.rc" \
         "$OSR_HOME/.config/zathura/90-theme.rc"
 fi
 
 if [ -f "$OSR_DOTFILES/mpv/mpv.conf" ]; then
     install_layer "$OSR_DOTFILES/mpv/mpv.conf" "$OSR_HOME/.config/mpv/mpv.conf"
 fi
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/mpv/90-theme.conf" ]; then
-    install_layer "$OSR_RICE_DIR/config/mpv/90-theme.conf" "$OSR_HOME/.config/mpv/90-theme.conf"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/mpv/90-theme.conf" ]; then
+    install_layer "$OSR_THEME_DIR/config/mpv/90-theme.conf" "$OSR_HOME/.config/mpv/90-theme.conf"
 fi

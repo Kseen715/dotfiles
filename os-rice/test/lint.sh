@@ -95,8 +95,8 @@ else
 fi
 
 if command -v zsh >/dev/null 2>&1; then
-    sec "zsh -n (rc.d + rice themes):"
-    for f in $(find "$REPO/zsh/rc.d" "$OSR_ROOT/rices" -name '*.zsh' 2>/dev/null); do
+    sec "zsh -n (rc.d + theme layers):"
+    for f in $(find "$REPO/zsh/rc.d" "$OSR_ROOT/themes" -name '*.zsh' 2>/dev/null); do
         if zsh -n "$f" 2>/dev/null; then
             p_ok "${f#"$REPO"/}"
         else

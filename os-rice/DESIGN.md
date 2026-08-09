@@ -491,6 +491,70 @@ cost); an opt-in `osr prune <rice>` may come later but removal is out of scope.
 
 ---
 
+## 6a. Themes are objects, not a folder inside a rice
+
+§6 makes a switch cheap *relative to a reinstall*. It is still a full manifest
+run: package managers, source builds, services, the network. Minutes, and a sudo
+ticket. Nobody binds that to a key, so in practice a rice was chosen once and
+never changed - which is the opposite of the point of having six of them.
+
+The fix is to split the two things that were living in one directory:
+
+- a **rice** is a set of PACKAGES (`rices/<name>/rice.list`)
+- a **theme** is a set of APPEARANCE LAYERS (`themes/<name>/`)
+
+```
+themes/<name>/
+  theme.list      metadata + palette, same `key: value` shape as rice.list
+  config/         the 90-* layers, one dir per app
+  wallpapers/     0..n images
+```
+
+Any theme applies onto any rice. The layers of apps a rice never installed land
+in `~/.config` and are simply never read - which is why this is safe, and why
+`osr theme` never needs to know what is installed.
+
+```sh
+osr theme <name>:
+  run ONLY the modules that carry a theme layer, with every install/build/
+  download/service verb neutralized (lib/apply.sh)
+  apply the theme's whole-dir `config:` entries
+  set the wallpaper (per-theme choice, remembered)
+  reload the running apps (lib/reload.sh)
+```
+
+**The engine is the same modules, not a second copy of the mapping.** A module
+already knows that gruvbox's `config/dunst/90-theme.conf` belongs at
+`~/.config/dunst/dunstrc.d/90-theme.conf`; a declarative theme manifest would
+duplicate that knowledge and then drift from it. So a theme apply sources the
+same module files with `pkg_install`, `enable_service`, `provide_*`,
+`osr_install_nerd_font` and friends replaced by no-ops. The neutralized set is
+*derived from the libs* rather than listed, so a provider added to
+`lib/build.sh` tomorrow is inert here the day it is written.
+
+Three properties that make it hotkey-safe:
+
+- **No package manager, no network, no sudo prompt.** `as_root` degrades to a
+  no-op unless a ticket already exists - a key press has no terminal to type a
+  password into, and a blocked prompt would hang the switch forever.
+- **Narrowed by the installed rice.** `~/.config/osr/state` records which
+  manifest was installed, so a theme apply runs that rice's ~20 modules rather
+  than all 39 that could paint something. Without it, switching a theme on a
+  Hyprland box would write `~/.config/polybar`.
+- **Never fatal.** A module that fails costs its own layer and a warning; the
+  desktop is not left half-painted.
+
+`rice.list` gains two directives: `theme:` (installed with the rice) and
+`themes:` (the set the picker offers). Both are advisory - they say what the
+rice was designed against, not what may be applied.
+
+The GUI half is **Proteus** (`../proteus`), a standalone Rust crate: a
+rofi-style overlay listing the themes with their wallpapers as previews, on both
+X11 and Wayland from one binary. It reads `theme.list` directly and shells out
+to `osr theme`, so neither half depends on the other's internals.
+
+---
+
 ## Manifest format
 
 Plain list, `#` comments, parsed with `while read`:

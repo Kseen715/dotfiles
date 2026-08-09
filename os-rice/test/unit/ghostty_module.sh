@@ -28,9 +28,9 @@ osr_download() { echo "DOWNLOAD $*" >>"$OUT"; return 1; }
 
 # --- scenario 1: rice ships a palette -> rice theme wins over dotfiles default -
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
-mkdir -p "$RICE/config/ghostty"
-printf '# RICE-PALETTE-MARKER\nbackground = #123456\n' >"$RICE/config/ghostty/ghostty-theme"
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+mkdir -p "$THEME/config/ghostty"
+printf '# RICE-PALETTE-MARKER\nbackground = #123456\n' >"$THEME/config/ghostty/ghostty-theme"
 
 . "$OSR_ROOT/modules/ghostty.sh" >/dev/null 2>&1
 
@@ -41,18 +41,18 @@ assert_contains "$OSR_HOME/.config/ghostty/config" 'ssh-terminfo' "base enables 
 assert_contains "$OSR_HOME/.config/ghostty/config" '^clipboard-write = allow$' "base allows OSC 52 writes from remote hosts"
 assert_contains "$OSR_HOME/.config/ghostty/config" '^config-file = ?ghostty-theme$' "base includes the rice palette layer"
 assert_contains "$OSR_HOME/.config/ghostty/ghostty-theme" 'RICE-PALETTE-MARKER' "rice palette overrides dotfiles default (90-theme)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 2: rice ships no palette -> dotfiles default palette used -------
 : >"$OUT"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/ghostty
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/ghostty
 
 . "$OSR_ROOT/modules/ghostty.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/ghostty/ghostty-theme" '^palette = 0=' "dotfiles default palette used when rice ships none"
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 rm -rf "$BIN"; rm -f "$OUT"
 finish

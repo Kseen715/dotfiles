@@ -1,0 +1,14 @@
+# themes/xin/theme.list — see themes/nord/theme.list for the field docs.
+display: Xin
+description: Near-black terminal palette, high contrast
+polarity: dark
+session: any
+
+color: bg      #181818
+color: surface #303030
+color: fg      #ffffff
+color: dim     #525252
+color: accent  #578f8d
+color: success #338716
+color: error   #be0f17
+color: warning #d4c310

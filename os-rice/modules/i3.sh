@@ -40,8 +40,8 @@ for _s in rofi-powermenu.sh; do
 done
 
 # Theme layer (rice-owned, swapped on switch §6).
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/i3/90-theme.conf" ]; then
-    install_wallpaper_layer "$OSR_RICE_DIR/config/i3/90-theme.conf" "$_i3d/90-theme.conf"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/i3/90-theme.conf" ]; then
+    install_wallpaper_layer "$OSR_THEME_DIR/config/i3/90-theme.conf" "$_i3d/90-theme.conf"
 fi
 
 # Machine layer — yours, never rewritten.

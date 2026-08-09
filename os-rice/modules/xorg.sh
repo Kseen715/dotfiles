@@ -41,8 +41,8 @@ if [ -f "$OSR_DOTFILES/xprofile/10-session.sh" ]; then
     install_layer "$OSR_DOTFILES/xprofile/10-session.sh" "$_xp_dir/10-session.sh"
 fi
 # 90-theme.sh — rice-owned, swapped on rice switch (§6)
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/xprofile/90-theme.sh" ]; then
-    install_layer "$OSR_RICE_DIR/config/xprofile/90-theme.sh" "$_xp_dir/90-theme.sh"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/xprofile/90-theme.sh" ]; then
+    install_layer "$OSR_THEME_DIR/config/xprofile/90-theme.sh" "$_xp_dir/90-theme.sh"
 fi
 # 00-env / 99-local — the user's, never overwritten (created empty, then kept)
 seed_empty "$_xp_dir/00-env.sh"

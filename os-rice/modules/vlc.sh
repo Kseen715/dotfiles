@@ -11,6 +11,6 @@
 
 run_step "Installing VLC" pkg_install vlc
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/vlc/vlcrc" ]; then
-    install_layer "$OSR_RICE_DIR/config/vlc/vlcrc" "$OSR_HOME/.config/vlc/vlcrc"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/vlc/vlcrc" ]; then
+    install_layer "$OSR_THEME_DIR/config/vlc/vlcrc" "$OSR_HOME/.config/vlc/vlcrc"
 fi

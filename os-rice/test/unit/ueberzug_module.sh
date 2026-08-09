@@ -28,7 +28,7 @@ install_layer() { :; }
 as_user()       { :; }
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES
 OSR_HOME="$TMP/home"; export OSR_HOME OSR_USER=tester
-OSR_RICE_DIR=''
+OSR_THEME_DIR=''
 
 # session <XDG_SESSION_TYPE> <DISPLAY> <WAYLAND_DISPLAY> <compositor-var-or-->
 session() {

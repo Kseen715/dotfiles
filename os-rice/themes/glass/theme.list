@@ -1,0 +1,18 @@
+# themes/glass/theme.list — see themes/nord/theme.list for the field docs.
+#
+# session: wayland — the Hyprland/waybar/mako/wofi layers are compositor-specific
+# and the transparency+blur this theme is named for needs a compositor that
+# honours it. The terminal/shell/GTK layers are portable and land anywhere.
+display: Glass
+description: Translucent blur over near-black, Hyprland
+polarity: dark
+session: wayland
+
+color: bg      #181818
+color: surface #303030
+color: fg      #ffffff
+color: dim     #525252
+color: accent  #bbbbbb
+color: success #338716
+color: error   #be0f17
+color: warning #d4c310

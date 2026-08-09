@@ -1,0 +1,19 @@
+# themes/rosemary/theme.list — see themes/nord/theme.list for the field docs.
+#
+# session: x11 — this theme carries i3, picom, polybar, Xresources and xprofile
+# layers. Applying it under a Wayland session installs files nothing reads; the
+# picker marks it as off-session rather than hiding it, because the terminal,
+# shell and GTK layers still land and still look right.
+display: Rosemary
+description: Muted rose on warm charcoal, i3/X11
+polarity: dark
+session: x11
+
+color: bg      #1c1f20
+color: surface #34393b
+color: fg      #e8dfe1
+color: dim     #4e5456
+color: accent  #d98cae
+color: success #9fb08a
+color: error   #e2655e
+color: warning #d9b48f

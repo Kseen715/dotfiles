@@ -1,25 +1,37 @@
 #!/bin/sh
 # osr — front-end CLI for the os-rice harness.
 #
-#   osr install <rice> [--user <name>] [--verbose]   full install of a rice
+#   osr install <rice> [--theme <t>] [--user <name>] [--verbose]
+#                                                    full install of a rice
 #   osr switch  <rice> [--user <name>] [--verbose]   move to a rice (§6):
 #                                                    additive packages, the
-#                                                    rice-owned 90-* config and
+#                                                    theme-owned 90-* config and
 #                                                    wallpaper are replaced;
 #                                                    00-env / aliases / installed
 #                                                    packages are left untouched.
-#   osr module  <name>... [--theme <rice>]           install module(s), no rice;
-#                                                    --theme picks which rice
-#                                                    supplies the 90-theme layers
+#   osr theme   [<name>] [--no-reload]               apply a THEME only (§6a):
+#                                                    rewires the 90-* layers and
+#                                                    reloads the running apps.
+#                                                    No packages, no sudo, no
+#                                                    network - this is the one
+#                                                    to bind to a hotkey. With
+#                                                    no name, prints the current
+#                                                    theme.
+#   osr wallpaper [<path>]                           set (or print) the wallpaper
+#                                                    for the current theme.
+#   osr module  <name>... [--theme <t>]              install module(s), no rice;
+#                                                    --theme picks which theme
+#                                                    supplies the 90-* layers
 #                                                    (interactive picker if
-#                                                    omitted, default rice if no
-#                                                    TTY).
+#                                                    omitted, default if no TTY).
 #   osr list                                         list available rices
+#   osr themes                                       list available themes
 #   osr modules                                      list available modules
 #
 # switch and install share one idempotent engine (install.sh): because installs
 # never uninstall and install_layer overwrites only os-rice-owned layers, "move
-# A -> B" is just applying B on top of A.
+# A -> B" is just applying B on top of A. `theme` is the same engine again with
+# every mutating verb stubbed out (lib/apply.sh) - one code path, three verbs.
 set -eu
 
 OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -30,13 +42,30 @@ case "$_cmd" in
     install) exec "$OSR_SELF_DIR/install.sh" "$@" ;;
     switch)  OSR_MODE=switch; export OSR_MODE; exec "$OSR_SELF_DIR/install.sh" "$@" ;;
     module)  exec "$OSR_SELF_DIR/install.sh" --module "$@" ;;
+    theme)
+        # `osr theme` with no name is a question, not a command.
+        case "${1:-}" in
+            ""|--*)
+                . "$OSR_SELF_DIR/lib/ui.sh"
+                . "$OSR_SELF_DIR/lib/log.sh"
+                . "$OSR_SELF_DIR/lib/state.sh"
+                _cur=$(osr_state_get theme)
+                printf '%s\n' "${_cur:-(none applied)}"
+                exit 0
+                ;;
+        esac
+        _theme=$1; shift
+        exec "$OSR_SELF_DIR/install.sh" --theme-only --theme "$_theme" "$@"
+        ;;
+    wallpaper) exec "$OSR_SELF_DIR/wallpaper.sh" "$@" ;;
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
+    themes)  exec "$OSR_SELF_DIR/install.sh" --list-themes ;;
     modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
     -h|--help|"")
-        sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, module, list, modules)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, list, themes, modules)" >&2
         exit 1
         ;;
 esac

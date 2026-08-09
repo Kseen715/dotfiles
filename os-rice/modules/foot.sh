@@ -24,8 +24,8 @@ install_layer "$OSR_DOTFILES/foot/foot.ini" "$OSR_HOME/.config/foot/foot.ini"
 # dotfiles default covers a rice that ships no palette. install_foot_palette,
 # not install_layer: the palette section was renamed in foot 1.26, so the file
 # is adapted to the foot that was just installed.
-if [ -f "$OSR_RICE_DIR/config/foot/foot-colors.ini" ]; then
-    install_foot_palette "$OSR_RICE_DIR/config/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
+if [ -f "$OSR_THEME_DIR/config/foot/foot-colors.ini" ]; then
+    install_foot_palette "$OSR_THEME_DIR/config/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
 elif [ -f "$OSR_DOTFILES/foot/foot-colors.ini" ]; then
     install_foot_palette "$OSR_DOTFILES/foot/foot-colors.ini" "$OSR_HOME/.config/foot/foot-colors.ini"
 fi

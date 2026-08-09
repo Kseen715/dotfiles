@@ -35,10 +35,10 @@ osr_download() { echo "DOWNLOAD $*" >>"$OUT"; return 1; }
 # --- scenario 1: current Alacritty + a rice palette --------------------------
 FAKE_ALACRITTY_VER=0.15.1; export FAKE_ALACRITTY_VER
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
-mkdir -p "$RICE/config/alacritty"
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+mkdir -p "$THEME/config/alacritty"
 printf '# RICE-PALETTE-MARKER\n[colors.primary]\nbackground = "#123456"\n' \
-    >"$RICE/config/alacritty/alacritty-theme.toml"
+    >"$THEME/config/alacritty/alacritty-theme.toml"
 
 . "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
 
@@ -59,25 +59,25 @@ refute_contains "$_CFG" '^opacity' "base carries no opacity - transparency is th
 assert_contains "$OSR_HOME/.config/alacritty/alacritty-theme.toml" 'RICE-PALETTE-MARKER' \
     "rice palette overrides the dotfiles default (90-theme)"
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 2: rice ships no palette -> dotfiles default -------------------
 : >"$OUT"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/alacritty
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/alacritty
 
 . "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
 
 _THEME="$OSR_HOME/.config/alacritty/alacritty-theme.toml"
 assert_contains "$_THEME" '^\[colors.normal\]$' "dotfiles default palette used when rice ships none"
 assert_contains "$_THEME" '^opacity = ' "the theme layer owns window.opacity"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 3: Alacritty 0.13 -> [general] downgraded to a top-level import -
 : >"$OUT"
 FAKE_ALACRITTY_VER=0.13.2
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
 
 . "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
 
@@ -85,7 +85,7 @@ _CFG="$OSR_HOME/.config/alacritty/alacritty.toml"
 refute_contains "$_CFG" '^\[general\]$' "0.13 drops the [general] section it cannot parse"
 assert_contains "$_CFG" '^import = \[' "0.13 keeps import as the top-level key it expects"
 assert_contains "$_CFG" '^TERM = "xterm-256color"$' "the rest of the base config is untouched"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 4: pre-TOML Alacritty -> warn, do not pretend it landed --------
 FAKE_ALACRITTY_VER=0.12.3

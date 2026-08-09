@@ -9,79 +9,9 @@
 #   90-*     rice            swapped on rice switch
 #   99-local machine         seeded empty once, never touched
 
-# --- rice-theme selection for standalone module installs (§6) ----------------
-#
-# In rice mode the manifest fixes which rice owns the 90-theme layers. In
-# --module mode there is no rice, so a standalone `osr module starship` would
-# install the base config but skip every rice-owned theme. This lets the user
-# pick which rice supplies those layers, so a single module still lands themed.
-
-# The rice used when no choice can be made (non-interactive: CI, piped, curl|sh).
-OSR_DEFAULT_THEME_RICE=${OSR_DEFAULT_THEME_RICE:-xin}
-
-# osr_theme_rices — list rice names that carry a config/ dir (a themeable rice).
-osr_theme_rices() {
-    for _tr_d in "$OSR_ROOT"/rices/*/; do
-        [ -d "${_tr_d}config" ] || continue
-        basename "$_tr_d"
-    done
-}
-
-# _osr_theme_menu — numbered picker. Prompt + input go through /dev/tty (never
-# stdout: this runs inside $(...) so stdout is the captured return value). Echoes
-# the chosen rice name. Empty/invalid/EOF input falls back to the default rice.
-_osr_theme_menu() {
-    # rice names are single words by construction -> safe to word-split.
-    # shellcheck disable=SC2046
-    set -- $(osr_theme_rices)
-    [ "$#" -gt 0 ] || { printf '%s' "$OSR_DEFAULT_THEME_RICE"; return; }
-    {
-        printf 'Select a rice theme for this module:\n'
-        _tm_n=1
-        for _tm_r in "$@"; do
-            if [ "$_tm_r" = "$OSR_DEFAULT_THEME_RICE" ]; then
-                printf '  %d) %s (default)\n' "$_tm_n" "$_tm_r"
-            else
-                printf '  %d) %s\n' "$_tm_n" "$_tm_r"
-            fi
-            _tm_n=$((_tm_n + 1))
-        done
-        printf 'Enter number [default %s]: ' "$OSR_DEFAULT_THEME_RICE"
-    } >/dev/tty
-    _tm_ans=""
-    read -r _tm_ans </dev/tty || _tm_ans=""
-    case "$_tm_ans" in
-        "")           printf '%s' "$OSR_DEFAULT_THEME_RICE"; return ;;
-        *[!0-9]*)     printf '%s' "$OSR_DEFAULT_THEME_RICE"; return ;;
-    esac
-    if [ "$_tm_ans" -ge 1 ] && [ "$_tm_ans" -le "$#" ]; then
-        eval "printf '%s' \"\${$_tm_ans}\""
-    else
-        printf '%s' "$OSR_DEFAULT_THEME_RICE"
-    fi
-}
-
-# osr_resolve_theme_rice [wanted] — set OSR_RICE + OSR_RICE_DIR for module mode.
-# Resolution order (§6): explicit --theme > interactive menu > default rice.
-# After this, a module's `[ -f "$OSR_RICE_DIR/config/..." ]` theme guards fire
-# exactly as in a rice install.
-osr_resolve_theme_rice() {
-    _rt_want=${1:-}
-    if [ -n "$_rt_want" ]; then
-        [ -d "$OSR_ROOT/rices/$_rt_want/config" ] \
-            || error "no such rice theme: '$_rt_want' (see: osr list)"
-        _rt_pick=$_rt_want
-    elif [ -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
-        _rt_pick=$(_osr_theme_menu)
-    else
-        _rt_pick=$OSR_DEFAULT_THEME_RICE
-        info "no interactive terminal - using default rice theme '$_rt_pick'"
-    fi
-    OSR_RICE=$_rt_pick
-    OSR_RICE_DIR="$OSR_ROOT/rices/$_rt_pick"
-    export OSR_RICE OSR_RICE_DIR
-    info "rice theme: $OSR_RICE"
-}
+# Theme selection (which theme owns the 90-* layers) lives in lib/theme.sh:
+# osr_resolve_theme sets OSR_THEME + OSR_THEME_DIR, and every module's
+# `[ -f "$OSR_THEME_DIR/config/..." ]` guard reads from there.
 
 # seed_once <src> <dst> — copy src to dst only if dst is absent (00-env). After
 # seeding, dst is user territory os-rice never rewrites.
@@ -353,14 +283,15 @@ install_alacritty_config() {
     rm -f "$_aa_tmp"
 }
 
-# apply_config <name> — copy a rice-owned config dir (rices/<rice>/config/<name>)
-# into ~/.config/<name>, backing up once. Used by the manifest `config:`
-# directive for DE configs (§5). Falls back gracefully if the dir is absent.
+# apply_config <name> — copy a theme-owned config dir (themes/<theme>/config/<name>)
+# into ~/.config/<name>, backing up once. Used by the theme.list `config:`
+# directive for whole-dir DE configs (§5) that no module owns. Falls back
+# gracefully if the dir is absent.
 apply_config() {
     _ac_name=$1
-    _ac_src="$OSR_RICE_DIR/config/$_ac_name"
+    _ac_src="$OSR_THEME_DIR/config/$_ac_name"
     if [ ! -d "$_ac_src" ]; then
-        warn "config '$_ac_name' not found in rice ($_ac_src) - skipping"
+        warn "config '$_ac_name' not found in theme ($_ac_src) - skipping"
         return 0
     fi
     _ac_dst="$OSR_HOME/.config/$_ac_name"
@@ -379,30 +310,63 @@ apply_config() {
 # a file nothing had copied). Resolve it once here, install it once into a
 # user-owned dir, and hand every consumer the same absolute path.
 
-# osr_rice_wallpaper — echo the rice's wallpaper source, "" when it ships none.
-# Extension-filtered on purpose: several rices carry a `wallpapers/*.txt`
-# "drop a real image here" placeholder, and that must resolve to "" (no
-# wallpaper) rather than to the placeholder itself.
-osr_rice_wallpaper() {
-    [ -n "${OSR_RICE_DIR:-}" ] || return 0
-    for _rw_f in "$OSR_RICE_DIR"/wallpapers/*; do
-        [ -f "$_rw_f" ] || continue
-        case "$_rw_f" in
-            *.jpg|*.jpeg|*.png|*.webp|*.bmp|*.gif|*.JPG|*.JPEG|*.PNG) ;;
-            *) continue ;;
-        esac
-        printf '%s' "$_rw_f"
-        return 0
+# osr_is_image <path> — true for a file with an image extension.
+# Extension-filtered on purpose: several themes carry a `wallpapers/*.txt`
+# "drop a real image here" placeholder, and that must never resolve to a
+# wallpaper - painting a text file is worse than painting nothing.
+osr_is_image() {
+    [ -f "$1" ] || return 1
+    case "$1" in
+        *.jpg|*.jpeg|*.png|*.webp|*.bmp|*.gif|*.JPG|*.JPEG|*.PNG|*.WEBP) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# osr_theme_wallpapers [theme-dir] — echo every image a theme ships, one per
+# line, in glob (lexical) order. A theme may carry several: the first is its
+# default, and the rest are what the picker scrolls through.
+osr_theme_wallpapers() {
+    _tw_dir=${1:-${OSR_THEME_DIR:-}}
+    [ -n "$_tw_dir" ] || return 0
+    for _tw_f in "$_tw_dir"/wallpapers/*; do
+        osr_is_image "$_tw_f" || continue
+        printf '%s\n' "$_tw_f"
     done
 }
 
-# osr_install_wallpaper — copy the rice wallpaper to ~/Pictures/Wallpapers and
-# echo the installed path ("" when the rice ships none). The installed copy, not
+# osr_theme_wallpaper — echo the wallpaper to use for the current theme, "" when
+# there is none. The user's per-theme choice (state: wallpaper.<theme>) wins over
+# the theme's default, which is what makes a picked wallpaper survive switching
+# away to another theme and back.
+osr_theme_wallpaper() {
+    [ -n "${OSR_THEME_DIR:-}" ] || return 0
+    if [ -n "${OSR_THEME:-}" ]; then
+        _rw_pick=$(osr_state_get "wallpaper.$OSR_THEME" 2>/dev/null || true)
+        # A recorded choice that no longer exists (image deleted, checkout moved)
+        # falls back to the theme default rather than failing the apply.
+        if [ -n "$_rw_pick" ] && osr_is_image "$_rw_pick"; then
+            printf '%s' "$_rw_pick"
+            return 0
+        fi
+    fi
+    osr_theme_wallpapers | head -n 1 | tr -d '\n'
+}
+
+# osr_install_wallpaper — copy the theme wallpaper to ~/Pictures/Wallpapers and
+# echo the installed path ("" when the theme ships none). The installed copy, not
 # the path inside the repo, is what the configs point at: the wallpaper then
 # survives moving or deleting the dotfiles checkout. Rerun-safe (§2) - an
 # identical file is left alone.
 osr_install_wallpaper() {
-    _iw_src=$(osr_rice_wallpaper)
+    _iw_src=$(osr_theme_wallpaper)
+    [ -n "$_iw_src" ] || return 0
+    osr_install_wallpaper_file "$_iw_src"
+}
+
+# osr_install_wallpaper_file <src> — copy one image into the user's Wallpapers
+# dir and echo where it landed.
+osr_install_wallpaper_file() {
+    _iw_src=$1
     [ -n "$_iw_src" ] || return 0
     _iw_dir="$OSR_HOME/Pictures/Wallpapers"
     _iw_dst="$_iw_dir/$(basename "$_iw_src")"
@@ -415,11 +379,11 @@ osr_install_wallpaper() {
     printf '%s' "$_iw_dst"
 }
 
-# install_wallpaper_layer <src> <dst> — install a rice-owned config layer that
+# install_wallpaper_layer <src> <dst> — install a theme-owned config layer that
 # carries the `{{WALLPAPER_PATH}}` placeholder, substituting the installed
 # wallpaper path. Same overwrite-on-update semantics as install_layer; the
-# placeholder is what keeps the path out of the rice's config files, so a rice
-# with a different image needs no module change. A rice with no wallpaper
+# placeholder is what keeps the path out of the theme's config files, so a theme
+# with a different image needs no module change. A theme with no wallpaper
 # substitutes empty - the config still lands, it just paints nothing.
 install_wallpaper_layer() {
     _wl_src=$1
@@ -431,24 +395,90 @@ install_wallpaper_layer() {
     rm -f "$_wl_tmp"
 }
 
-# apply_wallpaper — install the rice's wallpaper, record it as rice-owned state,
+# osr_wallpaper_set_live <path> — hand the image to whichever setter this
+# session has. Best-effort by design: on a headless box (container, ssh, CI)
+# there is nothing to paint, and that is not a failure (§9).
+osr_wallpaper_set_live() {
+    _wl_img=$1
+    if command -v swww >/dev/null 2>&1; then
+        as_user swww img "$_wl_img" >/dev/null 2>&1 || warn "swww failed to set wallpaper"
+    elif command -v hyprctl >/dev/null 2>&1; then
+        as_user hyprctl hyprpaper wallpaper ",$_wl_img" >/dev/null 2>&1 || warn "hyprpaper failed"
+    elif command -v feh >/dev/null 2>&1; then
+        as_user feh --bg-scale "$_wl_img" >/dev/null 2>&1 || warn "feh failed to set wallpaper"
+    else
+        info "no wallpaper setter (headless) - recorded $_wl_img"
+    fi
+    return 0
+}
+
+# osr_wallpaper_record <path> — the one place the applied wallpaper is written
+# down. ~/.config/osr/wallpaper is a bare path on a line because non-shell
+# consumers read it (a lock screen, a bar, Proteus); the state file carries the
+# same value keyed by theme so a per-theme choice survives switching away.
+osr_wallpaper_record() {
+    _wr_img=$1
+    as_user mkdir -p "$OSR_HOME/.config/osr"
+    printf '%s\n' "$_wr_img" | as_user tee "$OSR_HOME/.config/osr/wallpaper" >/dev/null
+    if command -v osr_state_set >/dev/null 2>&1; then
+        osr_state_set wallpaper "$_wr_img"
+    fi
+}
+
+# apply_wallpaper — install the theme's wallpaper, record it as theme-owned state,
 # and set it if a compositor/setter exists. Degrades to record-only when headless
 # (containers, no DE) so it never fails a run (§6, §9).
 apply_wallpaper() {
     _wp=$(osr_install_wallpaper)
     [ -n "$_wp" ] || return 0
+    osr_wallpaper_record "$_wp"
+    osr_wallpaper_set_live "$_wp"
+}
 
-    # Record the choice — this is what a switch swaps even with no display.
-    as_user mkdir -p "$OSR_HOME/.config/osr"
-    printf '%s\n' "$_wp" | as_user tee "$OSR_HOME/.config/osr/wallpaper" >/dev/null
+# osr_wallpaper_library — every image the user can choose between: the current
+# theme's own, then whatever is already in ~/Pictures/Wallpapers (which is where
+# osr_install_wallpaper puts every image it has ever applied, so this accretes
+# into a library across themes). Deduplicated by basename, theme first.
+osr_wallpaper_library() {
+    _wlib_seen=""
+    for _wlib_f in $(osr_theme_wallpapers); do
+        _wlib_b=$(basename "$_wlib_f")
+        _wlib_seen="$_wlib_seen|$_wlib_b"
+        printf '%s\n' "$_wlib_f"
+    done
+    for _wlib_f in "${OSR_HOME:-$HOME}"/Pictures/Wallpapers/*; do
+        osr_is_image "$_wlib_f" || continue
+        _wlib_b=$(basename "$_wlib_f")
+        case "$_wlib_seen" in *"|$_wlib_b"*) continue ;; esac
+        _wlib_seen="$_wlib_seen|$_wlib_b"
+        printf '%s\n' "$_wlib_f"
+    done
+}
 
-    if command -v swww >/dev/null 2>&1; then
-        as_user swww img "$_wp" >/dev/null 2>&1 || warn "swww failed to set wallpaper"
-    elif command -v hyprctl >/dev/null 2>&1; then
-        as_user hyprctl hyprpaper wallpaper ",$_wp" >/dev/null 2>&1 || warn "hyprpaper failed"
-    elif command -v feh >/dev/null 2>&1; then
-        as_user feh --bg-scale "$_wp" >/dev/null 2>&1 || warn "feh failed to set wallpaper"
-    else
-        info "no wallpaper setter (headless) - recorded $_wp"
+# osr_choose_wallpaper <path> — make <path> the wallpaper of the current theme:
+# remember the choice, install a copy into the library, paint it.
+#
+# The choice is keyed by theme on purpose. A wallpaper is part of how a theme
+# looks, so switching nord -> gruvbox -> nord must bring back the image that was
+# picked for nord, not the last one seen.
+osr_choose_wallpaper() {
+    _cw_src=$1
+    osr_is_image "$_cw_src" || error "not an image: $_cw_src"
+    case "$_cw_src" in
+        /*) ;;
+        *) _cw_src="$(cd -- "$(dirname -- "$_cw_src")" && pwd)/$(basename "$_cw_src")" ;;
+    esac
+    if [ -n "${OSR_THEME:-}" ] && command -v osr_state_set >/dev/null 2>&1; then
+        osr_state_set "wallpaper.$OSR_THEME" "$_cw_src"
     fi
+    _cw_installed=$(osr_install_wallpaper_file "$_cw_src")
+    # This function's stdout IS its return value (the installed path), so the
+    # setter's logging goes to stderr. `info` writes to stdout everywhere else
+    # in the codebase, and a "no wallpaper setter (headless)" line landing in a
+    # caller's `$( )` would silently corrupt the path it just asked for.
+    {
+        osr_wallpaper_record "$_cw_installed"
+        osr_wallpaper_set_live "$_cw_installed"
+    } >&2
+    printf '%s' "$_cw_installed"
 }

@@ -1,13 +1,22 @@
 # lib/log.sh — logging primitives (POSIX sh)
 #
-# info / warn / error / success / check_error. No color logic here; ui.sh owns
-# colors and exports the escape vars. When ui.sh has not been sourced these are
-# empty, so log output degrades to plain text.
+# debug / info / warn / error / success / check_error. No color logic here;
+# ui.sh owns colors and exports the escape vars. When ui.sh has not been sourced
+# these are empty, so log output degrades to plain text.
 
-: "${OSR_RED:=}" "${OSR_GREEN:=}" "${OSR_YELLOW:=}" "${OSR_CYAN:=}" "${OSR_NC:=}"
+: "${OSR_RED:=}" "${OSR_GREEN:=}" "${OSR_YELLOW:=}" "${OSR_CYAN:=}" "${OSR_DIM:=}" "${OSR_NC:=}"
 
 info() {
     printf '%b%-8s%b%s\n' "$OSR_CYAN" "[INFO]" "$OSR_NC" "$*"
+}
+
+# debug — off unless OSR_DEBUG is set. A theme apply skips dozens of package and
+# build steps by design (lib/apply.sh); printing each one would bury the handful
+# of lines that say what actually changed, and printing none makes "why did my
+# font not update" unanswerable. This is the switch between the two.
+debug() {
+    [ -n "${OSR_DEBUG:-}" ] || return 0
+    printf '%b%-8s%b%s\n' "$OSR_DIM" "[DEBUG]" "$OSR_NC" "$*" >&2
 }
 
 warn() {

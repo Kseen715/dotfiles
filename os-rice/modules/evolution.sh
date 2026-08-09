@@ -77,8 +77,8 @@ osr_gsettings_apply() {
 # Behaviour (dotfiles-owned): layout, reading habits, privacy.
 osr_gsettings_apply "$OSR_DOTFILES/evolution/gsettings.conf"
 # Appearance (rice-owned, swapped on rice switch §6): colors and fonts.
-if [ -n "${OSR_RICE_DIR:-}" ]; then
-    osr_gsettings_apply "$OSR_RICE_DIR/config/evolution/gsettings.conf"
+if [ -n "${OSR_THEME_DIR:-}" ]; then
+    osr_gsettings_apply "$OSR_THEME_DIR/config/evolution/gsettings.conf"
 fi
 
 # --- 2. the scoped GTK theme --------------------------------------------------
@@ -87,10 +87,10 @@ fi
 # no per-application CSS selector, so anything written there would restyle every
 # GTK app on the machine. The theme imports Adwaita-dark from GTK's own resource
 # bundle and only overrides on top of it.
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/evolution/gtk.css" ]; then
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/evolution/gtk.css" ]; then
     _ev_theme="$OSR_HOME/.local/share/themes/osr-evolution/gtk-3.0"
     as_user mkdir -p "$_ev_theme"
-    install_layer "$OSR_RICE_DIR/config/evolution/gtk.css" "$_ev_theme/gtk.css"
+    install_layer "$OSR_THEME_DIR/config/evolution/gtk.css" "$_ev_theme/gtk.css"
 
     # .desktop override that selects it. A user-level copy in
     # ~/.local/share/applications wins over the packaged one without touching

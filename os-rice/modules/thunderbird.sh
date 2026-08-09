@@ -58,8 +58,8 @@ _tb_root="$OSR_HOME/.thunderbird"
 _tb_js=""
 _tb_css=""
 [ -f "$OSR_DOTFILES/thunderbird/user.js" ] && _tb_js="$OSR_DOTFILES/thunderbird/user.js"
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/thunderbird/userChrome.css" ]; then
-    _tb_css="$OSR_RICE_DIR/config/thunderbird/userChrome.css"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/thunderbird/userChrome.css" ]; then
+    _tb_css="$OSR_THEME_DIR/config/thunderbird/userChrome.css"
 fi
 
 if [ -n "$_tb_js" ] || [ -n "$_tb_css" ]; then

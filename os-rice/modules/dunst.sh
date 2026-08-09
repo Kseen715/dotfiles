@@ -11,7 +11,7 @@ if [ -f "$OSR_DOTFILES/dunst/dunstrc" ]; then
     install_layer "$OSR_DOTFILES/dunst/dunstrc" "$OSR_HOME/.config/dunst/dunstrc"
 fi
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/dunst/90-theme.conf" ]; then
-    install_layer "$OSR_RICE_DIR/config/dunst/90-theme.conf" \
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/dunst/90-theme.conf" ]; then
+    install_layer "$OSR_THEME_DIR/config/dunst/90-theme.conf" \
         "$OSR_HOME/.config/dunst/dunstrc.d/90-theme.conf"
 fi

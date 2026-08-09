@@ -51,9 +51,9 @@ osr_download() { echo "DOWNLOAD $*" >>"$OUT"; return 1; }
 
 # --- scenario 1: rice ships a palette -> rice theme wins over dotfiles default -
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
-mkdir -p "$RICE/config/wezterm"
-printf '# RICE-PALETTE-MARKER\n[colors]\nbackground = "#123456"\n' >"$RICE/config/wezterm/wezterm-theme.toml"
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+mkdir -p "$THEME/config/wezterm"
+printf '# RICE-PALETTE-MARKER\n[colors]\nbackground = "#123456"\n' >"$THEME/config/wezterm/wezterm-theme.toml"
 
 . "$OSR_ROOT/modules/wezterm.sh" >/dev/null 2>&1
 
@@ -62,25 +62,25 @@ assert_contains "$OSR_HOME/.wezterm.lua" 'wezterm.config_builder' "base .wezterm
 assert_contains "$OSR_HOME/.wezterm.lua" 'colors/osr-rice.toml' "base selects the rice palette layer when present"
 assert_contains "$OSR_HOME/.config/wezterm/colors/osr-rice.toml" 'RICE-PALETTE-MARKER' \
     "rice palette overrides dotfiles default (90-theme)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 2: rice ships no palette -> dotfiles default palette used -------
 : >"$OUT"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/wezterm
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/wezterm
 
 . "$OSR_ROOT/modules/wezterm.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/wezterm/colors/osr-rice.toml" '^name = "osr-rice"$' \
     "dotfiles default palette used when rice ships none"
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- every rice that themes ghostty also themes wezterm ----------------------
-for d in "$OSR_ROOT"/rices/*/config/ghostty/ghostty-theme; do
+for d in "$OSR_ROOT"/themes/*/config/ghostty/ghostty-theme; do
     [ -f "$d" ] || continue
     r=$(basename "$(dirname "$(dirname "$(dirname "$d")")")")
-    if [ -f "$OSR_ROOT/rices/$r/config/wezterm/wezterm-theme.toml" ]; then
+    if [ -f "$OSR_ROOT/themes/$r/config/wezterm/wezterm-theme.toml" ]; then
         ok "rice $r ships a wezterm palette"
     else
         fail "rice $r themes ghostty but not wezterm"

@@ -15,8 +15,8 @@ as_user mkdir -p "$OSR_HOME/.config/hypr" "$OSR_HOME/Downloads" \
     "$OSR_HOME/Pictures" "$OSR_HOME/.local/share"
 
 # Rice-owned config: main hyprland.conf, autostart scripts, and the qt6ct theme.
-if [ -n "$OSR_RICE_DIR" ]; then
-    _hd="$OSR_RICE_DIR/config/hypr"
+if [ -n "$OSR_THEME_DIR" ]; then
+    _hd="$OSR_THEME_DIR/config/hypr"
     # hyprland.conf exports `env = WALLPAPER_PATH,{{WALLPAPER_PATH}}` for the
     # session; the placeholder resolves to the same installed file hyprpaper and
     # gtklock paint (config.sh). The legacy config hard-coded a `~/Pictures/...`
@@ -32,13 +32,13 @@ if [ -n "$OSR_RICE_DIR" ]; then
         install_layer "$_hd/$_s.sh" "$OSR_HOME/.config/hypr/$_s.sh"
         as_user chmod +x "$OSR_HOME/.config/hypr/$_s.sh"
     done
-    if [ -f "$OSR_RICE_DIR/config/qt6ct/qt6ct.conf" ]; then
-        install_layer "$OSR_RICE_DIR/config/qt6ct/qt6ct.conf" "$OSR_HOME/.config/qt6ct/qt6ct.conf"
+    if [ -f "$OSR_THEME_DIR/config/qt6ct/qt6ct.conf" ]; then
+        install_layer "$OSR_THEME_DIR/config/qt6ct/qt6ct.conf" "$OSR_HOME/.config/qt6ct/qt6ct.conf"
     fi
     # Wayland session launcher(s) live in a system path SDDM reads. They stay
     # root-owned and world-executable (0755) - the legacy chowned them to the
     # target user so "sddm can run it", which SDDM never needed.
-    _wd="$OSR_RICE_DIR/config/wayland-sessions"
+    _wd="$OSR_THEME_DIR/config/wayland-sessions"
     if [ -f "$_wd/hyprland.desktop" ]; then
         as_root mkdir -p /usr/share/wayland-sessions
         as_root cp -f "$_wd/hyprland.desktop" /usr/share/wayland-sessions/hyprland.desktop

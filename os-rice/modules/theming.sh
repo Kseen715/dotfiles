@@ -24,8 +24,8 @@ run_step "Installing fonts" pkg_install \
     ttf-liberation ttf-dejavu nerd-fonts-symbols
 run_step "Installing JetBrains Mono Nerd Font" osr_install_nerd_font JetBrainsMono
 
-[ -n "${OSR_RICE_DIR:-}" ] || return 0
-_rc="$OSR_RICE_DIR/config"
+[ -n "${OSR_THEME_DIR:-}" ] || return 0
+_rc="$OSR_THEME_DIR/config"
 
 # --- GTK 2/3/4 ---------------------------------------------------------------
 for _pair in \

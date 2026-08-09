@@ -2,6 +2,15 @@
 # dotfiles yazi default, now selectable as its own rice). Same shell modules as
 # nord/xin; the theme lives entirely in config/ (starship palette + yazi flavor
 # + zsh 90-theme). See DESIGN "Manifest format".
+
+# --- themes (§6a) -------------------------------------------------------------
+# `theme:` is the theme installed with this rice; `themes:` is the set the rice
+# ships and `osr theme` / Proteus offer for live switching. A theme is a
+# standalone directory under themes/ - any of them applies onto any rice, this
+# line only says which ones this rice was designed and tested against.
+theme: catppuccin
+themes: catppuccin nord gruvbox xin
+
 starship
 zsh
 fastfetch

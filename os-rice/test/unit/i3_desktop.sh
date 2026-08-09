@@ -2,8 +2,8 @@
 # Covers the i3/X11 desktop slice:
 #   1. servicemap @init facets (bluetooth/cups differ on runit only)
 #   2. xbps.map rows for the Void names that actually differ
-#   3. modules/i3.sh config layering (§5): base, rice theme, machine-local
-#   4. the void-i3-rosemuted rice manifest only names modules that exist
+#   3. modules/i3.sh config layering (§5): base, theme layer, machine-local
+#   4. the i3-rosemary rice manifest only names modules that exist
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -51,8 +51,9 @@ check_map i3 i3
 T=$(mktemp -d)
 OSR_HOME="$T/home"; OSR_USER=$(id -un)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
-OSR_RICE_DIR="$OSR_ROOT/rices/void-i3-rosemuted"
-export OSR_HOME OSR_USER OSR_DOTFILES OSR_RICE_DIR
+OSR_THEME_DIR="$OSR_ROOT/themes/rosemary"
+OSR_RICE_DIR="$OSR_ROOT/rices/i3-rosemary"
+export OSR_HOME OSR_USER OSR_DOTFILES OSR_THEME_DIR OSR_RICE_DIR
 mkdir -p "$OSR_HOME"
 . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"
 as_user()  { "$@"; }
@@ -155,7 +156,7 @@ GSCONF
 # The applier is defined by the module, so source it with the side effects mocked.
 ( pkg_install() { :; }
   run_step() { shift; "$@"; }
-  OSR_RICE_DIR=""
+  OSR_THEME_DIR=""
   . "$OSR_ROOT/modules/evolution.sh"
   osr_gsettings_apply "$T/gs.conf" ) >/dev/null 2>&1
 
@@ -166,9 +167,9 @@ refute_contains "$GS_LOG" "no-such-key" "a key this version lacks is skipped, no
 refute_contains "$GS_LOG" "menubar-visible" "a schema this version lacks is skipped"
 assert_contains "$GS_LOG" "layout 1" "known keys are still applied"
 
-# The rice must ship the scoped Evolution theme, not a global gtk.css edit —
+# The theme must ship the scoped Evolution theme, not a global gtk.css edit —
 # GTK3 has no per-app selector, so a global one would restyle every GTK app.
-assert_contains "$OSR_ROOT/rices/void-i3-rosemuted/config/evolution/gtk.css" \
+assert_contains "$OSR_ROOT/themes/rosemary/config/evolution/gtk.css" \
     "resource:///org/gtk/libgtk/theme/Adwaita" "the Evolution theme extends Adwaita rather than replacing it"
 assert_contains "$OSR_ROOT/modules/evolution.sh" "GTK_THEME=osr-evolution" \
     "the .desktop override is what scopes the theme to Evolution"
@@ -180,9 +181,9 @@ refute_contains "$OSR_ROOT/modules/vscode.sh" "install_layer" \
     "vscode module writes no config layer"
 refute_contains "$OSR_ROOT/modules/vscode.sh" "compose_json_config" \
     "vscode module composes no settings.json"
-[ -d "$OSR_ROOT/rices/void-i3-rosemuted/config/vscode" ] \
-    && fail "the rice still ships a VS Code palette" \
-    || ok "the rice ships no VS Code palette"
+[ -d "$OSR_ROOT/themes/rosemary/config/vscode" ] \
+    && fail "the theme still ships a VS Code palette" \
+    || ok "the theme ships no VS Code palette"
 
 # --- 4. the rice manifest names only modules that exist -----------------------
 _missing=""
@@ -190,10 +191,10 @@ while IFS= read -r _l || [ -n "$_l" ]; do
     _l=${_l%%#*}
     _l=$(printf '%s' "$_l" | tr -d ' \t')
     [ -n "$_l" ] || continue
-    case "$_l" in require:*|config:*) continue ;; esac
+    case "$_l" in require:*|config:*|theme:*|themes:*) continue ;; esac
     [ -f "$OSR_ROOT/modules/$_l.sh" ] || _missing="$_missing $_l"
 done < "$OSR_RICE_DIR/rice.list"
-assert_eq "" "$_missing" "every module in void-i3-rosemuted/rice.list exists"
+assert_eq "" "$_missing" "every module in i3-rosemary/rice.list exists"
 
 rm -rf "$T"
 finish

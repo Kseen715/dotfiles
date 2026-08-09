@@ -22,8 +22,8 @@ install_layer "$OSR_DOTFILES/zsh/rc.d/20-aliases.zsh" "$OSR_RCDIR/20-aliases.zsh
 
 # rice-owned prompt theme, swapped on rice switch (§6). starship.toml is owned by
 # modules/starship.sh (G5), not here.
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/zsh/90-theme.zsh" ]; then
-    install_layer "$OSR_RICE_DIR/config/zsh/90-theme.zsh" "$OSR_RCDIR/90-theme.zsh"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/zsh/90-theme.zsh" ]; then
+    install_layer "$OSR_THEME_DIR/config/zsh/90-theme.zsh" "$OSR_RCDIR/90-theme.zsh"
 fi
 
 seed_empty "$OSR_RCDIR/99-local.zsh"

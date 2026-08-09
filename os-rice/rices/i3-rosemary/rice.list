@@ -11,6 +11,15 @@
 # for the component -> package writeup and for what Void does not ship.
 # Dropping the two require: lines and filling pacman.map/apt.map is all it takes
 # to run this manifest elsewhere — nothing in the modules is Void-specific.
+
+# --- themes (§6a) -------------------------------------------------------------
+# `theme:` is the theme installed with this rice; `themes:` is the set the rice
+# ships and `osr theme` / Proteus offer for live switching. A theme is a
+# standalone directory under themes/ - any of them applies onto any rice, this
+# line only says which ones this rice was designed and tested against.
+theme: rosemary
+themes: rosemary catppuccin nord gruvbox xin
+
 require: distro:void
 require: arch:x86_64
 
@@ -32,6 +41,7 @@ lightdm
 polybar
 rofi
 dunst
+proteus
 i3lock
 feh
 copyq

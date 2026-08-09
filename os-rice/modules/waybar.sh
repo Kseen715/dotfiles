@@ -3,8 +3,8 @@
 # (was .../modules/waybar.sh). gsimplecal (calendar popup) and ddcutil (monitor
 # brightness via the custom ddc module) are companions the config invokes.
 run_step "Installing Waybar" pkg_install waybar gsimplecal ddcutil
-if [ -n "$OSR_RICE_DIR" ] && [ -d "$OSR_RICE_DIR/config/waybar" ]; then
-    _wb="$OSR_RICE_DIR/config/waybar"
+if [ -n "$OSR_THEME_DIR" ] && [ -d "$OSR_THEME_DIR/config/waybar" ]; then
+    _wb="$OSR_THEME_DIR/config/waybar"
     install_layer "$_wb/config.jsonc" "$OSR_HOME/.config/waybar/config.jsonc"
     install_layer "$_wb/style.css"    "$OSR_HOME/.config/waybar/style.css"
     install_layer "$_wb/waybar-ddc-module.sh" "$OSR_HOME/.config/waybar/waybar-ddc-module.sh"

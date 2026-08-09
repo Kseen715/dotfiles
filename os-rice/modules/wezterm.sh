@@ -30,10 +30,10 @@ fi
 
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
 # dotfiles default covers a rice that ships no palette. In --module mode
-# OSR_RICE_DIR is whatever rice the theme picker resolved (§6).
+# OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
 _wt_colors="$OSR_HOME/.config/wezterm/colors/osr-rice.toml"
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/wezterm/wezterm-theme.toml" ]; then
-    install_layer "$OSR_RICE_DIR/config/wezterm/wezterm-theme.toml" "$_wt_colors"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/wezterm/wezterm-theme.toml" ]; then
+    install_layer "$OSR_THEME_DIR/config/wezterm/wezterm-theme.toml" "$_wt_colors"
 elif [ -f "$OSR_DOTFILES/wezterm/wezterm-theme.toml" ]; then
     install_layer "$OSR_DOTFILES/wezterm/wezterm-theme.toml" "$_wt_colors"
 fi

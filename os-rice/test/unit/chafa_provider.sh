@@ -113,7 +113,7 @@ as_user()      { :; }
 provide_chafa() { echo "BUILD-CHAFA" >>"$OUT"; }
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES
 OSR_HOME="$TMP/home"; export OSR_HOME OSR_USER=tester
-OSR_RICE_DIR=''
+OSR_THEME_DIR=''
 
 : >"$OUT"; fake_chafa 1.14.5
 . "$OSR_ROOT/modules/yazi.sh" >/dev/null 2>&1

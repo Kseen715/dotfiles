@@ -1,0 +1,39 @@
+[package]
+name = "proteus"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "A rofi-style theme and wallpaper picker for X11 and Wayland"
+license = "MIT"
+repository = "https://github.com/Kseen715/dotfiles"
+readme = "README.md"
+keywords = ["wayland", "x11", "theme", "wallpaper", "launcher"]
+categories = ["gui"]
+
+[dependencies]
+cosmic-text = "0.19"
+glow = "0.18.0"
+glutin = "0.32.3"
+image = "0.25.10"
+pollster = "1.0.1"
+raw-window-handle = "0.6.2"
+rustix = { version = "1.1.4", features = ["event"] }
+serde = { version = "1.0.229", features = ["derive"] }
+tiny-skia = "0.12.0"
+toml = "1.1.4"
+wayland-client = { version = "0.31.15", features = ["system", "dlopen"] }
+wayland-protocols = { version = "0.32.12", features = ["client"] }
+wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
+wgpu = "26.0.1"
+x11rb = "0.14.0"
+xkbcommon-dl = "0.4.2"
+xkeysym = "0.2.1"
+
+[dev-dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

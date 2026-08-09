@@ -7,6 +7,15 @@
 #
 # Arch/x86_64/systemd only — declared up front so a mismatched host fails clean
 # before any mutation (§10). gpu:present gates the Hyprland DE on a real GPU.
+
+# --- themes (§6a) -------------------------------------------------------------
+# `theme:` is the theme installed with this rice; `themes:` is the set the rice
+# ships and `osr theme` / Proteus offer for live switching. A theme is a
+# standalone directory under themes/ - any of them applies onto any rice, this
+# line only says which ones this rice was designed and tested against.
+theme: glass
+themes: glass catppuccin nord gruvbox xin
+
 require: arch:x86_64
 require: init:systemd
 require: gpu:present
@@ -57,6 +66,7 @@ mako
 gtklock
 wofi
 cliphist
+proteus
 
 # --- audio --------------------------------------------------------------------
 # pipewire first: it swaps PulseAudio/JACK out, and the patchbay/EQ below are

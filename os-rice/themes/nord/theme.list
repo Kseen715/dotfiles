@@ -1,0 +1,27 @@
+# themes/nord/theme.list — theme metadata, same newline `key: value` shape as
+# rice.list (Decisions: no TOML, a `while read` loop is the whole parser).
+#
+# A theme owns every 90-* appearance layer (config/) and its wallpapers/. It is
+# applied independently of any rice: `osr theme nord` rewires the layers of the
+# apps that are installed and leaves the rest alone.
+#
+#   display:     human name shown in the picker
+#   description: one line, shown under the name
+#   polarity:    dark | light   (lets an app pick a matching icon/GTK variant)
+#   session:     any | x11 | wayland  (which display server the layers target)
+#   config:      whole config/ dirs copied to ~/.config on apply, 0..n lines
+#   color:       <role> <#rrggbb> — the palette Proteus styles itself with and
+#                falls back to when a theme ships no wallpaper.
+display: Nord
+description: Arctic, north-bluish palette
+polarity: dark
+session: any
+
+color: bg      #2e3440
+color: surface #3b4252
+color: fg      #d8dee9
+color: dim     #4c566a
+color: accent  #88c0d0
+color: success #a3be8c
+color: error   #bf616a
+color: warning #ebcb8b

@@ -1,12 +1,16 @@
 # gruvbox — shell + KDE/Plasma gruvbox desktop rice. One line per module; add an
 # app = add a line. See DESIGN "Manifest format".
+
+# --- themes (§6a) -------------------------------------------------------------
+# `theme:` is the theme installed with this rice; `themes:` is the set the rice
+# ships and `osr theme` / Proteus offer for live switching. A theme is a
+# standalone directory under themes/ - any of them applies onto any rice, this
+# line only says which ones this rice was designed and tested against.
+theme: gruvbox
+themes: catppuccin nord gruvbox xin
+
 starship
 zsh
 fastfetch
 yazi
 
-# Rice-owned XDG theme config, copied to ~/.config on install/switch (§5/§6).
-# GTK theme selection, font rendering, and xsettings for GTK apps under KDE.
-# The KDE global theme, icon pack, and wallpapers are store/URL downloads — see
-# README.md; they are intentionally not vendored here.
-config: gtk-4.0 fontconfig xsettingsd

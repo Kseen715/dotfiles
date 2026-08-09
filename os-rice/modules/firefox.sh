@@ -25,8 +25,8 @@ _ff_root="$OSR_HOME/.mozilla/firefox"
 _ff_js=""
 _ff_css=""
 [ -f "$OSR_DOTFILES/firefox/user.js" ] && _ff_js="$OSR_DOTFILES/firefox/user.js"
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/firefox/userChrome.css" ]; then
-    _ff_css="$OSR_RICE_DIR/config/firefox/userChrome.css"
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/firefox/userChrome.css" ]; then
+    _ff_css="$OSR_THEME_DIR/config/firefox/userChrome.css"
 fi
 
 if [ -n "$_ff_js" ] || [ -n "$_ff_css" ]; then

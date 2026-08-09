@@ -1,0 +1,104 @@
+# proteus.toml — the picker's own configuration.
+#
+# Every value here is a default made explicit; deleting the file changes
+# nothing. Installed to ~/.config/proteus/proteus.toml.
+#
+# Note what is NOT here: colours. Proteus paints itself with the palette of the
+# theme under the cursor, so moving the selection previews the theme live. Set
+# `bg`/`fg`/`accent`/`surface`/`dim` under [style] to pin them instead, or turn
+# `follow_theme` off.
+
+[sources]
+# Where the themes live. Unset means "look in the usual places":
+# ~/.config/osr/themes, ~/projects/dotfiles/os-rice/themes, ~/dotfiles/...,
+# then /usr/share/os-rice/themes.
+# themes_dir = "~/projects/dotfiles/os-rice/themes"
+
+# Extra wallpaper directories, on top of each theme's own wallpapers/.
+# os-rice copies every image it applies into ~/Pictures/Wallpapers, so this
+# accretes into a library across themes.
+wallpaper_dirs = ["~/Pictures/Wallpapers"]
+
+# Where os-rice records what is applied, so the list can mark it.
+# state_file = "~/.config/osr/state"
+
+[actions]
+# What Enter runs. `{}` becomes the theme name or the wallpaper path.
+#
+# This is a list, not a string, and it is passed to exec rather than to a
+# shell - so a wallpaper called "; rm -rf ~ .png" is a file name and nothing
+# more. Point these at any script to use Proteus without os-rice.
+apply_theme = ["osr", "theme", "{}"]
+apply_wallpaper = ["osr", "wallpaper", "{}"]
+
+[style]
+width = 1000.0
+height = 460.0
+
+# How many cards are visible across the strip. Fewer means bigger cards.
+rows = 5
+radius = 12.0
+padding = 16.0
+font_size = 15.0
+# font = "JetBrainsMono Nerd Font"
+
+# Window opacity. Only does anything on a compositor that blends (picom,
+# Hyprland); elsewhere the window is simply opaque.
+opacity = 1.0
+
+# Take colours from the theme under the cursor.
+follow_theme = true
+
+# Slide the list and the selection bar between rows instead of jumping.
+# The frame clock only runs while something is moving, so an idle picker costs
+# nothing either way. Turn it off if you find motion distracting, or on hardware
+# too slow to hold the frame budget - a jump beats a stutter.
+animate = true
+
+# How quickly the slide settles, in seconds (an exponential time constant).
+# 0.035 puts a one-row move at about 190ms. Smaller is snappier; 0 is the same
+# as animate = false.
+animation_speed = 0.035
+
+[cache]
+# Decoded previews held in memory, in megabytes. Past this the
+# least-recently-seen are dropped and re-read from the disk cache below, so
+# browsing hundreds of wallpapers costs the same as browsing six. 0 = unbounded.
+memory_mb = 25
+
+# Thumbnails kept on disk, in megabytes. This is what makes eviction cheap: a
+# dropped preview comes back as a small PNG read instead of decoding the
+# original again. Pruned oldest-first at startup. 0 disables it entirely.
+disk_mb = 200
+
+# Where those thumbnails live; unset means $XDG_CACHE_HOME/proteus/thumbs.
+# dir = "~/.cache/proteus/thumbs"
+
+[behavior]
+# overlay  = a real overlay: wlr-layer-shell on Wayland, override-redirect on
+#            X11. Centred, takes the keyboard, ignores the window manager.
+#            Falls back to an ordinary window on compositors without
+#            layer-shell (GNOME, KDE).
+# toplevel = always an ordinary window the WM places.
+window = "overlay"
+
+# auto | wgpu | gl | cpu
+#
+#   wgpu  Vulkan / Metal / DX12 / GL 3.3+
+#   gl    OpenGL 2.1 or GLES 2.0, for hardware wgpu will not touch
+#   cpu   straight to the display server, no GPU at all
+#
+# auto tries them in that order and takes the first that initialises, silently:
+# a machine without Vulkan is exactly what the next rung is for. All three show
+# identical pixels - the frame is rasterised once either way - so this only
+# decides how it reaches the screen (swapchain, vsync, tearing).
+#
+# PROTEUS_DEBUG=1 prints which one was chosen.
+renderer = "auto"
+
+# Close after applying. false keeps the picker open to try several themes.
+close_on_apply = true
+
+# Apply as the cursor moves, without waiting for Enter. Off by default: this
+# runs a full theme apply per arrow key, and holding Down would queue dozens.
+apply_on_move = false

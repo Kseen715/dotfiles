@@ -71,7 +71,7 @@ fi
 
 # --- the profile layer: both files, every profile -----------------------------
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE="$OSR_ROOT/rices/xin"; OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
+THEME="$OSR_ROOT/themes/xin"; OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
 # Two profiles, as profiles.ini declares them (Path= is relative to the root).
 mkdir -p "$OSR_HOME/.thunderbird/aaa.default" "$OSR_HOME/.thunderbird/bbb.work"
 printf '[Profile0]\nPath=aaa.default\n\n[Profile1]\nPath=bbb.work\n' \
@@ -98,7 +98,7 @@ for _p in aaa.default bbb.work; do
 done
 # The xin sheet targets the modern (115+) panes, so it must not carry dead
 # XUL-tree selectors that silently match nothing.
-refute_contains "$RICE/config/thunderbird/userChrome.css" '::-moz-tree' \
+refute_contains "$THEME/config/thunderbird/userChrome.css" '::-moz-tree' \
     "xin userChrome.css has no dead ::-moz-tree- rules"
 
 rm -rf "$OSR_HOME"

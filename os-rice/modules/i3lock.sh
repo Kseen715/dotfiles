@@ -18,8 +18,8 @@
 
 run_step "Installing lock screen" pkg_install betterlockscreen i3lock-color xss-lock xautolock
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/betterlockscreen/betterlockscreenrc" ]; then
-    install_layer "$OSR_RICE_DIR/config/betterlockscreen/betterlockscreenrc" \
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/betterlockscreen/betterlockscreenrc" ]; then
+    install_layer "$OSR_THEME_DIR/config/betterlockscreen/betterlockscreenrc" \
         "$OSR_HOME/.config/betterlockscreen/betterlockscreenrc"
 fi
 

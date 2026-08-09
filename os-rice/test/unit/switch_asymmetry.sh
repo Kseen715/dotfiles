@@ -15,12 +15,12 @@ H=$(mktemp -d); OSR_HOME="$H"; export OSR_HOME
 RC="$OSR_HOME/.config/osr/zsh/rc.d"
 
 apply_rice() {
-    OSR_RICE_DIR="$OSR_ROOT/rices/$1"; export OSR_RICE_DIR
+    OSR_THEME_DIR="$OSR_ROOT/themes/$1"; export OSR_THEME_DIR
     seed_once     "$OSR_DOTFILES/zsh/rc.d/00-env.zsh"     "$RC/00-env.zsh" >/dev/null
     install_layer "$OSR_DOTFILES/zsh/rc.d/20-aliases.zsh" "$RC/20-aliases.zsh" >/dev/null
-    install_layer "$OSR_RICE_DIR/config/zsh/90-theme.zsh" "$RC/90-theme.zsh" >/dev/null
+    install_layer "$OSR_THEME_DIR/config/zsh/90-theme.zsh" "$RC/90-theme.zsh" >/dev/null
     compose_starship_config "$OSR_DOTFILES/starship/starship.toml" \
-        "$OSR_RICE_DIR/config/starship.palette.toml" "$OSR_HOME/.config/starship.toml" >/dev/null
+        "$OSR_THEME_DIR/config/starship.palette.toml" "$OSR_HOME/.config/starship.toml" >/dev/null
     seed_empty "$RC/99-local.zsh"
     apply_wallpaper >/dev/null
 }
@@ -50,9 +50,9 @@ for r in one two; do
     mkdir -p "$F/$r/wallpapers"
     printf 'IMAGE-%s' "$r" >"$F/$r/wallpapers/$r.png"
 done
-OSR_RICE_DIR="$F/one"; export OSR_RICE_DIR; apply_wallpaper >/dev/null
+OSR_THEME_DIR="$F/one"; export OSR_THEME_DIR; apply_wallpaper >/dev/null
 assert_contains "$OSR_HOME/.config/osr/wallpaper" "one.png" "wallpaper recorded for the first rice"
-OSR_RICE_DIR="$F/two"; export OSR_RICE_DIR; apply_wallpaper >/dev/null
+OSR_THEME_DIR="$F/two"; export OSR_THEME_DIR; apply_wallpaper >/dev/null
 assert_contains "$OSR_HOME/.config/osr/wallpaper" "two.png" "wallpaper swapped on rice switch"
 [ -f "$OSR_HOME/Pictures/Wallpapers/one.png" ] \
     && ok "the previous rice's wallpaper file is kept (additive, only the pointer swaps)" \

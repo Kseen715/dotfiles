@@ -16,7 +16,7 @@ NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 OUT="$TMP/out"
-RICE="$TMP/rice"; OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
+THEME="$TMP/rice"; OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
 
 run_step()    { shift; "$@"; }
 pkg_install() { echo "PKG $*" >>"$OUT"; }
@@ -35,22 +35,22 @@ as_root() {
 }
 
 # --- rice fixture: the real config layout, minimal contents ------------------
-mkdir -p "$RICE/config/hypr" "$RICE/config/qt6ct" "$RICE/config/wayland-sessions" \
-         "$RICE/wallpapers"
-printf 'IMAGE' >"$RICE/wallpapers/glass.jpg"
+mkdir -p "$THEME/config/hypr" "$THEME/config/qt6ct" "$THEME/config/wayland-sessions" \
+         "$THEME/wallpapers"
+printf 'IMAGE' >"$THEME/wallpapers/glass.jpg"
 printf 'env = WALLPAPER_PATH,{{WALLPAPER_PATH}}\nexec-once = hyprpaper\n' \
-    >"$RICE/config/hypr/hyprland.conf"
+    >"$THEME/config/hypr/hyprland.conf"
 for s in start-audio start-amnezia-vpn-client start-mako start-easyeffects \
          start-top start-wleave; do
-    printf '#!/bin/sh\n# %s\n' "$s" >"$RICE/config/hypr/$s.sh"
+    printf '#!/bin/sh\n# %s\n' "$s" >"$THEME/config/hypr/$s.sh"
 done
-printf 'qt6ct\n' >"$RICE/config/qt6ct/qt6ct.conf"
+printf 'qt6ct\n' >"$THEME/config/qt6ct/qt6ct.conf"
 printf 'Exec=/usr/share/wayland-sessions/start-hyprland.sh\n' \
-    >"$RICE/config/wayland-sessions/hyprland.desktop"
-printf 'exec Hyprland\n' >"$RICE/config/wayland-sessions/start-hyprland.sh"
-printf 'Name=Hyprland (VMware)\n' >"$RICE/config/wayland-sessions/hyprland-vmware.desktop"
+    >"$THEME/config/wayland-sessions/hyprland.desktop"
+printf 'exec Hyprland\n' >"$THEME/config/wayland-sessions/start-hyprland.sh"
+printf 'Name=Hyprland (VMware)\n' >"$THEME/config/wayland-sessions/hyprland-vmware.desktop"
 printf 'export GSK_RENDERER=cairo\nexec Hyprland\n' \
-    >"$RICE/config/wayland-sessions/start-hyprland-vmware.sh"
+    >"$THEME/config/wayland-sessions/start-hyprland-vmware.sh"
 
 # run_module <virt>
 run_module() {

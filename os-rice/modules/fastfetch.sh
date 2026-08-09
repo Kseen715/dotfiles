@@ -14,8 +14,8 @@
 
 run_step "Installing fastfetch" pkg_install fastfetch
 
-if [ -n "${OSR_RICE_DIR:-}" ] && [ -f "$OSR_RICE_DIR/config/fastfetch/config.jsonc" ]; then
-    install_layer "$OSR_RICE_DIR/config/fastfetch/config.jsonc" \
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/fastfetch/config.jsonc" ]; then
+    install_layer "$OSR_THEME_DIR/config/fastfetch/config.jsonc" \
         "$OSR_HOME/.config/fastfetch/config.jsonc"
 elif [ -f "$OSR_DOTFILES/fastfetch/config.jsonc" ]; then
     install_layer "$OSR_DOTFILES/fastfetch/config.jsonc" \

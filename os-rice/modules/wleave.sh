@@ -3,4 +3,4 @@
 # POSIX (was .../modules/wleave.sh). scdoc is a native build/man dep. The config
 # dir (layout, style.css, icons) is rice-owned (§6), copied whole.
 run_step "Installing wleave (AUR)" pkg_install wleave scdoc
-if [ -n "$OSR_RICE_DIR" ]; then apply_config wleave; fi
+if [ -n "$OSR_THEME_DIR" ]; then apply_config wleave; fi

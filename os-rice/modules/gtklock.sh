@@ -5,8 +5,8 @@
 # wallpaper. .face (lockscreen avatar) is seeded once and then left to the user.
 run_step "Installing gtklock" pkg_install gtklock gtklock-userinfo-module
 
-if [ -n "$OSR_RICE_DIR" ]; then
-    _gd="$OSR_RICE_DIR/config/gtklock"
+if [ -n "$OSR_THEME_DIR" ]; then
+    _gd="$OSR_THEME_DIR/config/gtklock"
     [ -f "$_gd/config.ini" ] && install_layer "$_gd/config.ini" "$OSR_HOME/.config/gtklock/config.ini"
 
     # Resolve {{WALLPAPER_PATH}} -> the installed wallpaper (cosmetic bg). Shared

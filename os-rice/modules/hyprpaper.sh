@@ -9,7 +9,7 @@
 # install_wallpaper_layer with the same installed path gtklock and hyprland's
 # `env =` line get, so the daemon, the locker and the session agree on one file.
 run_step "Installing hyprpaper" pkg_install hyprpaper
-if [ -n "$OSR_RICE_DIR" ] && [ -f "$OSR_RICE_DIR/config/hypr/hyprpaper.conf" ]; then
-    install_wallpaper_layer "$OSR_RICE_DIR/config/hypr/hyprpaper.conf" \
+if [ -n "$OSR_THEME_DIR" ] && [ -f "$OSR_THEME_DIR/config/hypr/hyprpaper.conf" ]; then
+    install_wallpaper_layer "$OSR_THEME_DIR/config/hypr/hyprpaper.conf" \
         "$OSR_HOME/.config/hypr/hyprpaper.conf"
 fi

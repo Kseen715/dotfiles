@@ -6,8 +6,8 @@
 # order is the dependency graph, but this module self-heals if go is absent).
 run_step "Installing cliphist" pkg_install cliphist ripgrep
 
-if [ -n "$OSR_RICE_DIR" ] && [ -f "$OSR_RICE_DIR/config/hypr/start-cliphist-store.sh" ]; then
-    install_layer "$OSR_RICE_DIR/config/hypr/start-cliphist-store.sh" \
+if [ -n "$OSR_THEME_DIR" ] && [ -f "$OSR_THEME_DIR/config/hypr/start-cliphist-store.sh" ]; then
+    install_layer "$OSR_THEME_DIR/config/hypr/start-cliphist-store.sh" \
         "$OSR_HOME/.config/hypr/start-cliphist-store.sh"
     as_user chmod +x "$OSR_HOME/.config/hypr/start-cliphist-store.sh"
 fi

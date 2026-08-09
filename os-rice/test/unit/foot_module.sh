@@ -34,9 +34,9 @@ osr_download() { echo "DOWNLOAD $*" >>"$OUT"; return 1; }
 # --- scenario 1: rice ships a palette -> rice theme wins over dotfiles default -
 FAKE_FOOT_VERSION=1.26.0; export FAKE_FOOT_VERSION   # knows [colors-dark]
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR
-mkdir -p "$RICE/config/foot"
-printf '[colors-dark]\n# RICE-PALETTE-MARKER\n' >"$RICE/config/foot/foot-colors.ini"
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+mkdir -p "$THEME/config/foot"
+printf '[colors-dark]\n# RICE-PALETTE-MARKER\n' >"$THEME/config/foot/foot-colors.ini"
 
 . "$OSR_ROOT/modules/foot.sh" >/dev/null 2>&1
 
@@ -45,21 +45,21 @@ assert_contains "$OSR_HOME/.config/foot/foot.ini" 'JetBrainsMono' "foot.ini inst
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" 'RICE-PALETTE-MARKER' "rice palette overrides dotfiles default (90-theme)"
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" '^\[colors-dark\]$' "palette keeps [colors-dark] on foot >= 1.26"
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 # --- scenario 2: rice ships no palette -> dotfiles default palette used -------
 # Old foot: [colors-dark] is an invalid section there, so it must be downgraded.
 : >"$OUT"
 FAKE_FOOT_VERSION=1.25.0
 OSR_HOME=$(mktemp -d); export OSR_HOME
-RICE=$(mktemp -d); OSR_RICE_DIR="$RICE"; export OSR_RICE_DIR   # no config/foot
+THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/foot
 
 . "$OSR_ROOT/modules/foot.sh" >/dev/null 2>&1
 
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" 'regular0' "dotfiles default palette used when rice ships none"
 assert_contains "$OSR_HOME/.config/foot/foot-colors.ini" '^\[colors\]$' "palette section downgraded for foot < 1.26"
 refute_contains "$OSR_HOME/.config/foot/foot-colors.ini" 'colors-dark' "no [colors-dark] left for a foot that rejects it"
-rm -rf "$OSR_HOME" "$RICE"
+rm -rf "$OSR_HOME" "$THEME"
 
 rm -rf "$BIN"; rm -f "$OUT"
 finish

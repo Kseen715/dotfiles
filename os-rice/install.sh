@@ -5,6 +5,8 @@
 #   install.sh --user alice gruvbox    rice a specific user (user-for-user, §8)
 #   install.sh --verbose gruvbox       stream output, no spinners
 #   install.sh --module zsh foot       install specific module(s), no rice
+#   install.sh --theme nord gruvbox    install a rice painted with another theme
+#   install.sh --theme-only --theme nord  apply a theme only (the hotkey path)
 #   install.sh --list                  list available rices
 #   install.sh --list-modules          list available modules
 #
@@ -21,22 +23,30 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES
 # presence keeps the runner working while the harness is built up slice by slice.
 . "$OSR_LIB/ui.sh"
 . "$OSR_LIB/log.sh"
-for _lib in detect user net pkg git service config fonts build preflight; do
+for _lib in detect user net pkg git service config theme state apply reload fonts build preflight; do
     [ -f "$OSR_LIB/$_lib.sh" ] && . "$OSR_LIB/$_lib.sh"
 done
 
 usage() {
-    cat <<EOF
+    # Quoted delimiter: this text contains backticks (`theme:`), which an
+    # unquoted heredoc would run as a command substitution.
+    cat <<'EOF'
 Usage:
-  install.sh [--user <name>] [--verbose] <rice>     install a rice
-  install.sh --module [--theme <rice>] <name>...    install module(s), no rice
+  install.sh [--user <name>] [--verbose] [--theme <name>] <rice>
+                                                    install a rice
+  install.sh --module [--theme <name>] <name>...    install module(s), no rice
+  install.sh --theme-only --theme <name>            apply a theme only (no
+                                                    packages, no sudo) - see osr
   install.sh --list                                 list available rices
+  install.sh --list-themes                          list available themes
   install.sh --list-modules                         list available modules
 
   <rice>            name of a directory under os-rice/rices/
   --module          treat positionals as module names, not a rice
-  --theme <rice>    (--module only) which rice supplies the 90-theme layers;
-                    interactive picker if omitted, default rice if no TTY
+  --theme <name>    which theme supplies the 90-* appearance layers. In rice
+                    mode it overrides the manifest's own `theme:`; in --module
+                    mode it is the interactive picker's answer (default theme
+                    if no TTY)
   --user <name>     account to install for (default: invoking user)
   --verbose         stream command output instead of spinners
 EOF
@@ -57,18 +67,29 @@ list_modules() {
     done
 }
 
+list_themes() {
+    for _t in $(osr_themes); do
+        printf '  %-12s %s\n' "$_t" "$(osr_theme_meta "$_t" description)"
+    done
+}
+
 # --- argument parsing --------------------------------------------------------
 OSR_ARG_USER=""
 OSR_ARG_THEME=""
 OSR_MODULE_MODE=""
+OSR_THEME_ONLY=""
+OSR_NO_RELOAD=""
 OSR_POS=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --user)         OSR_ARG_USER=${2:?--user needs a name}; shift 2 ;;
-        --theme)        OSR_ARG_THEME=${2:?--theme needs a rice name}; shift 2 ;;
+        --theme)        OSR_ARG_THEME=${2:?--theme needs a theme name}; shift 2 ;;
+        --theme-only)   OSR_THEME_ONLY=1; shift ;;
+        --no-reload)    OSR_NO_RELOAD=1; shift ;;
         --verbose)      OSR_VERBOSE=1; export OSR_VERBOSE; shift ;;
         --module)       OSR_MODULE_MODE=1; shift ;;
         --list)         echo "Available rices:"; list_rices; exit 0 ;;
+        --list-themes)  echo "Available themes:"; list_themes; exit 0 ;;
         --list-modules) echo "Available modules:"; list_modules; exit 0 ;;
         -h|--help)      usage; exit 0 ;;
         -*)             error "unknown option: $1" ;;
@@ -79,6 +100,21 @@ done
 # --- detection + identity ----------------------------------------------------
 osr_detect
 osr_resolve_user "$OSR_ARG_USER"
+
+# --- theme-only: the hotkey path (§6a) ---------------------------------------
+#
+# Everything below this block - the hardware report, the sudo warm-up, the DMI
+# probe that may INSTALL dmidecode - exists to make package decisions. A theme
+# apply makes none, and it runs from a key press with no terminal attached, so
+# it must not touch a package manager, prompt for a password, or take a second.
+# It exits here rather than threading `if` through the rest of the file.
+if [ -n "$OSR_THEME_ONLY" ]; then
+    osr_apply_theme "$OSR_ARG_THEME"
+    [ -n "$OSR_NO_RELOAD" ] || osr_reload_all
+    success "theme '$OSR_THEME' applied"
+    exit 0
+fi
+
 # VERSION_ID is absent on rolling releases (Arch/Void/Gentoo) — the ${:+} just
 # drops the suffix there, no special-casing needed.
 info "distro=$OSR_DISTRO${OSR_VERSION_ID:+ version_id=$OSR_VERSION_ID}${OSR_CODENAME:+ codename=$OSR_CODENAME}${OSR_VERSION:+ version=\"$OSR_VERSION\"}"
@@ -134,21 +170,19 @@ if [ -n "$_accel" ];         then info "hwaccel: $_accel"; fi
 
 # --- resolve what to run: a rice manifest, or explicit --module names --------
 OSR_MODULES=""
-OSR_CONFIGS=""
 OSR_REQUIRES=""
 if [ -n "$OSR_MODULE_MODE" ]; then
     # Explicit module install: positionals are module names, there is no rice.
-    # A standalone module still gets rice-owned 90-theme layers: resolve which
-    # rice supplies them (--theme > interactive picker > default rice, §6), then
-    # a module's `[ -f "$OSR_RICE_DIR/config/..." ]` theme guards fire normally.
+    # A standalone module still gets theme-owned 90-* layers: resolve which theme
+    # supplies them (--theme > interactive picker > default theme, §6a), then a
+    # module's `[ -f "$OSR_THEME_DIR/config/..." ]` theme guards fire normally.
     OSR_MODULES=$OSR_POS
     [ -n "$OSR_MODULES" ] || { usage >&2; error "no module specified"; }
     for _m in $OSR_MODULES; do
         [ -f "$OSR_ROOT/modules/$_m.sh" ] || error "module not found: $_m (try --list-modules)"
     done
-    osr_resolve_theme_rice "$OSR_ARG_THEME"
+    osr_resolve_theme "$OSR_ARG_THEME"
 else
-    [ -z "$OSR_ARG_THEME" ] || warn "--theme is ignored outside --module mode (the rice defines its own theme)"
     # Rice install: exactly one positional names a rices/<rice>/ directory.
     OSR_RICE=""
     for _p in $OSR_POS; do
@@ -159,7 +193,9 @@ else
     OSR_RICE_DIR="$OSR_ROOT/rices/$OSR_RICE"
     [ -f "$OSR_RICE_DIR/rice.list" ] || error "rice not found: $OSR_RICE (try --list)"
     export OSR_RICE OSR_RICE_DIR
-    # Strip `#` comments + whitespace; collect module lines and `config:` dirs.
+    # Strip `#` comments + whitespace; collect module lines. `theme:`/`themes:`
+    # are read back through lib/theme.sh, not here - they must still be matched
+    # so a directive never falls through to the module list.
     # Module count is the progress denominator (§3).
     while IFS= read -r _line || [ -n "$_line" ]; do
         _line=${_line%%#*}
@@ -167,10 +203,19 @@ else
         [ -n "$_line" ] || continue
         case "$_line" in
             require:*) OSR_REQUIRES="$OSR_REQUIRES ${_line#require:}" ;;
-            config:*)  OSR_CONFIGS="$OSR_CONFIGS ${_line#config:}" ;;
+            theme:*)   ;;  # osr_rice_default_theme
+            themes:*)  ;;  # osr_rice_themes (the picker's offer set)
             *)         OSR_MODULES="$OSR_MODULES $_line" ;;
         esac
     done < "$OSR_RICE_DIR/rice.list"
+
+    # The theme that owns this run's 90-* layers: --theme wins, else the
+    # manifest's `theme:`, else the default. Overriding it is supported on
+    # purpose - a rice is a package set, and any theme paints any of them.
+    _rice_theme=$OSR_ARG_THEME
+    [ -n "$_rice_theme" ] || _rice_theme=$(osr_rice_default_theme "$OSR_RICE")
+    [ -n "$_rice_theme" ] || _rice_theme=$OSR_DEFAULT_THEME
+    osr_resolve_theme "$_rice_theme"
 
     # Preconditions (§10 Tier 1): fail clean before any mutation if the host
     # can't run this rice. Runs on switch too — you can't switch into a rice the
@@ -199,18 +244,25 @@ for _m in $OSR_MODULES; do
     run_module "$_m"
 done
 
-# --- copy rice-owned configs + wallpaper (rice mode only) --------------------
+# --- copy theme-owned whole-dir configs + wallpaper (rice mode only) ---------
+# The `config:` dirs come from the THEME's manifest, not the rice's: they are
+# appearance (GTK colors, xsettingsd, fontconfig) and must travel with the theme
+# onto whichever rice it is applied to.
 if [ -z "$OSR_MODULE_MODE" ]; then
-    for _c in $OSR_CONFIGS; do
-        apply_config "$_c"
-    done
+    osr_apply_theme_configs
     apply_wallpaper
+    # Record what is now applied. `rice` is what makes a later `osr theme` cheap
+    # AND correct: it narrows the layer set to this manifest's modules, so a
+    # theme switch never writes configs for programs this rice never installed.
+    osr_state_set rice "$OSR_RICE"
+    osr_state_set theme "$OSR_THEME"
+    osr_state_set applied "$(date +%s 2>/dev/null || echo 0)"
 fi
 
 if [ -n "$OSR_MODULE_MODE" ]; then
     success "module(s) installed:$OSR_MODULES"
 elif [ "${OSR_MODE:-install}" = "switch" ]; then
-    success "switched to rice '$OSR_RICE' (packages accreted, rice config replaced)"
+    success "switched to rice '$OSR_RICE' (packages accreted, theme layers replaced)"
 else
     success "rice '$OSR_RICE' installed"
 fi

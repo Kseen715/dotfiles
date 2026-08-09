@@ -10,6 +10,15 @@
 # config/alacritty/. yazi is listed after it because the two are paired: with no
 # image protocol in Alacritty, yazi previews images through the chafa that
 # modules/yazi.sh installs.
+
+# --- themes (§6a) -------------------------------------------------------------
+# `theme:` is the theme installed with this rice; `themes:` is the set the rice
+# ships and `osr theme` / Proteus offer for live switching. A theme is a
+# standalone directory under themes/ - any of them applies onto any rice, this
+# line only says which ones this rice was designed and tested against.
+theme: xin
+themes: catppuccin nord gruvbox xin
+
 rust
 starship
 zsh

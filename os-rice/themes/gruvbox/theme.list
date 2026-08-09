@@ -1,0 +1,22 @@
+# themes/gruvbox/theme.list — see themes/nord/theme.list for the field docs.
+#
+# The three `config:` dirs were the rice.list `config:` line before themes became
+# first-class: they are pure appearance (GTK4 colors, the xsettingsd theme names,
+# font rendering), so they belong to the theme and travel with it onto any rice.
+display: Gruvbox
+description: Retro groove, dark medium contrast
+polarity: dark
+session: any
+
+config: gtk-4.0
+config: fontconfig
+config: xsettingsd
+
+color: bg      #282828
+color: surface #504945
+color: fg      #ebdbb2
+color: dim     #928374
+color: accent  #fabd2f
+color: success #8ec07c
+color: error   #fb4934
+color: warning #d79921
