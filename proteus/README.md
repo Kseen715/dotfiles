@@ -14,11 +14,11 @@ everything looks like.
 │  Arctic, north-bluish palette                                    │
 │  ▬▬ ▬▬ ▬▬ ▬▬ ▬▬                                                  │
 │                                                                  │
-│    ╱▔▔╱▔▔╱▔▔▔▔╱▔▔╱▔▔╱                                            │
-│   ╱   ╱   ╱    ╱   ╱   ╱     cards overhang, selected in front    │
+│    ╱▔▔▔╱▔▔▔╱▔▔▔▔╱▔▔▔╱▔▔▔╱                                        │
+│   ╱   ╱   ╱    ╱   ╱   ╱     cards overhang, selected in front   │
 │  ╱▁▁▁╱▁▁▁╱▁▁▁▁╱▁▁▁╱▁▁▁╱                                          │
 │           ▔▔▔▔                                                   │
-│  4/6   ← → browse  •  Tab: wallpapers  •  Enter: apply  •  Esc    │
+│  4/6   ← → browse  •  Tab: wallpapers  •  Enter: apply  •  Esc   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
