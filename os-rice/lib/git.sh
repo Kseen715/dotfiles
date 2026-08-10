@@ -9,6 +9,11 @@
 # remote differs, re-clone. Idempotent (§2).
 install_or_update_git_repo() {
     _gr_name=$1; _gr_url=$2; _gr_dir=$3; shift 3
+    # Fix root-owned files from a previous sudo run (§8): git operations run as
+    # OSR_USER, so every byte under the repo must be owned by that user.
+    if [ -d "$_gr_dir" ]; then
+        as_root chown -R "$OSR_USER:$OSR_USER" "$_gr_dir" 2>/dev/null || true
+    fi
     if [ -d "$_gr_dir/.git" ]; then
         _gr_remote=$(as_user git -C "$_gr_dir" remote get-url origin 2>/dev/null || echo "")
         if [ "$_gr_remote" = "$_gr_url" ] || [ "$_gr_remote" = "$_gr_url.git" ] || [ "$_gr_remote" = "${_gr_url%.git}" ]; then
