@@ -199,3 +199,14 @@ thunderbird@trixie   = source:provide_thunderbird_tarball
 thunderbird@jammy    = source:provide_thunderbird_tarball
 thunderbird@noble    = source:provide_thunderbird_tarball
 thunderbird@resolute = source:provide_thunderbird_tarball
+
+# GPaste tracks GNOME Shell's version, and Debian/Ubuntu do not: resolute ships
+# 45.3-5 against Shell 50, patched only to CLAIM compatibility in metadata.json.
+# The mismatch costs the clipboard history, image support and a quiet panel all
+# at once - see provide_gpaste. So source is the only route here, not a fallback.
+gpaste = source:provide_gpaste
+# meson/ninja/gettext build the project; gcr-4, gtk4 (+ its x11 backend),
+# libadwaita and pango are the hard pkg-config deps in meson.build; the
+# girepository pair builds the GIR the shell extension imports GPaste through;
+# libx11/libxi back the X keybinder that X11 sessions fall back to.
+gpaste-build-deps = meson ninja-build pkg-config gettext libgcr-4-dev libglib2.0-dev libgtk-4-dev libadwaita-1-dev libpango1.0-dev libgirepository-2.0-dev gobject-introspection libx11-dev libxi-dev

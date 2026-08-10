@@ -800,3 +800,172 @@ provide_proteus() {
     as_user "$_pr_cargo" install --locked --path "$_pr_src" --root "$OSR_HOME/.local" --force
     check_error $? "proteus build failed"
 }
+
+# --- GPaste -------------------------------------------------------------------
+# GPaste is versioned AGAINST GNOME Shell: v50.x is the branch that speaks the
+# Shell 50 extension API, v45.x speaks 45's. "Latest" is therefore the wrong
+# question - the right tag is the newest one whose major matches the running
+# gnome-shell, which is what _gpaste_tag resolves.
+GPASTE_REPO=Keruspe/GPaste
+
+# _gpaste_gnome_major — major version of the installed gnome-shell ("50.1" -> 50).
+_gpaste_gnome_major() {
+    _gg=$(gnome-shell --version 2>/dev/null) || return 1
+    _gg=${_gg##* }
+    [ -n "$_gg" ] || return 1
+    printf '%s' "${_gg%%.*}"
+}
+
+# _gpaste_client_major — major version of the gpaste-client on PATH, or nothing.
+# `gpaste-client version` is the local binary's own string; `daemon-version`
+# would D-Bus-activate the daemon, which is not something an installer should do.
+_gpaste_client_major() {
+    _gc=$(gpaste-client version 2>/dev/null) || return 1
+    _gc=${_gc##* }
+    printf '%s' "${_gc%%.*}"
+}
+
+# _gpaste_typelib_ok [root] — true when GPaste-2.typelib sits somewhere
+# GIRepository actually searches. That is the introspection libdir it was built
+# with, NOT anything reachable via XDG_DATA_DIRS - which is exactly the trap a
+# /usr/local prefix falls into. Probing the system libdirs directly beats parsing
+# that out of gobject-introspection, and covers multiarch and plain layouts both.
+# `root` prefixes the paths (tests pass a fake root; the builder passes nothing).
+_gpaste_typelib_ok() {
+    for _gk in "lib/$(uname -m)-linux-gnu/girepository-1.0" \
+               lib64/girepository-1.0 lib/girepository-1.0; do
+        [ -f "${1:-}/usr/$_gk/GPaste-2.typelib" ] && return 0
+    done
+    return 1
+}
+
+# _gpaste_tag <gnome-major> — newest upstream tag on that GNOME major (v50.7),
+# falling back to the newest tag overall if the major is not covered yet.
+_gpaste_tag() {
+    _gt_json=$(osr_fetch_stdout "https://api.github.com/repos/$GPASTE_REPO/tags?per_page=100" 2>/dev/null)
+    # One field per line BEFORE the match: sed's .* is greedy, so on a payload
+    # that puts several tags on one line it would keep only the last of them.
+    _gt_tag=$(printf '%s\n' "$_gt_json" | tr ',' '\n' \
+        | sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\(v[0-9][^"]*\)".*/\1/p' \
+        | grep "^v$1\." | sort -V | tail -n 1)
+    [ -n "$_gt_tag" ] || _gt_tag=$(github_latest "$GPASTE_REPO")
+    printf '%s' "$_gt_tag"
+}
+
+# provide_gpaste — build GPaste from source, on the branch matching gnome-shell.
+#
+# Source is the only route on Debian/Ubuntu: resolute ships 45.3-5, whose only
+# concession to modern GNOME is a downstream patch widening metadata.json's
+# shell-version list to "50". The JS behind it is still the 45 extension. What
+# that costs, all three from one root: the Shell refuses the extension's
+# GrabAccelerators call, so the daemon logs "falling back to X11 keybinder" and
+# starts polling X selections under Xwayland - that is the flickering selection
+# and the twitching panel. And with no working extension, a Wayland session gives
+# the daemon no clipboard to watch at all, so the history stays empty and no
+# image ever reaches it. One version mismatch, three symptoms.
+#
+# Idempotency goes BEYOND _via_source's probe (§2), twice over: the probe looks
+# for a `gpaste` binary that upstream never installs (it is gpaste-client), and
+# an old distro GPaste would satisfy any name-only check while being exactly the
+# thing that has to go. So the builder compares majors itself.
+#
+# -Dvapi=false drops valac: nothing here consumes the Vala bindings. Introspection
+# stays ON - the shell extension imports GPaste through GIR and is dead without
+# the typelib. The X keybinder stays ON too: it is the fallback that X11 sessions
+# without a live extension need, and once the extension matches the Shell it is
+# never engaged - fixing the mismatch is what silences it, not deleting it.
+#
+# The prefix is /usr, not the /usr/local every other builder here uses, and that
+# is forced by GIRepository rather than chosen: its typelib search path is the
+# libdir gobject-introspection itself was compiled with plus $GI_TYPELIB_PATH -
+# XDG_DATA_DIRS does not enter into it. A /usr/local prefix therefore parks
+# GPaste-2.typelib somewhere gnome-shell will never look, and the extension dies
+# on `Requiring GPaste, version 2: Typelib file ... not found` while every other
+# part of the install looks perfectly healthy. Symlinking the two typelibs into
+# /usr would write to /usr anyway, just less honestly. Overwriting the distro's
+# files is not a concern because they are removed above, not merged with.
+provide_gpaste() {
+    _gp_major=$(_gpaste_gnome_major) \
+        || error "gnome-shell not found - GPaste is a GNOME Shell clipboard manager"
+
+    # Matching versions are necessary but NOT sufficient: a GPaste installed under
+    # the wrong prefix reports the right version from a shell extension that
+    # cannot load. So the skip needs the typelib to be findable too, or a box left
+    # in that state would skip its way out of ever being repaired.
+    if [ "$(_gpaste_client_major 2>/dev/null)" = "$_gp_major" ] && _gpaste_typelib_ok; then
+        info "GPaste $(gpaste-client version 2>/dev/null) already matches GNOME Shell $_gp_major - skipping the source build"
+        return 0
+    fi
+
+    # The distro package owns the same D-Bus names, gsettings schema and
+    # extension UUID as the build. Two GPastes is one too many - and for the
+    # duplicate extension UUID the outcome is a coin toss over which copy the
+    # Shell loads - so the old one goes before the new one lands.
+    if command -v dpkg-query >/dev/null 2>&1; then
+        _gp_old=$(dpkg-query -W -f '${Package} ${Status}\n' \
+            'gpaste-2' 'libgpaste-2' 'libgpaste-2-common' 'gir1.2-gpaste-2' \
+            'gnome-shell-extension-gpaste' 2>/dev/null \
+            | sed -n 's/ install ok installed$//p')
+        if [ -n "$_gp_old" ]; then
+            info "removing the distro GPaste ($(echo $_gp_old | tr '\n' ' '))"
+            as_root apt-get remove -y $_gp_old || warn "could not remove the distro GPaste - the build may collide with it"
+        fi
+    fi
+
+    # An earlier build of this module used a /usr/local prefix (see the typelib
+    # note above for why it cannot work). Left in place it is worse than useless:
+    # /usr/local/bin precedes /usr/bin on PATH, so the broken gpaste-client keeps
+    # winning, and /usr/local/share is ahead of /usr/share in XDG_DATA_DIRS, so
+    # the Shell keeps loading the extension that cannot find its typelib. Every
+    # path GPaste installs there carries "gpaste" in its name, which is what
+    # makes this narrow enough to delete.
+    if [ -x /usr/local/bin/gpaste-client ]; then
+        info "removing the earlier /usr/local GPaste (wrong prefix for the typelib)"
+        for _gp_dir in bin libexec lib include share; do
+            [ -d "/usr/local/$_gp_dir" ] || continue
+            as_root find "/usr/local/$_gp_dir" -iname '*gpaste*' -depth -exec rm -rf {} + 2>/dev/null || true
+        done
+    fi
+
+    pkg_install build gpaste-build-deps
+
+    _gp_tag=$(_gpaste_tag "$_gp_major")
+    info "building GPaste $_gp_tag for GNOME Shell $_gp_major"
+    _gp_tmp=$(mktemp -d)
+    osr_download "https://github.com/$GPASTE_REPO/archive/refs/tags/${_gp_tag}.tar.gz" \
+        "$_gp_tmp/gpaste.tar.gz" || { rm -rf "$_gp_tmp"; error "failed to download GPaste $_gp_tag"; }
+    tar -xf "$_gp_tmp/gpaste.tar.gz" -C "$_gp_tmp" \
+        || { rm -rf "$_gp_tmp"; error "failed to extract GPaste $_gp_tag"; }
+
+    _gp_src="$_gp_tmp/GPaste-${_gp_tag#v}"
+    [ -f "$_gp_src/meson.build" ] \
+        || { rm -rf "$_gp_tmp"; error "no meson.build in the GPaste tarball - its layout changed"; }
+
+    # Debian/Ubuntu put libs and typelibs under a multiarch libdir. Only pass it
+    # when that dir is really there - the point is to land beside the system's
+    # own typelibs, so the system's own layout is the thing worth copying.
+    _gp_libdir=
+    [ -d "/usr/lib/$(uname -m)-linux-gnu" ] && _gp_libdir="--libdir=lib/$(uname -m)-linux-gnu"
+
+    env PKG_CONFIG_PATH="$(_osr_pkgconfig_path)" meson setup "$_gp_src/build" "$_gp_src" \
+        --prefix=/usr \
+        $_gp_libdir \
+        --buildtype=release \
+        -Dvapi=false \
+        -Ddbus-services-dir=/usr/share/dbus-1/services \
+        -Dcontrol-center-keybindings-dir=/usr/share/gnome-control-center/keybindings \
+        -Dsystemd-user-unit-dir=/usr/lib/systemd/user \
+        || { rm -rf "$_gp_tmp"; error "GPaste meson configure failed"; }
+    meson compile -C "$_gp_src/build" -j "${OSR_BUILD_JOBS:-$(nproc 2>/dev/null || echo 2)}" \
+        || { rm -rf "$_gp_tmp"; error "GPaste build failed"; }
+    as_root meson install -C "$_gp_src/build" \
+        || { rm -rf "$_gp_tmp"; error "GPaste install failed"; }
+
+    # libgpaste lands in /usr/local/lib; refresh the loader cache so the daemon
+    # finds it on distros that do not scan that dir by default.
+    as_root ldconfig >/dev/null 2>&1 || true
+    rm -rf "$_gp_tmp"
+
+    command -v gpaste-client >/dev/null 2>&1 \
+        || error "GPaste installed but gpaste-client is not on PATH"
+}
