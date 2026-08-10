@@ -775,3 +775,28 @@ provide_yandex_browser_deb() {
     command -v update-desktop-database >/dev/null 2>&1 \
         && as_root update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
 }
+
+# provide_proteus — build the theme/wallpaper picker from this repo's Rust crate
+# (../proteus). Proteus is part of the dotfiles: it reads this repo's theme
+# directory and has no meaning apart from it, so a source build is the only route
+# on every target — same class as wezterm (any.map).
+#
+# Needs a toolchain: list `rust` before `proteus` in the rice (manifest order is
+# the dependency graph, §4). modules/rust.sh installs rustup into ~/.cargo.
+# Idempotency is _via_source's `command -v proteus` probe (§2).
+provide_proteus() {
+    _pr_cargo="$OSR_HOME/.cargo/bin/cargo"
+    as_user test -x "$_pr_cargo" \
+        || error "cargo not found for proteus — install 'rust' before proteus (manifest order, §4)"
+
+    _pr_src="$OSR_DOTFILES/proteus"
+    [ -f "$_pr_src/Cargo.toml" ] \
+        || error "proteus sources not found at $_pr_src"
+
+    info "building proteus from $_pr_src"
+    # --locked: the Cargo.lock this repo was tested against.
+    # --root sets the install prefix; the binary lands in $OSR_HOME/.local/bin,
+    # which is on PATH for the shell layers.
+    as_user "$_pr_cargo" install --locked --path "$_pr_src" --root "$OSR_HOME/.local" --force
+    check_error $? "proteus build failed"
+}

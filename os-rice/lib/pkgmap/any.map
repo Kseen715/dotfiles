@@ -25,3 +25,8 @@ wezterm = source:provide_wezterm
 yazi = source:provide_yazi_bin
 
 amneziavpn = source:provide_amneziavpn
+
+# proteus is the theme/wallpaper picker; it reads this repo's theme directory and
+# has no meaning apart from these dotfiles, so a source build (from ../proteus)
+# is the only route on every target — same class as wezterm.
+proteus = source:provide_proteus

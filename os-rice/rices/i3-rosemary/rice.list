@@ -41,6 +41,7 @@ lightdm
 polybar
 rofi
 dunst
+rust
 proteus
 i3lock
 feh
