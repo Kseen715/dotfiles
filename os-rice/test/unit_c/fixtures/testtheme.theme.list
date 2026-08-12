@@ -1,0 +1,7 @@
+display: Test Theme
+polarity: dark
+gtk_theme: Test-Adwaita
+
+color: background  #101010
+color: foreground  #f0f0f0
+color: accent      #00ff00

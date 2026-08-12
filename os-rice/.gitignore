@@ -1,2 +1,7 @@
 .cache/
 alias/
+
+# C core build artifacts (see nob.c, PLAN_UNIVERSAL.md)
+*.exe
+*.exe.old
+*.o

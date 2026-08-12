@@ -68,6 +68,91 @@ exists and was verified before committing to this:
 mingw-w64. `go-backports` (an unofficial frozen Go fork for XP) is the
 equivalent-effort alternative in Go, with less prior art to build on.
 
+**4. Rule: code here is written for a human to read, not to be clever.**
+No macro tricks, no golfed one-liners, no "look how few lines" C. Every
+function reads top-to-bottom as ordinary, explicit C: named variables over
+inline expressions, early returns over nested conditionals, a short comment
+wherever the *why* isn't obvious from the code itself (a WinAPI quirk, a
+format this has to stay byte-identical with). This matters more here than in
+most code, because the reason this tier exists at all is compilers and
+readers older/less sophisticated than the norm elsewhere in this repo — code
+that's hard for a person to read is also usually the code that's hardest for
+an old compiler to accept and hardest for the next contributor porting a
+Linux module into this tier to trust.
+
+**5. Decided: interleave C sources into `os-rice/` next to the file each one
+ports, not a separate `universal-core/` tree.**
+The original plan below (§"Source layout") put every C file under
+`os-rice/universal-core/src/`, kept deliberately apart from `os-rice/` and
+`windows-rice/`. In practice, starting implementation made a different
+layout the better fit: `lib/net.c` sits beside `lib/net.sh`, `lib/winpkg.c`
+beside the `windows-rice/src/pkg.ps1` it ports, `install.c` at the same
+level as `install.sh`. Reasons this won out over the segregated tree:
+
+- **Direct sh-to-C comparison.** Reviewing whether `net.c` actually matches
+  `net.sh`'s behavior is a lot easier when the two files are one `ls` apart,
+  not two directory levels removed in an unrelated tree.
+- **Incremental module-by-module porting stays incremental.** The stated
+  end goal is working through the ~70 `os-rice/modules/*.sh` files one at a
+  time and, where it makes sense, growing a native (non-stub) Linux branch
+  in the matching `lib/*.c` file. That only stays a per-file decision if the
+  C and sh files already live together — a segregated tree would need a
+  wholesale migration first.
+- **`windows.map`/`windows-rice/` reuse falls out for free.** `lib/winpkg.c`
+  reads the *existing* `windows-rice/windows.map` file and ports the
+  *existing* `windows-rice/src/pkg.ps1` dispatch logic rather than inventing
+  a second package-name mapping — only possible because nothing was moved
+  out of `windows-rice/`.
+This does not change decision 1-3's reasoning (C, narrow scope, XP floor via
+`_WIN32_WINNT=0x0501`) or the "does not touch `os-rice/`'s *behavior*"
+intent — `install.sh`, `lib/net.sh`, and `windows-rice/` are all untouched
+and still the primary path; only *where new files land* changed, and only
+because it serves the same "later, continue consuming and rewriting Linux
+modules" goal the original layout was also trying to serve.
+
+**6. Decided: build with `nob.h` (vendored), not a Makefile.**
+The first working version of this used a plain Makefile. Reconsidered
+because `make` turned out to be a real, separate install on a fresh
+Windows box (this session's own dev machine didn't have it — had to
+`scoop install make`), on top of the `gcc` this project needs anyway;
+`nob.h` needs nothing beyond the C compiler already required to build
+`install.exe` itself. Mechanics: `nob.c` (`os-rice/nob.c`) is the actual
+build script, `nob.h` (`os-rice/nob.h`, vendored verbatim, public domain,
+<https://github.com/tsoding/nob.h>) is a single-header library it uses for
+running compiler commands. Bootstrap once —
+`gcc -o nob.exe nob.c` — and every run after that is just `nob.exe`;
+nob.h's "Go Rebuild Urself" technology recompiles `nob.exe` on the spot
+whenever `nob.c` changes, so nobody types that `gcc` line a second time.
+`nob.c`/`nob.h` are build-time tooling only (run on the dev/CI host, never
+cross-compiled for a target), so — unlike `install.c`/`lib/*.c` — they're
+written in ordinary C99, matching what `nob.h` itself requires; this does
+not loosen decision 3's C89/XP-floor rule for the actual product code.
+`osr.ps1` leans on this directly: it bootstraps `nob.exe` the same way if
+it isn't already there, so a fresh clone needs nothing typed by hand at
+all, PowerShell included (see `osr.ps1`'s own header comment).
+
+**7. Decided: port windows-rice's own 4 modules (fastfetch, wezterm, pwsh,
+oh-my-posh), not a generic module framework.**
+Phase 1 initially covered package resolution only, with theme rendering and
+module execution left as gaps. Both are now real: `modules.c` runs the same
+finite module set `windows-rice/modules/*.ps1` already runs, ported
+function-for-function (see `modules.c`'s header comment for the exact
+mapping) — package install, Nerd Font install where needed, dotfiles-owned
+config copy, and theme-rendered config, using `lib/theme_render.c` (a third
+C port of the same `{{role}}` substitution `lib/theme.sh` and
+`windows-rice/src/theme.ps1` already implement — see that file's own header
+comment) and `lib/wallpaper.c` (the wallpaper half of `lib/config.sh`,
+fresh-ported since `windows-rice` had nothing to port for it). This is
+still not the "~70 Linux modules" the Scope section below rules out —
+`windows-rice` already decided 4 modules is the realistic Windows set, and
+this only ports what already existed. `install.exe` also gained
+`--theme-only` (the hotkey-safe re-theme path, install.sh's own
+`--theme-only`) and `--module` (install a named module with no rice,
+install.sh's `--module`), and a standalone `wallpaper.exe`
+(`wallpaper.sh`'s shape: separate from install, no packages, no modules
+run). `osr.ps1`'s `theme`/`wallpaper`/`module`/`switch` verbs, previously
+"not yet implemented," now dispatch to these for real.
+
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
 by three different pinned toolchains for three different reach targets, kept
@@ -89,31 +174,112 @@ targets often have no package manager, only "fetch and place a file"),
 render theme templates with the same `{{role}}` substitution algorithm as
 the sh/PowerShell renderers.
 
-**Does not:** reimplement the ~70 os-rice modules, the DE/session logic, or
-anything that assumes a desktop. XP and bare embedded boards get a minimal
-rice: shell config, a prompt, a few CLI tools, a theme. No Hyprland, no
-Wayland, no GPU probing.
+**Does not:** reimplement the ~70 Linux `os-rice/modules/*.sh`, the
+DE/session logic, or anything that assumes a Linux desktop. XP and bare
+embedded boards get a minimal rice: shell config, a prompt, a few CLI
+tools, a theme. No Hyprland, no Wayland, no GPU probing.
+
+**Exception, decided in decision 7:** the C core *does* run
+`windows-rice`'s own 4 modules (fastfetch, wezterm, pwsh, oh-my-posh) —
+`modules.c`. That is not the ~70-module tree this section rules out; it is
+`windows-rice`'s already-decided, already-finite Windows module set,
+ported rather than reinvented. No Linux module gets a C port under this
+rule; a *sixth* Windows module would need a person to write it (like the
+first 4 were), not a generic framework to auto-generate it (see "Not
+doing" below, which still holds).
 
 ### Source layout
 
+**Revised from the original plan below** (see decision 5): C sources live
+interleaved inside `os-rice/`, next to the `.sh`/`.ps1` file each one ports,
+instead of in a separate `universal-core/` tree. What actually exists today:
+
 ```
-os-rice/universal-core/
-  src/
-    main.c            entry: parse argv, dispatch to install/theme/render
-    os_windows.c       #ifdef _WIN32 branch: winget/direct-download install,
-                        registry/env, Win32 threads only (no winpthread)
-    os_linux.c         #ifdef __linux__ branch: apt/pacman/apk probe + native
-                        fallback (fetch a static tarball, extract, place)
-    manifest.c         rice.list / theme.list parser — hand-rolled, mirrors
-                        the `while read` logic in lib/theme.sh line-for-line
-    theme.c            {{role}}/{{role_rgb}}/{{role_dec}} substitution,
-                        ports _osr_theme_sed's algorithm, not its shell
-    net.c              minimal HTTP(S) fetch — WinInet on Windows,
-                        libcurl-or-raw-sockets on Linux; degrades to
-                        "no network, local-only" on XP (see toolchain matrix)
-  Makefile             one Makefile, target selected by env (see below)
-  toolchains/          Dockerfiles for the pinned/patched builders (XP tier)
+os-rice/
+  install.c            CLI entry, C port of install.sh: rice.list -> package
+                        + module resolution, `--apply` to actually install,
+                        `--theme-only --theme <name>` (hotkey-safe re-theme,
+                        no packages), `--module <name>...` (no rice)
+  wallpaper.c           standalone program, C port of wallpaper.sh (show/
+                        --list/--next/set) -- separate from install.exe on
+                        purpose, same separation the sh originals have
+  modules.c / modules.h the finite Windows module set (fastfetch, wezterm,
+                        pwsh, oh-my-posh), C ports of windows-rice's own
+                        modules/*.ps1 -- see decision 7 and this file's own
+                        header comment for the exact sh/ps1-to-C mapping
+  lib/
+    net.c / net.h       C port of lib/net.sh: URL/header parsing (portable,
+                        no OS dependency) + WinInet-backed fetch (Windows
+                        only so far; the #else branch is a documented stub,
+                        landing spot for a native Linux port later)
+    winpkg.c / winpkg.h C port of windows-rice/src/pkg.ps1: windows.map
+                        lookup + scoop -> choco -> winget dispatch. NOT a
+                        port of lib/pkg.sh -- that's a different package
+                        model (apt/pacman/apk), still POSIX-sh-only
+    manifest.c / manifest.h  rice.list parser (the `theme:`/`themes:`/
+                        `require:`/module-line format), factored out of
+                        install.c for standalone unit testing. Does NOT
+                        parse theme.list's own shape -- that's theme_list.c.
+    theme_list.c / .h   theme.list parser (meta fields + `color:`/`config:`
+                        multi-valued lines), C port of lib/theme.sh's
+                        _osr_theme_lines/osr_theme_meta/osr_theme_color and
+                        windows-rice/src/theme.ps1's Get-ThemeListLines/
+                        Get-ThemePalette -- the third parser of this format
+    theme_render.c/.h   `{{role}}`/`{{role_rgb}}`/`{{role_dec}}`/
+                        `{{role_sgr}}` template substitution + the literal-
+                        file-then-render layer resolution chain, C port of
+                        lib/theme.sh's _osr_theme_sed and windows-rice/src/
+                        theme.ps1's Expand-ThemeTemplate/Get-ThemeSource/
+                        Install-ThemeLayer. Verified against a real template
+                        (wezterm/wezterm-theme.toml.tmpl) + real theme
+                        (themes/nord), not only a synthetic fixture.
+    config_copy.c / .h  `~` expansion + bounded file copy (parent dirs
+                        created as needed), C port of windows-rice/src/
+                        config.ps1's Copy-ConfigEntry (file half only)
+    fonts.c / fonts.h   Nerd Font install: registry "already installed"
+                        check + scoop/choco dispatch, C port of the
+                        scoop/choco half of windows-rice/src/fonts.ps1's
+                        Install-NerdFont (the manual GitHub-zip fallback is
+                        a documented, not-yet-ported gap -- see the file)
+    wallpaper.c / .h    theme wallpaper library + apply +
+                        SystemParametersInfo live-set, C port of the
+                        wallpaper half of lib/config.sh (windows-rice had
+                        nothing to port for this -- fresh port from sh)
+    state.c / state.h   `%USERPROFILE%\.config\osr\state` key=value reader/
+                        writer, C port of lib/state.sh
+    ui.c / ui.h         colored `[INFO]`/`[WARN]`/`[ERROR]`/`[DONE]` status
+                        lines + step counter, C port of lib/log.sh (+ ui.sh's
+                        step counter). NOT ported: ui.sh's live-repainting
+                        spinner window -- a documented scope cut, see ui.h
+  test/
+    c_test.h            tiny C89 assertion micro-framework (ok/fail/finish,
+                        same shape as test/lib.sh, nothing generated between
+                        the two)
+    unit_c/
+      net_parse_test.c     lib/net.c's portable parsers
+      winpkg_test.c        lib/winpkg.c against the real windows.map fixture
+      manifest_test.c      lib/manifest.c against real rices/*/rice.list
+      theme_render_test.c  lib/theme_list.c + theme_render.c: a synthetic
+                        fixture matching test/unit/theme_template.sh's own,
+                        plus a real template rendered against a real theme
+      config_copy_test.c   lib/config_copy.c: ~ expansion + file copy
+    fixtures/            synthetic theme.list/.tmpl fixtures for
+                        theme_render_test.c (mirrors test/unit/
+                        theme_template.sh's own synthetic scenario)
+  nob.c / nob.h         build script + vendored build-system library,
+                        replaces the Makefile the first version of this
+                        used (see decision 6). `gcc -o nob.exe nob.c` once,
+                        then `nob.exe` (builds install.exe + wallpaper.exe)
+                        / `nob.exe test` / `nob.exe clean`.
+  osr.ps1               Windows front end for this tier, mirrors ./osr in
+                        full now (install/switch/theme/wallpaper/module/
+                        list/modules/test). Bootstraps nob.exe/install.exe/
+                        wallpaper.exe itself if they don't exist yet.
+  osr.bat               thin cmd.exe launcher for osr.ps1
 ```
+
+`toolchains/` (Dockerfiles for pinned/patched builders) does not exist yet --
+Task 0.1 is unstarted, see that task's updated status below.
 
 One `#ifdef _WIN32` / `#else` pair per platform difference — no runtime OS
 detection where compile-time is available, since each target is already a
@@ -161,6 +327,15 @@ correct prebuilt binary for the detected target and execs it. The stub never
 does installer logic itself — it only picks and runs a binary, same as
 `cargo-binstall` already does for Rust packages in this repo.
 
+**Not yet what `osr.bat`/`osr.ps1` do today.** Those two files (see Source
+layout) are the CLI entry point/dispatcher — they build `install.exe`
+locally from source via `nob.c` if it isn't there yet, they don't fetch a
+prebuilt release binary from anywhere. This section's "fetch the right
+prebuilt binary" stub is a different, still-unbuilt piece: something to
+revisit once there's an actual release feed of prebuilt binaries to fetch
+from (parallel to how `cargo-binstall` needs published release artifacts
+to point at).
+
 ---
 
 ## Task breakdown
@@ -168,6 +343,17 @@ does installer logic itself — it only picks and runs a binary, same as
 ### Phase 0 — Toolchain infrastructure (blocks everything else)
 
 - [ ] **Task 0.1: Pin and Dockerize the XP-capable mingw-w64 build**
+  - **Status: long-away-planned, not started.** Explicit call: the pinned/
+    patched toolchain itself is real infrastructure work with no
+    dependents ready for it yet, so it stays deferred. What *is* done
+    ahead of it: `nob.c` already builds every C source with
+    `-DWINVER=0x0501 -D_WIN32_WINNT=0x0501` on an ordinary current
+    mingw-w64, and `lib/net.c`'s WinInet calls and `lib/winpkg.c`'s
+    `system()`-based dispatch were written against that floor (no
+    `winpthread`, no C++ stdlib, no API newer than XP) — so the source is
+    ready for this toolchain the day it exists; it just hasn't been
+    verified against the *actual* pinned/patched compiler or a real XP
+    boot yet.
   - Acceptance: `docker run osr-xp-toolchain gcc -o hello.exe hello.c` produces
     an `.exe` that boots on a real or emulated XP SP3 install and prints
     output.
@@ -175,7 +361,7 @@ does installer logic itself — it only picks and runs a binary, same as
     same "manual/nightly, not per-commit" precedent as `os-rice/DESIGN.md`
     §9's QEMU DE smoke test).
   - Dependencies: none.
-  - Files: `os-rice/universal-core/toolchains/xp.Dockerfile`.
+  - Files: `os-rice/toolchains/xp.Dockerfile` (path updated per decision 5).
   - Scope: Medium.
 
 - [ ] **Task 0.2: musl-gcc build path for common Linux architectures**
@@ -184,7 +370,7 @@ does installer logic itself — it only picks and runs a binary, same as
     dynamic executable."
   - Verification: automated, runs in normal CI.
   - Dependencies: none.
-  - Files: `os-rice/universal-core/Makefile`.
+  - Files: `os-rice/nob.c` (path/build-tool updated per decisions 5 and 6).
   - Scope: Small.
 
 ### Checkpoint: Phase 0
@@ -195,33 +381,71 @@ does installer logic itself — it only picks and runs a binary, same as
 
 ### Phase 1 — Minimal core (proves the shape end to end)
 
-- [ ] **Task 1.1: Manifest parser (`manifest.c`)**
-  - Acceptance: parses a real `rice.list`/`theme.list` from the existing
-    Linux `os-rice/rices/` and `os-rice/themes/` trees byte-identically to
-    what `lib/theme.sh`'s reader extracts (same keys, same values).
-  - Verification: unit test comparing parsed output against a fixture
-    generated by the existing shell parser.
-  - Dependencies: none.
-  - Files: `os-rice/universal-core/src/manifest.c`, a small test harness.
-  - Scope: Small.
+- [x] **Task 1.1a: `rice.list` half of the manifest parser — done.**
+  `lib/manifest.c`'s `osr_parse_rice_list()` reads `theme:`/`themes:`/
+  `require:`/module-line `rice.list` files, matching install.sh's own
+  inline parser (comment stripping, whitespace trim, directive lines).
+  Verified against the real `rices/nord/rice.list` and
+  `rices/gruvbox/rice.list` fixtures in `test/unit_c/manifest_test.c`
+  (13 assertions, all passing).
+- [x] **Task 1.1b: `theme.list` half — done.** `lib/theme_list.c`'s
+  `osr_load_theme_palette()` reads the single-valued meta fields
+  (`display:`/`description:`/`polarity:`/`session:`/...) and the
+  multi-valued `color:`/`config:` lines, including the narrower comment
+  rule `_osr_theme_lines` needs (a `#rrggbb` value must never be read as a
+  comment). Files: `os-rice/lib/theme_list.c`, `theme_list.h` (a separate
+  parser, not an extension of `manifest.c` — the two formats' comment rules
+  differ, see `theme_list.h`'s header comment).
 
-- [ ] **Task 1.2: Theme template renderer (`theme.c`)**
-  - Acceptance: given one existing `.tmpl` file (e.g.
-    `os-rice/btop/btop.theme.tmpl`) and a `theme.list` (e.g. `nord`),
-    produces output identical to `render_theme_template` in `lib/theme.sh`.
-  - Verification: diff against the sh-rendered output for all six existing
-    themes.
-  - Dependencies: Task 1.1.
-  - Files: `os-rice/universal-core/src/theme.c`.
-  - Scope: Medium.
+- [x] **Task 1.2: Theme template renderer — done, as `theme_render.c`.**
+  `osr_render_template()` implements the full `{{role}}`/`{{role_rgb}}`/
+  `{{role_dec}}`/`{{role_sgr}}`/meta/`{{THEME}}` substitution
+  (`_osr_theme_sed`'s algorithm) and `osr_theme_layer_source()` the
+  literal-then-render resolution chain (`Get-ThemeSource`/
+  `Install-ThemeLayer`).
+  - Acceptance met: `test/unit_c/theme_render_test.c` renders a real
+    template (`wezterm/wezterm-theme.toml.tmpl`) against a real theme
+    (`themes/nord`) and asserts the substituted colors are present with
+    nothing left unsubstituted, plus the exact synthetic scenario
+    `test/unit/theme_template.sh` already proves against the sh
+    implementation (same theme, same template, same expected output
+    lines) — a human comparing the two sees the same behavior, ported.
+  - Not run against all six themes/every `.tmpl` in one automated sweep
+    the way `theme_template.sh`'s last section does (looping every real
+    theme against every real template) — a real gap versus that test's
+    full coverage, worth closing before relying on this for a theme this
+    session hasn't hand-tested.
+  - Files: `os-rice/lib/theme_render.c`, `theme_render.h` (path/name
+    updated: not `theme.c`, since manifest/theme_list/theme_render ended
+    up as three separate small files rather than one).
 
 - [ ] **Task 1.3: Windows branch — install dispatch + `fetch_and_place` fallback**
+  - **Status: partially done, scope narrower than originally written.**
+    `lib/winpkg.c` implements the dispatch half against `windows.map`
+    (scoop -> choco -> winget, ported from `windows-rice/src/pkg.ps1`) and
+    `install.c` wires it up end to end (`install.exe <rice>` resolves a
+    real `rice.list` and reports/installs each module's package). What's
+    NOT done: the generic `fetch_and_place` fallback this task's title
+    names. It was deliberately not built yet — `windows.map` only carries
+    `mgr:id` pairs, not raw download URLs, so there's no data source to
+    fetch *from* for a name with no map entry; `install.exe` reports those
+    as skipped rather than guessing. Also unverified: a real Win7-without-
+    winget VM run (`osr_winpkg_have_command`/`osr_winpkg_install` are only
+    exercised so far on this dev machine, which already has scoop/winget,
+    plus unit tests for the map-lookup half only — the actual
+    `scoop install`/`choco install`/`winget install` `system()` calls have
+    not been exercised in anger).
   - Acceptance: on a Win7 VM with no winget, `install_pkg("starship")`
     downloads and places the binary without error; on Win10/11 with winget
     present, it uses winget instead.
   - Verification: manual run on both a Win7 and Win10 VM.
-  - Dependencies: Task 1.1.
-  - Files: `os-rice/universal-core/src/os_windows.c`.
+  - Dependencies: Task 1.1a.
+  - Files: `os-rice/lib/winpkg.c`, `os-rice/install.c` (paths updated per
+    decision 5 — no separate `os_windows.c`; the platform branch lives
+    inside `lib/net.c`'s `#ifdef _WIN32`, not a whole extra file, since
+    Windows package dispatch (`windows.map`) and Linux package dispatch
+    (`lib/pkg.sh`'s apt/pacman/apk) are different enough models that they
+    were never going to share one `install_pkg()` body).
   - Scope: Medium.
 
 - [ ] **Task 1.4: Linux branch — package-manager probe + bare fallback**
@@ -230,9 +454,38 @@ does installer logic itself — it only picks and runs a binary, same as
     `fetch_and_place`.
   - Verification: container test for both cases, added to
     `os-rice/test/matrix.sh`-style harness.
-  - Dependencies: Task 1.1.
-  - Files: `os-rice/universal-core/src/os_linux.c`.
+  - Dependencies: Task 1.1a.
+  - Files: `os-rice/lib/net.c`'s `#else` branch (currently a documented
+    stub returning "unsupported" — see decision 5; path updated, no
+    separate `os_linux.c`).
   - Scope: Medium.
+
+- [x] **Task 1.5: Windows module execution + wallpaper — done, beyond the
+  original Phase 1 scope.** Not in the original task breakdown (the
+  original Scope section ruled out module execution entirely); added this
+  session once `windows-rice/modules/*.ps1` turned out to be a small,
+  finite, already-decided set worth porting rather than a reason to defer
+  further — see decision 7.
+  - Acceptance: `install.exe <rice> --apply` installs + themes fastfetch,
+    wezterm, pwsh, and oh-my-posh for real (package + Nerd Font where
+    needed + dotfiles config + theme-rendered config); `install.exe
+    --theme-only --theme <name>` re-themes only what's already installed,
+    no packages; `install.exe --module <name>...` installs module(s)
+    without a rice; `wallpaper.exe` shows/lists/steps/sets the theme
+    wallpaper.
+  - Verification: manual smoke test on this session's own dev machine —
+    `install.exe --theme-only --theme nord` correctly themed the three
+    modules actually installed there (fastfetch, wezterm, oh-my-posh),
+    including reproducing oh-my-posh's real "no config for this theme,
+    fall back to osr-rice" warning path byte-for-byte against
+    `oh-my-posh.ps1`'s own logic. Not yet verified: a real `--apply`
+    package install (winget/scoop/choco actually installing something) —
+    every test so far either dry-ran the package step or exercised it
+    against tools already present. Not verified on a second machine or a
+    clean VM.
+  - Files: `os-rice/modules.c`, `modules.h`, `os-rice/wallpaper.c`,
+    `os-rice/lib/wallpaper.c`, `wallpaper.h`.
+  - Scope: Large (was the biggest single increment of this session).
 
 ### Checkpoint: Phase 1
 
@@ -261,7 +514,7 @@ does installer logic itself — it only picks and runs a binary, same as
   - Verification: manual test against both an HTTP and an HTTPS-only URL on
     the XP VM.
   - Dependencies: Task 2.1.
-  - Files: `os-rice/universal-core/src/net.c`.
+  - Files: `os-rice/lib/net.c` (path updated per decision 5).
   - Scope: Small.
 
 - [ ] **Task 2.3: Minimal XP rice — one real end-to-end install**
@@ -270,7 +523,8 @@ does installer logic itself — it only picks and runs a binary, same as
     producing a themed, working prompt.
   - Verification: manual, screenshotted, on the XP VM.
   - Dependencies: Task 2.2.
-  - Files: a new minimal rice, e.g. `os-rice/universal-core/rices/xp-minimal/`.
+  - Files: a new minimal rice, e.g. `os-rice/rices/xp-minimal/` (path
+    updated per decision 5).
   - Scope: Medium.
 
 ### Checkpoint: Phase 2 — XP go/no-go
@@ -292,7 +546,8 @@ does installer logic itself — it only picks and runs a binary, same as
   - Verification: manual run on the real board, or QEMU user-mode emulation
     if hardware isn't available.
   - Dependencies: Phase 1.
-  - Files: `os-rice/universal-core/toolchains/`, `Makefile`.
+  - Files: `os-rice/toolchains/`, `os-rice/nob.c` (path/build-tool updated
+    per decisions 5 and 6).
   - Scope: Medium (per architecture).
 
 > Deliberately not broken into more tasks yet — §"Not Doing" explains why
@@ -323,6 +578,9 @@ does installer logic itself — it only picks and runs a binary, same as
 - **Porting the ~70 existing Linux modules or the DE/Hyprland stack to this
   tier.** XP and bare embedded boards get a minimal shell+prompt+theme rice,
   not a desktop. Out of scope by definition of what these targets even are.
+  (This still holds after Task 1.5/decision 7: the 4 modules `modules.c`
+  ports are `windows-rice`'s own already-finite Windows set, not any of
+  these ~70 Linux ones.)
 - **Pre-building cross-toolchains for architectures with no named target
   device.** Only stand up an obscure-arch toolchain against Task 3.1's
   concrete, real board — otherwise this becomes an unbounded task list for
@@ -350,7 +608,10 @@ does installer logic itself — it only picks and runs a binary, same as
   target, or is "proven once, frozen" (Phase 2's checkpoint) acceptable? This
   changes whether Phase 0's Docker image needs periodic revalidation or can
   simply be archived once Phase 2 passes.
-- Should the C core's `rice.list` entries live under
-  `os-rice/universal-core/rices/`, or should existing rices grow an optional
-  "minimal subset" the C core can also read, to avoid a fourth manifest tree
-  to keep in sync?
+- Should an XP-minimal rice's `rice.list` live under a new `os-rice/rices/
+  xp-minimal/`, or should existing rices grow an optional "minimal subset"
+  the C core can also read, to avoid a fourth manifest tree to keep in
+  sync? (Less pressing than when this was first written — decision 5's
+  interleaved layout means there's no longer a *separate tree's* rices/ to
+  duplicate into, just the question of a new directory under the existing
+  one.)
