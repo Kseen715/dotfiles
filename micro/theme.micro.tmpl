@@ -1,0 +1,42 @@
+# micro colorscheme template — rendered per theme (§6b) and installed as
+# <theme>.micro, which is the name the settings.json fragment selects. Installed
+# to ~/.config/micro/colorschemes/ and selected by the dotfiles-owned
+# settings.json. Swapped on theme switch (§6).
+#
+# micro's format: <group> <fg>,<bg> with optional bold/italic/underline.
+
+color-link default "{{foreground}},{{background}}"
+color-link comment "{{text_faint}},{{background}}"
+color-link identifier "{{ansi_cyan}},{{background}}"
+color-link identifier.class "{{cursor}},{{background}}"
+color-link constant "{{accent_orange}},{{background}}"
+color-link constant.number "{{accent_orange}},{{background}}"
+color-link constant.string "{{ansi_green}},{{background}}"
+color-link constant.string.char "{{ansi_green}},{{background}}"
+color-link statement "{{cursor}},{{background}}"
+color-link symbol "{{foreground}},{{background}}"
+color-link symbol.brackets "{{text_primary}},{{background}}"
+color-link symbol.tag "{{ansi_blue}},{{background}}"
+color-link preproc "{{ansi_yellow}},{{background}}"
+color-link type "{{ansi_yellow}},{{background}}"
+color-link type.keyword "{{cursor}},{{background}}"
+color-link special "{{urgent}},{{background}}"
+color-link ignore "{{ansi_bright_black}},{{background}}"
+color-link error "{{background}},{{ansi_red}}"
+color-link todo "{{background}},{{ansi_yellow}}"
+
+color-link statusline "{{background}},{{cursor}}"
+color-link tabbar "{{text_primary}},{{panel_background}}"
+color-link indent-char "{{selection_background}},{{background}}"
+color-link line-number "{{ansi_bright_black}},{{background}}"
+color-link current-line-number "{{cursor}},{{background}}"
+color-link cursor-line "{{panel_background}}"
+color-link color-column "{{panel_background}}"
+color-link selection "{{foreground}},{{selection_background}}"
+color-link gutter-error "{{ansi_red}},{{background}}"
+color-link gutter-warning "{{ansi_yellow}},{{background}}"
+color-link diff-added "{{ansi_green}},{{background}}"
+color-link diff-modified "{{ansi_yellow}},{{background}}"
+color-link diff-deleted "{{ansi_red}},{{background}}"
+color-link match-brace "{{background}},{{cursor}}"
+color-link hlsearch "{{background}},{{ansi_yellow}}"

@@ -1,0 +1,23 @@
+# 90-theme.conf — theme-owned mpv OSD/OSC colors, rendered per theme (§6b). Included by
+# the dotfiles-owned mpv.conf. Swapped on theme switch (§6).
+# mpv wants colors as #AARRGGBB (alpha first, 00 = opaque).
+
+osd-font='{{mono_font}}'
+osd-font-size=32
+osd-color='#00{{foreground_rgb}}'
+osd-border-color='#00{{background_rgb}}'
+osd-border-size=2
+osd-bar-align-y=0.85
+osd-bar-h=2.2
+osd-bar-w=60
+
+# The seek bar is the one accent surface.
+osd-back-color='#80{{background_rgb}}'
+background-color='#00{{background_rgb}}'
+
+sub-color='#00{{foreground_rgb}}'
+sub-border-color='#00{{background_rgb}}'
+
+# On-screen controller
+script-opts-append=osc-layout=slimbox
+script-opts-append=osc-seekbarstyle=bar

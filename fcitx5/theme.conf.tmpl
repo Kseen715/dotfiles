@@ -1,0 +1,43 @@
+# fcitx5 theme template — rendered per theme (§6b) to
+# ~/.local/share/fcitx5/themes/osr/theme.conf and selected by classicui.conf's
+# `Theme=osr`. The candidate window is the one piece of UI an input method draws
+# itself, so without this it stays stock grey on every rice.
+[Metadata]
+Name=os-rice ({{display}})
+Version=1
+Author=os-rice
+Description={{description}}
+
+[InputPanel]
+Font="{{ui_font}}"
+NormalColor={{foreground}}
+HighlightCandidateColor={{background}}
+HighlightColor={{background}}
+HighlightBackgroundColor={{accent}}
+Spacing=3
+
+[InputPanel/Background]
+Color={{background}}
+BorderColor={{border}}
+BorderWidth=1
+Margin/Left=2
+Margin/Right=2
+Margin/Top=2
+Margin/Bottom=2
+
+[InputPanel/Highlight]
+Color={{accent}}
+BorderWidth=0
+
+[Menu]
+Font="{{ui_font}}"
+NormalColor={{foreground}}
+SeparatorColor={{border}}
+
+[Menu/Background]
+Color={{background}}
+BorderColor={{border}}
+BorderWidth=1
+
+[Menu/Highlight]
+Color={{accent}}

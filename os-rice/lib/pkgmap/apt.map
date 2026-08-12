@@ -95,7 +95,7 @@ yandex-browser = source:provide_yandex_browser
 # prefix it with systemd- (modules/swap.sh).
 zram-generator = systemd-zram-generator
 
-# --- i3/X11 desktop (rices/void-i3-rosemuted) ---------------------------------
+# --- i3/X11 desktop (rices/i3-rosemary) ---------------------------------
 # The i3 rice is validated on Void; these rows are name mapping only, so the same
 # manifest resolves on Debian/Ubuntu too. Debian bundles most X client utilities
 # into two packages, which is exactly the one-to-many case pkgmap exists for (§1).

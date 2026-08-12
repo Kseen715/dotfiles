@@ -1,0 +1,121 @@
+/* userChrome.css — theme-owned Thunderbird chrome colors (xin).
+ * Swapped on theme switch (§6). Requires
+ * toolkit.legacyUserProfileCustomizations.stylesheets=true, which the
+ * dotfiles-owned user.js sets — the two are installed together by
+ * modules/thunderbird.sh.
+ *
+ * Same 16 colors as this theme's foot/ghostty/btop palettes; bright red is the
+ * single accent, everything else is greyscale.
+ *
+ * Written for the Thunderbird 115+ UI (about:3pane): the folder and thread panes
+ * are HTML there, not XUL trees, so this file carries no XUL tree-row rules —
+ * they stopped matching anything after 102.
+ *
+ * Chrome only. Message bodies keep the sender's own HTML.
+ */
+
+:root {
+    --osr-bg:     {{background}};
+    --osr-bg-alt: {{panel_background}};
+    --osr-fg:     {{foreground}};
+    --osr-muted:  {{text_primary}};
+    --osr-dim:    {{text_muted}};
+    --osr-accent: {{urgent}};
+    --osr-border: {{selection_background}};
+}
+
+/* Toolbars, tab strip, title bar */
+#navigation-toolbox,
+#toolbar-menubar,
+#tabs-toolbar,
+#titlebar,
+#unifiedToolbar,
+#mail-toolbox {
+    background-color: var(--osr-bg) !important;
+    color: var(--osr-fg) !important;
+    border-color: var(--osr-border) !important;
+}
+
+/* Tabs: the selected one is the only thing wearing the accent. */
+.tabmail-tab .tab-background {
+    background-color: transparent !important;
+    border-radius: 8px !important;
+}
+.tabmail-tab[selected] .tab-background {
+    background-color: var(--osr-bg-alt) !important;
+    border-bottom: 2px solid var(--osr-accent) !important;
+}
+.tabmail-tab:not([selected]) .tab-label {
+    color: var(--osr-muted) !important;
+}
+.tabmail-tab[selected] .tab-label {
+    color: var(--osr-fg) !important;
+}
+
+/* Spaces toolbar (the icon rail down the left edge) */
+#spacesToolbar {
+    background-color: var(--osr-bg-alt) !important;
+    border-right: 1px solid var(--osr-border) !important;
+}
+#spacesToolbar .spaces-toolbar-button[aria-selected="true"] {
+    background-color: var(--osr-bg) !important;
+    box-shadow: inset 2px 0 0 var(--osr-accent) !important;
+}
+
+/* about:3pane — folder pane, thread pane, message pane.
+ * The three panes are one HTML document, so they are themed by variable, not by
+ * per-widget background rules. */
+#folderTree,
+#threadTree,
+#messagePane,
+#messengerBox,
+#folderPaneHeader,
+#threadPaneHeaderBar {
+    background-color: var(--osr-bg) !important;
+    color: var(--osr-fg) !important;
+}
+
+#folderTree li .container:hover,
+#threadTree tr:hover {
+    background-color: var(--osr-bg-alt) !important;
+}
+#folderTree li.selected > .container,
+#threadTree tr[is="thread-row"].selected {
+    background-color: var(--osr-accent) !important;
+    color: var(--osr-bg) !important;
+}
+
+/* Unread counts carry the accent, read rows stay muted. */
+#folderTree li.unread > .container .name,
+#folderTree .unread-count {
+    color: var(--osr-accent) !important;
+    font-weight: 600 !important;
+}
+#threadTree tr[is="thread-row"]:not(.unread) {
+    color: var(--osr-muted) !important;
+}
+
+/* Message header + quick filter */
+#messageHeader,
+#quick-filter-bar,
+#qfb-qs-textbox {
+    background-color: var(--osr-bg-alt) !important;
+    color: var(--osr-fg) !important;
+    border-color: var(--osr-border) !important;
+}
+
+/* Search input focus is the other accented state. */
+#searchInput:focus-within,
+#qfb-qs-textbox:focus {
+    border-color: var(--osr-accent) !important;
+    box-shadow: 0 0 0 1px var(--osr-accent) !important;
+}
+
+/* Splitters and the status bar: structure, not color. */
+#folderPaneSplitter,
+#threadPaneSplitter,
+#status-bar {
+    background-color: var(--osr-bg) !important;
+    border-color: var(--osr-border) !important;
+    color: var(--osr-dim) !important;
+}

@@ -1,0 +1,26 @@
+# 90-theme.conf — theme-owned dunst theme, rendered per theme (§6b). Installed to
+# ~/.config/dunst/dunstrc.d/, which dunst merges AFTER the base dunstrc, so
+# everything here wins. Swapped on theme switch (§6).
+
+[global]
+    font = "{{mono_font}} Medium 10"
+    frame_color = "{{accent}}"
+    separator_color = frame
+    highlight = "{{accent}}"
+
+[urgency_low]
+    background = "{{background}}"
+    foreground = "{{text_faint}}"
+    frame_color = "{{selection_background}}"
+
+[urgency_normal]
+    background = "{{background}}"
+    foreground = "{{foreground}}"
+    frame_color = "{{accent}}"
+
+# Critical keeps the hot pink from the reference dotfiles: this is the one that
+# is allowed to shout.
+[urgency_critical]
+    background = "{{panel_background}}"
+    foreground = "{{foreground}}"
+    frame_color = "{{urgent}}"

@@ -31,7 +31,7 @@ OSR_DOTFILES="$TMP/dotfiles"; export OSR_DOTFILES
 cat >"$FAKE/themes/testtheme/theme.list" <<'EOF'
 display: Test Theme
 polarity: dark
-yazi_flavor: test-flavor
+gtk_theme: Test-Adwaita
 
 color: background  #101010
 color: foreground  #f0f0f0
@@ -40,7 +40,7 @@ EOF
 cat >"$DOTS/app.conf.tmpl" <<'EOF'
 name = {{THEME}} ({{display}})
 polarity = {{polarity}}
-flavor = {{yazi_flavor}}
+gtk = {{gtk_theme}}
 background = {{background}}
 foreground = {{foreground}}
 accent = {{accent}}
@@ -57,8 +57,8 @@ render_theme_template "$DOTS/app.conf.tmpl" "$TMP/out.conf" 2>"$TMP/warn"
 assert_contains "$TMP/out.conf" '^background = #101010$'     "a color role substitutes"
 assert_contains "$TMP/out.conf" '^accent = #00ff00$' "every color role substitutes, not just the first"
 assert_contains "$TMP/out.conf" '^polarity = dark$'  "a meta field substitutes too"
-assert_contains "$TMP/out.conf" '^flavor = test-flavor$' \
-    "a non-color field (yazi's flavor) substitutes - a theme is not only hexes"
+assert_contains "$TMP/out.conf" '^gtk = Test-Adwaita$' \
+    "a non-color field (a toolkit name) substitutes - a theme is not only hexes"
 assert_contains "$TMP/out.conf" '^name = testtheme (Test Theme)$' \
     "{{THEME}} is the theme's own name, alongside its display field"
 assert_contains "$TMP/out.conf" '^accent_bare = 00ff00$' \
@@ -104,12 +104,68 @@ for _t in $(osr_themes); do
     for _tmpl in "$OSR_DOTFILES"/*/*.tmpl; do
         [ -f "$_tmpl" ] || continue
         render_theme_template "$_tmpl" "$TMP/real.out" 2>/dev/null
-        if grep -q '{{' "$TMP/real.out"; then
-            fail "theme $_t leaves $(basename "$_tmpl") with $(sed -n 's/.*{{\([A-Za-z0-9_]*\)}}.*/\1/p' "$TMP/real.out" | sort -u | tr '\n' ' ')unset"
+        # WALLPAPER_PATH survives on purpose - install_wallpaper_layer fills it.
+        if grep -v WALLPAPER_PATH "$TMP/real.out" | grep -q '{{'; then
+            fail "theme $_t leaves $(basename "$_tmpl") with $(grep -v WALLPAPER_PATH "$TMP/real.out" | sed -n 's/.*{{\([A-Za-z0-9_]*\)}}.*/\1/p' | sort -u | tr '\n' ' ')unset"
         else
             ok "theme $_t renders $(basename "$_tmpl")"
         fi
     done
+done
+
+# --- a rendered layer must be VALID, not just placeholder-free ----------------
+#
+# Two real bugs motivated this, both invisible to the "nothing unsubstituted"
+# check above. A template kept one theme's colors in a spelling the reverse
+# mapping did not know (fastfetch writes ANSI `38;2;r;g;b`), so every other theme
+# rendered rosemary's pink; and a raw ESC byte inside a JSON string made fastfetch
+# reject the whole file. So: no foreign palette values, no control characters,
+# and JSON still parses.
+_pal_of() { sed -n 's/^color:[[:space:]]*[A-Za-z0-9_]*[[:space:]][[:space:]]*\(#[0-9a-fA-F]\{6\}\)$/\1/p' \
+    "$OSR_ROOT/themes/$1/theme.list" | sort -u; }
+
+for _t in $(osr_themes); do
+    OSR_THEME=$_t
+    # One pattern file per theme: every color some OTHER theme defines and this
+    # one does not, in all three spellings. A single `grep -F -f` per rendered
+    # file then costs one pass instead of a fork per color.
+    _mine="$TMP/mine"; _pal_of "$_t" >"$_mine"
+    : >"$TMP/foreign"
+    for _other in $(osr_themes); do
+        [ "$_other" = "$_t" ] && continue
+        _pal_of "$_other"
+    done | sort -u | grep -v -x -F -f "$_mine" | while read -r _c; do
+        _cd=$(_osr_hex_dec "$_c")
+        printf '%s\n%s\n%s\n' "$_c" "$_cd" "$(printf '%s' "$_cd" | tr , ';')"
+    done >"$TMP/foreign"
+
+    for _tmpl in "$OSR_DOTFILES"/*/*.tmpl; do
+        [ -f "$_tmpl" ] || continue
+        _b=$(basename "$_tmpl")
+        render_theme_template "$_tmpl" "$TMP/v.out" 2>/dev/null
+
+        # No control characters (tab and newline excepted): JSON forbids them
+        # inside strings, and every config here is text.
+        if LC_ALL=C tr -d '\11\12' <"$TMP/v.out" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+            fail "theme $_t renders $_b with a raw control character"
+        fi
+
+        # No color that belongs to a different theme's palette and not to this
+        # one. That is precisely what a missed spelling leaves behind.
+        if [ -s "$TMP/foreign" ] && grep -qF -f "$TMP/foreign" "$TMP/v.out"; then
+            fail "theme $_t renders $_b carrying another theme's colors: $(grep -oF -f "$TMP/foreign" "$TMP/v.out" | sort -u | tr '\n' ' ')"
+        fi
+
+        # JSON templates must still parse after substitution.
+        case "$_b" in
+            *.json.tmpl|*.jsonc.tmpl)
+                command -v python3 >/dev/null 2>&1 || continue
+                sed 's|^[[:space:]]*//.*$||' "$TMP/v.out" \
+                    | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null \
+                    || fail "theme $_t renders $_b as JSON that does not parse" ;;
+        esac
+    done
+    ok "theme $_t renders every template clean: no control chars, no foreign colors, valid JSON"
 done
 
 finish

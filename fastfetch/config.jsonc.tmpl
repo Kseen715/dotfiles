@@ -1,0 +1,95 @@
+// config.jsonc — theme-owned fastfetch layout + colors, rendered per theme (§6b).
+// Swapped on theme switch (§6).
+//
+// Colors are given as raw SGR sequences so they are the theme's actual hex
+// values rather than one of the 16 terminal slots — fastfetch is often piped
+// into a screenshot, and "whatever the terminal happens to be" is not a theme.
+//   38;2;R;G;B = truecolor foreground
+//
+// Every module here is LOCAL and cheap. Deliberately absent: publicip and
+// weather (network round trips), netio (needs a sampling interval), opengl /
+// vulkan / opencl (each spawns a probe process). fastfetch runs on every new
+// shell for some people; a second of latency there is not worth a line of text.
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+
+  "logo": {
+    "type": "auto",
+    // Uncomment to force the logo into the theme's accents instead of the
+    // distro's own colors. Keep the comma on the line above it in sync -
+    // fastfetch rejects a trailing comma, and the whole file with it.
+    // "color": { "1": "38;2;{{accent_sgr}}", "2": "38;2;{{text_metadata_sgr}}" },
+    "padding": { "top": 1, "right": 3 }
+  },
+
+  "display": {
+    "separator": "  ",
+    "color": { "keys": "38;2;{{accent_sgr}}", "title": "38;2;{{urgent_sgr}}" },
+    "percent": { "type": 9 },
+    "constants": ["\u001b[38;2;{{text_muted_sgr}}m"]
+  },
+
+  "modules": [
+    // { "type": "title", "color": { "user": "38;2;{{accent_sgr}}", "host": "38;2;{{accent_cyan_sgr}}" } },
+    // { "type": "separator", "string": "─" },
+
+    // --- the machine and what it is running ---------------------------------
+    { "type": "os",           "key": "  distro" },
+    { "type": "host",         "key": "  host  " },
+    { "type": "kernel",       "key": "  kernel" },
+    { "type": "initsystem",   "key": "  init  " },
+    { "type": "packages",     "key": "  pkgs  " },
+    { "type": "uptime",       "key": "  uptime" },
+    // { "type": "loadavg",      "key": "  load  " },
+    // { "type": "processes",    "key": "  procs " },
+
+    // "break",
+
+    // --- the session: what os-rice actually paints --------------------------
+    // `osr` is this repo's own line. The theme name is substituted at render
+    // time, so the fetch always reports the theme that drew it - which is the
+    // one thing a screenshot of a rice should never have to be trusted on.
+    { "type": "custom", "key": "  osr   ", "format": "{{display}} ({{polarity}}, {{session}})" },
+    { "type": "de",           "key": "  de    " },
+    { "type": "wm",           "key": "  wm    " },
+    // { "type": "wmtheme",      "key": "  wmthm " },
+    { "type": "lm",           "key": "  login " },
+    // { "type": "theme",        "key": "  gtk   " },
+    // { "type": "icons",        "key": "  icons " },
+    // { "type": "cursor",       "key": "  cursor" },
+    // { "type": "font",         "key": "  font  " },
+    { "type": "terminal",     "key": "  term  " },
+    // { "type": "terminalfont", "key": "  tfont " },
+    { "type": "shell",        "key": "  shell " },
+    // { "type": "editor",       "key": "  editor" },
+
+    // "break",
+
+    // --- hardware -----------------------------------------------------------
+    { "type": "cpu",          "key": "  cpu   " },
+    // { "type": "cpuusage",     "key": "  cpu%  " },
+    { "type": "gpu",          "key": "  gpu   " },
+    { "type": "memory",       "key": "  ram   " },
+    { "type": "physicalmemory", "key": "  dimms " },
+    { "type": "swap",         "key": "  swap  " },
+    { "type": "disk",         "key": "  disk  " },
+    { "type": "display",      "key": "  screen" },
+    { "type": "brightness",   "key": "  bright" },
+    // { "type": "sound",        "key": "  audio " },
+    { "type": "bluetooth",    "key": "  bt    " },
+    { "type": "battery",      "key": "  bat   " },
+    { "type": "poweradapter", "key": "  power " },
+
+    // "break",
+
+    // --- network and locale -------------------------------------------------
+    { "type": "localip",      "key": "  lan   " },
+    { "type": "wifi",         "key": "  wifi  " }
+    // { "type": "locale",       "key": "  locale" }
+    // { "type": "users",        "key": "  users " },
+    // { "type": "datetime",     "key": "  time  " },
+
+    // "break",
+    // { "type": "colors", "paddingLeft": 2, "symbol": "ascii" }
+  ]
+}

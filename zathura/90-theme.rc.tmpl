@@ -1,0 +1,37 @@
+# 90-theme.rc — theme-owned zathura colors, rendered per theme (§6b). Included by the
+# dotfiles-owned zathurarc, so anything here wins. Swapped on switch (§6).
+
+set font "{{mono_font}} 10"
+
+set default-bg              "{{background}}"
+set default-fg              "{{foreground}}"
+set statusbar-bg            "{{panel_background}}"
+set statusbar-fg            "{{foreground}}"
+set inputbar-bg             "{{panel_background}}"
+set inputbar-fg             "{{accent}}"
+set notification-bg         "{{panel_background}}"
+set notification-fg         "{{foreground}}"
+set notification-error-bg   "{{error}}"
+set notification-error-fg   "{{background}}"
+set notification-warning-bg "{{warning}}"
+set notification-warning-fg "{{background}}"
+set completion-bg           "{{panel_background}}"
+set completion-fg           "{{text_primary}}"
+set completion-group-bg     "{{background}}"
+set completion-group-fg     "{{text_faint}}"
+set completion-highlight-bg "{{accent}}"
+set completion-highlight-fg "{{background}}"
+set index-bg                "{{background}}"
+set index-fg                "{{foreground}}"
+set index-active-bg         "{{accent}}"
+set index-active-fg         "{{background}}"
+set highlight-color         "{{warning}}"
+set highlight-active-color  "{{accent}}"
+set render-loading-bg       "{{background}}"
+set render-loading-fg       "{{text_faint}}"
+
+# recolor: night mode that keeps the palette instead of inverting to grey.
+set recolor-lightcolor      "{{background}}"
+set recolor-darkcolor       "{{foreground}}"
+set recolor                 true
+set recolor-keephue         true

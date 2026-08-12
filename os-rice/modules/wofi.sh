@@ -27,4 +27,5 @@ if gnome_is_session; then
 fi
 
 # ---- wofi config (theme-owned) ----------------------------------------------
-if [ -n "${OSR_THEME_DIR:-}" ]; then apply_config wofi; fi
+install_theme_layer wofi config    "$OSR_HOME/.config/wofi/config"    || :
+install_theme_layer wofi style.css "$OSR_HOME/.config/wofi/style.css" || :

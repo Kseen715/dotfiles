@@ -57,13 +57,18 @@ PATH="$BIN:$PATH"; export PATH GSFILE
 # Stubs.
 run_step()     { shift; "$@"; }
 pkg_install()  { echo "PKG $*" >>"$OUT"; }
-apply_config() { echo "APPLY_CONFIG $*" >>"$OUT"; }
+# Stands in for lib/config.sh's helper, including its contract: non-zero when
+# no theme is resolved, which is what "no layer applied" means now.
+install_theme_layer() {
+    [ -n "${OSR_THEME:-}" ] || return 1
+    echo "THEME_LAYER $1 $2" >>"$OUT"
+}
 warn()         { echo "WARN $*" >>"$OUT"; }
 
 # ---- scenario 1: non-GNOME session -> GNOME block skipped entirely ----------
 : >"$OUT"; : >"$GSFILE"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-OSR_THEME_DIR=""
+OSR_THEME=""; OSR_THEME_DIR=""; export OSR_THEME
 XDG_CURRENT_DESKTOP=i3 XDG_SESSION_DESKTOP=i3
 export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
 
@@ -71,13 +76,13 @@ export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
 
 assert_contains "$OUT" 'PKG wofi' "installs wofi regardless of session"
 assert_eq "" "$(cat "$GSFILE")" "no gsettings calls on non-GNOME"
-refute_contains "$OUT" 'APPLY_CONFIG' "no theme config applied without OSR_THEME_DIR"
+refute_contains "$OUT" 'THEME_LAYER' "no theme layer applied without a resolved theme"
 rm -rf "$OSR_HOME"
 
 # ---- scenario 2: GNOME (ubuntu:GNOME) -> Super+R registered ----------------
 : >"$OUT"; : >"$GSFILE"
 OSR_HOME=$(mktemp -d); export OSR_HOME
-OSR_THEME_DIR="$OSR_ROOT/themes/xin"
+OSR_THEME=xin; OSR_THEME_DIR="$OSR_ROOT/themes/xin"; export OSR_THEME
 XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_DESKTOP=gnome
 export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
 
@@ -87,7 +92,7 @@ assert_contains "$GSFILE" "$_schema custom-keybindings \['$_path'\]" "parent arr
 assert_contains "$GSFILE" "$_child:$_path name Application Launcher" "shortcut name set"
 assert_contains "$GSFILE" "$_child:$_path binding <Super>r" "binding is Super+r (Win+R)"
 assert_contains "$GSFILE" "$_child:$_path command $_cmd" "command toggles wofi drun via sh -c"
-assert_contains "$OUT" 'APPLY_CONFIG wofi' "theme-owned wofi config applied"
+assert_contains "$OUT" 'THEME_LAYER wofi style.css' "theme-owned wofi stylesheet applied"
 rm -rf "$OSR_HOME"
 
 # ---- scenario 3: idempotent -- second run adds nothing ---------------------

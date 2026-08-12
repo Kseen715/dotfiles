@@ -1,0 +1,18 @@
+/* colors.rasi — theme-owned rofi palette, rendered per theme (§6b). Swapped on rice
+ * switch (§6); launcher.rasi and powermenu.rasi @import this and define no
+ * colors of their own.
+ *
+ * The accent is the muted rose this theme is named for; @urgent keeps the hotter
+ * pink from the reference dotfiles for things that must actually interrupt you.
+ */
+
+* {
+    bg:          {{background}}f2;
+    bg-alt:      {{panel_background}}ff;
+    fg:          {{foreground}}ff;
+    fg-muted:    {{text_faint}}ff;
+    accent:      {{accent}}ff;
+    accent-dim:  {{text_metadata}}ff;
+    urgent:      {{urgent}}ff;
+    transparent: #00000000;
+}

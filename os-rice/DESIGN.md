@@ -589,9 +589,19 @@ to four different numbers (ghostty 0.85, wezterm 0.9, foot 0.7, alacritty 0.7)
 with no theme able to say otherwise. Now glass is 0.7 everywhere because glass
 says so.
 
-Every colour role has a second spelling, `<role>_rgb`, with the leading `#`
-stripped - foot writes bare `RRGGBB`, GTK and Xresources want the hash. Same
-value, the shape the app parses, no colour hard-coded into a template to get it.
+Every colour role has three spellings, because the configs os-rice owns write a
+colour three ways: `{{role}}` is `#rrggbb` (GTK, Xresources, most TUIs),
+`{{role_rgb}}` is bare `rrggbb` (foot), `{{role_dec}}` is `r,g,b` (KDE colour
+schemes, Konsole, CSS `rgba()`). One value, three shapes, nothing hard-coded into
+a template to get the one its app parses.
+
+Not every theme field is a colour. `gtk_theme`, `icon_theme`, `cursor_theme`,
+`cursor_size`, `ui_font`, `mono_font`, `gnome_accent` are names,
+and they substitute the same way - which is what collapsed five files that each
+repeated the same six toolkit names (`gtk-2.0/gtkrc`, GTK3 and GTK4
+`settings.ini`, `xsettingsd.conf`, the cursor `index.theme`) into one template
+each. `modules/theming.sh` no longer parses those names back out of the file it
+just wrote to feed `gsettings`; it reads `theme.list`.
 
 The chrome group is why this is a vocabulary and not just a colour list. A
 full-screen app paints furniture the ANSI slots have no name for, and *which*
@@ -612,6 +622,15 @@ layer would use - but none of the shared apps need it today. Where a theme looke
 bespoke, the honest fix was a role: glass's blur became `background_blur`, and
 rosemary's muted look became the `accent_*` group rather than two hand-written
 config files.
+
+yazi was the last holdout and the clearest case. A flavor there is a DIRECTORY -
+`flavor.toml` plus the `tmtheme.xml` that colours file previews - so the tree
+carried five vendored flavors, ~4400 lines, and only the four themes that had one
+were painted. Both files are palette maps with a 600-line icon table attached, so
+both are templates now: every theme gets a flavor named after itself, and
+syntax-highlighted previews, from the same palette its terminal uses. The
+`yazi_flavor` field retired with them - the flavor is `{{THEME}}`, so the
+selector and the flavor cannot disagree about a name.
 
 A theme's `config/` now holds only what is genuinely single-theme - glass's
 Hyprland/waybar/sddm tree, rosemary's i3/polybar/GTK tree. Those are not

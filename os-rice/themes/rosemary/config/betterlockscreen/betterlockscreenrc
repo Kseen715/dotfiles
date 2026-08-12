@@ -1,4 +1,4 @@
-# betterlockscreenrc — rice-owned lock screen colors (void-i3-rosemuted).
+# betterlockscreenrc — rice-owned lock screen colors (i3-rosemary).
 # Swapped on rice switch (§6). betterlockscreen is a wrapper around
 # i3lock-color, so these are i3lock-color's argument colors in RRGGBBAA.
 #
@@ -19,7 +19,7 @@ quiet=false
 # theme
 loginbox=1c1f20cc
 loginshadow=00000000
-locktext="rosemuted"
+locktext="rosemary"
 font="JetBrainsMono Nerd Font"
 ringcolor=d98caeff
 ringvercolor=8fb3b0ff

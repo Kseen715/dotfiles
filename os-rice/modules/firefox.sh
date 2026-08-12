@@ -25,9 +25,7 @@ _ff_root="$OSR_HOME/.mozilla/firefox"
 _ff_js=""
 _ff_css=""
 [ -f "$OSR_DOTFILES/firefox/user.js" ] && _ff_js="$OSR_DOTFILES/firefox/user.js"
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/firefox/userChrome.css" ]; then
-    _ff_css="$OSR_THEME_DIR/config/firefox/userChrome.css"
-fi
+_ff_css=$(osr_theme_source firefox userChrome.css) || _ff_css=""
 
 if [ -n "$_ff_js" ] || [ -n "$_ff_css" ]; then
     install_mozilla_layer "$_ff_root" "$_ff_js" "$_ff_css"

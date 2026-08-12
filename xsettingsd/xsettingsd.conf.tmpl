@@ -1,0 +1,16 @@
+# xsettingsd template — the X11 half of the GTK settings (§6b). xsettingsd is
+# what tells running GTK apps the theme changed without restarting them, so this
+# file and gtk/settings.ini.tmpl must name the same theme; they read the same
+# theme.list fields, which is how that is now guaranteed rather than remembered.
+Net/ThemeName "{{gtk_theme}}"
+Net/IconThemeName "{{icon_theme}}"
+Gtk/CursorThemeName "{{cursor_theme}}"
+Gtk/CursorThemeSize {{cursor_size}}
+Gtk/FontName "{{ui_font}}"
+Gtk/EnableAnimations {{gtk_animations}}
+Gtk/DecorationLayout "{{gtk_decoration_layout}}"
+Xft/DPI 98304
+Xft/Antialias 1
+Xft/Hinting 1
+Xft/HintStyle "hintslight"
+Xft/RGBA "rgb"

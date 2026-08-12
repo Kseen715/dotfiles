@@ -139,8 +139,11 @@ render_theme_template() {
     _osr_theme_sed "$OSR_THEME" >"$_rt_sed"
     sed -f "$_rt_sed" "$_rt_src" >"$_rt_dst"
     rm -f "$_rt_sed"
-    if grep -q '{{' "$_rt_dst"; then
-        warn "theme '$OSR_THEME' defines no $(sed -n 's/.*{{\([A-Za-z0-9_]*\)}}.*/\1/p' "$_rt_dst" | sort -u | tr '\n' ' ')- left unsubstituted in $(basename "$_rt_src")"
+    # {{WALLPAPER_PATH}} is deliberately left: it is filled by
+    # install_wallpaper_layer in a second pass, because the value is an installed
+    # path rather than anything the theme's palette knows (§6).
+    if grep -v 'WALLPAPER_PATH' "$_rt_dst" | grep -q '{{'; then
+        warn "theme '$OSR_THEME' defines no $(grep -v WALLPAPER_PATH "$_rt_dst" | sed -n 's/.*{{\([A-Za-z0-9_]*\)}}.*/\1/p' | sort -u | tr '\n' ' ')- left unsubstituted in $(basename "$_rt_src")"
     fi
 }
 

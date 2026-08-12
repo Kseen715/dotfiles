@@ -71,7 +71,7 @@ yandex-browser = aur:yandex-browser
 zen-browser = aur:zen-browser-bin
 steam-aur = aur:steam
 
-# --- i3/X11 desktop (rices/void-i3-rosemuted) ---------------------------------
+# --- i3/X11 desktop (rices/i3-rosemary) ---------------------------------
 # The i3 rice is validated on Void; these rows are name mapping only, so the same
 # manifest resolves on Arch too. X client utils already carry Arch's `xorg-*`
 # names as their logical names, so they need no rows here (§1: no identity rows).

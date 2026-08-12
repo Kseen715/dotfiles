@@ -10,7 +10,8 @@ OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
 OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB OSR_DOTFILES OSR_PKG=apt
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
-. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"
+. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"
+. "$OSR_LIB/theme.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"
 . "$OSR_LIB/pkg.sh"; . "$OSR_LIB/build.sh"
 . "$HERE/../lib.sh"
 
@@ -71,7 +72,8 @@ fi
 
 # --- the profile layer: both files, every profile -----------------------------
 OSR_HOME=$(mktemp -d); export OSR_HOME
-THEME="$OSR_ROOT/themes/xin"; OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
+THEME="$OSR_ROOT/themes/xin"; OSR_THEME=xin; OSR_THEME_DIR="$THEME"
+export OSR_THEME OSR_THEME_DIR
 # Two profiles, as profiles.ini declares them (Path= is relative to the root).
 mkdir -p "$OSR_HOME/.thunderbird/aaa.default" "$OSR_HOME/.thunderbird/bbb.work"
 printf '[Profile0]\nPath=aaa.default\n\n[Profile1]\nPath=bbb.work\n' \
@@ -93,8 +95,8 @@ for _p in aaa.default bbb.work; do
         "$_p: user.js enables userChrome.css"
     assert_contains "$OSR_HOME/.thunderbird/$_p/user.js" 'mail.ews.enabled", true' \
         "$_p: user.js turns on the native Exchange/EWS backend"
-    assert_contains "$OSR_HOME/.thunderbird/$_p/chrome/userChrome.css" '\-\-xin-accent' \
-        "$_p: the xin rice's chrome colors are installed"
+    assert_contains "$OSR_HOME/.thunderbird/$_p/chrome/userChrome.css" '\-\-osr-accent' \
+        "$_p: the xin theme's chrome colors are installed"
 done
 # The xin sheet targets the modern (115+) panes, so it must not carry dead
 # XUL-tree selectors that silently match nothing.

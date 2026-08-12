@@ -79,6 +79,12 @@ osr_theme_color() {
     printf '%s' "$_tk_v"
 }
 
+# _osr_hex_dec <#rrggbb> — echo "r,g,b". POSIX arithmetic understands 0x hex.
+_osr_hex_dec() {
+    _hd=${1#\#}
+    printf '%d,%d,%d' "$((0x${_hd%????}))" "$((0x${_hd#??} / 0x100))" "$((0x${_hd#????}))"
+}
+
 # _osr_theme_sed <name> — echo a sed script that substitutes every `{{key}}` the
 # theme defines: one rule per `color:` role, one per single-valued meta field,
 # plus `{{THEME}}` for the theme's own name.
@@ -89,11 +95,18 @@ osr_theme_color() {
 # sum. With one template per app the app is written once and a theme is only its
 # colors, so both axes grow independently.
 #
-# Every color role also gets a `{{<role>_rgb}}` form with the leading `#`
-# stripped, because not every config file writes a color the same way: foot's
-# palette is bare `RRGGBB`, GTK and Xresources want the hash. One vocabulary,
-# two spellings, so a template never has to hard-code a color to get the shape
-# its app parses.
+# Every color role gets three spellings, because a color is written three ways
+# across the configs os-rice owns and a template must never hard-code one to get
+# the shape its app parses:
+#
+#   {{role}}      #rrggbb     GTK, Xresources, most TUIs
+#   {{role_rgb}}  rrggbb      foot, and anything CSS-adjacent that adds its own #
+#   {{role_dec}}  r,g,b       KDE color schemes, konsole, CSS rgba()
+#   {{role_sgr}}  r;g;b       ANSI truecolor escapes (fastfetch, any 38;2;... run)
+#
+# The decimal form is computed here in sh arithmetic rather than stored in
+# theme.list: it is the same number twice, and two spellings of one value in the
+# palette is exactly the drift this design exists to remove.
 #
 # The delimiter is `|`, never `#`: every value here is a `#rrggbb`. A value
 # containing `|` would break its own rule, which no color or theme name can.
@@ -101,6 +114,15 @@ osr_theme_color() {
 # wants a config dir names it directly.
 _osr_theme_sed() {
     printf 's|{{THEME}}|%s|g\n' "$1"
+    # The decimal spellings need arithmetic, so they are built in the shell
+    # rather than by the one-pass sed below.
+    _osr_theme_lines "$OSR_ROOT/themes/$1/theme.list" \
+        | sed -n 's/^color:[[:space:]]*\([A-Za-z0-9_]*\)[[:space:]][[:space:]]*#\([0-9a-fA-F]\{6\}\)$/\1 \2/p' \
+        | while read -r _ts_role _ts_hex; do
+            _ts_d=$(_osr_hex_dec "$_ts_hex")
+            printf 's|{{%s_dec}}|%s|g\n' "$_ts_role" "$_ts_d"
+            printf 's|{{%s_sgr}}|%s|g\n' "$_ts_role" "$(printf '%s' "$_ts_d" | tr , ';')"
+        done
     _osr_theme_lines "$OSR_ROOT/themes/$1/theme.list" | sed -n '
         s/^color:[[:space:]]*\([A-Za-z0-9_]*\)[[:space:]][[:space:]]*#\(.*\)$/s|{{\1}}|#\2|g\
 s|{{\1_rgb}}|\2|g/p

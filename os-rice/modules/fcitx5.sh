@@ -20,3 +20,11 @@ run_step "Installing fcitx5 engines" pkg_install \
 # Emoji picking without an IME switch: rofimoji drives the rofi launcher this
 # rice already ships, so Super+. gets emoji with no extra daemon.
 run_step "Installing emoji picker" pkg_install rofimoji
+
+# Candidate-window theme (theme-owned, §6b). An input method draws its own popup,
+# so without this it is stock grey over a themed desktop - the one piece of UI no
+# GTK/Qt theme reaches.
+install_theme_layer fcitx5 theme.conf \
+    "$OSR_HOME/.local/share/fcitx5/themes/osr/theme.conf" || :
+install_theme_layer fcitx5 classicui.conf \
+    "$OSR_HOME/.config/fcitx5/conf/classicui.conf" || :

@@ -1,0 +1,9 @@
+# Cursor-theme selector template (§6b). Installed as
+# ~/.local/share/icons/default/index.theme - the toolkit-independent pointer
+# every X11 client reads. XCURSOR_THEME in the xprofile layer covers the rest;
+# the root window still needs `xsetroot -cursor_name left_ptr` if it shows the
+# X cross.
+[Icon Theme]
+Name=Default
+Comment=Default cursor theme (os-rice, {{THEME}})
+Inherits={{cursor_theme}}

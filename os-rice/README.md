@@ -109,7 +109,7 @@ when stdout is not a TTY, so piping to a logfile stays clean).
 | rice | what it is |
 | ---- | ---------- |
 | `arch-hyprland-glass` | Wayland/Hyprland "glass" desktop, Arch + systemd only |
-| `void-i3-rosemuted` | i3/X11 desktop in a muted rose dark palette, validated on Void |
+| `i3-rosemary` | i3/X11 desktop in a muted rose dark palette, validated on Void |
 | `xin` `catppuccin` `gruvbox` `nord` | shell/CLI rices (no DE) |
 
 The i3 desktop is documented in two files: [`i3-sugg.md`](i3-sugg.md) is the

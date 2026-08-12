@@ -87,10 +87,8 @@ fi
 # no per-application CSS selector, so anything written there would restyle every
 # GTK app on the machine. The theme imports Adwaita-dark from GTK's own resource
 # bundle and only overrides on top of it.
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/evolution/gtk.css" ]; then
-    _ev_theme="$OSR_HOME/.local/share/themes/osr-evolution/gtk-3.0"
-    as_user mkdir -p "$_ev_theme"
-    install_layer "$OSR_THEME_DIR/config/evolution/gtk.css" "$_ev_theme/gtk.css"
+_ev_theme="$OSR_HOME/.local/share/themes/osr-evolution/gtk-3.0"
+if as_user mkdir -p "$_ev_theme" && install_theme_layer evolution gtk.css "$_ev_theme/gtk.css"; then
 
     # .desktop override that selects it. A user-level copy in
     # ~/.local/share/applications wins over the packaged one without touching

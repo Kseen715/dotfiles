@@ -1,0 +1,36 @@
+# 90-theme.conf — theme-owned i3 theme layer, rendered per theme (§6b).
+# Swapped on theme switch (§6); the keybinds and rules in ~/.config/i3/config are
+# untouched by a switch, and 99-local.conf still gets the last word.
+#
+
+set $bg      {{background}}
+set $bg_alt  {{panel_background}}
+set $sel     {{selection_background}}
+set $muted   {{text_muted}}
+set $fg      {{foreground}}
+set $fg_dim  {{text_primary}}
+set $accent  {{accent}}
+set $urgent  {{urgent}}
+
+font pango:{{mono_font}} Medium 10
+
+gaps inner 10
+gaps outer 4
+smart_gaps on
+smart_borders on
+default_border pixel 2
+default_floating_border pixel 2
+title_align center
+
+# Property                border   background  text     indicator  child_border
+client.focused           $accent  $bg_alt     $fg      $accent    $accent
+client.focused_inactive  $sel     $bg         $fg_dim  $sel       $sel
+client.unfocused         $bg_alt  $bg         $muted   $bg_alt    $bg_alt
+client.urgent            $urgent  $urgent     $bg      $urgent    $urgent
+client.placeholder       $bg_alt  $bg         $fg_dim  $bg_alt    $bg_alt
+client.background        $bg
+
+# Wallpaper. {{WALLPAPER_PATH}} is substituted by install_wallpaper_layer with
+# the copy in ~/Pictures/Wallpapers, so the path survives moving the dotfiles
+# checkout. A rice with no wallpaper substitutes empty and feh just does nothing.
+exec_always --no-startup-id feh --no-fehbg --bg-fill {{WALLPAPER_PATH}}

@@ -12,8 +12,6 @@
 #   polarity:     dark | light   (lets an app pick a matching icon/GTK variant)
 #   session:      any | x11 | wayland  (which display server the layers target)
 #   config:       whole config/ dirs copied to ~/.config on apply, 0..n lines
-#   yazi_flavor:  yazi ships whole flavors rather than a palette - this names the
-#                 one in dotfiles/yazi/flavors/<name>.yazi
 #   color:        <role> <#rrggbb>
 #
 # Every single-valued field above is also substitutable in a template under its
@@ -25,7 +23,24 @@ display: Nord
 description: Arctic, north-bluish palette
 polarity: dark
 session: any
-yazi_flavor: nord
+
+# Toolkit and font names. Not colors, but the same kind of thing: what a theme
+# picks, that a per-app template drops into a settings file. Five files used to
+# repeat these (gtk-2.0/gtkrc, gtk-3.0 + gtk-4.0 settings.ini, xsettingsd.conf,
+# icons/index.theme); now they are one template each and these lines.
+gtk_theme: Adwaita-dark
+icon_theme: Papirus-Dark
+cursor_theme: Adwaita
+cursor_size: 24
+ui_font: Noto Sans 10
+ui_font_family: Noto Sans
+ui_font_size: 10
+mono_font: JetBrainsMono Nerd Font
+# GNOME 47+ takes a NAMED accent, not a hex: blue teal green yellow orange
+# red pink purple slate. Nearest name to this theme's accent.
+gnome_accent: teal
+gtk_decoration_layout: menu:minimize,maximize,close
+gtk_animations: 1
 
 # --- the window ---------------------------------------------------------------
 color: background            #2e3440
@@ -40,6 +55,13 @@ color: selection_foreground  #eceff4
 # different numbers. opacity 1.00 is solid; blur 0 is off.
 color: background_opacity     0.85
 color: background_blur        0
+
+# Three shades off the background, for toolkits that ask for a full ramp (Qt's
+# Dark/Mid/Shadow roles). Derived from the background when the theme was
+# written, not at render time - a theme may retune any of them by hand.
+color: background_sunken     #21252e
+color: surface_mid           #3b4252
+color: shadow                #191d23
 
 # --- the 16 ANSI slots --------------------------------------------------------
 # What a terminal paints text with. Every terminal layer (ghostty, wezterm, foot,
@@ -78,6 +100,9 @@ color: accent_yellow         #ebcb8b
 color: accent_blue           #81a1c1
 color: accent_magenta        #b48ead
 color: accent_cyan           #8fbcbb
+color: text_faint            #616e88
+color: accent_orange         #d08770
+color: urgent                #bf616a
 
 # btop draws one box per subsystem and one gradient per meter. gradient_mid and
 # gradient_peak are the warm/hot end of a load ramp - the colors a theme wants a

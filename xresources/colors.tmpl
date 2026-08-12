@@ -1,0 +1,50 @@
+
+! ─── theme palette (rendered per theme, §6b; appended to the dotfiles Xresources base
+! by modules/theming.sh; regenerated on theme switch, §6) ─────────────────────
+!
+! Base16-shaped so anything expecting base00..base0F resolves, and the ANSI 16
+! below are the same colors mapped the way terminals actually use them (bright
+! = a lightened variant, not a repeat of the normal color).
+
+#define base00 {{background}}
+#define base01 {{panel_background}}
+#define base02 {{selection_background}}
+#define base03 {{ansi_bright_black}}
+#define base04 {{text_faint}}
+#define base05 {{foreground}}
+#define base06 {{text_primary}}
+#define base07 {{ansi_bright_white}}
+#define base08 {{ansi_red}}
+#define base09 {{accent_orange}}
+#define base0A {{ansi_yellow}}
+#define base0B {{ansi_green}}
+#define base0C {{ansi_cyan}}
+#define base0D {{ansi_blue}}
+#define base0E {{cursor}}
+#define base0F {{urgent}}
+
+*foreground:   base05
+*background:   base00
+*cursorColor:  base0E
+
+*color0:       base00
+*color1:       base08
+*color2:       base0B
+*color3:       base0A
+*color4:       base0D
+*color5:       base0E
+*color6:       base0C
+*color7:       base05
+
+*color8:       {{ansi_bright_black}}
+*color9:       {{ansi_bright_red}}
+*color10:      {{ansi_bright_green}}
+*color11:      {{ansi_bright_yellow}}
+*color12:      {{ansi_bright_blue}}
+*color13:      {{ansi_bright_magenta}}
+*color14:      {{ansi_bright_cyan}}
+*color15:      {{ansi_bright_white}}
+
+! i3lock-color / xsecurelock read these when invoked without explicit flags.
+*i3lock.ring:  base0E
+*i3lock.inside: base00

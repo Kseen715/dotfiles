@@ -313,5 +313,5 @@ udisks automount, screen locking on lid-close and portals all fail silently.
   first line, enforced by `test/lint.sh`, so
   `grep -l '^# session: wayland' modules/*.sh` answers "what does moving this
   rice to X11 break" without opening 110 files.
-- `rices/void-i3-rosemuted/` — the rose-muted dark rice (palette derived from
+- `rices/i3-rosemary/` — the rose-muted dark rice (palette derived from
   `dcindallas/dots-new`).

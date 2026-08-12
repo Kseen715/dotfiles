@@ -20,6 +20,4 @@ for _f in config.ini modules.ini launch.sh; do
 done
 if [ -f "$_pb/launch.sh" ]; then as_user chmod +x "$_pb/launch.sh"; fi
 
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/polybar/colors.ini" ]; then
-    install_layer "$OSR_THEME_DIR/config/polybar/colors.ini" "$_pb/colors.ini"
-fi
+install_theme_layer polybar colors.ini "$_pb/colors.ini" || :
