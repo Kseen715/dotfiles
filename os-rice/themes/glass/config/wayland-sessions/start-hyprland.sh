@@ -15,5 +15,5 @@ export XCURSOR_THEME=Bibata-Modern-Ice
 export HYPRCURSOR_SIZE=20
 export HYPRCURSOR_THEME=Bibata-Modern-Ice
 export GTK_THEME=pop:dark
-export QT_QPA_PLATFORMTHEME=qt6ct
+export QT_QPA_PLATFORMTHEME=qt5ct
 exec Hyprland

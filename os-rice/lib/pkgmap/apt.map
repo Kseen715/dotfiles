@@ -139,6 +139,14 @@ lm_sensors = lm-sensors
 i3lock-color = i3lock
 gtk-dark-theme = gnome-themes-extra
 libva-utils = vainfo
+# Debian splits the Kvantum style plugin per Qt major version; there is no
+# `kvantum` package. Both, so Qt5 and Qt6 apps pick up the same style.
+kvantum = qt5-style-kvantum qt6-style-kvantum
+# Debian/Ubuntu package no Nerd Fonts symbols font, and there is no equivalent
+# (fonts-symbola is Unicode emoji, not the Powerline/devicon private-use range).
+# Empty RHS = skip: modules/theming.sh downloads a full Nerd Font anyway, which
+# carries the same patched glyphs.
+nerd-fonts-symbols =
 
 # Soname-versioned Debian library packages (libpoppler-glib8, libheif1, libjxl0.11,
 # ...) are deliberately NOT mapped here: the name changes with every release and

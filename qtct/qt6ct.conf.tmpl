@@ -1,6 +1,7 @@
-; qt6ct.conf — theme-owned, rendered per theme (§6b). Read because
-; QT_QPA_PLATFORMTHEME=qt6ct is exported by the xprofile theme layer; without
-; that env var Qt ignores all of this and apps look like 2009 (i3-sugg §4.3).
+; qt6ct.conf — theme-owned, rendered per theme (§6b). Read because the xprofile
+; theme layer exports QT_QPA_PLATFORMTHEME=qt5ct, a key the qt6ct plugin also
+; registers (that one value themes Qt5 and Qt6 apps alike); without the env var
+; Qt ignores all of this and apps look like 2009 (i3-sugg §4.3).
 ;
 ; Fusion + a custom palette rather than Kvantum: none of the rose Kvantum themes
 ; are packaged on Void, and Fusion honours a palette file exactly.

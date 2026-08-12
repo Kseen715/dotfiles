@@ -9,7 +9,9 @@
 #   GTK2   ~/.gtkrc-2.0
 #   GTK3   ~/.config/gtk-3.0/settings.ini (+ gtk.css for accents)
 #   GTK4   ~/.config/gtk-4.0/ + gsettings
-#   Qt5/6  qt5ct/qt6ct, selected via QT_QPA_PLATFORMTHEME in the xprofile layer
+#   Qt5/6  qt5ct/qt6ct, both selected by QT_QPA_PLATFORMTHEME=qt5ct (the qt6ct
+#          plugin registers that key too), exported from the xprofile layer for
+#          X11 and from ~/.config/environment.d for a Wayland/systemd session
 #
 # xsettingsd is the daemon that pushes theme/font/DPI to already-running GTK2/3
 # apps (live-reload with `killall -HUP xsettingsd`). Everything below except the
@@ -23,6 +25,13 @@ run_step "Installing fonts" pkg_install \
     fontconfig noto-fonts noto-fonts-emoji noto-fonts-cjk \
     ttf-liberation ttf-dejavu nerd-fonts-symbols
 run_step "Installing JetBrains Mono Nerd Font" osr_install_nerd_font JetBrainsMono
+
+# The env var that selects qt5ct/qt6ct. The xprofile layer sets it too, but only
+# an X11 session reads that file: GNOME/KDE on Wayland launch apps from the
+# systemd user session, whose only env source is ~/.config/environment.d.
+# Not theme-owned - one constant value, so it is a plain layer, not a template.
+install_layer "$OSR_DOTFILES/environment.d/90-qt.conf" \
+    "$OSR_HOME/.config/environment.d/90-qt.conf"
 
 [ -n "${OSR_THEME:-}" ] || return 0
 

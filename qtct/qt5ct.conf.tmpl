@@ -1,8 +1,8 @@
 ; qt5ct.conf — theme-owned, rendered per theme (§6b), the Qt5 twin of qt6ct.conf.
-; QT_QPA_PLATFORMTHEME can only name one of them, and the xprofile theme layer
-; sets qt6ct (Qt6 is the majority now). A Qt5-heavy machine flips that variable
-; in ~/.config/xprofile.d/99-local.sh and this file takes over instead — the
-; palette is identical either way.
+; QT_QPA_PLATFORMTHEME can only name one plugin, and the xprofile layer sets
+; `qt5ct`: the qt6ct plugin registers that key as well as its own and still reads
+; ~/.config/qt6ct, while the Qt5 plugin answers to nothing else. So both files
+; are live at once, one per Qt version, and the palette is identical either way.
 ;
 ; Fusion + a custom palette rather than Kvantum: none of the rose Kvantum themes
 ; are packaged on Void, and Fusion honours a palette file exactly.

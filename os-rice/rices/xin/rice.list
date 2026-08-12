@@ -26,17 +26,4 @@ fastfetch
 btop
 htop
 ncdu
-alacritty
 yazi
-
-# --- launcher -----------------------------------------------------------------
-# wofi is Wayland-only (layer-shell). It is here because this rice's home is a
-# GNOME/Wayland session, where modules/wofi.sh binds it to Super+R via gsettings;
-# on an X11 host the package still installs and simply never opens - the X11
-# launcher is modules/rofi.sh, which this rice does not carry.
-wofi
-# --- GNOME session tuning -----------------------------------------------------
-# The bare Super tap opens the Activities overview, which is the slowest thing in
-# the session and swallows the key. gnome-overview frees it; the launcher above
-# keeps the Super+R chord.
-gnome-overview

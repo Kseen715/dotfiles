@@ -11,8 +11,11 @@ qt-notification=0
 qt-system-tray=1
 qt-fs-controller=1
 qt-minimal-view=0
-# 2 = dark palette in VLC's own theme selector (0 = system, 1 = light).
-qt-interface-style=2
+# VLC's own dark palette, for the widgets it paints itself. It does NOT reach the
+# menus - those take the Qt platform palette, which is why theming.sh exports
+# QT_QPA_PLATFORMTHEME. (`qt-interface-style` was the VLC 4 name and is silently
+# ignored by the 3.0.x that every distro still ships.)
+qt-dark-palette=1
 
 [core]
 metadata-network-access=0
