@@ -787,7 +787,7 @@ provide_yandex_browser_deb() {
 provide_proteus() {
     _pr_cargo="$OSR_HOME/.cargo/bin/cargo"
     as_user test -x "$_pr_cargo" \
-        || error "cargo not found for proteus — install 'rust' before proteus (manifest order, §4)"
+        || error "cargo not found for proteus - install 'rust' before proteus (manifest order, section 4)"
 
     _pr_src="$OSR_DOTFILES/proteus"
     [ -f "$_pr_src/Cargo.toml" ] \
