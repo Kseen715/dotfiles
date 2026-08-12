@@ -172,8 +172,14 @@ osr_apply_theme_configs() {
 # color would be repainted by whatever palette the terminal is currently wearing
 # - every theme would look identical.
 _osr_theme_swatch() {
-    for _sw_role in background surface foreground accent \
-                    ansi_red ansi_green ansi_yellow ansi_blue ansi_magenta ansi_cyan; do
+    # `-` is a gap, not a role: it splits the theme's own surface/text/accent
+    # colors from the fixed-meaning status trio.
+    for _sw_role in background surface text_muted foreground accent \
+                    - success warning error; do
+        if [ "$_sw_role" = - ]; then
+            printf '\033[0m  '
+            continue
+        fi
         _sw_hex=$(osr_theme_color "$1" "$_sw_role")
         case "$_sw_hex" in \#??????) ;; *) continue ;; esac
         printf '\033[48;2;%sm    ' "$(_osr_hex_dec "$_sw_hex" | tr , ';')"
