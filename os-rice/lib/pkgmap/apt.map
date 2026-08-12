@@ -84,7 +84,6 @@ ghostty@trixie = source:provide_ghostty_deb
 xz = xz-utils
 gtk4-dev = libgtk-4-dev
 libadwaita-dev = libadwaita-1-dev
-amneziavpn = source:provide_amneziavpn
 
 # Yandex Browser is in no Debian/Ubuntu archive; the vendor runs its own apt repo
 # (modules/yandex-browser.sh), which the builder adds before installing.
