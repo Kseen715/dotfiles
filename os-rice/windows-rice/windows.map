@@ -1,0 +1,16 @@
+# os-rice/windows-rice/windows.map — logical package name -> real id per
+# manager. Windows equivalent of ../lib/pkgmap/*.map, collapsed into one file
+# because there's one OS here, not five package managers each needing their
+# own map: the "column" that varies per-distro on Linux is a `mgr:id` token
+# on the RHS instead.
+#
+# Format: name = mgr:id [mgr:id ...]   (any subset of scoop/choco/winget; a
+# manager with no token for this name is skipped for it — same "no entry =
+# not available that way" rule as pkgmap). Install-RicePackage (src/pkg.ps1)
+# tries them in the scoop -> choco -> winget preference order, using whichever
+# manager is actually installed.
+
+pwsh       = scoop:pwsh choco:powershell-core winget:Microsoft.PowerShell
+wezterm    = scoop:wezterm choco:wezterm winget:wez.wezterm
+oh-my-posh = scoop:oh-my-posh choco:oh-my-posh winget:JanDeDobbeleer.OhMyPosh
+fastfetch  = scoop:fastfetch choco:fastfetch winget:Fastfetch-cli.Fastfetch

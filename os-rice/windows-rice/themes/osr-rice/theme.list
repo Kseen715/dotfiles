@@ -1,0 +1,20 @@
+# os-rice/windows-rice/themes/osr-rice/theme.list — mirrors
+# ../../../themes/<name>/theme.list, scaled down: no palette-substitution
+# template engine has been ported here (that only earns its cost once there's
+# more than one theme to keep in sync -- see ../../../DESIGN.md §6b for why
+# Linux only added it after several themes existed). A theme here is just a
+# name plus a config/<app>/<file> directory of literal files -- Linux's own
+# "escape hatch" (a theme can ship a literal file that wins over a rendered
+# template) is the whole mechanism, not a fallback path.
+#
+# config/oh-my-posh/M365Princess++.omp.json is this theme's only file today:
+# it fully defines oh-my-posh's colors, so it IS the theme, not a base config.
+#
+# wezterm has no override here on purpose: ../../../wezterm/wezterm-theme.toml
+# is shared with the Linux build (it's Linux's own §6 dotfiles-level default
+# palette, read by modules/wezterm.sh there too) so it stays put rather than
+# being duplicated; modules/wezterm.ps1 falls back to it when a theme (like
+# this one) ships no wezterm override of its own -- the same fallback chain
+# Linux uses.
+
+name: osr-rice

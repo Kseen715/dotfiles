@@ -20,7 +20,32 @@ config.animation_fps = 1
 config.cursor_blink_rate = 500
 config.term = "xterm-256color" -- Set the terminal type
 config.prefer_egl = true -- Use universal rendering backend
-local windows_pwsh_path = { "C:/Program Files/PowerShell/7/pwsh.exe", "-nologo" }
+-- pwsh's install location depends on how it was installed (MSI/winget ->
+-- Program Files, scoop -> ~\scoop\apps\pwsh\current, choco -> often Program
+-- Files too but not guaranteed) -- a single hardcoded path breaks for whoever
+-- didn't use that particular installer (wezterm then fails to spawn at all:
+-- "exited with code 1", no shell, no error dialog explaining why). Probe the
+-- real candidates in order and fall back to relying on PATH, then to
+-- Windows PowerShell (always present) rather than a dead terminal.
+local function get_windows_pwsh_path()
+	local candidates = {
+		"C:/Program Files/PowerShell/7/pwsh.exe", -- MSI / winget
+		wezterm.home_dir .. "/scoop/apps/pwsh/current/pwsh.exe", -- scoop
+		"C:/ProgramData/chocolatey/lib/powershell-core/tools/pwsh.exe", -- choco
+	}
+	for _, path in ipairs(candidates) do
+		local f = io.open(path, "rb")
+		if f then
+			f:close()
+			return path
+		end
+	end
+	-- Not at any known install path -- let Windows resolve it via PATH
+	-- (covers scoop's shim, a custom install dir, etc).
+	return "pwsh.exe"
+end
+
+local windows_pwsh_path = { get_windows_pwsh_path(), "-nologo" }
 local linux_shell_path = { os.getenv 'SHELL', "--login" }
 config.scrollback_lines = 10000
 config.check_for_updates = false

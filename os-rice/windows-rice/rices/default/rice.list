@@ -1,0 +1,13 @@
+# os-rice/windows-rice/rices/default/rice.list — which modules this rice
+# installs, in order. Mirrors ../../../rices/<name>/rice.list: a plain list,
+# # comments, one name per line; manifest order is the dependency order
+# (nothing here depends on anything else yet, but the convention carries over
+# from the Linux side).
+#
+# Each name must have a windows.map entry (the package) and a
+# ../../modules/<name>.ps1 (the package + config layer).
+
+pwsh
+wezterm
+oh-my-posh
+fastfetch
