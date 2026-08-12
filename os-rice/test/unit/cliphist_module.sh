@@ -9,7 +9,7 @@ OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
 OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB OSR_DOTFILES OSR_PKG=dnf
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
-. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"
+. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/net.sh"; . "$OSR_LIB/gnome.sh"
 . "$HERE/../lib.sh"
 
 OUT=$(mktemp)
@@ -41,6 +41,9 @@ _gs_set() {
 case "$1" in
     get) _gs_get "$2 $3"; exit 0 ;;
     set) _gs_set "$2 $3" "$4"; exit 0 ;;
+    # "<schema> <key> <value>" for every key stored under the schema -- what
+    # lib/gnome.sh's gnome_free_binding reads to find who holds the chord.
+    list-recursively) grep "^$2 " "$GSFILE" 2>/dev/null || true; exit 0 ;;
     *)   exit 1 ;;
 esac
 MOCK_EOF
