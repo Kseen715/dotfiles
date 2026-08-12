@@ -839,6 +839,110 @@ provide_datagrip() {
     # `osr module datagrip` (this builder) is the update path.
 }
 
+# --- Telegram Desktop (vendor tarball) ---------------------------------------
+# telegram.org/desktop's Linux button is a redirect to the current
+# tsetup.<version>.tar.xz, which unpacks to a self-contained Telegram/ tree (the
+# app plus its Updater). Distro packages exist, but they lag - a messenger whose
+# protocol moves is one of the few things worth taking straight from upstream.
+#
+# The tree is owned by the INVOKING USER, not root, which is the one place this
+# builder differs from provide_datagrip. Telegram ships its own updater and that
+# updater writes into this directory; a root-owned tree silently breaks it and
+# makes `osr module telegram` the only update path for a security-sensitive app.
+# User-owned, Telegram keeps itself current and this builder is just the install
+# and the occasional repair.
+#
+# Leaving the updater enabled also means Telegram writes its OWN .desktop entry
+# and icon into ~/.local/share on first run (Platform::InstallLauncher, which
+# returns early when the updater is disabled) - so, unlike DataGrip, there is no
+# menu entry to write here.
+OSR_TELEGRAM_PREFIX=${OSR_TELEGRAM_PREFIX:-/opt/telegram-desktop}
+OSR_TELEGRAM_URL=${OSR_TELEGRAM_URL:-https://telegram.org/dl/desktop/linux}
+
+# _telegram_latest — echo "<version> <url> <bytes>" for the current release,
+# resolved from the redirect the download link answers with (G4: no version is
+# ever written down here).
+_telegram_latest() {
+    [ "$OSR_ARCH" = x86_64 ] \
+        || error "Telegram publishes no Linux $OSR_ARCH desktop tarball (x86_64 only)"
+    _tg_url=$(osr_final_url "$OSR_TELEGRAM_URL")
+    case "$_tg_url" in
+        *tsetup.*.tar.xz) ;;
+        *) error "could not resolve the Telegram tarball from $OSR_TELEGRAM_URL" ;;
+    esac
+    _tg_file=${_tg_url##*/}
+    _tg_ver=${_tg_file#tsetup.}; _tg_ver=${_tg_ver%.tar.xz}
+    printf '%s %s %s' "$_tg_ver" "$_tg_url" "$(_osr_remote_size "$_tg_url")"
+}
+
+# _telegram_report_foreign — name the copies of Telegram this builder does not
+# own. Reported, never removed (§5, G2): a snap/flatpak/distro launcher earlier
+# on PATH is the one that opens, and each keeps its own tdata, so the wrong one
+# looks like "my chats are gone".
+_telegram_report_foreign() {
+    command -v snap >/dev/null 2>&1 && snap list telegram-desktop >/dev/null 2>&1 \
+        && warn "a telegram-desktop snap is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    command -v flatpak >/dev/null 2>&1 && flatpak info org.telegram.desktop >/dev/null 2>&1 \
+        && warn "the org.telegram.desktop flatpak is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    _native_installed telegram-desktop \
+        && warn "a native 'telegram-desktop' package is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    return 0
+}
+
+# provide_telegram — install or update Telegram Desktop from the vendor tarball.
+#
+# Version-idempotent, like provide_datagrip: the installed version is a stamp
+# file this builder writes, because the binary has no -version flag and the tree
+# carries no manifest. When Telegram has updated ITSELF the stamp goes stale and
+# a rerun reinstalls the same version once - a wasted 80 MB in the rare case,
+# against re-downloading on every rice run if presence were the test.
+provide_telegram() {
+    pkg_install tar xz
+    _tg_latest=$(_telegram_latest)
+    _tg_ver=${_tg_latest%% *}
+    _tg_rest=${_tg_latest#* }
+    _tg_url=${_tg_rest%% *}
+    _tg_size=${_tg_rest#* }
+    _telegram_report_foreign
+
+    _tg_stamp="$OSR_TELEGRAM_PREFIX/.osr-version"
+    if [ -x "$OSR_TELEGRAM_PREFIX/Telegram" ] && [ -f "$_tg_stamp" ] \
+        && [ "$(cat "$_tg_stamp")" = "$_tg_ver" ]; then
+        info "Telegram Desktop $_tg_ver is already installed - skipping the download"
+        as_root ln -sf "$OSR_TELEGRAM_PREFIX/Telegram" /usr/local/bin/telegram-desktop
+        return 0
+    fi
+
+    _tg_parent=$(dirname "$OSR_TELEGRAM_PREFIX")
+    as_root mkdir -p "$_tg_parent"
+    _tg_tmp=$(as_root mktemp -d "$_tg_parent/.telegram-XXXXXX") \
+        || error "failed to create a staging directory under $_tg_parent"
+    # Same reason as provide_datagrip: the download and unpack run unprivileged
+    # (osr_download is a shell function and cannot cross an as_root boundary),
+    # staged on the destination filesystem so the swap is a rename.
+    as_root chown "$(id -un)" "$_tg_tmp"
+    info "installing Telegram Desktop $_tg_ver"
+    osr_download "$_tg_url" "$_tg_tmp/telegram.tar.xz" "$_tg_size" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to download $_tg_url"; }
+    tar -xf "$_tg_tmp/telegram.tar.xz" -C "$_tg_tmp" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to extract the Telegram tarball"; }
+    rm -f "$_tg_tmp/telegram.tar.xz"
+    # The tarball unpacks into a single Telegram/ dir holding the app and Updater.
+    _tg_src=$(find "$_tg_tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    [ -n "$_tg_src" ] && [ -x "$_tg_src/Telegram" ] \
+        || { as_root rm -rf "$_tg_tmp"; error "the Telegram tarball has an unexpected layout (no Telegram binary)"; }
+    printf '%s\n' "$_tg_ver" >"$_tg_src/.osr-version"
+
+    as_root rm -rf "$OSR_TELEGRAM_PREFIX"
+    as_root mv "$_tg_src" "$OSR_TELEGRAM_PREFIX" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to install Telegram into $OSR_TELEGRAM_PREFIX"; }
+    as_root rm -rf "$_tg_tmp"
+    # The riced user owns the tree so Telegram's own updater can replace the
+    # binary - that account is the one that runs it (§8).
+    as_root chown -R "$OSR_USER" "$OSR_TELEGRAM_PREFIX"
+    as_root ln -sf "$OSR_TELEGRAM_PREFIX/Telegram" /usr/local/bin/telegram-desktop
+}
+
 # provide_yandex_browser — Yandex Browser on Debian/Ubuntu from the vendor's own
 # apt repo (repo.yandex.ru/yandex-browser/deb), the route yandex.ru/support/
 # browser/ru/about/install documents. A repo and not the one-off

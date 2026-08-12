@@ -72,6 +72,17 @@ _osr_fit_left() {
 # looks hung without one".
 OSR_PROGRESS_MIN_BYTES=${OSR_PROGRESS_MIN_BYTES:-1048576}   # 1 MiB
 
+# _osr_head <url> — echo the response headers of a HEAD, one block per redirect
+# hop, CRs stripped. Empty when the downloader has no header-only mode (busybox
+# wget) or the host rejects a HEAD.
+_osr_head() {
+    case "$(osr_downloader)" in
+        curl) curl -fsSLI --max-time 20 "$1" 2>/dev/null ;;
+        wget) wget --spider -S --timeout=20 -q -O /dev/null "$1" 2>&1 ;;
+        *)    : ;;
+    esac | tr -d '\r'
+}
+
 # _osr_remote_size <url> — echo the Content-Length a HEAD reports, or "" when the
 # server does not say (chunked responses, a HEAD the host rejects, busybox wget,
 # which has no header-only mode). Redirects are followed, and the LAST
@@ -81,12 +92,17 @@ OSR_PROGRESS_MIN_BYTES=${OSR_PROGRESS_MIN_BYTES:-1048576}   # 1 MiB
 # Sizes are advisory here - they only scale a progress bar - so every failure
 # path is an empty answer and a silent download, never an error.
 _osr_remote_size() {
-    case "$(osr_downloader)" in
-        curl) curl -fsSLI --max-time 20 "$1" 2>/dev/null ;;
-        wget) wget --spider -S --timeout=20 -q -O /dev/null "$1" 2>&1 ;;
-        *)    : ;;
-    esac | tr -d '\r' | sed -n 's/^[Cc]ontent-[Ll]ength:[[:space:]]*\([0-9][0-9]*\).*/\1/p' \
+    _osr_head "$1" | sed -n 's/^[Cc]ontent-[Ll]ength:[[:space:]]*\([0-9][0-9]*\).*/\1/p' \
          | tail -n 1
+}
+
+# osr_final_url <url> — echo where a redirecting URL actually lands, or "" when
+# nothing redirects (or no HEAD is possible). The LAST Location wins, same reason
+# as the size above. This is how a vendor "latest" URL yields a version: the
+# filename it redirects to carries one (telegram.org/dl/desktop/linux ->
+# .../tsetup.7.0.9.tar.xz), so nothing has to be hard-coded (G4).
+osr_final_url() {
+    _osr_head "$1" | sed -n 's/^[Ll]ocation:[[:space:]]*\([^[:space:]]*\).*/\1/p' | tail -n 1
 }
 
 # osr_download <url> <dest> [expected_bytes] — fetch url to dest with whatever
