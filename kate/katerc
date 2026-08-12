@@ -86,12 +86,12 @@ Fallback Encoding=cp 1251
 
 [KTextEditor Renderer]
 Animate Bracket Matching=true
-Auto Color Theme Selection=true
-Color Theme=Breeze Dark
+Auto Color Theme Selection=false
+Color Theme=os-rice
 Line Height Multiplier=1
 Show Indentation Lines=false
 Show Whole Bracket Expression=true
-Text Font=JetBrains Mono NL,9,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
+Text Font=JetBrainsMono Nerd Font,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1
 Text Font Features=
 Word Wrap Marker=false
 
@@ -170,7 +170,7 @@ SetEditor=false
 MenuBar=Disabled
 
 [UiSettings]
-ColorScheme=Breeze Dark
+ColorScheme=os-rice
 
 [filetree]
 editShade=183,220,246

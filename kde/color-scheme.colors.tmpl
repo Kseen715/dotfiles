@@ -1,6 +1,13 @@
-# KDE color scheme template (§6b) -> ~/.local/share/color-schemes/osr.colors,
+# KDE color scheme template (§6b) -> ~/.local/share/color-schemes/os-rice.colors,
 # the palette every KDE/Qt app (Kate, Dolphin, Okular) reads once it is selected
 # in Plasma's Colors KCM or via qt6ct.
+#
+# File basename, [General] ColorScheme and [General] Name are all `os-rice` on
+# purpose. An app records the scheme it uses under whichever of the three it
+# treats as the id (Kate writes `BreezeDark` for a scheme named "Breeze Dark",
+# which is both the basename AND the name with its spaces removed), so keeping
+# them identical - and free of the theme's display name, which changes on every
+# rice switch - is what lets kate/katerc name the scheme statically.
 #
 # The two literal Color= values in [ColorEffects:*] are Breeze's disabled and
 # inactive TINTS, not palette entries - they are the same grey whatever the
@@ -96,8 +103,8 @@ ForegroundPositive={{success_dec}}
 ForegroundVisited={{text_muted_dec}}
 
 [General]
-ColorScheme=GruvboxColors
-Name=os-rice {{display}}
+ColorScheme=os-rice
+Name=os-rice
 shadeSortColumn=true
 
 [KDE]
