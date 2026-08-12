@@ -33,8 +33,8 @@ fi
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
 # dotfiles default covers a rice that ships no palette. In --module mode
 # OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/ghostty/ghostty-theme" ]; then
-    install_layer "$OSR_THEME_DIR/config/ghostty/ghostty-theme" "$OSR_HOME/.config/ghostty/ghostty-theme"
+if install_theme_layer ghostty ghostty-theme "$OSR_HOME/.config/ghostty/ghostty-theme"; then
+    :
 elif [ -f "$OSR_DOTFILES/ghostty/ghostty-theme" ]; then
     install_layer "$OSR_DOTFILES/ghostty/ghostty-theme" "$OSR_HOME/.config/ghostty/ghostty-theme"
 fi

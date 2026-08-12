@@ -1,4 +1,0 @@
-# Rice-owned yazi theme (90, §6): selects the gruvbox flavor shipped in
-# dotfiles/yazi/flavors/gruvbox-dark.yazi. Swapped on rice switch.
-[flavor]
-dark = "gruvbox-dark"

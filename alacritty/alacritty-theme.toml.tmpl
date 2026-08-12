@@ -1,0 +1,41 @@
+# Alacritty palette template — the ONE Alacritty theme layer, rendered per theme
+# (§6b). Imported by the dotfiles-owned alacritty/alacritty.toml, which sets no
+# [colors] and no window.opacity, so everything visual is decided here.
+# Placeholders come from themes/<name>/theme.list - the same values foot and
+# ghostty render from, so the three terminals cannot drift apart again.
+
+[window]
+# Needs a compositor on X11 (picom under i3).
+opacity = {{background_opacity}}
+
+[colors.primary]
+background = "{{background}}"
+foreground = "{{foreground}}"
+
+[colors.cursor]
+text = "{{background}}"
+cursor = "{{cursor}}"
+
+[colors.selection]
+text = "{{selection_foreground}}"
+background = "{{selection_background}}"
+
+[colors.normal]
+black = "{{ansi_black}}"
+red = "{{ansi_red}}"
+green = "{{ansi_green}}"
+yellow = "{{ansi_yellow}}"
+blue = "{{ansi_blue}}"
+magenta = "{{ansi_magenta}}"
+cyan = "{{ansi_cyan}}"
+white = "{{ansi_white}}"
+
+[colors.bright]
+black = "{{ansi_bright_black}}"
+red = "{{ansi_bright_red}}"
+green = "{{ansi_bright_green}}"
+yellow = "{{ansi_bright_yellow}}"
+blue = "{{ansi_bright_blue}}"
+magenta = "{{ansi_bright_magenta}}"
+cyan = "{{ansi_bright_cyan}}"
+white = "{{ansi_bright_white}}"

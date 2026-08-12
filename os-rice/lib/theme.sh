@@ -79,6 +79,38 @@ osr_theme_color() {
     printf '%s' "$_tk_v"
 }
 
+# _osr_theme_sed <name> — echo a sed script that substitutes every `{{key}}` the
+# theme defines: one rule per `color:` role, one per single-valued meta field,
+# plus `{{THEME}}` for the theme's own name.
+#
+# This is what makes a theme a palette instead of a directory of app configs. An
+# app's colors used to be written out once per theme, so adding a theme meant
+# writing N files and adding an app meant editing N themes - the product, not the
+# sum. With one template per app the app is written once and a theme is only its
+# colors, so both axes grow independently.
+#
+# Every color role also gets a `{{<role>_rgb}}` form with the leading `#`
+# stripped, because not every config file writes a color the same way: foot's
+# palette is bare `RRGGBB`, GTK and Xresources want the hash. One vocabulary,
+# two spellings, so a template never has to hard-code a color to get the shape
+# its app parses.
+#
+# The delimiter is `|`, never `#`: every value here is a `#rrggbb`. A value
+# containing `|` would break its own rule, which no color or theme name can.
+# `config:` is excluded because it is multi-valued (0..n lines); a template that
+# wants a config dir names it directly.
+_osr_theme_sed() {
+    printf 's|{{THEME}}|%s|g\n' "$1"
+    _osr_theme_lines "$OSR_ROOT/themes/$1/theme.list" | sed -n '
+        s/^color:[[:space:]]*\([A-Za-z0-9_]*\)[[:space:]][[:space:]]*#\(.*\)$/s|{{\1}}|#\2|g\
+s|{{\1_rgb}}|\2|g/p
+        t
+        s/^color:[[:space:]]*\([A-Za-z0-9_]*\)[[:space:]][[:space:]]*\(.*\)$/s|{{\1}}|\2|g/p
+        t
+        /^config:/d
+        s/^\([a-z][a-z0-9_]*\):[[:space:]]*\(.*\)$/s|{{\1}}|\2|g/p'
+}
+
 # osr_theme_session <name> — echo any|x11|wayland (defaults to any).
 osr_theme_session() {
     _ts_v=$(osr_theme_meta "$1" session)

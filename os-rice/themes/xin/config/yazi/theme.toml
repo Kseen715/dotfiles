@@ -1,4 +1,0 @@
-# Rice-owned yazi theme (90, §6): selects the xin flavor shipped in
-# dotfiles/yazi/flavors/xin.yazi (ANSI, terminal-native). Swapped on rice switch.
-[flavor]
-dark = "xin"

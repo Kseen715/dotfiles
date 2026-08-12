@@ -19,8 +19,8 @@ fi
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
 # dotfiles default covers a rice that ships no palette. In --module mode
 # OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/btop/btop.theme" ]; then
-    install_layer "$OSR_THEME_DIR/config/btop/btop.theme" "$OSR_HOME/.config/btop/themes/rice.theme"
+if install_theme_layer btop btop.theme "$OSR_HOME/.config/btop/themes/rice.theme"; then
+    :
 elif [ -f "$OSR_DOTFILES/btop/btop.theme" ]; then
     install_layer "$OSR_DOTFILES/btop/btop.theme" "$OSR_HOME/.config/btop/themes/rice.theme"
 fi

@@ -1,19 +1,101 @@
-# themes/rosemary/theme.list — see themes/nord/theme.list for the field docs.
+# themes/rosemary/theme.list — a theme is its PALETTE (§6b). Metadata plus colors, in
+# the same newline `key: value` shape as rice.list (Decisions: no TOML, a
+# `while read` loop is the whole parser).
 #
-# session: x11 — this theme carries i3, picom, polybar, Xresources and xprofile
-# layers. Applying it under a Wayland session installs files nothing reads; the
-# picker marks it as off-session rather than hiding it, because the terminal,
-# shell and GTK layers still land and still look right.
+# There are no per-app config files here: every app's theme layer is ONE template
+# beside that app's dotfiles (btop/btop.theme.tmpl, ghostty/ghostty-theme.tmpl,
+# ...) and the placeholders in it are the names below. Writing a new theme is
+# this file and nothing else.
+#
+#   display:      human name shown in the picker
+#   description:  one line, shown under the name
+#   polarity:     dark | light   (lets an app pick a matching icon/GTK variant)
+#   session:      any | x11 | wayland  (which display server the layers target)
+#   config:       whole config/ dirs copied to ~/.config on apply, 0..n lines
+#   yazi_flavor:  yazi ships whole flavors rather than a palette - this names the
+#                 one in dotfiles/yazi/flavors/<name>.yazi
+#   color:        <role> <#rrggbb>
+#
+# Every single-valued field above is also substitutable in a template under its
+# own name, along with `THEME` for this directory's name. A role a template asks
+# for and a theme omits is a warning, not a failed switch: the file still lands
+# with the placeholder left visible, so the gap is obvious and local.
+
 display: Rosemary
 description: Muted rose on warm charcoal, i3/X11
 polarity: dark
 session: x11
+yazi_flavor: rosemuted
 
-color: bg      #1c1f20
-color: surface #34393b
-color: fg      #e8dfe1
-color: dim     #4e5456
-color: accent  #d98cae
-color: success #9fb08a
-color: error   #e2655e
-color: warning #d9b48f
+# --- the window ---------------------------------------------------------------
+color: background            #1c1f20
+color: foreground            #e8dfe1
+color: cursor                #d98cae
+color: selection_background  #34393b
+color: selection_foreground  #e8dfe1
+
+# How translucent the terminal is, and how hard the compositor blurs what shows
+# through. Both are part of the LOOK, so they live with the colors rather than in
+# each terminal's base config, where the four terminals had drifted to four
+# different numbers. opacity 1.00 is solid; blur 0 is off.
+color: background_opacity     0.85
+color: background_blur        0
+
+# --- the 16 ANSI slots --------------------------------------------------------
+# What a terminal paints text with. Every terminal layer (ghostty, wezterm, foot,
+# alacritty, Xresources) is exactly these.
+color: ansi_black            #1c1f20
+color: ansi_red              #e2655e
+color: ansi_green            #9fb08a
+color: ansi_yellow           #d9b48f
+color: ansi_blue             #8f95bd
+color: ansi_magenta          #d98cae
+color: ansi_cyan             #8fb3b0
+color: ansi_white            #e8dfe1
+color: ansi_bright_black     #4e5456
+color: ansi_bright_red       #ef7d76
+color: ansi_bright_green     #b6c6a1
+color: ansi_bright_yellow    #eccba7
+color: ansi_bright_blue      #a7adcf
+color: ansi_bright_magenta   #eda6c4
+color: ansi_bright_cyan      #a8c9c6
+color: ansi_bright_white     #ffffff
+
+# --- TUI chrome ---------------------------------------------------------------
+# What a full-screen terminal app (btop, serie) paints its own furniture with.
+# These are a CHOICE, not a copy of the ANSI slots: most themes accent with the
+# bright set, and a muted theme accents with the normal one. That choice is the
+# reason these roles exist instead of the templates hard-coding an intensity.
+color: text_primary          #b3a8ab
+color: text_metadata         #a86a84
+color: text_muted            #4e5456
+color: panel_background      #24282a
+color: border                #34393b
+color: highlight             #d98cae
+color: accent_red            #e2655e
+color: accent_green          #9fb08a
+color: accent_yellow         #d9b48f
+color: accent_blue           #8f95bd
+color: accent_magenta        #d98cae
+color: accent_cyan           #8fb3b0
+
+# btop draws one box per subsystem and one gradient per meter. gradient_mid and
+# gradient_peak are the warm/hot end of a load ramp - the colors a theme wants a
+# saturated CPU to be, which is not always its yellow and red.
+color: box_cpu               #d98cae
+color: box_memory            #9fb08a
+color: box_network           #8f95bd
+color: box_process           #8fb3b0
+color: gradient_mid          #d98cae
+color: gradient_peak         #f15495
+
+# --- semantic roles -----------------------------------------------------------
+# Read by Proteus (which styles its own overlay from a theme it has never seen)
+# and by the prompt. Not terminal colors: a theme may point them anywhere.
+color: surface               #34393b
+color: text_dim              #4e5456
+color: accent                #d98cae
+color: success               #9fb08a
+color: error                 #e2655e
+color: warning               #d9b48f
+color: prompt_secondary      #d9b48f

@@ -24,8 +24,10 @@ run_step "Installing JetBrains Mono Nerd Font" osr_install_nerd_font JetBrainsMo
 _ss_base="$OSR_DOTFILES/starship/starship.toml"
 _ss_dst="$OSR_HOME/.config/starship.toml"
 if [ -f "$_ss_base" ]; then
-    if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/starship.palette.toml" ]; then
-        compose_starship_config "$_ss_base" "$OSR_THEME_DIR/config/starship.palette.toml" "$_ss_dst"
+    _ss_pal=$(osr_theme_source starship starship.palette.toml) || _ss_pal=""
+    if [ -n "$_ss_pal" ]; then
+        compose_starship_config "$_ss_base" "$_ss_pal" "$_ss_dst"
+        case "$_ss_pal" in "${TMPDIR:-/tmp}"/osr-theme-*) rm -f "$_ss_pal" ;; esac
     else
         # No rice palette -> install the base as-is (its default palette).
         install_layer "$_ss_base" "$_ss_dst"

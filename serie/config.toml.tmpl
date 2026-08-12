@@ -1,0 +1,58 @@
+# serie theme template — the ONE serie theme layer, rendered per theme (§6b).
+# Placeholders come from themes/<name>/theme.list — the same 16 colors as the
+# ghostty template.
+
+# fg/bg are left at "Reset" (the terminal's own colors), so serie inherits the
+# terminal background and stays transparent.
+
+[color]
+fg = "Reset"
+bg = "Reset"
+
+list_selected_fg = "{{foreground}}"
+list_selected_bg = "{{selection_background}}"
+list_ref_paren_fg = "{{text_muted}}"
+list_ref_branch_fg = "{{accent_green}}"
+list_ref_remote_branch_fg = "{{accent_red}}"
+list_ref_tag_fg = "{{accent_yellow}}"
+list_ref_stash_fg = "{{accent_magenta}}"
+list_head_fg = "{{accent_cyan}}"
+list_subject_fg = "Reset"
+list_name_fg = "{{ansi_cyan}}"
+list_hash_fg = "{{ansi_yellow}}"
+list_date_fg = "{{text_metadata}}"
+list_match_fg = "{{background}}"
+list_match_bg = "{{accent_yellow}}"
+
+detail_label_fg = "{{text_primary}}"
+detail_name_fg = "{{accent_cyan}}"
+detail_date_fg = "{{accent_magenta}}"
+detail_email_fg = "{{accent_blue}}"
+detail_hash_fg = "{{accent_yellow}}"
+detail_ref_branch_fg = "{{accent_green}}"
+detail_ref_remote_branch_fg = "{{accent_red}}"
+detail_ref_tag_fg = "{{accent_yellow}}"
+detail_file_change_add_fg = "{{accent_green}}"
+detail_file_change_modify_fg = "{{accent_yellow}}"
+detail_file_change_delete_fg = "{{accent_red}}"
+detail_file_change_move_fg = "{{accent_magenta}}"
+
+ref_selected_fg = "{{foreground}}"
+ref_selected_bg = "{{selection_background}}"
+
+help_block_title_fg = "{{accent_green}}"
+help_key_fg = "{{accent_yellow}}"
+
+virtual_cursor_fg = "{{accent_cyan}}"
+status_input_fg = "{{foreground}}"
+status_input_transient_fg = "{{text_muted}}"
+status_info_fg = "{{accent_cyan}}"
+status_success_fg = "{{accent_green}}"
+status_warn_fg = "{{accent_yellow}}"
+status_error_fg = "{{accent_red}}"
+divider_fg = "{{text_muted}}"
+
+# Commit graph edge colors, cycled per branch. edge/background stay at their
+# transparent defaults so the graph image blends into the terminal.
+[graph.color]
+branches = ["{{accent_red}}", "{{accent_green}}", "{{accent_yellow}}", "{{accent_blue}}", "{{accent_magenta}}", "{{accent_cyan}}"]

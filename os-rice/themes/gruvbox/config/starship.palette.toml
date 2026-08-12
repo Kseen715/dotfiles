@@ -1,7 +1,0 @@
-# gruvbox palette — rice-owned colors composed onto the shared starship base (§6).
-# Prompt structure/symbols live in the dotfiles base (starship/starship.toml).
-[palettes.theme]
-accent = "#fabd2f"
-success = "#8ec07c"
-error = "#fb4934"
-secondary = "#83a598"

@@ -76,14 +76,19 @@ assert_contains "$OSR_HOME/.config/wezterm/colors/osr-rice.toml" '^name = "osr-r
 refute_contains "$OUT" 'DOWNLOAD' "Nerd Font download skipped when already present (§2)"
 rm -rf "$OSR_HOME" "$THEME"
 
-# --- every rice that themes ghostty also themes wezterm ----------------------
-for d in "$OSR_ROOT"/themes/*/config/ghostty/ghostty-theme; do
-    [ -f "$d" ] || continue
-    r=$(basename "$(dirname "$(dirname "$(dirname "$d")")")")
-    if [ -f "$OSR_ROOT/themes/$r/config/wezterm/wezterm-theme.toml" ]; then
-        ok "rice $r ships a wezterm palette"
+# --- every theme gets a wezterm palette, from its own file or the template ----
+# This replaces an older assertion that every theme shipping a ghostty palette
+# also shipped a wezterm one. That pairing was the N*M problem itself: it could
+# only ever be satisfied by writing one more file per theme. The invariant worth
+# holding is the outcome - every theme HAS a wezterm palette - which the template
+# satisfies for free (§6b, lib/config.sh).
+for d in "$OSR_ROOT"/themes/*/theme.list; do
+    r=$(basename "$(dirname "$d")")
+    if [ -f "$OSR_ROOT/themes/$r/config/wezterm/wezterm-theme.toml" ] \
+        || [ -f "$OSR_DOTFILES/wezterm/wezterm-theme.toml.tmpl" ]; then
+        ok "theme $r resolves a wezterm palette"
     else
-        fail "rice $r themes ghostty but not wezterm"
+        fail "theme $r has no wezterm palette and no template to render one"
     fi
 done
 

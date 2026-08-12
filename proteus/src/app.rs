@@ -169,7 +169,7 @@ mod tests {
         let d = tmpdir("fix");
         write(
             &d.join("themes/nord/theme.list"),
-            "display: Nord\ndescription: cold\ncolor: bg #2e3440\ncolor: accent #88c0d0\n",
+            "display: Nord\ndescription: cold\ncolor: background #2e3440\ncolor: accent #88c0d0\n",
         );
         png(&d.join("themes/nord/wallpapers/ice.png"));
         png(&d.join("themes/nord/wallpapers/snow.png"));

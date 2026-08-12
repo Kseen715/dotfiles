@@ -77,8 +77,8 @@ fi
 
 # Flavor selection is the rice-owned theme (§6): rice override wins, dotfiles
 # default covers a rice that ships none.
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/yazi/theme.toml" ]; then
-    install_layer "$OSR_THEME_DIR/config/yazi/theme.toml" "$_yazi_cfg/theme.toml"
+if install_theme_layer yazi theme.toml "$_yazi_cfg/theme.toml"; then
+    :
 elif [ -f "$OSR_DOTFILES/yazi/theme.toml" ]; then
     install_layer "$OSR_DOTFILES/yazi/theme.toml" "$_yazi_cfg/theme.toml"
 fi

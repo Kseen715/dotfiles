@@ -1,0 +1,32 @@
+# foot palette template — the ONE foot theme layer, rendered per theme (§6b).
+# Placeholders come from themes/<name>/theme.list.
+#
+# foot writes colors as bare RRGGBB, so this uses the `_rgb` spelling of each
+# role - same value, no leading hash. The section name is [colors-dark] because
+# that is what current foot calls it; install_foot_palette downgrades it to
+# [colors] for a foot older than 1.26 (see lib/config.sh).
+[colors-dark]
+alpha={{background_opacity}}
+foreground={{foreground_rgb}}
+background={{background_rgb}}
+
+regular0={{ansi_black_rgb}}
+regular1={{ansi_red_rgb}}
+regular2={{ansi_green_rgb}}
+regular3={{ansi_yellow_rgb}}
+regular4={{ansi_blue_rgb}}
+regular5={{ansi_magenta_rgb}}
+regular6={{ansi_cyan_rgb}}
+regular7={{ansi_white_rgb}}
+
+bright0={{ansi_bright_black_rgb}}
+bright1={{ansi_bright_red_rgb}}
+bright2={{ansi_bright_green_rgb}}
+bright3={{ansi_bright_yellow_rgb}}
+bright4={{ansi_bright_blue_rgb}}
+bright5={{ansi_bright_magenta_rgb}}
+bright6={{ansi_bright_cyan_rgb}}
+bright7={{ansi_bright_white_rgb}}
+
+selection-foreground={{selection_foreground_rgb}}
+selection-background={{selection_background_rgb}}

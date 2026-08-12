@@ -1,0 +1,60 @@
+# btop theme template — the ONE btop theme layer, rendered per theme (§6b).
+# Placeholders come from themes/<name>/theme.list; same 16 colors as the ghostty
+# template, so the terminal and the monitor inside it agree.
+
+# Main background, empty for terminal default; ignored while btop.conf keeps
+# theme_background = False (transparent background).
+theme[main_bg]="{{background}}"
+theme[main_fg]="{{foreground}}"
+theme[title]="{{ansi_bright_white}}"
+theme[hi_fg]="{{highlight}}"
+theme[selected_bg]="{{selection_background}}"
+theme[selected_fg]="{{foreground}}"
+theme[inactive_fg]="{{text_muted}}"
+theme[graph_text]="{{text_primary}}"
+theme[meter_bg]="{{panel_background}}"
+theme[proc_misc]="{{accent_cyan}}"
+
+# Box outlines
+theme[cpu_box]="{{box_cpu}}"
+theme[mem_box]="{{box_memory}}"
+theme[net_box]="{{box_network}}"
+theme[proc_box]="{{box_process}}"
+theme[div_line]="{{border}}"
+
+# Temperature graph
+theme[temp_start]="{{ansi_green}}"
+theme[temp_mid]="{{ansi_yellow}}"
+theme[temp_end]="{{ansi_red}}"
+
+# CPU graph
+theme[cpu_start]="{{ansi_cyan}}"
+theme[cpu_mid]="{{gradient_mid}}"
+theme[cpu_end]="{{gradient_peak}}"
+
+# Mem/disk meters
+theme[free_start]="{{accent_green}}"
+theme[free_mid]=""
+theme[free_end]="{{ansi_green}}"
+theme[cached_start]="{{accent_blue}}"
+theme[cached_mid]=""
+theme[cached_end]="{{ansi_blue}}"
+theme[available_start]="{{accent_yellow}}"
+theme[available_mid]=""
+theme[available_end]="{{ansi_yellow}}"
+theme[used_start]="{{accent_red}}"
+theme[used_mid]=""
+theme[used_end]="{{ansi_red}}"
+
+# Net graphs
+theme[download_start]="{{accent_cyan}}"
+theme[download_mid]=""
+theme[download_end]="{{ansi_cyan}}"
+theme[upload_start]="{{accent_magenta}}"
+theme[upload_mid]=""
+theme[upload_end]="{{ansi_magenta}}"
+
+# Process list gradient
+theme[process_start]="{{accent_green}}"
+theme[process_mid]="{{accent_yellow}}"
+theme[process_end]="{{accent_red}}"

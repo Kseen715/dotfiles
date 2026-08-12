@@ -18,8 +18,8 @@ run_step "Installing serie" pkg_install serie
 # (90-*, swapped on rice switch, §6). Rice override wins; the dotfiles default
 # covers a rice that ships none. In --module mode OSR_THEME_DIR is whatever rice
 # the theme picker resolved (§6).
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/serie/config.toml" ]; then
-    install_layer "$OSR_THEME_DIR/config/serie/config.toml" "$OSR_HOME/.config/serie/config.toml"
+if install_theme_layer serie config.toml "$OSR_HOME/.config/serie/config.toml"; then
+    :
 elif [ -f "$OSR_DOTFILES/serie/config.toml" ]; then
     install_layer "$OSR_DOTFILES/serie/config.toml" "$OSR_HOME/.config/serie/config.toml"
 fi

@@ -107,6 +107,76 @@ PYEOF
     rm -f "$_cj_tmp"
 }
 
+# --- theme templates: one config per app, one palette per theme --------------
+#
+# §6b. A theme is a set of COLORS; the shape of an app's config file is the same
+# whatever the colors are. Keeping a full btop/ghostty/wezterm/serie config in
+# every theme meant every new app had to be written once per theme and every new
+# theme once per app - N*M files to keep in sync, and in practice they drifted.
+#
+# So the app's config lives ONCE, next to the rest of that app's dotfiles, with
+# `{{role}}` placeholders where a color goes, and a theme carries only the
+# `color:` block that fills them in. Adding an app is one template; adding a
+# theme is one palette.
+#
+# A theme can still ship a literal file under its own config/ - every module
+# prefers that over the template. That is the escape hatch for a theme whose
+# look is not a palette substitution (glass's blur, rosemary's GTK sheets), and
+# it is what makes the migration incremental rather than a flag day.
+
+# render_theme_template <src> <dst> — write <src> to <dst> with every `{{role}}`
+# replaced by the current theme's value for it.
+#
+# An unresolved `{{...}}` is a warning, not a failure: the file still lands, and
+# a role one theme forgot must not take a whole theme switch down with it (§9).
+# The warning names both the placeholder and the template, so the gap is findable.
+render_theme_template() {
+    _rt_src=$1
+    _rt_dst=$2
+    [ -f "$_rt_src" ] || error "render_theme_template: template not found: $_rt_src"
+    [ -n "${OSR_THEME:-}" ] || error "render_theme_template: no theme resolved"
+    _rt_sed="${TMPDIR:-/tmp}/osr-theme-sed-$$"
+    _osr_theme_sed "$OSR_THEME" >"$_rt_sed"
+    sed -f "$_rt_sed" "$_rt_src" >"$_rt_dst"
+    rm -f "$_rt_sed"
+    if grep -q '{{' "$_rt_dst"; then
+        warn "theme '$OSR_THEME' defines no $(sed -n 's/.*{{\([A-Za-z0-9_]*\)}}.*/\1/p' "$_rt_dst" | sort -u | tr '\n' ' ')- left unsubstituted in $(basename "$_rt_src")"
+    fi
+}
+
+# osr_theme_source <app-dir> <name> — echo a path to this theme's version of an
+# app's theme layer, ready to install: the theme's own literal file when it ships
+# one, else the app's template rendered with the theme palette. Returns non-zero
+# with no output when neither exists.
+#
+# The precedence lives here, once, so no module re-implements it. A rendered file
+# is a temp the CALLER removes - which is why install_theme_layer below exists and
+# is what modules normally use; the raw form is for the one consumer that does not
+# just copy the file (starship composes it onto a base).
+osr_theme_source() {
+    _ts_app=$1
+    _ts_name=$2
+    if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/$_ts_app/$_ts_name" ]; then
+        printf '%s' "$OSR_THEME_DIR/config/$_ts_app/$_ts_name"
+        return 0
+    fi
+    _ts_tmpl="$OSR_DOTFILES/$_ts_app/$_ts_name.tmpl"
+    [ -f "$_ts_tmpl" ] && [ -n "${OSR_THEME:-}" ] || return 1
+    _ts_out="${TMPDIR:-/tmp}/osr-theme-$_ts_app-$$-$(basename "$_ts_name")"
+    render_theme_template "$_ts_tmpl" "$_ts_out"
+    printf '%s' "$_ts_out"
+}
+
+# install_theme_layer <app-dir> <name> <dst> — the whole per-app theme rule in
+# one call: theme file or rendered template, installed as a 90-layer. Non-zero
+# when the theme has neither, which is a module's cue to fall back to its
+# unthemed dotfiles default.
+install_theme_layer() {
+    _tl_src=$(osr_theme_source "$1" "$2") || return 1
+    install_layer "$_tl_src" "$3"
+    case "$_tl_src" in "${TMPDIR:-/tmp}"/osr-theme-*) rm -f "$_tl_src" ;; esac
+}
+
 # --- Mozilla profiles (Firefox / Thunderbird) --------------------------------
 #
 # Mozilla apps keep their settings in a randomly-named profile directory, so

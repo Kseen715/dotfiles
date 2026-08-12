@@ -46,10 +46,10 @@ fn fixture() -> PathBuf {
         &d.join("themes/aaa-red/theme.list"),
         "display: Red Theme\n\
          description: the first one\n\
-         color: bg      #200000\n\
+         color: background  #200000\n\
          color: surface #400000\n\
-         color: fg      #ffdddd\n\
-         color: dim     #a06060\n\
+         color: foreground  #ffdddd\n\
+         color: text_dim    #a06060\n\
          color: accent  #ff0000\n",
     );
     write(
@@ -57,10 +57,10 @@ fn fixture() -> PathBuf {
         "display: Green Theme\n\
          description: the second one\n\
          session: wayland\n\
-         color: bg      #002000\n\
+         color: background  #002000\n\
          color: surface #004000\n\
-         color: fg      #ddffdd\n\
-         color: dim     #60a060\n\
+         color: foreground  #ddffdd\n\
+         color: text_dim    #60a060\n\
          color: accent  #00ff00\n",
     );
     d
