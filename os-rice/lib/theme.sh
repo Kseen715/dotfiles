@@ -166,6 +166,21 @@ osr_apply_theme_configs() {
     done
 }
 
+# _osr_theme_swatch <name> — echo a run of colored blocks for the theme's
+# palette. 48;2;r;g;b (truecolor) on purpose, never the 0-15 palette indices:
+# the point of the preview is to show the theme's own colors, and an indexed
+# color would be repainted by whatever palette the terminal is currently wearing
+# - every theme would look identical.
+_osr_theme_swatch() {
+    for _sw_role in background surface foreground accent \
+                    ansi_red ansi_green ansi_yellow ansi_blue ansi_magenta ansi_cyan; do
+        _sw_hex=$(osr_theme_color "$1" "$_sw_role")
+        case "$_sw_hex" in \#??????) ;; *) continue ;; esac
+        printf '\033[48;2;%sm    ' "$(_osr_hex_dec "$_sw_hex" | tr , ';')"
+    done
+    printf '\033[0m'
+}
+
 # _osr_theme_menu — numbered picker. Prompt + input go through /dev/tty (never
 # stdout: this runs inside $(...) so stdout is the captured return value). Echoes
 # the chosen theme name. Empty/invalid/EOF input falls back to the default theme.
@@ -178,11 +193,7 @@ _osr_theme_menu() {
         printf 'Select a theme:\n'
         _tm_n=1
         for _tm_r in "$@"; do
-            if [ "$_tm_r" = "$OSR_DEFAULT_THEME" ]; then
-                printf '  %d) %s (default)\n' "$_tm_n" "$_tm_r"
-            else
-                printf '  %d) %s\n' "$_tm_n" "$_tm_r"
-            fi
+            printf '  %d) %-12s %s\n' "$_tm_n" "$_tm_r" "$(_osr_theme_swatch "$_tm_r")"
             _tm_n=$((_tm_n + 1))
         done
         printf 'Enter number [default %s]: ' "$OSR_DEFAULT_THEME"
