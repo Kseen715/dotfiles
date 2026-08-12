@@ -1,7 +1,9 @@
 # os-rice/windows-rice/modules/pwsh.ps1 — PowerShell 7 + profile config.
 # Mirrors ../../modules/zsh.sh's shape: package, then dotfiles-owned config
 # (profile.ps1 is the loader, no theme layer -- oh-my-posh owns the prompt
-# theme, see modules/oh-my-posh.ps1).
+# theme, see modules/oh-my-posh.ps1; fastfetch owns its own config.jsonc, see
+# modules/fastfetch.ps1 -- the profile just calls `fastfetch` bare and it
+# auto-discovers that file, same as it does on Linux).
 #
 # Profile path is asked FROM THE INSTALLED PWSH ITSELF
 # ($PROFILE.CurrentUserCurrentHost), never assembled from $HOME\Documents --
@@ -29,8 +31,8 @@ function Install-Pwsh {
 
     $dotfiles = Join-Path $REPO_ROOT "PowerShell7-profile"
     Install-RiceConfig -Ask:$Ask `
-        -Files @($profilePath, "$(Split-Path -Path $profilePath -Parent)\ff-startup.jsonc") `
-        -LocalFiles @("$dotfiles\Microsoft.PowerShell_profile.ps1", "$dotfiles\ff-startup.jsonc")
+        -Files @($profilePath) `
+        -LocalFiles @("$dotfiles\Microsoft.PowerShell_profile.ps1")
 }
 
 function Save-Pwsh {
@@ -44,6 +46,6 @@ function Save-Pwsh {
 
     $dotfiles = Join-Path $REPO_ROOT "PowerShell7-profile"
     Save-RiceConfig -Ask:$Ask `
-        -Files @($profilePath, "$(Split-Path -Path $profilePath -Parent)\ff-startup.jsonc") `
-        -LocalFiles @("$dotfiles\Microsoft.PowerShell_profile.ps1", "$dotfiles\ff-startup.jsonc")
+        -Files @($profilePath) `
+        -LocalFiles @("$dotfiles\Microsoft.PowerShell_profile.ps1")
 }

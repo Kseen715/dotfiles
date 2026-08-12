@@ -3,9 +3,9 @@
 # rice, one theme, four modules so far. Thin dispatcher over rice.ps1, which
 # does the actual work; this just gives it the same verbs.
 #
-#   osr.ps1 install [-Rice default] [-Theme osr-rice] [-Ask]
-#   osr.ps1 save    [-Rice default] [-Theme osr-rice] [-Ask]
-#   osr.ps1 module <name> [-Theme osr-rice] [-Ask] [-Save]
+#   osr.ps1 install [-Rice default] [-Theme xin] [-Ask]
+#   osr.ps1 save    [-Rice default] [-Theme xin] [-Ask]
+#   osr.ps1 module <name> [-Theme xin] [-Ask] [-Save]
 #   osr.ps1 list
 
 param(
@@ -17,7 +17,7 @@ param(
     [string]$Name = "",
 
     [string]$Rice = "default",
-    [string]$Theme = "osr-rice",
+    [string]$Theme = "xin",
     [switch]$Ask = $false
 )
 

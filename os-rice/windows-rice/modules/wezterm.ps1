@@ -1,13 +1,15 @@
 # os-rice/windows-rice/modules/wezterm.ps1 — WezTerm + Nerd Font + config +
 # theme. Mirrors ../../modules/wezterm.sh: base config is dotfiles-owned
 # (../../../wezterm/.wezterm.lua, overwritten on update), the palette is
-# theme-owned and installed to ~/.config/wezterm/colors/osr-rice.toml, which
-# .wezterm.lua selects by that name.
+# rendered dynamically from ../../../wezterm/wezterm-theme.toml.tmpl -- the
+# SAME template the Linux rices use -- against whichever theme.list -Theme
+# resolves to (src/theme.ps1), and installed to
+# ~/.config/wezterm/colors/osr-rice.toml, which .wezterm.lua selects by name.
 #
-# The palette itself: a theme's own config/wezterm/wezterm-theme.toml wins;
-# with none, falls back to ../../../wezterm/wezterm-theme.toml -- the same
-# file the LINUX build's modules/wezterm.sh falls back to (see
-# themes/osr-rice/theme.list for why that file isn't duplicated in here).
+# Falls back to the literal ../../../wezterm/wezterm-theme.toml (Linux's own
+# dotfiles-level default, read by its modules/wezterm.sh too) only if no
+# theme.list resolves at all -- should not happen for the shipped "osr-rice"
+# theme, but keeps this module from leaving WezTerm unthemed if it does.
 
 function Install-Wezterm {
     param([switch]$Ask, [string]$Theme = "osr-rice")
@@ -16,22 +18,18 @@ function Install-Wezterm {
     Install-NerdFont -Name "JetBrainsMono"
 
     $dotfiles = Join-Path $REPO_ROOT "wezterm"
-    $themeFile = Get-ThemeConfig -App "wezterm" -FileName "wezterm-theme.toml" -Theme $Theme
-    if (-not $themeFile) { $themeFile = Join-Path $dotfiles "wezterm-theme.toml" }
+    Copy-ConfigEntry -Source "$dotfiles\.wezterm.lua" -Destination "~\.wezterm.lua" -Ask:$Ask
 
-    Install-RiceConfig -Ask:$Ask `
-        -Files @("~\.wezterm.lua", "~\.config\wezterm\colors\osr-rice.toml") `
-        -LocalFiles @("$dotfiles\.wezterm.lua", $themeFile)
+    $dest = "~\.config\wezterm\colors\osr-rice.toml"
+    if (-not (Install-ThemeLayer -App "wezterm" -FileName "wezterm-theme.toml" -Destination $dest -Theme $Theme -Ask:$Ask)) {
+        Copy-ConfigEntry -Source "$dotfiles\wezterm-theme.toml" -Destination $dest -Ask:$Ask
+    }
 }
 
 function Save-Wezterm {
     param([switch]$Ask, [string]$Theme = "osr-rice")
 
     $dotfiles = Join-Path $REPO_ROOT "wezterm"
-    $themeFile = Get-ThemeConfig -App "wezterm" -FileName "wezterm-theme.toml" -Theme $Theme
-    if (-not $themeFile) { $themeFile = Join-Path $dotfiles "wezterm-theme.toml" }
-
-    Save-RiceConfig -Ask:$Ask `
-        -Files @("~\.wezterm.lua", "~\.config\wezterm\colors\osr-rice.toml") `
-        -LocalFiles @("$dotfiles\.wezterm.lua", $themeFile)
+    Copy-ConfigEntry -Source "~\.wezterm.lua" -Destination "$dotfiles\.wezterm.lua" -Ask:$Ask
+    EchoInfo "wezterm-theme.toml is rendered from ../../../wezterm/wezterm-theme.toml.tmpl + a theme's palette -- edit the template or the theme's theme.list, not the installed file"
 }

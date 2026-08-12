@@ -12,7 +12,7 @@
 
 param(
     [string]$Rice = "default",
-    [string]$Theme = "osr-rice",
+    [string]$Theme = "xin",
     [string]$Module = "",
     [switch]$Save = $false,
     [switch]$Ask = $false

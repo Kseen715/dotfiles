@@ -2,8 +2,12 @@
 # Mirrors ../../modules/starship.sh's shape, but oh-my-posh has no separate
 # base-config layer: the .omp.json IS the whole prompt definition (structure
 # and colors together), so there's nothing dotfiles-owned to install alongside
-# it -- only a theme-owned file, always resolved through Get-ThemeConfig (no
-# dotfiles-level fallback exists for this app, unlike wezterm's).
+# it -- only a theme-owned file, always resolved through Get-ThemeConfig. Only
+# 'osr-rice' ships one today, so Install-OhMyPosh falls back to it with a
+# warning for any -Theme (like the default 'xin') that has no prompt of its
+# own -- the color palette (wezterm/fastfetch) still switches, only the
+# oh-my-posh prompt itself stays put until a themes/<name>/config/oh-my-posh/
+# file exists.
 
 function Resolve-PoshThemesPath {
     # POSH_THEMES_PATH is set by the installer but a session that hasn't
@@ -36,6 +40,10 @@ function Install-OhMyPosh {
         return
     }
     $themeFile = Get-ThemeConfig -App "oh-my-posh" -FileName "M365Princess++.omp.json" -Theme $Theme
+    if (-not $themeFile -and $Theme -ne "osr-rice") {
+        EchoWarning "Theme '$Theme' ships no oh-my-posh config (themes/$Theme/config/oh-my-posh/); using 'osr-rice' -- the only prompt defined so far"
+        $themeFile = Get-ThemeConfig -App "oh-my-posh" -FileName "M365Princess++.omp.json" -Theme "osr-rice"
+    }
     if (-not $themeFile) {
         EchoError "Theme '$Theme' ships no oh-my-posh config (themes/$Theme/config/oh-my-posh/)"
         return

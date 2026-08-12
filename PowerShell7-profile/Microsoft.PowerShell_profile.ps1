@@ -4,14 +4,17 @@
 # Tweaked & enhanced by Denis Korenev (@Kseen715)
 
 # REQUIRES:
-# - choco
-# - oh-my-posh (get it from choco)
-# - fastfetch (get it from choco)
-# - config file for fastfetch
+# - oh-my-posh
+# - fastfetch
+#
+# Both installed and configured by os-rice/windows-rice/rice.ps1 (scoop ->
+# choco -> winget). fastfetch's config.jsonc is theme-owned -- see
+# os-rice/windows-rice/themes/osr-rice/config/fastfetch/config.jsonc -- and
+# installed to ~\.config\fastfetch\, fastfetch's own first config search path,
+# so the bare `fastfetch` call below finds it with no -c flag needed.
 
 
-# Run `$profile` in PS to get place where you need to put this file 
-# and fastfetch config
+# Run `$profile` in PS to get place where you need to put this file
 
 
 # Hotkeys:
@@ -32,9 +35,6 @@
 
 using namespace System.Management.Automation
 using namespace System.Management.Automation.Language
-
-$profileFolder = Split-Path -Parent $profile
-$ffConfigPath = Join-Path -Path $profileFolder -ChildPath 'ff-startup.jsonc'
 
 if ($host.Name -eq 'ConsoleHost') {
     Import-Module -Name PSReadLine
@@ -248,4 +248,4 @@ if (Test-Path("$env:ChocolateyInstall\helpers\chocolateyProfile.psm1")) {
 }
 
 cls
-# fastfetch -c $ffConfigPath
+fastfetch

@@ -1,20 +1,79 @@
-# os-rice/windows-rice/themes/osr-rice/theme.list — mirrors
-# ../../../themes/<name>/theme.list, scaled down: no palette-substitution
-# template engine has been ported here (that only earns its cost once there's
-# more than one theme to keep in sync -- see ../../../DESIGN.md §6b for why
-# Linux only added it after several themes existed). A theme here is just a
-# name plus a config/<app>/<file> directory of literal files -- Linux's own
-# "escape hatch" (a theme can ship a literal file that wins over a rendered
-# template) is the whole mechanism, not a fallback path.
+# os-rice/windows-rice/themes/osr-rice/theme.list — a Windows-native palette,
+# same `key: value` shape as ../../../themes/<name>/theme.list on the Linux
+# side (a Windows-local theme.list and a Linux one are interchangeable inputs
+# to the same renderer -- see src/theme.ps1). Values match
+# ../../../wezterm/wezterm-theme.toml, the dotfiles-level default WezTerm
+# already used before any theme rendering existed here. No longer rice.ps1's
+# own default (that's -Theme xin now, see rice.ps1) but still the only theme
+# with a Windows-local oh-my-posh prompt (config/oh-my-posh/), so
+# modules/oh-my-posh.ps1 falls back to it for any theme that ships none.
 #
-# config/oh-my-posh/M365Princess++.omp.json is this theme's only file today:
-# it fully defines oh-my-posh's colors, so it IS the theme, not a base config.
-#
-# wezterm has no override here on purpose: ../../../wezterm/wezterm-theme.toml
-# is shared with the Linux build (it's Linux's own §6 dotfiles-level default
-# palette, read by modules/wezterm.sh there too) so it stays put rather than
-# being duplicated; modules/wezterm.ps1 falls back to it when a theme (like
-# this one) ships no wezterm override of its own -- the same fallback chain
-# Linux uses.
+# Any Linux theme name (nord, gruvbox, catppuccin, glass, rosemary, xin --
+# see ../../../themes/) also works directly as -Theme: rice.ps1 falls back to
+# ../../themes/<name>/theme.list when there's no Windows-local one, so it
+# renders the SAME template against the REAL palette Linux ships, not a
+# hand-copied approximation of it.
 
-name: osr-rice
+display: OSR Rice
+description: Windows-native palette (matches WezTerm's dotfiles default)
+polarity: dark
+session: any
+
+# --- the window -----------------------------------------------------------
+color: background            #181818
+color: foreground            #ffffff
+color: cursor                #ffffff
+color: selection_background  #303030
+color: selection_foreground  #ffffff
+color: background_opacity     0.9
+color: background_blur        0
+
+# --- the 16 ANSI slots ------------------------------------------------------
+color: ansi_black            #1e1e1e
+color: ansi_red              #be0f17
+color: ansi_green            #338716
+color: ansi_yellow           #d4c310
+color: ansi_blue             #185b8f
+color: ansi_magenta          #a12b84
+color: ansi_cyan             #578f8d
+color: ansi_white            #bbbbbb
+color: ansi_bright_black     #525252
+color: ansi_bright_red       #f0424b
+color: ansi_bright_green     #55dc28
+color: ansi_bright_yellow    #f3e659
+color: ansi_bright_blue      #3292dc
+color: ansi_bright_magenta   #d45eb7
+color: ansi_bright_cyan      #90bbba
+color: ansi_bright_white     #ededed
+
+# --- TUI chrome --------------------------------------------------------------
+color: text_primary          #ffffff
+color: text_metadata         #a12b84
+color: text_muted            #525252
+color: text_faint            #525252
+color: panel_background      #1e1e1e
+color: border                #525252
+color: highlight             #be0f17
+color: accent_red            #be0f17
+color: accent_green          #338716
+color: accent_yellow         #d4c310
+color: accent_blue           #185b8f
+color: accent_magenta        #a12b84
+color: accent_cyan           #90bbba
+color: accent_orange         #d4c310
+color: urgent                #be0f17
+color: box_cpu                #578f8d
+color: box_memory             #338716
+color: box_network            #a12b84
+color: box_process            #185b8f
+color: gradient_mid           #d4c310
+color: gradient_peak          #be0f17
+
+# --- semantic roles -----------------------------------------------------------
+color: surface                #1e1e1e
+color: text_dim                #525252
+color: accent                  #3292dc
+color: success                  #338716
+color: error                     #be0f17
+color: warning                    #d4c310
+color: prompt_secondary            #ededed
