@@ -245,7 +245,6 @@ static int run_rice(const char *root, const char *repo_root, const char *rice_na
     char rices_dir[OSR_MAX_PATH_C];
     char rice_dir[OSR_MAX_PATH_C];
     char rice_list_path[OSR_MAX_PATH_C];
-    char windows_rice_dir[OSR_MAX_PATH_C];
     char map_path[OSR_MAX_PATH_C];
     char themes_dir[OSR_MAX_PATH_C];
     char theme_dir[OSR_MAX_PATH_C];
@@ -256,8 +255,7 @@ static int run_rice(const char *root, const char *repo_root, const char *rice_na
     path_join(rices_dir, sizeof(rices_dir), root, "rices");
     path_join(rice_dir, sizeof(rice_dir), rices_dir, rice_name);
     path_join(rice_list_path, sizeof(rice_list_path), rice_dir, "rice.list");
-    path_join(windows_rice_dir, sizeof(windows_rice_dir), root, "windows-rice");
-    path_join(map_path, sizeof(map_path), windows_rice_dir, "windows.map");
+    path_join(map_path, sizeof(map_path), root, "windows.map");
     path_join(themes_dir, sizeof(themes_dir), root, "themes");
 
     if (!osr_parse_rice_list(rice_list_path, &m)) {
@@ -349,7 +347,6 @@ int main(int argc, char **argv) {
     char repo_root[OSR_MAX_PATH_C];
     char rices_dir[OSR_MAX_PATH_C];
     char modules_dir[OSR_MAX_PATH_C];
-    char windows_rice_dir[OSR_MAX_PATH_C];
     char map_path[OSR_MAX_PATH_C];
 
     root[0] = '\0';
@@ -403,8 +400,7 @@ int main(int argc, char **argv) {
 
     path_join(rices_dir, sizeof(rices_dir), root, "rices");
     path_join(modules_dir, sizeof(modules_dir), root, "modules");
-    path_join(windows_rice_dir, sizeof(windows_rice_dir), root, "windows-rice");
-    path_join(map_path, sizeof(map_path), windows_rice_dir, "windows.map");
+    path_join(map_path, sizeof(map_path), root, "windows.map");
 
     if (do_list) { list_rices(rices_dir); return 0; }
     if (do_list_modules) { list_modules(modules_dir); return 0; }

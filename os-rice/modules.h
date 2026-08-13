@@ -1,13 +1,14 @@
 /* modules.h -- the finite set of Windows modules this C tier can actually
- * run, C ports of windows-rice/modules folder (*.ps1) (fastfetch, oh-my-posh, pwsh,
- * wezterm -- windows-rice's entire module set today). See modules.c's
- * header comment for the full sh/ps1-to-C mapping.
+ * run: fastfetch, oh-my-posh, pwsh, wezterm. Ported once from the
+ * now-retired windows-rice/modules folder (*.ps1) -- see PLAN_UNIVERSAL.md
+ * decision 8 -- and now the only Windows rice implementation this repo
+ * ships. See modules.c's header comment for the full ps1-to-C mapping.
  *
  * This is NOT an attempt at the ~70 Linux os-rice/modules folder (*.sh) -- those
  * assume a Linux desktop (X11/Wayland, GTK, systemd units) that has no
  * Windows equivalent. PLAN_UNIVERSAL.md's own "Not Doing" section already
  * rules that out; this file covers exactly the modules windows-rice
- * itself already decided are the realistic Windows set.
+ * itself had already decided were the realistic Windows set.
  *
  * C89.
  */

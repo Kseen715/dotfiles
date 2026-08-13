@@ -1,12 +1,12 @@
 /* test/unit_c/winpkg_test.c -- lib/winpkg.c's windows.map lookup.
  * Platform-independent: osr_winpkg_lookup is plain fopen/fgets, exercised
- * here against the real windows-rice/windows.map fixture, not a synthetic
+ * here against the real os-rice/windows.map fixture, not a synthetic
  * copy, so drift between the two never goes unnoticed.
  */
 #include "../c_test.h"
 #include "../../lib/winpkg.h"
 
-#define MAP_PATH "../../windows-rice/windows.map"
+#define MAP_PATH "../../windows.map"
 
 static void test_known_entries(void) {
     osr_winpkg_spec spec;

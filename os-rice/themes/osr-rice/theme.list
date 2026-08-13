@@ -1,18 +1,20 @@
-# os-rice/windows-rice/themes/osr-rice/theme.list — a Windows-native palette,
-# same `key: value` shape as ../../../themes/<name>/theme.list on the Linux
-# side (a Windows-local theme.list and a Linux one are interchangeable inputs
-# to the same renderer -- see src/theme.ps1). Values match
-# ../../../wezterm/wezterm-theme.toml, the dotfiles-level default WezTerm
-# already used before any theme rendering existed here. No longer rice.ps1's
-# own default (that's -Theme xin now, see rice.ps1) but still the only theme
-# with a Windows-local oh-my-posh prompt (config/oh-my-posh/), so
-# modules/oh-my-posh.ps1 falls back to it for any theme that ships none.
+# os-rice/themes/osr-rice/theme.list — a Windows-native palette, same
+# `key: value` shape as every other themes/<name>/theme.list (this is not a
+# separate Windows-only format -- see lib/theme_list.c/theme_render.c). It
+# lives in the same themes/ tree as every Linux theme now (ingested from the
+# now-retired windows-rice/themes/osr-rice/, see PLAN_UNIVERSAL.md decision
+# 8), so it renders through the exact same code path as nord/gruvbox/etc.
+# Values match ../../wezterm/wezterm-theme.toml, the dotfiles-level default
+# WezTerm already used before any theme rendering existed. Not install.exe's
+# default theme (that's still "xin", see install.c's OSR_DEFAULT_THEME) but
+# still the only theme with an oh-my-posh prompt (config/oh-my-posh/), so
+# modules.c's module_oh_my_posh falls back to it for any theme that ships
+# none of its own.
 #
-# Any Linux theme name (nord, gruvbox, catppuccin, glass, rosemary, xin --
-# see ../../../themes/) also works directly as -Theme: rice.ps1 falls back to
-# ../../themes/<name>/theme.list when there's no Windows-local one, so it
-# renders the SAME template against the REAL palette Linux ships, not a
-# hand-copied approximation of it.
+# Every other theme (nord, gruvbox, catppuccin, glass, rosemary, xin) also
+# works as-is for the Windows modules: modules.c renders their real
+# wezterm-theme.toml.tmpl/config.jsonc.tmpl against their real theme.list,
+# not a hand-copied approximation of them.
 
 display: OSR Rice
 description: Windows-native palette (matches WezTerm's dotfiles default)

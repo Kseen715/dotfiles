@@ -1,8 +1,11 @@
 /* lib/winpkg.h -- windows.map lookup + scoop/choco/winget dispatch.
  *
- * C port of os-rice/windows-rice/src/pkg.ps1's Get-WindowsMapSpec /
- * Install-RicePackage, reading the same os-rice/windows-rice/windows.map
- * file (format: `name = mgr:id [mgr:id ...]`, mgr in {scoop,choco,winget}).
+ * C port of windows-rice's own src/pkg.ps1 (Get-WindowsMapSpec /
+ * Install-RicePackage / Install-Scoop) and src/common.ps1's
+ * Update-SessionEnvironment, reading the same os-rice/windows.map file
+ * (format: `name = mgr:id [mgr:id ...]`, mgr in {scoop,choco,winget}) --
+ * windows-rice itself has been retired, this is now the only copy (see
+ * PLAN_UNIVERSAL.md decision 8).
  *
  * This is deliberately NOT a port of lib/pkg.sh: pkg.sh's problem is
  * apt/pacman/apk dispatch, a different package model than Windows' three

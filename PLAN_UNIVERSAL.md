@@ -2,12 +2,18 @@
 
 ## Problem statement
 
-`os-rice/` (POSIX sh, mainstream Linux distros) and `os-rice/windows-rice/`
-(PowerShell 7, Windows 10/11) already cover "ricing every OS" for anything
-with a real shell and a real package manager — see
-[`os-rice/DESIGN.md`](os-rice/DESIGN.md) and
-[`os-rice/windows-rice/README.md`](os-rice/windows-rice/README.md). That
-split is correct and **stays as-is**: this plan does not touch either tree.
+`os-rice/` (POSIX sh, mainstream Linux distros) already covers "ricing every
+OS" for anything with a real shell and a real package manager — see
+[`os-rice/DESIGN.md`](os-rice/DESIGN.md). This plan does not touch that tree.
+
+**Windows is different from the original version of this plan.** Windows
+used to have its own separate, plain-PowerShell tree (`os-rice/windows-rice/`)
+alongside this C core, on the theory that an ordinary Win10/11 box didn't
+need the C core at all. That tree has since been retired: its 4 modules,
+its Windows-native `osr-rice` theme, its `windows.map`, and its
+scoop-bootstrap/env-refresh logic were all ported into the C core, which is
+now the *only* Windows rice implementation this repo ships — see decision 8
+below for why and what changed.
 
 Two targets fall outside what a shell can reach at all:
 
@@ -98,17 +104,24 @@ level as `install.sh`. Reasons this won out over the segregated tree:
   in the matching `lib/*.c` file. That only stays a per-file decision if the
   C and sh files already live together — a segregated tree would need a
   wholesale migration first.
-- **`windows.map`/`windows-rice/` reuse falls out for free.** `lib/winpkg.c`
-  reads the *existing* `windows-rice/windows.map` file and ports the
-  *existing* `windows-rice/src/pkg.ps1` dispatch logic rather than inventing
-  a second package-name mapping — only possible because nothing was moved
-  out of `windows-rice/`.
+- **`windows.map`/`windows-rice/` reuse falls out for free.** At the time
+  this decision was made, `lib/winpkg.c` read the *existing*
+  `windows-rice/windows.map` file and ported the *existing*
+  `windows-rice/src/pkg.ps1` dispatch logic rather than inventing a second
+  package-name mapping — only possible because nothing was moved out of
+  `windows-rice/` yet. **Superseded by decision 8**: `windows-rice/` was
+  later ingested and deleted, and `windows.map` now lives at
+  `os-rice/windows.map` directly — this bullet is kept as the historical
+  reasoning for why the interleaved layout (decision 5 itself) was chosen,
+  not as a current description of where the file lives.
 This does not change decision 1-3's reasoning (C, narrow scope, XP floor via
 `_WIN32_WINNT=0x0501`) or the "does not touch `os-rice/`'s *behavior*"
-intent — `install.sh`, `lib/net.sh`, and `windows-rice/` are all untouched
-and still the primary path; only *where new files land* changed, and only
-because it serves the same "later, continue consuming and rewriting Linux
-modules" goal the original layout was also trying to serve.
+intent — `install.sh` and `lib/net.sh` are untouched and still the primary
+path on Linux; only *where new files land* changed, and only because it
+serves the same "later, continue consuming and rewriting Linux modules"
+goal the original layout was also trying to serve. (`windows-rice/` itself
+was untouched *at the time this decision was written* — see decision 8 for
+what changed there since.)
 
 **6. Decided: build with `nob.h` (vendored), not a Makefile.**
 The first working version of this used a plain Makefile. Reconsidered
@@ -153,11 +166,65 @@ install.sh's `--module`), and a standalone `wallpaper.exe`
 run). `osr.ps1`'s `theme`/`wallpaper`/`module`/`switch` verbs, previously
 "not yet implemented," now dispatch to these for real.
 
+**8. Decided: ingest `windows-rice/` fully into the C core, then retire it.**
+Decisions 1-7 treated the C core as a *fallback* tier — `windows-rice/`
+(plain PowerShell) stayed the primary Windows path, and this plan explicitly
+said it "does not touch" that tree. That framing stopped making sense once
+decision 7 had already ported `windows-rice/modules/*.ps1` function-for-
+function: at that point the C core and `windows-rice/` were two copies of
+the same four-module rice, one of them compiled and tested, the other not —
+exactly the kind of drift-prone duplication this repo avoids everywhere
+else (`DESIGN.md`'s own "distro variance lives in exactly one place"
+principle, applied here to "Windows rice lives in exactly one place"). This
+session finished the ingestion and deleted `windows-rice/`:
+- **`windows.map`** moved to `os-rice/windows.map` (was
+  `windows-rice/windows.map`); `lib/winpkg.c` and `install.c`/`modules.c`
+  read it from there now.
+- **The `osr-rice` theme** (a Windows-native palette plus the one
+  Windows-only asset, `config/oh-my-posh/M365Princess++.omp.json`) moved to
+  `os-rice/themes/osr-rice/`, alongside every Linux theme — it renders
+  through the exact same `lib/theme_render.c` path as `nord`/`gruvbox`/etc.
+  now, not a separate Windows-only theme root. `modules.c`'s
+  `module_oh_my_posh` no longer needs a second `themes_root` parameter for
+  this reason.
+- **`Install-Scoop` (pkg.ps1) and `Update-SessionEnvironment` (common.ps1)**
+  — the two pieces decision 7's port had left out — are now real:
+  `lib/winpkg.c`'s `osr_winpkg_bootstrap_scoop` (installs scoop via
+  `irm get.scoop.sh | iex` when no package manager is present at all) and
+  `osr_winpkg_refresh_env` (re-reads Machine + User environment variables,
+  including PATH, from the registry after every install attempt, so a
+  package a manager just installed is visible to the rest of the same
+  `install.exe` run without a new shell).
+- **`ui.sh`'s `run_step` spinner** is now ported too (`osr_run_step` in
+  `lib/ui.c`) — a live-repainting status block (dimmed tail of the running
+  command's own output, a spinner line last) that collapses to `[ok]`/`[!!]
+  desc` on completion, off a TTY (piped output, or `OSR_VERBOSE` set) falls
+  back to a single plain info line + streamed output, matching `ui.sh`'s
+  own auto-degrade. `lib/winpkg.c`'s three package-manager `system()` calls
+  now run through it. One deliberate behavior difference from the sh
+  original: `osr_run_step` returns the exit code instead of calling
+  `osr_error()` (fatal, process-exiting) on failure — see `ui.h`'s header
+  comment for why forcing sh's "one fatal path" here would have broken the
+  non-fatal scoop-then-choco-then-winget fallback `windows-rice/src/pkg.ps1`
+  already established and this C core already mirrors.
+- **What did NOT get ported, on purpose** (permanent gaps, not oversights):
+  `fonts.ps1`'s manual GitHub-zip-download-and-register fallback (only
+  reachable when neither scoop nor choco is present; writing a ZIP
+  decompressor in C89 for that corner is disproportionate to the value —
+  `lib/fonts.h`'s header comment already flagged this before decision 8);
+  `config.ps1`'s `-Ask` interactive confirm-before-overwrite mode (the C
+  core always overwrites, same default `config.ps1` itself already used);
+  `rice.ps1`'s `-Save` direction (pulling a live installed config back into
+  the repo) — `install.sh` never had this concept either, so porting it
+  would be a new feature, not a port.
+
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
-by three different pinned toolchains for three different reach targets, kept
-as the *fallback* tier under `os-rice/` and `windows-rice/`, which remain the
-primary path for everything that already has a real shell.
+by three different pinned toolchains for three different reach targets —
+except on Windows specifically, where, after decision 8, it is no longer a
+*fallback* tier but the one Windows rice implementation this repo ships.
+`os-rice/` (POSIX sh) remains the primary path for Linux, untouched by any
+of this.
 
 ---
 
@@ -166,8 +233,8 @@ primary path for everything that already has a real shell.
 ### Scope: what the C core does and does not do
 
 **Does:** parse a `rice.list`/`theme.list` (same plain `key: value` format
-`os-rice/lib/theme.sh` and `windows-rice/src/theme.ps1` already read — see
-[`os-rice/DESIGN.md` §6b](os-rice/DESIGN.md)), branch on OS/arch, dispatch
+`os-rice/lib/theme.sh` reads on Linux and `lib/theme_list.c` reads on
+Windows — see [`os-rice/DESIGN.md` §6b](os-rice/DESIGN.md)), branch on OS/arch, dispatch
 package installs to whatever's actually present (`winget` if found, else a
 direct download; `apt`/`pacman`/`apk` if found, else nothing — legacy/bare
 targets often have no package manager, only "fetch and place a file"),
@@ -179,14 +246,15 @@ DE/session logic, or anything that assumes a Linux desktop. XP and bare
 embedded boards get a minimal rice: shell config, a prompt, a few CLI
 tools, a theme. No Hyprland, no Wayland, no GPU probing.
 
-**Exception, decided in decision 7:** the C core *does* run
-`windows-rice`'s own 4 modules (fastfetch, wezterm, pwsh, oh-my-posh) —
-`modules.c`. That is not the ~70-module tree this section rules out; it is
-`windows-rice`'s already-decided, already-finite Windows module set,
-ported rather than reinvented. No Linux module gets a C port under this
-rule; a *sixth* Windows module would need a person to write it (like the
-first 4 were), not a generic framework to auto-generate it (see "Not
-doing" below, which still holds).
+**Exception, decided in decision 7, now the whole Windows story per
+decision 8:** the C core runs the 4 Windows modules (fastfetch, wezterm,
+pwsh, oh-my-posh) — `modules.c`. That is not the ~70-module tree this
+section rules out; it is the same already-decided, already-finite Windows
+module set the now-retired `windows-rice/` tree had, ported rather than
+reinvented. No Linux module gets a C port under this rule; a *sixth*
+Windows module would need a person to write it (like the first 4 were),
+not a generic framework to auto-generate it (see "Not doing" below, which
+still holds).
 
 ### Source layout
 
@@ -196,6 +264,9 @@ instead of in a separate `universal-core/` tree. What actually exists today:
 
 ```
 os-rice/
+  windows.map           logical package name -> real id per manager
+                        (scoop/choco/winget), read by lib/winpkg.c. Ingested
+                        from the retired windows-rice/windows.map (decision 8).
   install.c            CLI entry, C port of install.sh: rice.list -> package
                         + module resolution, `--apply` to actually install,
                         `--theme-only --theme <name>` (hotkey-safe re-theme,
@@ -204,16 +275,26 @@ os-rice/
                         --list/--next/set) -- separate from install.exe on
                         purpose, same separation the sh originals have
   modules.c / modules.h the finite Windows module set (fastfetch, wezterm,
-                        pwsh, oh-my-posh), C ports of windows-rice's own
-                        modules/*.ps1 -- see decision 7 and this file's own
-                        header comment for the exact sh/ps1-to-C mapping
+                        pwsh, oh-my-posh) -- see decision 7/8 and this
+                        file's own header comment for the exact mapping
+  themes/
+    osr-rice/            a Windows-native palette (theme.list + the one
+                        Windows-only asset, config/oh-my-posh/
+                        M365Princess++.omp.json) -- ingested from the
+                        retired windows-rice/themes/osr-rice/ (decision 8),
+                        lives alongside nord/gruvbox/etc. now, renders
+                        through the same lib/theme_render.c path as any of
+                        them
   lib/
     net.c / net.h       C port of lib/net.sh: URL/header parsing (portable,
                         no OS dependency) + WinInet-backed fetch (Windows
                         only so far; the #else branch is a documented stub,
                         landing spot for a native Linux port later)
-    winpkg.c / winpkg.h C port of windows-rice/src/pkg.ps1: windows.map
-                        lookup + scoop -> choco -> winget dispatch. NOT a
+    winpkg.c / winpkg.h windows.map lookup + scoop -> choco -> winget
+                        dispatch, scoop bootstrap (osr_winpkg_bootstrap_scoop)
+                        + registry env refresh (osr_winpkg_refresh_env) --
+                        the full package half of the retired windows-rice/
+                        src/pkg.ps1 + src/common.ps1 (decision 8). NOT a
                         port of lib/pkg.sh -- that's a different package
                         model (apt/pacman/apk), still POSIX-sh-only
     manifest.c / manifest.h  rice.list parser (the `theme:`/`themes:`/
@@ -222,35 +303,31 @@ os-rice/
                         parse theme.list's own shape -- that's theme_list.c.
     theme_list.c / .h   theme.list parser (meta fields + `color:`/`config:`
                         multi-valued lines), C port of lib/theme.sh's
-                        _osr_theme_lines/osr_theme_meta/osr_theme_color and
-                        windows-rice/src/theme.ps1's Get-ThemeListLines/
-                        Get-ThemePalette -- the third parser of this format
+                        _osr_theme_lines/osr_theme_meta/osr_theme_color --
+                        the one parser of this format now (decision 8)
     theme_render.c/.h   `{{role}}`/`{{role_rgb}}`/`{{role_dec}}`/
                         `{{role_sgr}}` template substitution + the literal-
                         file-then-render layer resolution chain, C port of
-                        lib/theme.sh's _osr_theme_sed and windows-rice/src/
-                        theme.ps1's Expand-ThemeTemplate/Get-ThemeSource/
-                        Install-ThemeLayer. Verified against a real template
-                        (wezterm/wezterm-theme.toml.tmpl) + real theme
-                        (themes/nord), not only a synthetic fixture.
+                        lib/theme.sh's _osr_theme_sed. Verified against a
+                        real template (wezterm/wezterm-theme.toml.tmpl) +
+                        real theme (themes/nord), not only a synthetic fixture.
     config_copy.c / .h  `~` expansion + bounded file copy (parent dirs
-                        created as needed), C port of windows-rice/src/
-                        config.ps1's Copy-ConfigEntry (file half only)
+                        created as needed)
     fonts.c / fonts.h   Nerd Font install: registry "already installed"
-                        check + scoop/choco dispatch, C port of the
-                        scoop/choco half of windows-rice/src/fonts.ps1's
-                        Install-NerdFont (the manual GitHub-zip fallback is
-                        a documented, not-yet-ported gap -- see the file)
+                        check + scoop/choco dispatch (the manual GitHub-zip
+                        fallback is a documented, permanent scope cut -- see
+                        decision 8 and the file's own header comment)
     wallpaper.c / .h    theme wallpaper library + apply +
                         SystemParametersInfo live-set, C port of the
-                        wallpaper half of lib/config.sh (windows-rice had
-                        nothing to port for this -- fresh port from sh)
+                        wallpaper half of lib/config.sh (fresh port from sh,
+                        windows-rice never had this)
     state.c / state.h   `%USERPROFILE%\.config\osr\state` key=value reader/
                         writer, C port of lib/state.sh
     ui.c / ui.h         colored `[INFO]`/`[WARN]`/`[ERROR]`/`[DONE]` status
-                        lines + step counter, C port of lib/log.sh (+ ui.sh's
-                        step counter). NOT ported: ui.sh's live-repainting
-                        spinner window -- a documented scope cut, see ui.h
+                        lines + step counter + osr_run_step (the ui.sh
+                        live-repainting spinner block, ported in full as of
+                        decision 8 -- see ui.h's header comment for the one
+                        deliberate behavior difference from the sh original)
   test/
     c_test.h            tiny C89 assertion micro-framework (ok/fail/finish,
                         same shape as test/lib.sh, nothing generated between
@@ -271,8 +348,9 @@ os-rice/
                         used (see decision 6). `gcc -o nob.exe nob.c` once,
                         then `nob.exe` (builds install.exe + wallpaper.exe)
                         / `nob.exe test` / `nob.exe clean`.
-  osr.ps1               Windows front end for this tier, mirrors ./osr in
-                        full now (install/switch/theme/wallpaper/module/
+  osr.ps1               the Windows front end -- the only one now that
+                        windows-rice/ is retired (decision 8) -- mirrors
+                        ./osr in full (install/switch/theme/wallpaper/module/
                         list/modules/test). Bootstraps nob.exe/install.exe/
                         wallpaper.exe itself if they don't exist yet.
   osr.bat               thin cmd.exe launcher for osr.ps1
@@ -307,7 +385,7 @@ separate build:
 
 | Target | Toolchain | `_WIN32_WINNT` / libc | Notes |
 |---|---|---|---|
-| Win10/11 | current MSYS2 mingw-w64 or MSVC | UCRT | no constraints, could also just call `windows-rice/` instead — this tier exists only if a rice needs the same C core for consistency |
+| Win10/11 | current MSYS2 mingw-w64 or MSVC | UCRT | no constraints -- this is also the only Windows rice this repo ships now (decision 8), not an optional extra tier |
 | Win7 | current mingw-w64 | `0x0601`, UCRT or msvcrt | works today, no patching |
 | WinXP | **own pinned/patched mingw-w64**, Dockerized (`toolchains/xp.Dockerfile`) | `0x0501`, `msvcrt.dll`, no `winpthread`, no C++ stdlib | the one genuinely custom toolchain in this plan |
 | Linux, common arch | `musl-gcc`, static | musl | x86_64/aarch64/armv7 covered by any current distro's musl toolchain |
@@ -578,16 +656,22 @@ to point at).
 - **Porting the ~70 existing Linux modules or the DE/Hyprland stack to this
   tier.** XP and bare embedded boards get a minimal shell+prompt+theme rice,
   not a desktop. Out of scope by definition of what these targets even are.
-  (This still holds after Task 1.5/decision 7: the 4 modules `modules.c`
-  ports are `windows-rice`'s own already-finite Windows set, not any of
+  (This still holds after Task 1.5/decisions 7-8: the 4 modules `modules.c`
+  ports are the Windows rice's own already-finite module set, not any of
   these ~70 Linux ones.)
 - **Pre-building cross-toolchains for architectures with no named target
   device.** Only stand up an obscure-arch toolchain against Task 3.1's
   concrete, real board — otherwise this becomes an unbounded task list for
   hardware nobody is using.
-- **Replacing `os-rice/` or `windows-rice/` with this C core.** Both already
-  work, are past MVP, and are the right tool wherever a real shell exists.
-  This plan only fills the gap they structurally cannot reach.
+- **Replacing `os-rice/` with this C core.** `os-rice/` (POSIX sh) already
+  works, is past MVP, and is the right tool wherever a real shell exists —
+  this plan only fills the gap it structurally cannot reach. (Windows is the
+  one place this bullet no longer applies exactly as originally written:
+  decision 8 *did* replace `windows-rice/`, a plain-PowerShell tree with no
+  compiled core underneath, with this C core plus its `osr.ps1` front end —
+  see that decision for why duplicating the same 4-module rice in two
+  untested-against-each-other trees stopped being the right call. `os-rice/`
+  itself is untouched.)
 - **A general plugin/module framework for the C core mirroring `os-rice/modules/`.**
   YAGNI at this scope — the C core covers a handful of CLI tools and a
   theme, not ~70 apps. Revisit only if a second contributor needs it (same

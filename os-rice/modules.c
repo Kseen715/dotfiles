@@ -246,7 +246,7 @@ static int module_pwsh(const char *repo_root, const char *map_path, const char *
     return 1;
 }
 
-static int module_oh_my_posh(const char *repo_root, const char *windows_themes_root, const char *map_path,
+static int module_oh_my_posh(const char *repo_root, const char *themes_root, const char *map_path,
                               const char *theme, int theme_only) {
     char themes_path[600];
     char dest[700];
@@ -265,15 +265,15 @@ static int module_oh_my_posh(const char *repo_root, const char *windows_themes_r
     }
 
     copy_bounded(use_theme, sizeof(use_theme), theme);
-    if (!osr_theme_layer_source(windows_themes_root, repo_root, "oh-my-posh", "M365Princess++.omp.json",
+    if (!osr_theme_layer_source(themes_root, repo_root, "oh-my-posh", "M365Princess++.omp.json",
                                  use_theme, layer_src, sizeof(layer_src), &is_temp)) {
         if (strcmp(use_theme, "osr-rice") == 0) {
-            osr_warn("oh-my-posh: theme 'osr-rice' ships no oh-my-posh config (windows-rice/themes/osr-rice/config/oh-my-posh/)");
+            osr_warn("oh-my-posh: theme 'osr-rice' ships no oh-my-posh config (themes/osr-rice/config/oh-my-posh/)");
             return 0;
         }
         osr_warn("oh-my-posh: theme '%s' ships no oh-my-posh config; using 'osr-rice' -- the only prompt defined so far", use_theme);
         copy_bounded(use_theme, sizeof(use_theme), "osr-rice");
-        if (!osr_theme_layer_source(windows_themes_root, repo_root, "oh-my-posh", "M365Princess++.omp.json",
+        if (!osr_theme_layer_source(themes_root, repo_root, "oh-my-posh", "M365Princess++.omp.json",
                                      use_theme, layer_src, sizeof(layer_src), &is_temp)) {
             osr_warn("oh-my-posh: theme 'osr-rice' ships no oh-my-posh config either");
             return 0;
@@ -293,20 +293,16 @@ static int module_oh_my_posh(const char *repo_root, const char *windows_themes_r
 static int dispatch(const char *repo_root, const char *name, const char *theme, int theme_only) {
     char os_rice_root[600];
     char themes_root[600];
-    char windows_rice_root[600];
-    char windows_themes_root[600];
     char map_path[700];
 
     path_join(os_rice_root, sizeof(os_rice_root), repo_root, "os-rice");
     path_join(themes_root, sizeof(themes_root), os_rice_root, "themes");
-    path_join(windows_rice_root, sizeof(windows_rice_root), os_rice_root, "windows-rice");
-    path_join(windows_themes_root, sizeof(windows_themes_root), windows_rice_root, "themes");
-    path_join(map_path, sizeof(map_path), windows_rice_root, "windows.map");
+    path_join(map_path, sizeof(map_path), os_rice_root, "windows.map");
 
     if (strcmp(name, "fastfetch") == 0) return module_fastfetch(repo_root, themes_root, map_path, theme, theme_only);
     if (strcmp(name, "wezterm") == 0) return module_wezterm(repo_root, themes_root, map_path, theme, theme_only);
     if (strcmp(name, "pwsh") == 0) return module_pwsh(repo_root, map_path, theme, theme_only);
-    if (strcmp(name, "oh-my-posh") == 0) return module_oh_my_posh(repo_root, windows_themes_root, map_path, theme, theme_only);
+    if (strcmp(name, "oh-my-posh") == 0) return module_oh_my_posh(repo_root, themes_root, map_path, theme, theme_only);
 
     return 0;
 }

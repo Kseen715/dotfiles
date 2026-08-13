@@ -2,10 +2,11 @@
 # mirrors ./osr (the POSIX dispatcher: install/switch/theme/wallpaper/
 # module/list/themes/modules/test) scaled to what the C core actually
 # implements so far -- see install.c's own header comment and
-# PLAN_UNIVERSAL.md for the exact scope line. This is the entry point for
-# the C-core tier specifically (XP/Win7-without-winget fallback); on an
-# ordinary Win10/11 box, windows-rice/osr.ps1 is still the primary tool
-# (PLAN_UNIVERSAL.md's decision log).
+# PLAN_UNIVERSAL.md for the exact scope line. This is now the ONE Windows
+# rice entry point for every Windows version this repo supports (10/11
+# today, XP/Win7 once Phase 0/2 land) -- the former windows-rice/ tree
+# (plain PowerShell, no C core underneath) has been retired and fully
+# ingested here, see PLAN_UNIVERSAL.md decision 8.
 #
 #   osr.ps1 install <rice> [-Theme <name>] [-Apply]
 #                                        resolve (default) or apply a rice

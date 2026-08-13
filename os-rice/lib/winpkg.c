@@ -102,6 +102,103 @@ int osr_winpkg_lookup(const char *map_path, const char *name, osr_winpkg_spec *o
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "ui.h"
+
+/* refresh_one_scope -- copy every value under an Environment registry key
+ * (HKLM's Machine scope or HKCU's User scope) into this process's own
+ * environment. C port of common.ps1's Update-SessionEnvironment: a
+ * package manager that just installed something (e.g. oh-my-posh setting
+ * POSH_THEMES_PATH) only writes the registry -- this process would never
+ * see it without re-reading it back out, normally requiring a new shell.
+ * PATH itself is skipped here and rebuilt separately below, since the
+ * running value is Machine;User joined, not either alone.
+ */
+static void refresh_one_scope(HKEY root, const char *subkey) {
+    HKEY key;
+    DWORD index;
+    char name[256];
+    char value[4096];
+
+    if (RegOpenKeyExA(root, subkey, 0, KEY_READ, &key) != ERROR_SUCCESS) return;
+
+    index = 0;
+    for (;;) {
+        DWORD name_len = (DWORD)sizeof(name);
+        DWORD value_len = (DWORD)sizeof(value);
+        DWORD type;
+        LONG rc = RegEnumValueA(key, index, name, &name_len, NULL, &type, (BYTE *)value, &value_len);
+        if (rc == ERROR_NO_MORE_ITEMS) break;
+        if (rc != ERROR_SUCCESS) break;
+
+        /* RegEnumValueA does not guarantee a null terminator for a REG_SZ
+         * value that was stored without one -- force one within bounds. */
+        if (value_len >= sizeof(value)) value_len = sizeof(value) - 1;
+        value[value_len] = '\0';
+
+        if ((type == REG_SZ || type == REG_EXPAND_SZ) && _stricmp(name, "Path") != 0) {
+            SetEnvironmentVariableA(name, value);
+        }
+        index++;
+    }
+
+    RegCloseKey(key);
+}
+
+static void refresh_path(void) {
+    char machine[4096];
+    char user[4096];
+    char joined[8192];
+    HKEY key;
+    DWORD len;
+
+    machine[0] = '\0';
+    user[0] = '\0';
+
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+            "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+            0, KEY_READ, &key) == ERROR_SUCCESS) {
+        len = (DWORD)sizeof(machine) - 1;
+        if (RegQueryValueExA(key, "Path", NULL, NULL, (BYTE *)machine, &len) != ERROR_SUCCESS) len = 0;
+        machine[len] = '\0';
+        RegCloseKey(key);
+    }
+
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Environment", 0, KEY_READ, &key) == ERROR_SUCCESS) {
+        len = (DWORD)sizeof(user) - 1;
+        if (RegQueryValueExA(key, "Path", NULL, NULL, (BYTE *)user, &len) != ERROR_SUCCESS) len = 0;
+        user[len] = '\0';
+        RegCloseKey(key);
+    }
+
+    sprintf(joined, "%s;%s", machine, user);
+    SetEnvironmentVariableA("Path", joined);
+}
+
+/* osr_winpkg_refresh_env -- re-read Machine + User environment variables
+ * (including PATH) from the registry into this process. Called after
+ * every install attempt below, same point Update-SessionEnvironment is
+ * called from pkg.ps1.
+ */
+static void osr_winpkg_refresh_env(void) {
+    refresh_one_scope(HKEY_LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+    refresh_one_scope(HKEY_CURRENT_USER, "Environment");
+    refresh_path();
+}
+
+/* osr_winpkg_bootstrap_scoop -- install scoop itself (no admin required),
+ * the one no-admin fallback pkg.ps1's Install-RicePackage reaches for when
+ * NONE of scoop/choco/winget are present at all. Same command scoop's own
+ * docs give (`irm get.scoop.sh | iex`), run through cmd.exe -> powershell
+ * so it works even from an old cmd.exe-only environment.
+ */
+static void osr_winpkg_bootstrap_scoop(void) {
+    if (osr_winpkg_have_command("scoop")) return;
+    osr_run_step("installing scoop (no admin required)",
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        "\"iwr -useb get.scoop.sh | iex\"");
+    osr_winpkg_refresh_env();
+}
+
 int osr_winpkg_have_command(const char *name) {
     static const char *exts[4] = { NULL, ".exe", ".cmd", ".bat" };
     unsigned long i;
@@ -123,12 +220,15 @@ void osr_winpkg_available_managers(int *has_scoop, int *has_choco, int *has_wing
 /* Same scoop -> choco -> winget preference order as pkg.ps1's
  * Install-RicePackage: scoop needs no admin and is fastest for CLI tools,
  * choco covers what scoop's buckets miss, winget is the built-in fallback.
+ * If none of the three are present at all, bootstraps scoop first (the
+ * one no-admin option), same as Install-RicePackage's own fallback.
  */
 int osr_winpkg_install(const char *map_path, const char *name, const char *test_command) {
     osr_winpkg_spec spec;
     int has_scoop, has_choco, has_winget;
     const char *tc;
     char cmd[600];
+    char desc[200];
 
     tc = (test_command != NULL) ? test_command : name;
     if (osr_winpkg_have_command(tc)) return 1;
@@ -136,18 +236,34 @@ int osr_winpkg_install(const char *map_path, const char *name, const char *test_
     if (!osr_winpkg_lookup(map_path, name, &spec)) return 0;
 
     osr_winpkg_available_managers(&has_scoop, &has_choco, &has_winget);
+    if (!has_scoop && !has_choco && !has_winget) {
+        osr_winpkg_bootstrap_scoop();
+        osr_winpkg_available_managers(&has_scoop, &has_choco, &has_winget);
+    }
 
     if (has_scoop && spec.has_scoop) {
         sprintf(cmd, "scoop install %s", spec.scoop);
-        if (system(cmd) == 0 && osr_winpkg_have_command(tc)) return 1;
+        sprintf(desc, "%s via scoop (%s)", name, spec.scoop);
+        if (osr_run_step(desc, cmd) == 0) {
+            osr_winpkg_refresh_env();
+            if (osr_winpkg_have_command(tc)) return 1;
+        }
     }
     if (has_choco && spec.has_choco) {
         sprintf(cmd, "choco install %s -y", spec.choco);
-        if (system(cmd) == 0 && osr_winpkg_have_command(tc)) return 1;
+        sprintf(desc, "%s via choco (%s)", name, spec.choco);
+        if (osr_run_step(desc, cmd) == 0) {
+            osr_winpkg_refresh_env();
+            if (osr_winpkg_have_command(tc)) return 1;
+        }
     }
     if (has_winget && spec.has_winget) {
         sprintf(cmd, "winget install --id %s -e --accept-source-agreements --accept-package-agreements", spec.winget);
-        if (system(cmd) == 0 && osr_winpkg_have_command(tc)) return 1;
+        sprintf(desc, "%s via winget (%s)", name, spec.winget);
+        if (osr_run_step(desc, cmd) == 0) {
+            osr_winpkg_refresh_env();
+            if (osr_winpkg_have_command(tc)) return 1;
+        }
     }
 
     return 0;

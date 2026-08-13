@@ -7,11 +7,12 @@
 # - oh-my-posh
 # - fastfetch
 #
-# Both installed and configured by os-rice/windows-rice/rice.ps1 (scoop ->
-# choco -> winget). fastfetch's config.jsonc is theme-owned -- see
-# os-rice/windows-rice/themes/osr-rice/config/fastfetch/config.jsonc -- and
-# installed to ~\.config\fastfetch\, fastfetch's own first config search path,
-# so the bare `fastfetch` call below finds it with no -c flag needed.
+# Both installed and configured by os-rice/osr.ps1 (scoop -> choco ->
+# winget, see os-rice/modules.c). fastfetch's config.jsonc is theme-owned --
+# rendered from fastfetch/config.jsonc.tmpl against whichever theme's
+# os-rice/themes/<theme>/theme.list is active -- and installed to
+# ~\.config\fastfetch\, fastfetch's own first config search path, so the
+# bare `fastfetch` call below finds it with no -c flag needed.
 
 
 # Run `$profile` in PS to get place where you need to put this file
