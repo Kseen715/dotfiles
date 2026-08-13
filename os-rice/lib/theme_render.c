@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define OSR_MAX_REPLACEMENTS 200
+#define OSR_MAX_REPLACEMENTS 320
 #define OSR_REPL_NAME_LEN    80
 #define OSR_REPL_VALUE_LEN   300
 

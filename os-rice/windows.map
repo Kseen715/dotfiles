@@ -14,4 +14,5 @@
 pwsh       = scoop:pwsh choco:powershell-core winget:Microsoft.PowerShell
 wezterm    = scoop:wezterm choco:wezterm winget:wez.wezterm
 oh-my-posh = scoop:oh-my-posh choco:oh-my-posh winget:JanDeDobbeleer.OhMyPosh
+starship   = scoop:starship choco:starship winget:Starship.Starship
 fastfetch  = scoop:fastfetch choco:fastfetch winget:Fastfetch-cli.Fastfetch

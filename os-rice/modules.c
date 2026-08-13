@@ -11,7 +11,14 @@
  *   pwsh.ps1        -> modules/pwsh.c         package + dotfiles-owned profile
  *                                             (no theme layer)
  *   oh-my-posh.ps1  -> modules/oh-my-posh.c   package + font + theme-owned
- *                                             M365Princess++.omp.json
+ *                                             M365Princess++.omp.json, PLUS
+ *                                             Starship (package + font +
+ *                                             composed starship.toml, same
+ *                                             as modules/starship.sh on
+ *                                             Linux) -- the active pwsh
+ *                                             prompt engine; oh-my-posh's
+ *                                             own theme is kept as a
+ *                                             switch-back-able fallback.
  */
 #include "modules.h"
 
