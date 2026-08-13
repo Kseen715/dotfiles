@@ -160,9 +160,9 @@ static void list_modules(const char *modules_dir) {
 static void usage(void) {
     printf(
         "Usage:\n"
-        "  install [--root <path>] [--theme <name>] [--apply] <rice>\n"
-        "                              resolve (default) or apply a rice\n"
-        "  install --module [--theme <name>] [--apply] <name>...\n"
+        "  install [--root <path>] [--theme <name>] <rice>\n"
+        "                              install a rice\n"
+        "  install --module [--theme <name>] <name>...\n"
         "                              install module(s) directly, no rice\n"
     );
     printf(
@@ -178,8 +178,6 @@ static void usage(void) {
         "  <rice>        name of a directory under rices/\n"
         "  --theme <name> which theme paints module configs (default: the rice's\n"
         "                own `theme:`, else '" OSR_DEFAULT_THEME "')\n"
-        "  --apply       actually install packages/configs (default is a dry-run\n"
-        "                plan -- nothing is installed or written)\n"
         "  --root <path> os-rice root (default: the directory this program is in)\n"
         "\n"
     );
@@ -194,41 +192,26 @@ static void usage(void) {
 /* run_one_module -- dispatch a single module name: modules.c's real
  * install if known, else a plain windows.map package resolution (package
  * only, no config -- this is the fallback for any rice.list entry that
- * names a Linux-only module modules.c has no port of).
+ * names a Linux-only module modules.c has no port of). Always executes
+ * for real, same as install.sh's own run_module -- there is no dry-run
+ * concept on the sh side, so there isn't one here either (see
+ * PLAN_UNIVERSAL.md decision 9).
  */
 static void run_one_module(const char *repo_root, const char *map_path, const char *name,
-                            const char *theme, int do_apply) {
+                            const char *theme) {
     if (osr_known_module(name)) {
-        if (do_apply) {
-            if (osr_run_module(repo_root, name, theme)) {
-                /* module itself already printed an osr_success/osr_warn line */
-            } else {
-                osr_warn("module '%s' failed -- skipped", name);
-            }
+        if (osr_run_module(repo_root, name, theme)) {
+            /* module itself already printed an osr_success/osr_warn line */
         } else {
-            osr_info("  %-14s would install + theme as '%s' (fastfetch/wezterm/pwsh/oh-my-posh module)", name, theme);
+            osr_warn("module '%s' failed -- skipped", name);
         }
         return;
     }
 
-    {
-        int already = osr_winpkg_have_command(name);
-        osr_winpkg_spec spec;
-        int in_map = osr_winpkg_lookup(map_path, name, &spec);
-
-        if (do_apply) {
-            if (osr_winpkg_install(map_path, name, NULL)) {
-                osr_success("  %-14s installed", name);
-            } else {
-                osr_warn("  %-14s FAILED (no windows.map entry, or every available manager failed)", name);
-            }
-        } else if (already) {
-            osr_info("  %-14s already installed", name);
-        } else if (in_map) {
-            osr_info("  %-14s would install via windows.map", name);
-        } else {
-            osr_info("  %-14s no windows.map entry -- skipped (Linux module, no Windows package yet)", name);
-        }
+    if (osr_winpkg_install(map_path, name, NULL)) {
+        osr_success("  %-14s installed", name);
+    } else {
+        osr_warn("  %-14s FAILED (no windows.map entry, or every available manager failed)", name);
     }
 }
 
@@ -241,7 +224,7 @@ static void record_applied(const char *rice_name, const char *theme) {
 }
 
 static int run_rice(const char *root, const char *repo_root, const char *rice_name,
-                     const char *theme_override, int do_apply) {
+                     const char *theme_override) {
     char rices_dir[OSR_MAX_PATH_C];
     char rice_dir[OSR_MAX_PATH_C];
     char rice_list_path[OSR_MAX_PATH_C];
@@ -272,25 +255,23 @@ static int run_rice(const char *root, const char *repo_root, const char *rice_na
     osr_info("modules=%lu", m.module_count);
 
     for (i = 0; i < m.module_count; i++) {
-        run_one_module(repo_root, map_path, m.modules[i], theme, do_apply);
+        run_one_module(repo_root, map_path, m.modules[i], theme);
     }
 
-    if (do_apply) {
-        osr_apply_theme_wallpaper(theme_dir, theme);
-        record_applied(rice_name, theme);
-        osr_success("rice '%s' installed", rice_name);
-    }
+    osr_apply_theme_wallpaper(theme_dir, theme);
+    record_applied(rice_name, theme);
+    osr_success("rice '%s' installed", rice_name);
 
     return 0;
 }
 
 static int run_modules_direct(const char *repo_root, const char *map_path,
-                               char **names, int name_count, const char *theme, int do_apply) {
+                               char **names, int name_count, const char *theme) {
     int i;
     for (i = 0; i < name_count; i++) {
-        run_one_module(repo_root, map_path, names[i], theme, do_apply);
+        run_one_module(repo_root, map_path, names[i], theme);
     }
-    if (do_apply) osr_success("module(s) processed");
+    osr_success("module(s) processed");
     return 0;
 }
 
@@ -335,7 +316,6 @@ int main(int argc, char **argv) {
     int i;
     int do_list = 0;
     int do_list_modules = 0;
-    int do_apply = 0;
     int do_help = 0;
     int module_mode = 0;
     int theme_only = 0;
@@ -358,8 +338,6 @@ int main(int argc, char **argv) {
             do_list = 1;
         } else if (strcmp(argv[i], "--list-modules") == 0) {
             do_list_modules = 1;
-        } else if (strcmp(argv[i], "--apply") == 0) {
-            do_apply = 1;
         } else if (strcmp(argv[i], "--module") == 0) {
             module_mode = 1;
         } else if (strcmp(argv[i], "--theme-only") == 0) {
@@ -375,7 +353,7 @@ int main(int argc, char **argv) {
         } else if (argv[i][0] == '-') {
             fprintf(stderr,
                 "error: unknown option: %s (this C port only implements --list, "
-                "--list-modules, --module, --theme, --theme-only, --apply, --root "
+                "--list-modules, --module, --theme, --theme-only, --root "
                 "-- see install.sh for the full set)\n",
                 argv[i]);
             return 1;
@@ -420,7 +398,7 @@ int main(int argc, char **argv) {
             return 1;
         }
         return run_modules_direct(repo_root, map_path, module_names, module_count,
-                                   theme_arg != NULL ? theme_arg : OSR_DEFAULT_THEME, do_apply);
+                                   theme_arg != NULL ? theme_arg : OSR_DEFAULT_THEME);
     }
 
     if (rice_name == NULL) {
@@ -429,5 +407,5 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    return run_rice(root, repo_root, rice_name, theme_arg, do_apply);
+    return run_rice(root, repo_root, rice_name, theme_arg);
 }

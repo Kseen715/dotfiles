@@ -8,9 +8,9 @@
 # (plain PowerShell, no C core underneath) has been retired and fully
 # ingested here, see PLAN_UNIVERSAL.md decision 8.
 #
-#   osr.ps1 install <rice> [-Theme <name>] [-Apply]
-#                                        resolve (default) or apply a rice
-#   osr.ps1 switch  <rice> [-Theme <name>] [-Apply]
+#   osr.ps1 install <rice> [-Theme <name>]
+#                                        install a rice
+#   osr.ps1 switch  <rice> [-Theme <name>]
 #                                        same engine as install -- the C core
 #                                        has no separate switch/install path
 #                                        (matches install.sh's own "switch and
@@ -20,7 +20,7 @@
 #                                        With no name: print the current theme.
 #   osr.ps1 wallpaper [<path>|-List|-Next]
 #                                        show/list/step/set the wallpaper
-#   osr.ps1 module <name>... [-Theme <name>] [-Apply]
+#   osr.ps1 module <name>... [-Theme <name>]
 #                                        install module(s) directly, no rice
 #   osr.ps1 list                        list available rices
 #   osr.ps1 modules                     list available modules
@@ -53,11 +53,11 @@ function ErrMsg([string]$msg) { Write-Host $msg -ForegroundColor Red }
 
 function Show-Usage {
     Write-Host "Usage:"
-    Write-Host "  osr.ps1 install <rice> [-Theme <name>] [-Apply]"
-    Write-Host "  osr.ps1 switch  <rice> [-Theme <name>] [-Apply]  (same engine as install)"
+    Write-Host "  osr.ps1 install <rice> [-Theme <name>]"
+    Write-Host "  osr.ps1 switch  <rice> [-Theme <name>]  (same engine as install)"
     Write-Host "  osr.ps1 theme   [<name>]         re-theme (a name) or print current (none)"
     Write-Host "  osr.ps1 wallpaper [<path>|-List|-Next]"
-    Write-Host "  osr.ps1 module <name>... [-Theme <name>] [-Apply]"
+    Write-Host "  osr.ps1 module <name>... [-Theme <name>]"
     Write-Host "  osr.ps1 list                     list available rices"
     Write-Host "  osr.ps1 modules                  list available modules"
     Write-Host "  osr.ps1 test                     build + run the C unit tests"
@@ -104,14 +104,13 @@ switch ($Command) {
     { $_ -in @("install", "switch") } {
         if (-not (Ensure-Binaries)) { exit 1 }
         if ($Rest.Count -eq 0 -or $Rest[0].StartsWith("-")) {
-            ErrMsg "osr.ps1 $Command <rice> [-Theme <name>] [-Apply]"
+            ErrMsg "osr.ps1 $Command <rice> [-Theme <name>]"
             exit 1
         }
         $rice = $Rest[0]
         $flags = @($rice)
         for ($i = 1; $i -lt $Rest.Count; $i++) {
             if ($Rest[$i] -eq "-Theme" -and $i + 1 -lt $Rest.Count) { $flags += @("--theme", $Rest[$i + 1]); $i++ }
-            elseif ($Rest[$i] -eq "-Apply") { $flags += "--apply" }
         }
         & .\install.exe @flags
         exit $LASTEXITCODE
@@ -140,14 +139,13 @@ switch ($Command) {
     "module" {
         if (-not (Ensure-Binaries)) { exit 1 }
         if ($Rest.Count -eq 0) {
-            ErrMsg "osr.ps1 module <name>... [-Theme <name>] [-Apply]"
+            ErrMsg "osr.ps1 module <name>... [-Theme <name>]"
             exit 1
         }
         $names = @()
         $flags = @("--module")
         for ($i = 0; $i -lt $Rest.Count; $i++) {
             if ($Rest[$i] -eq "-Theme" -and $i + 1 -lt $Rest.Count) { $flags += @("--theme", $Rest[$i + 1]); $i++ }
-            elseif ($Rest[$i] -eq "-Apply") { $flags += "--apply" }
             else { $names += $Rest[$i] }
         }
         & .\install.exe @flags @names

@@ -218,6 +218,31 @@ session finished the ingestion and deleted `windows-rice/`:
   the repo) — `install.sh` never had this concept either, so porting it
   would be a new feature, not a port.
 
+**9. Decided: drop `install.exe`'s dry-run-by-default `--apply` gate — it now
+always executes, matching `install.sh`.**
+`install.c` originally required an explicit `--apply` flag before a rice or
+`--module` run would install anything; without it, every module printed a
+"would install..." line and touched nothing. `install.sh` (and `osr`, its
+Linux front end) has no equivalent concept at all — `osr install <rice>` and
+`osr module <name>` always perform the install immediately, the same
+"switch and install share one idempotent engine, nothing is destructive"
+model the rest of `os-rice/DESIGN.md` relies on. The dry-run gate was never
+a documented, deliberate deviation from that — it was just how `install.c`
+happened to get written — and in practice it was a silent trap: running
+`osr.ps1 module wezterm` printed a clean-looking `[INFO] would install...`
+line with no error and no obvious next step, easy to mistake for "already
+done" rather than "nothing happened, you needed `-Apply`." Removed
+entirely: `run_one_module`/`run_rice`/`run_modules_direct` in `install.c` no
+longer take a `do_apply` flag and always take the action; the `--apply` CLI
+option is gone (an unknown option now, same as `install.sh` would treat any
+flag it doesn't implement); `osr.ps1`'s `-Apply` switch on `install`/
+`switch`/`module` is gone too, for the same reason `./osr` never had one.
+`--theme-only` is unaffected — it already always applied regardless of this
+flag, matching `install.sh --theme-only`. Net result: `osr.ps1 module
+wezterm` (no flags) now does what `osr module wezterm` already did on
+Linux — installs and themes it for real, on the first run, with no second
+flag to discover.
+
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
 by three different pinned toolchains for three different reach targets —
@@ -268,7 +293,8 @@ os-rice/
                         (scoop/choco/winget), read by lib/winpkg.c. Ingested
                         from the retired windows-rice/windows.map (decision 8).
   install.c            CLI entry, C port of install.sh: rice.list -> package
-                        + module resolution, `--apply` to actually install,
+                        + module resolution, always installs for real (no
+                        dry-run gate, matching install.sh -- decision 9),
                         `--theme-only --theme <name>` (hotkey-safe re-theme,
                         no packages), `--module <name>...` (no rice)
   wallpaper.c           standalone program, C port of wallpaper.sh (show/
@@ -544,23 +570,29 @@ to point at).
   session once `windows-rice/modules/*.ps1` turned out to be a small,
   finite, already-decided set worth porting rather than a reason to defer
   further — see decision 7.
-  - Acceptance: `install.exe <rice> --apply` installs + themes fastfetch,
-    wezterm, pwsh, and oh-my-posh for real (package + Nerd Font where
-    needed + dotfiles config + theme-rendered config); `install.exe
-    --theme-only --theme <name>` re-themes only what's already installed,
-    no packages; `install.exe --module <name>...` installs module(s)
-    without a rice; `wallpaper.exe` shows/lists/steps/sets the theme
-    wallpaper.
+  - Acceptance: `install.exe <rice>` installs + themes fastfetch, wezterm,
+    pwsh, and oh-my-posh for real (package + Nerd Font where needed +
+    dotfiles config + theme-rendered config); `install.exe --theme-only
+    --theme <name>` re-themes only what's already installed, no packages;
+    `install.exe --module <name>...` installs module(s) without a rice;
+    `wallpaper.exe` shows/lists/steps/sets the theme wallpaper. (Originally
+    written against a `--apply` flag that gated real installs behind a
+    dry-run default; that gate was removed in decision 9 so this now reads
+    "always does it," matching `install.sh`.)
   - Verification: manual smoke test on this session's own dev machine —
     `install.exe --theme-only --theme nord` correctly themed the three
     modules actually installed there (fastfetch, wezterm, oh-my-posh),
     including reproducing oh-my-posh's real "no config for this theme,
     fall back to osr-rice" warning path byte-for-byte against
-    `oh-my-posh.ps1`'s own logic. Not yet verified: a real `--apply`
-    package install (winget/scoop/choco actually installing something) —
-    every test so far either dry-ran the package step or exercised it
-    against tools already present. Not verified on a second machine or a
-    clean VM.
+    `oh-my-posh.ps1`'s own logic. A real package-manager install (winget/
+    scoop/choco actually installing something) is still unverified — every
+    test so far either exercised the dry-run plan (pre-decision-9) or ran
+    against tools already present, so the `scoop install`/`choco install`/
+    `winget install` `system()` calls themselves have not been exercised in
+    anger. `install.exe --module wezterm` was re-verified end to end after
+    decision 9 (real build, real run, `[DONE] wezterm: themed as 'xin'`) on
+    this dev machine, where wezterm was already installed — still not
+    verified on a second machine or a clean VM.
   - Files: `os-rice/modules.c`, `modules.h`, `os-rice/wallpaper.c`,
     `os-rice/lib/wallpaper.c`, `wallpaper.h`.
   - Scope: Large (was the biggest single increment of this session).
