@@ -25,13 +25,21 @@ static void copy_bounded(char *dst, unsigned long dst_sz, const char *src, unsig
     dst[src_len] = '\0';
 }
 
-const char *osr_winpkg_mgr_name(osr_winpkg_mgr mgr) {
-    switch (mgr) {
-        case OSR_WINPKG_MGR_SCOOP:  return "scoop";
-        case OSR_WINPKG_MGR_CHOCO:  return "choco";
-        case OSR_WINPKG_MGR_WINGET: return "winget";
-        default:                    return "none";
+const char *osr_winpkg_provider_name(osr_winpkg_provider provider) {
+    switch (provider) {
+        case OSR_WINPKG_PROV_SCOOP:  return "scoop";
+        case OSR_WINPKG_PROV_CHOCO:  return "choco";
+        case OSR_WINPKG_PROV_WINGET: return "winget";
+        case OSR_WINPKG_PROV_SOURCE: return "source";
+        case OSR_WINPKG_PROV_SCRIPT: return "script";
+        default:                     return "none";
     }
+}
+
+int osr_winpkg_is_manager(osr_winpkg_provider provider) {
+    return provider == OSR_WINPKG_PROV_SCOOP
+        || provider == OSR_WINPKG_PROV_CHOCO
+        || provider == OSR_WINPKG_PROV_WINGET;
 }
 
 /* -------------------------------------------------------------------------
@@ -78,32 +86,52 @@ static void strip_inline_comment(char *s) {
     }
 }
 
-/* parse_mgr_token -- `<mgr>:<id>` into out. 0 when it is not one. */
-static int parse_mgr_token(const char *tok, osr_winpkg_spec *out) {
+/* parse_provider_token -- `<provider>:<argument>` into out. 0 when it is
+ * not one. The argument means whatever that provider needs it to: a package
+ * id, a builder name, a URL.
+ */
+static int parse_provider_token(const char *tok, osr_winpkg_spec *out) {
+    static const struct { const char *name; unsigned long len; osr_winpkg_provider provider; } table[] = {
+        { "scoop",  5, OSR_WINPKG_PROV_SCOOP  },
+        { "choco",  5, OSR_WINPKG_PROV_CHOCO  },
+        { "winget", 6, OSR_WINPKG_PROV_WINGET },
+        { "source", 6, OSR_WINPKG_PROV_SOURCE },
+        { "script", 6, OSR_WINPKG_PROV_SCRIPT }
+    };
     const char *colon = strchr(tok, ':');
-    const char *id;
+    const char *arg;
     const char *slash;
-    unsigned long mgr_len;
+    unsigned long name_len;
+    unsigned long i;
 
     if (colon == NULL) return 0;
-    mgr_len = (unsigned long)(colon - tok);
-    id = colon + 1;
+    name_len = (unsigned long)(colon - tok);
+    arg = colon + 1;
 
-    if (id[0] == '\0') return 0;
-    if (strlen(id) >= sizeof(out->id)) return 0;
+    if (arg[0] == '\0') return 0;
+    if (strlen(arg) >= sizeof(out->id)) return 0;
 
-    if (mgr_len == 5 && strncmp(tok, "scoop", 5) == 0)       out->mgr = OSR_WINPKG_MGR_SCOOP;
-    else if (mgr_len == 5 && strncmp(tok, "choco", 5) == 0)  out->mgr = OSR_WINPKG_MGR_CHOCO;
-    else if (mgr_len == 6 && strncmp(tok, "winget", 6) == 0) out->mgr = OSR_WINPKG_MGR_WINGET;
-    else return 0;
+    out->provider = OSR_WINPKG_PROV_NONE;
+    for (i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+        if (name_len == table[i].len && strncmp(tok, table[i].name, name_len) == 0) {
+            out->provider = table[i].provider;
+            break;
+        }
+    }
+    if (out->provider == OSR_WINPKG_PROV_NONE) return 0;
 
-    strcpy(out->id, id);
+    strcpy(out->id, arg);
 
-    /* scoop only: `bucket/name` names a bucket that has to be added first. */
-    slash = strchr(out->id, '/');
-    if (slash != NULL && out->mgr == OSR_WINPKG_MGR_SCOOP) {
-        if (slash == out->id || slash[1] == '\0') return 0;
-        copy_bounded(out->bucket, sizeof(out->bucket), out->id, (unsigned long)(slash - out->id));
+    /* scoop only: `bucket/name` names a bucket that has to be added first.
+     * Other providers put slashes in their arguments all the time (URLs,
+     * owner/repo), so this must not apply to them. */
+    if (out->provider == OSR_WINPKG_PROV_SCOOP) {
+        slash = strchr(out->id, '/');
+        if (slash != NULL) {
+            if (slash == out->id || slash[1] == '\0') return 0;
+            copy_bounded(out->bucket, sizeof(out->bucket), out->id,
+                         (unsigned long)(slash - out->id));
+        }
     }
 
     return 1;
@@ -131,14 +159,7 @@ static int parse_rhs(char *rhs, osr_winpkg_spec *out) {
     if (tok == NULL) return OSR_WINPKG_BAD_ROW;
     if (strtok(NULL, " \t") != NULL) return OSR_WINPKG_BAD_ROW;
 
-    /* bin: is a provider like any other, not a modifier on a manager. */
-    if (strncmp(tok, "bin:", 4) == 0) {
-        if (tok[4] == '\0' || strlen(tok + 4) >= sizeof(out->bin)) return OSR_WINPKG_BAD_ROW;
-        strcpy(out->bin, tok + 4);
-        return OSR_WINPKG_OK;
-    }
-
-    if (!parse_mgr_token(tok, out)) return OSR_WINPKG_BAD_ROW;
+    if (!parse_provider_token(tok, out)) return OSR_WINPKG_BAD_ROW;
     return OSR_WINPKG_OK;
 }
 
@@ -220,6 +241,7 @@ int osr_winpkg_lookup(const char *map_path, const char *name,
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "../provide_module.h"
 #include "elevate.h"
 #include "ui.h"
 #include "winbin.h"
@@ -366,8 +388,8 @@ int osr_winpkg_have_command(const char *name) {
  * manager* -- installing packages with an already-present winget usually
  * does not).
  */
-static int mgr_bootstrap_needs_admin(osr_winpkg_mgr mgr) {
-    return mgr != OSR_WINPKG_MGR_SCOOP;
+static int mgr_bootstrap_needs_admin(osr_winpkg_provider provider) {
+    return provider != OSR_WINPKG_PROV_SCOOP;
 }
 
 /* bootstrap_scoop -- scoop's own documented installer (scoop.sh /
@@ -435,25 +457,25 @@ static int bootstrap_winget(void) {
     return 1;
 }
 
-int osr_winpkg_ensure_manager(osr_winpkg_mgr mgr) {
-    const char *exe = osr_winpkg_mgr_name(mgr);
+int osr_winpkg_ensure_manager(osr_winpkg_provider provider) {
+    const char *exe = osr_winpkg_provider_name(provider);
     char reason[200];
 
-    if (mgr == OSR_WINPKG_MGR_NONE) return 0;
+    if (!osr_winpkg_is_manager(provider)) return 0;
     if (osr_winpkg_have_command(exe)) return 1;
 
-    if (mgr_bootstrap_needs_admin(mgr) && !osr_is_admin()) {
+    if (mgr_bootstrap_needs_admin(provider) && !osr_is_admin()) {
         sprintf(reason, "%s is not installed, and installing it needs Administrator rights.", exe);
         if (!osr_elevate_now(reason)) {
             /* Declined -- bootstrap_* below prints the manual command, and
-             * the caller falls back to the row's bin: route if it has one. */
+             * the caller reports the failure. */
         }
     }
 
-    switch (mgr) {
-        case OSR_WINPKG_MGR_SCOOP:  bootstrap_scoop(); break;
-        case OSR_WINPKG_MGR_CHOCO:  if (!bootstrap_choco()) return 0; break;
-        case OSR_WINPKG_MGR_WINGET: if (!bootstrap_winget()) return 0; break;
+    switch (provider) {
+        case OSR_WINPKG_PROV_SCOOP:  bootstrap_scoop(); break;
+        case OSR_WINPKG_PROV_CHOCO:  if (!bootstrap_choco()) return 0; break;
+        case OSR_WINPKG_PROV_WINGET: if (!bootstrap_winget()) return 0; break;
         default: return 0;
     }
 
@@ -482,8 +504,8 @@ int osr_winpkg_install(const char *map_path, const char *name, const char *test_
     osr_winpkg_spec spec;
     int status;
     const char *tc;
-    char cmd[600];
-    char desc[200];
+    char cmd[900];
+    char desc[600];
 
     tc = (test_command != NULL) ? test_command : name;
     if (osr_winpkg_have_command(tc)) return 1;
@@ -498,30 +520,38 @@ int osr_winpkg_install(const char *map_path, const char *name, const char *test_
     }
     if (status != OSR_WINPKG_OK) {
         osr_warn("windows.map row '%s' is malformed: it must name exactly one provider "
-                 "-- <scoop|choco|winget>:<id> or bin:<spec>, never both", name);
+                 "-- <scoop|choco|winget>:<id>, source:<builder> or script:<url>", name);
         return 0;
     }
 
-    /* One provider, taken as written. A `bin:` row goes straight to the
-     * vendor artifact; a manager row uses that manager, installing it first
-     * if this machine does not have it yet. There is no crossover between
-     * the two: which provider serves a package is the map's decision, made
-     * per machine through @facet keys, not a runtime scramble. */
-    if (spec.mgr == OSR_WINPKG_MGR_NONE) return osr_winbin_install(spec.bin, name, tc);
+    /* One provider, taken as written. Which provider serves a package is
+     * the map's decision, made per machine through @facet keys, not a
+     * runtime scramble -- so these branches never fall through to one
+     * another. */
+    if (spec.provider == OSR_WINPKG_PROV_SOURCE) {
+        return osr_provide_run(spec.id, map_path, name, tc);
+    }
+    if (spec.provider == OSR_WINPKG_PROV_SCRIPT) {
+        if (!osr_winbin_run_script(spec.id, name)) return 0;
+        if (osr_winpkg_have_command(tc)) return 1;
+        osr_warn("%s: the install script finished but '%s' is not on PATH yet -- "
+                 "open a new shell", name, tc);
+        return 1;
+    }
 
-    if (!osr_winpkg_ensure_manager(spec.mgr)) {
+    if (!osr_winpkg_ensure_manager(spec.provider)) {
         osr_warn("  %-14s skipped: windows.map provides it through %s, which is not "
                  "installed and could not be installed",
-                 name, osr_winpkg_mgr_name(spec.mgr));
+                 name, osr_winpkg_provider_name(spec.provider));
         return 0;
     }
 
-    switch (spec.mgr) {
-        case OSR_WINPKG_MGR_SCOOP:
+    switch (spec.provider) {
+        case OSR_WINPKG_PROV_SCOOP:
             if (spec.bucket[0] != '\0') ensure_bucket(spec.bucket);
             sprintf(cmd, "scoop install %s", spec.id);
             break;
-        case OSR_WINPKG_MGR_CHOCO:
+        case OSR_WINPKG_PROV_CHOCO:
             sprintf(cmd, "choco install %s -y", spec.id);
             break;
         default:
@@ -534,7 +564,7 @@ int osr_winpkg_install(const char *map_path, const char *name, const char *test_
             break;
     }
 
-    sprintf(desc, "%s via %s (%s)", name, osr_winpkg_mgr_name(spec.mgr), spec.id);
+    sprintf(desc, "%s via %s (%s)", name, osr_winpkg_provider_name(spec.provider), spec.id);
     if (osr_run_step(desc, cmd) != 0) return 0;
 
     osr_winpkg_refresh_env();
@@ -545,22 +575,6 @@ int osr_winpkg_install(const char *map_path, const char *name, const char *test_
      * do this). Report the install, not a failure. */
     osr_warn("%s installed, but '%s' is not on PATH yet -- open a new shell", name, tc);
     return 1;
-}
-
-/* bin_needs_admin -- does this bin: row hand off to a system-wide installer?
- * msi and setup do; zip and exe stay inside %LOCALAPPDATA%. For a gh: source
- * the pattern still carries the extension, so this answers correctly without
- * resolving the release first.
- */
-static int bin_needs_admin(const char *spec) {
-    osr_winbin_kind kind;
-    char args[200];
-    char source[600];
-
-    if (!osr_winbin_parse_spec(spec, &kind, args, sizeof(args), source, sizeof(source))) return 0;
-    if (kind == OSR_WINBIN_KIND_AUTO) kind = osr_winbin_kind_of_file(source);
-
-    return kind == OSR_WINBIN_KIND_MSI || kind == OSR_WINBIN_KIND_SETUP;
 }
 
 int osr_winpkg_run_needs_admin(const char *map_path, char **names, int count) {
@@ -574,13 +588,18 @@ int osr_winpkg_run_needs_admin(const char *map_path, char **names, int count) {
 
         if (osr_winpkg_lookup(map_path, names[i], &facets, &spec) != OSR_WINPKG_OK) continue;
 
-        if (spec.mgr == OSR_WINPKG_MGR_NONE) {
-            if (bin_needs_admin(spec.bin)) return 1;
+        /* A builder declares this for itself in provide_module.c's registry:
+         * only the builder knows whether its recipe ends in a system-wide
+         * installer, and guessing from the outside would be wrong either
+         * way. script: rows are per-user by definition (see winpkg.h). */
+        if (spec.provider == OSR_WINPKG_PROV_SOURCE) {
+            if (osr_provide_needs_admin(spec.id)) return 1;
             continue;
         }
+        if (!osr_winpkg_is_manager(spec.provider)) continue;
 
-        if (osr_winpkg_have_command(osr_winpkg_mgr_name(spec.mgr))) continue;
-        if (!mgr_bootstrap_needs_admin(spec.mgr)) continue;     /* scoop: per-user */
+        if (osr_winpkg_have_command(osr_winpkg_provider_name(spec.provider))) continue;
+        if (!mgr_bootstrap_needs_admin(spec.provider)) continue;   /* scoop: per-user */
 
         return 1;
     }
@@ -608,8 +627,8 @@ int osr_winpkg_have_command(const char *name) {
     return 0;
 }
 
-int osr_winpkg_ensure_manager(osr_winpkg_mgr mgr) {
-    (void)mgr;
+int osr_winpkg_ensure_manager(osr_winpkg_provider provider) {
+    (void)provider;
     return 0;
 }
 

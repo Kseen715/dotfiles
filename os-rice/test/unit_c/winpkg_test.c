@@ -4,11 +4,14 @@
  *
  * Two maps are exercised. The real os-rice/windows.map, so drift between the
  * map and this test never goes unnoticed -- including the invariant that every
- * row in it names exactly one manager. And fixtures/windows_facets.map, for
- * facet precedence and for the malformed rows the real map must never contain.
+ * row names exactly one provider, and that every source: row points at a
+ * builder provide_module.c actually registers. And
+ * fixtures/windows_facets.map, for facet precedence, every provider spelling,
+ * and the malformed rows the real map must never contain.
  */
 #include "../c_test.h"
 #include "../../lib/winpkg.h"
+#include "../../provide_module.h"
 
 #define MAP_PATH   "../../windows.map"
 #define FIXTURE    "fixtures/windows_facets.map"
@@ -24,76 +27,115 @@ static osr_winpkg_facets facets_of(const char *release, const char *version, con
 
 /* --- the real map ---------------------------------------------------------- */
 
-static void check_real_row(const char *name, osr_winpkg_mgr mgr, const char *id) {
+static void check_real_row(const char *name, const osr_winpkg_facets *facets,
+                           osr_winpkg_provider provider, const char *id) {
     osr_winpkg_spec spec;
     char label[128];
 
     sprintf(label, "windows.map: %s resolves", name);
-    osr_t_eq_int(label, osr_winpkg_lookup(MAP_PATH, name, NULL, &spec), OSR_WINPKG_OK);
+    osr_t_eq_int(label, osr_winpkg_lookup(MAP_PATH, name, facets, &spec), OSR_WINPKG_OK);
 
-    sprintf(label, "windows.map: %s manager", name);
-    osr_t_eq_str(label, osr_winpkg_mgr_name(spec.mgr), osr_winpkg_mgr_name(mgr));
+    sprintf(label, "windows.map: %s provider", name);
+    osr_t_eq_str(label, osr_winpkg_provider_name(spec.provider),
+                 osr_winpkg_provider_name(provider));
 
-    sprintf(label, "windows.map: %s id", name);
+    sprintf(label, "windows.map: %s argument", name);
     osr_t_eq_str(label, spec.id, id);
 }
 
 static void test_real_map(void) {
+    osr_winpkg_facets x64 = facets_of("", "", "x86_64");
+    osr_winpkg_facets arm = facets_of("", "", "arm64");
     osr_winpkg_spec spec;
 
-    /* Every row is pinned to one manager, and to the manager that project's
-     * own Windows install page names -- see the header of windows.map. */
-    check_real_row("pwsh",       OSR_WINPKG_MGR_WINGET, "Microsoft.PowerShell");
-    check_real_row("wezterm",    OSR_WINPKG_MGR_WINGET, "wez.wezterm");
-    check_real_row("oh-my-posh", OSR_WINPKG_MGR_WINGET, "JanDeDobbeleer.OhMyPosh");
-    check_real_row("starship",   OSR_WINPKG_MGR_WINGET, "Starship.Starship");
-    check_real_row("fastfetch",  OSR_WINPKG_MGR_SCOOP,  "fastfetch");
+    /* Each row's provider is the one that project's own Windows install page
+     * names -- see the header of windows.map. */
+    check_real_row("pwsh",       NULL, OSR_WINPKG_PROV_WINGET, "Microsoft.PowerShell");
+    check_real_row("oh-my-posh", NULL, OSR_WINPKG_PROV_WINGET, "JanDeDobbeleer.OhMyPosh");
+    check_real_row("starship",   NULL, OSR_WINPKG_PROV_WINGET, "Starship.Starship");
+    check_real_row("fastfetch",  NULL, OSR_WINPKG_PROV_SCOOP,  "fastfetch");
 
     /* fastfetch is in scoop's main bucket, so it carries no bucket prefix --
      * if that ever changes the install must run `scoop bucket add` first. */
     osr_winpkg_lookup(MAP_PATH, "fastfetch", NULL, &spec);
     osr_t_eq_str("windows.map: fastfetch needs no bucket", spec.bucket, "");
+
+    /* The build dependencies provide/wezterm.c installs through the map. */
+    check_real_row("git",            NULL, OSR_WINPKG_PROV_WINGET, "Git.Git");
+    check_real_row("rustup",         NULL, OSR_WINPKG_PROV_WINGET, "Rustlang.Rustup");
+    check_real_row("strawberryperl", NULL, OSR_WINPKG_PROV_WINGET,
+                   "StrawberryPerl.StrawberryPerl");
+
+    /* wezterm is the worked example: winget on x64, a source build on arm64,
+     * where upstream ships no binary for any manager to carry. */
+    check_real_row("wezterm", &x64, OSR_WINPKG_PROV_WINGET, "wez.wezterm");
+    check_real_row("wezterm", &arm, OSR_WINPKG_PROV_SOURCE, "provide_wezterm");
 }
 
-/* The one-provider rule, asserted against the real file: every row resolves
- * to a manager OR a bin: spec, never both. A row that grew a second provider
- * would still parse as OK under the old format, so this is worth checking on
- * the real map and not only on the fixture.
- */
+/* A source: row is a reference into provide_module.c's registry, and nothing
+ * but a test cross-checks the two: a typo would parse perfectly and then fail
+ * at install time with "builder not defined". */
+static void test_real_map_builders_exist(void) {
+    osr_winpkg_facets arm = facets_of("", "", "arm64");
+    osr_winpkg_spec spec;
+
+    osr_winpkg_lookup(MAP_PATH, "wezterm", &arm, &spec);
+    osr_t_eq_int("builder: wezterm@arm64 names a source: row",
+                 spec.provider, OSR_WINPKG_PROV_SOURCE);
+    osr_t_true("builder: the name it uses is registered in provide_module.c",
+               osr_provide_known(spec.id));
+
+    osr_t_true("builder: an unregistered name is not known",
+               !osr_provide_known("provide_definitely_not_real"));
+    osr_t_true("builder: provide_wezterm needs no Administrator",
+               !osr_provide_needs_admin("provide_wezterm"));
+}
+
 static void test_real_map_one_provider(void) {
-    static const char *names[5] = { "pwsh", "wezterm", "oh-my-posh", "starship", "fastfetch" };
+    static const char *names[6] = { "pwsh", "oh-my-posh", "starship", "fastfetch",
+                                    "git", "rustup" };
     osr_winpkg_spec spec;
     char label[128];
     int i;
 
-    for (i = 0; i < 5; i++) {
-        osr_winpkg_lookup(MAP_PATH, names[i], NULL, &spec);
+    /* Every row resolves to exactly one provider. A row that grew a second
+     * one would still have parsed under the old format, so this is checked
+     * on the real map and not only on the fixture. */
+    for (i = 0; i < 6; i++) {
+        osr_t_eq_int("one provider: resolves",
+                     osr_winpkg_lookup(MAP_PATH, names[i], NULL, &spec), OSR_WINPKG_OK);
 
-        sprintf(label, "windows.map: %s names exactly one provider", names[i]);
-        osr_t_true(label, (spec.mgr != OSR_WINPKG_MGR_NONE) != (spec.bin[0] != '\0'));
+        sprintf(label, "windows.map: %s names one provider", names[i]);
+        osr_t_true(label, spec.provider != OSR_WINPKG_PROV_NONE);
     }
 }
 
 /* Architecture is the manager's job wherever the manager has the build --
  * verified against winget's and scoop's own manifests, which carry arm64
- * installers for all four of these. An @arm64 row in front of a provider
- * that already resolves the architecture would be a downgrade, so the real
- * map must have none, and every name must fall to its bare row on arm64.
+ * installers for all of these. An @arm64 row in front of a provider that
+ * already resolves the architecture would be a downgrade, so these must have
+ * none and must fall to their bare row on arm64.
  */
 static void test_real_map_arch(void) {
-    static const char *names[5] = { "pwsh", "wezterm", "oh-my-posh", "starship", "fastfetch" };
+    static const char *names[4] = { "pwsh", "oh-my-posh", "starship", "fastfetch" };
     osr_winpkg_facets arm = facets_of("", "", "arm64");
     osr_winpkg_spec spec;
     char label[128];
     int i;
 
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 4; i++) {
         osr_t_eq_int("arm64: resolves", osr_winpkg_lookup(MAP_PATH, names[i], &arm, &spec),
                      OSR_WINPKG_OK);
 
         sprintf(label, "arm64: %s uses its bare row (no arch override)", names[i]);
         osr_t_eq_str(label, spec.key, names[i]);
     }
+
+    /* wezterm is the exception, and has no bare row at all: upstream ships no
+     * 32-bit build either, so an x86 machine must get "no row" rather than a
+     * silently wrong answer. */
+    osr_t_eq_int("x86: wezterm has no row to fall back on",
+                 osr_winpkg_lookup(MAP_PATH, "wezterm", NULL, &spec), OSR_WINPKG_NOT_FOUND);
 }
 
 /* --- facet precedence ------------------------------------------------------ */
@@ -150,28 +192,27 @@ static void test_row_shapes(void) {
     osr_t_eq_str("duplicate: first row of equal specificity wins", spec.id, "first");
 }
 
-static void test_bin_rows(void) {
+static void test_non_manager_providers(void) {
     osr_winpkg_spec spec;
 
-    osr_t_eq_int("bin: URL row resolves",
-                 osr_winpkg_lookup(FIXTURE, "binurl", NULL, &spec), OSR_WINPKG_OK);
-    osr_t_eq_int("bin: a bin row names no manager", spec.mgr, OSR_WINPKG_MGR_NONE);
-    osr_t_eq_str("bin: spec captured", spec.bin, "https://example.invalid/only.exe");
+    osr_t_eq_int("source: row resolves",
+                 osr_winpkg_lookup(FIXTURE, "srcrow", NULL, &spec), OSR_WINPKG_OK);
+    osr_t_eq_int("source: provider recognised", spec.provider, OSR_WINPKG_PROV_SOURCE);
+    osr_t_eq_str("source: builder name captured", spec.id, "provide_thing");
 
-    osr_t_eq_int("bin: gh row resolves",
-                 osr_winpkg_lookup(FIXTURE, "bingh", NULL, &spec), OSR_WINPKG_OK);
-    osr_t_eq_str("bin: gh spec captured whole, colons and all",
-                 spec.bin, "gh:owner/repo:tool-*-win64.zip");
+    osr_t_eq_int("script: row resolves",
+                 osr_winpkg_lookup(FIXTURE, "scriptrow", NULL, &spec), OSR_WINPKG_OK);
+    osr_t_eq_int("script: provider recognised", spec.provider, OSR_WINPKG_PROV_SCRIPT);
+    osr_t_eq_str("script: URL captured whole, its own colon and all",
+                 spec.id, "https://example.invalid/install.ps1");
 
-    osr_t_eq_int("bin: explicit kind resolves",
-                 osr_winpkg_lookup(FIXTURE, "binkind", NULL, &spec), OSR_WINPKG_OK);
-    osr_t_eq_str("bin: kind stays part of the spec",
-                 spec.bin, "msi:https://example.invalid/tool.msi");
-
-    osr_t_eq_int("bin: setup row with switches resolves",
-                 osr_winpkg_lookup(FIXTURE, "binsetup", NULL, &spec), OSR_WINPKG_OK);
-    osr_t_eq_str("bin: setup switches survive the map parse",
-                 spec.bin, "setup,/S:https://example.invalid/setup.exe");
+    /* The bucket rule is scoop's alone: a URL is full of slashes and none of
+     * them name a bucket. */
+    osr_t_eq_int("script: URL with many slashes resolves",
+                 osr_winpkg_lookup(FIXTURE, "scriptgh", NULL, &spec), OSR_WINPKG_OK);
+    osr_t_eq_str("script: no bucket is inferred from a URL", spec.bucket, "");
+    osr_t_eq_str("script: URL survives intact",
+                 spec.id, "https://raw.example.invalid/o/r/main/install.ps1");
 }
 
 /* The prescribed way to say "a different provider on this architecture":
@@ -183,14 +224,14 @@ static void test_provider_differs_by_facet(void) {
     osr_t_eq_int("split: x86_64 gets the manager row",
                  osr_winpkg_lookup(FIXTURE, "split", NULL, &spec), OSR_WINPKG_OK);
     osr_t_eq_str("split: manager id", spec.id, "Vendor.Thing");
-    osr_t_eq_str("split: manager row carries no bin spec", spec.bin, "");
+    osr_t_eq_int("split: bare row is a manager row", spec.provider, OSR_WINPKG_PROV_WINGET);
 
     osr_t_eq_int("split: arm64 gets the bin row",
                  osr_winpkg_lookup(FIXTURE, "split", &arm, &spec), OSR_WINPKG_OK);
     osr_t_eq_str("split: arm64 row wins", spec.key, "split@arm64");
-    osr_t_eq_int("split: arm64 row has no manager", spec.mgr, OSR_WINPKG_MGR_NONE);
-    osr_t_eq_str("split: arm64 artifact", spec.bin, "https://vendor.invalid/thing-arm64.zip");
-    osr_t_eq_str("split: the replaced row's id does not leak through", spec.id, "");
+    osr_t_eq_int("split: arm64 row is a source row", spec.provider, OSR_WINPKG_PROV_SOURCE);
+    osr_t_eq_str("split: arm64 builder", spec.id, "provide_thing");
+    osr_t_eq_str("split: the replaced row's bucket does not leak through", spec.bucket, "");
 }
 
 /* --- malformed rows are errors, not fallbacks ------------------------------ */
@@ -208,15 +249,15 @@ static void test_bad_rows(void) {
      * token. A manager paired with a bin: route is that same thing wearing a
      * different hat, so it is rejected exactly as hard. */
     check_bad("multi");
-    check_bad("mgrplusbin");
-    check_bad("twobins");
+    check_bad("mgrplussource");
+    check_bad("twosources");
 
     check_bad("nocolon");
     check_bad("emptyid");
-    check_bad("unknownmgr");
+    check_bad("emptysource");
+    check_bad("unknownprov");
     check_bad("norhs");
     check_bad("badbucket");
-    check_bad("emptybin");
 }
 
 /* --- absent rows and files -------------------------------------------------- */
@@ -228,7 +269,7 @@ static void test_missing(void) {
                  osr_winpkg_lookup(MAP_PATH, "definitely-not-a-real-package", NULL, &spec),
                  OSR_WINPKG_NOT_FOUND);
     osr_t_true("missing: unknown name leaves spec empty",
-               spec.mgr == OSR_WINPKG_MGR_NONE && spec.id[0] == '\0');
+               spec.provider == OSR_WINPKG_PROV_NONE && spec.id[0] == '\0');
 
     osr_t_eq_int("missing: unreadable map file",
                  osr_winpkg_lookup("no/such/file.map", "wezterm", NULL, &spec),
@@ -244,11 +285,12 @@ static void test_missing(void) {
 int main(void) {
     OSR_T_INIT();
     test_real_map();
+    test_real_map_builders_exist();
     test_real_map_one_provider();
     test_real_map_arch();
     test_facet_precedence();
     test_row_shapes();
-    test_bin_rows();
+    test_non_manager_providers();
     test_provider_differs_by_facet();
     test_bad_rows();
     test_missing();

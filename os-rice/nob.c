@@ -52,6 +52,7 @@ static const char *lib_srcs[] = {
     "lib/config_copy.c",
     "lib/fonts.c",
     "lib/wallpaper.c",
+    "provide_module.c",
     "modules.c",
     "modules/src/common.c",
     "modules/fastfetch.c",

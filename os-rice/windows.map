@@ -3,7 +3,9 @@
 #
 # Format:  <name>[@facet] = <provider>
 #
-#   provider := scoop:<id> | choco:<id> | winget:<id> | bin:<spec>
+#   provider := scoop:<id>  | choco:<id> | winget:<id>
+#             | source:<builder>          a C function in provide_module.c
+#             | script:<url>              the vendor's own install script
 #
 # ONE PROVIDER PER ROW. This is the rule the whole file exists to enforce, not
 # a stylistic preference. scoop, choco and winget are independent namespaces:
@@ -14,8 +16,8 @@
 # source is missing on this machine" into "install whatever the next namespace
 # has under this name" — a different publisher's software, silently. So a row
 # names one provider, osr uses that provider, and a row that names two is a
-# map error (OSR_WINPKG_BAD_ROW), not a chain. Same rule, same reason, as
-# lib/pkgmap/*.map on the Linux side.
+# map error (OSR_WINPKG_BAD_ROW), not a chain. Same rule, same reason, and the
+# same provider vocabulary as lib/pkgmap/*.map on the Linux side.
 #
 # A MISSING MANAGER IS INSTALLED, NOT ROUTED AROUND. If a row's manager is not
 # on this machine, osr installs it from its own vendor installer: scoop from
@@ -23,7 +25,7 @@
 # community.chocolatey.org/install.ps1, winget from asheroto/winget-install.
 # The last two need Administrator, so the run elevates once, up front, and
 # continues elevated — the Windows equivalent of install.sh's `sudo -v`
-# warm-up. That is why the file needs no fallbacks: the provider a row names
+# warm-up. That is why this file needs no fallbacks: the provider a row names
 # can always be made to exist.
 #
 # WHERE A PACKAGE MUST COME FROM SOMEWHERE ELSE ON SOME MACHINES, SAY SO WITH
@@ -35,41 +37,25 @@
 #   name@<arch>      x86_64 | arm64 | x86                     (~ OSR_ARCH)
 #   name             unqualified fallback
 #
-# A qualified row REPLACES the bare row; it does not merge with it. So the way
-# to say "winget everywhere, but winget has no arm64 build of this one" is two
-# rows, the second naming a different provider outright:
+# A qualified row REPLACES the bare row; it does not merge with it. That is
+# how a package changes provider per machine — deliberately, in advance, and
+# visible in one place — instead of by a runtime scramble. See wezterm below
+# for the worked example.
 #
-#   thing       = winget:Vendor.Thing
-#   thing@arm64 = bin:https://vendor.example/thing-arm64.zip
+# THE source: PROVIDER (see provide_module.h) names a C function in
+# provide_module.c, exactly as `source:provide_wezterm` in lib/pkgmap/any.map
+# names a shell function in lib/build.sh. A URL can only ever say "download
+# this"; a builder can resolve a version, pick an asset per architecture,
+# install its own build dependencies through this very map, clone with
+# submodules, run a compiler, and place several binaries at the end. Reach for
+# it whenever the install is more than a fetch — and note the cost, because it
+# is why managers stay preferred: a manager can upgrade and remove what it
+# installed, while a builder's output is only ever overwritten in place.
 #
-# There are no such rows today, and that is a checked claim rather than an
-# assumption: winget's manifests carry arm64 installers for Microsoft.PowerShell,
-# Starship.Starship and JanDeDobbeleer.OhMyPosh, and scoop's fastfetch manifest
-# has an arm64 URL, so those four managers already resolve the architecture
-# themselves. wez.wezterm is x64-only — but upstream publishes no Windows arm64
-# build at all, so there is nothing for a bin: row to point at either; arm64
-# machines run the x64 build under emulation, as they would from any provider.
-# Re-check before adding a row: an @arm64 bin: row in front of a manager that
-# does have an arm64 build is a downgrade, not a fix.
-#
-# The bin: provider (see lib/winbin.h) installs the vendor's own artifact:
-#
-#   bin:[<kind>:]<source>
-#
-#     <source>  https://host/path/file.zip     a direct URL, or
-#               gh:<owner>/<repo>:<pattern>    newest GitHub release, first
-#                                              asset whose filename matches
-#                                              <pattern> (glob, `*` only) —
-#                                              for version-named assets
-#
-#     <kind>    inferred from the file extension when omitted. Write it only
-#               when the extension is absent or misleading:
-#                 zip     portable archive  -> %LOCALAPPDATA%\osr\bin + PATH
-#                 exe     the program       -> placed there as <command>.exe
-#                 msi     installer package -> msiexec /qn (needs admin)
-#                 setup   installer .exe    -> run with the silent switches
-#                                              the row gives, comma-separated
-#                                              after the kind: `setup,/S:<url>`
+# THE script: PROVIDER runs a vendor's own install script (`irm <url> | iex`),
+# the route a project means by "paste this line into a shell". Per-user: a
+# script that needs Administrator belongs behind a source: builder that can
+# say so, so that the run elevates once up front instead of failing mid-script.
 #
 # WHICH MANAGER A ROW NAMES is decided by the project's own Windows install
 # page, not by preference — the manager upstream ships to is the one whose id
@@ -89,9 +75,22 @@
 # scoop and choco are neither listed nor supported by Microsoft.
 pwsh       = winget:Microsoft.PowerShell
 
+# wezterm — the worked example of a provider that changes per architecture.
+#
 # wezterm.org/install/windows.html lists winget first, then scoop (extras
-# bucket), then choco. Its scoop route would be scoop:extras/wezterm.
-wezterm@x86_64    = winget:wez.wezterm
+# bucket), then choco; its scoop route would be scoop:extras/wezterm. But every
+# one of those ships x64 ONLY — checked against wez.wezterm's winget installer
+# manifest, which declares a single x64 installer — and upstream publishes no
+# Windows arm64 release asset at all, so there is no artifact for arm64 to
+# download from anywhere. What is left is what upstream documents for exactly
+# this case: build it (wezterm.org/install/source.html). provide/wezterm.c does
+# that, and installs its own git/rust/perl prerequisites through this map on
+# the way. It is a long compile, which is precisely why only arm64 pays for it.
+#
+# No bare `wezterm` row: upstream has no 32-bit build either, so an x86 machine
+# should get "no windows.map row for wezterm", not a silent wrong answer.
+wezterm@x86_64 = winget:wez.wezterm
+wezterm@arm64  = source:provide_wezterm
 
 # ohmyposh.dev/docs/installation/windows leads with winget and cautions that
 # "The chocolatey package is maintained by the community and might not be up to
@@ -106,3 +105,13 @@ starship   = winget:Starship.Starship
 # bucket (ScoopInstaller/Main), which scoop adds on install — no bucket prefix
 # needed. This is the one row that is not winget: upstream ranks scoop first.
 fastfetch  = scoop:fastfetch
+
+# --- build dependencies ------------------------------------------------------
+# Not rices in themselves: these exist so provide/*.c builders can install what
+# they need through the map (osr_winpkg_install) instead of hardcoding ids, the
+# same way lib/build.sh's builders open with `pkg_install build git`. All three
+# are what provide/wezterm.c requires per wezterm.org/install/source.html.
+
+git            = winget:Git.Git
+rustup         = winget:Rustlang.Rustup
+strawberryperl = winget:StrawberryPerl.StrawberryPerl

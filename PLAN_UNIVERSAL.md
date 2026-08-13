@@ -292,8 +292,8 @@ supported command line). Because the named provider can always be made to
 exist, the map needs no fallbacks at all -- which is what lets the format
 stay at exactly one provider per row, the same shape `lib/pkgmap/*.map` has
 always had on the Linux side. `parse_rhs` rejects a second provider token
-whatever it is: two managers, two `bin:` specs, or a manager paired with a
-`bin:` route are all `OSR_WINPKG_BAD_ROW`.
+whatever it is: two managers, two `source:` builders, or a manager paired
+with a `source:`/`script:` provider are all `OSR_WINPKG_BAD_ROW`.
 
 Elevation is a real path rather than a refusal, ported from what the Linux
 side already does. `install.sh` runs `sudo -v` once at the top of a run so no
@@ -311,28 +311,61 @@ being riced travels across the elevation boundary and configs still land in
 the user's home rather than in whichever admin account answered the prompt --
 exactly the job `as_user` does on Linux.
 
-The fourth provider is `bin:`, in `lib/winbin.c`: the vendor's own artifact,
-named by a direct URL or `gh:<owner>/<repo>:<pattern>` where the asset name
-carries a version. By kind -- inferred from the extension or written
-explicitly -- it expands a `zip` under %LOCALAPPDATA%\osr\bin and puts the
-executable's directory on the user's PATH, places a portable `exe` there
-under the command's name, runs an `msi` through `msiexec /qn`, or runs a
-`setup` installer with the silent switches the row supplies (every installer
-toolkit spells those differently, so the map states them rather than osr
-guessing). It sits alongside the managers rather than behind them: a row
-names it when no manager should serve that package on that machine, most
-often an architecture the manager never shipped, written as a second
-`name@arch` row that replaces the bare one outright.
+The remaining providers are the two Linux already has, ported rather than
+invented. `script:<url>` fetches a vendor's own install script and runs it
+(`irm <url> | iex`), the shape `lib/pkg.sh`'s `_via_script` has. And
+`source:<builder>` names a C function in `provide_module.c`, exactly as
+`source:provide_wezterm` in `lib/pkgmap/any.map` names a shell function in
+`lib/build.sh`.
 
-No row uses `bin:` today, and that is a checked claim rather than an
-oversight: winget's manifests carry arm64 installers for
+`source:` is the general escape hatch, and it is a function rather than a URL
+on purpose: a URL can only say "download this", while a builder can resolve a
+version, pick an asset per architecture, install its own build dependencies
+*through this same map*, clone with submodules, run a compiler, and place
+several binaries at the end. `provide_module.c` is a metapacket -- it
+`#include`s each `provide/<name>.c`, so the whole set is one translation unit
+and a new recipe costs no build plumbing -- and holds the registry mapping
+the name a map row writes to the function, plus whether it needs
+Administrator. `lib/winbin.c` is the toolkit those builders are written
+against (resolve a GitHub release asset, fetch, unzip, locate an exe, place
+it, extend the user's PATH, hand a file to msiexec), the counterpart of
+`lib/build.sh`'s `_osr_install_tarball_bin` and friends.
+
+The contract is copied from `_via_source` so both platforms behave alike:
+idempotency belongs to the dispatcher (`osr_provide_run` probes the command
+and skips a builder whose program is already present, so no builder writes
+its own already-installed check), an unregistered builder name is reported as
+a map error rather than silently skipped, and a failed build keeps its
+checkout so a retry resumes instead of recompiling from scratch.
+
+wezterm is the worked example, and gives the arm64 question a real answer.
+Every Windows provider for it ships x64 only -- checked against
+`wez.wezterm`'s winget installer manifest, which declares a single x64
+installer -- and upstream publishes no Windows arm64 release asset at all, so
+there is no artifact for any manager or URL to fetch. What upstream documents
+for exactly that case is building it, so the map reads
+`wezterm@x86_64 = winget:wez.wezterm` and
+`wezterm@arm64 = source:provide_wezterm`, and `provide/wezterm.c` follows
+upstream's own recipe (git clone with submodules, then
+`cargo build --release`) after installing git, rustup and Strawberry Perl
+through the map. There is deliberately no bare `wezterm` row: upstream has no
+32-bit build either, so an x86 machine gets "no windows.map row for wezterm"
+rather than a silently wrong answer.
+
+The other four packages need no `@arch` row, and that is a checked claim
+rather than an oversight: winget's manifests carry arm64 installers for
 Microsoft.PowerShell, Starship.Starship and JanDeDobbeleer.OhMyPosh, and
-scoop's fastfetch manifest has an arm64 URL, so all four already resolve
-architecture themselves. wez.wezterm is x64-only, but upstream publishes no
-Windows arm64 build for a `bin:` row to point at either. An `@arm64` row in
-front of a manager that does have an arm64 build would be a downgrade --
-`bin:` cannot upgrade or uninstall what it drops in -- so the rows stay as
-they are and `winbin.c` stands ready for the case that actually needs it.
+scoop's fastfetch manifest has an arm64 URL, so all four resolve architecture
+themselves. Putting a `source:` row in front of a manager that already has an
+arm64 build would be a downgrade -- a builder's output is only ever
+overwritten in place, never upgraded or removed by the thing that installed
+it.
+
+Resulting behaviour per package: the row's one provider is used. For a
+manager row that means installing the manager first if it is missing
+(elevating once when that needs it); for `source:`/`script:` it means running
+the builder or the script. Nothing falls through to a second provider, and a
+package manager is never substituted for another one at any step.
 
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
@@ -382,8 +415,14 @@ instead of in a separate `universal-core/` tree. What actually exists today:
 os-rice/
   windows.map           logical package name -> the ONE provider that
                         installs it (`name[@facet] = <provider>`, provider
-                        being scoop:/choco:/winget:<id> or bin:<spec>),
-                        read by lib/winpkg.c.
+                        being scoop:/choco:/winget:<id>, source:<builder> or
+                        script:<url>), read by lib/winpkg.c.
+  provide_module.c/.h   source: builders -- the C port of lib/build.sh. A
+                        metapacket: #includes every provide/<name>.c so they
+                        are one translation unit, and holds the registry
+                        mapping a row's builder name to the function.
+  provide/<name>.c      one builder per package (provide/wezterm.c today:
+                        the arm64 source build).
                         Ingested from the retired windows-rice/windows.map
                         (decision 8), reworked to one-manager-per-row +
                         @facet qualifiers (decision 10).
@@ -417,10 +456,12 @@ os-rice/
                         vendor installer first (osr_winpkg_ensure_manager,
                         elevating once when that needs admin; decision 11)
                         + registry env refresh (osr_winpkg_refresh_env) --
-    winbin.c / winbin.h the bin: provider: resolve a direct URL or a
-                        gh:owner/repo:pattern release asset, download, then
-                        expand a zip / place an exe / run an msi or setup
-                        installer by kind (decision 11)
+    winbin.c / winbin.h the toolkit source: builders are written against:
+                        resolve a direct URL or a gh:owner/repo:pattern
+                        release asset, fetch, unzip, locate an exe, place it,
+                        extend the user's PATH, run an msi/setup installer or
+                        a vendor script (decision 11) -- the Windows
+                        counterpart of lib/build.sh's install helpers
     elevate.c/elevate.h one-shot UAC elevation: relaunch this run under
                         `runas`, carrying --user-home across the boundary
                         the way sudo carries $SUDO_USER. Port of
