@@ -10,7 +10,9 @@
  *   ./nob clean
  *
  * The compiler used for the actual build is the host's default; set $CC
- * to override it (CC=clang ./nob).
+ * to override it (CC=clang ./nob). Both flag dialects are handled: a $CC
+ * named cl/clang-cl gets MSVC's spelling (/W4, /c, /Fo, *.lib), everything
+ * else gets gcc/clang's.
  *
  * After the first bootstrap you never type that gcc line again -- nob.h's
  * "Go Rebuild Urself" technology (NOB_GO_REBUILD_URSELF below) recompiles
@@ -62,21 +64,71 @@ static const char *test_names[] = {
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 
+/* DEFAULT_CC -- what to build with when $CC is unset: the same family of
+ * compiler that built nob itself, which is the one known to exist on this
+ * host. */
+#if defined(_MSC_VER)
+#define DEFAULT_CC "cl.exe"
+#elif defined(__clang__)
+#define DEFAULT_CC "clang"
+#else
+#define DEFAULT_CC "cc"
+#endif
+
+static const char *cc(void) {
+    const char *env = getenv("CC");
+    return (env && *env) ? env : DEFAULT_CC;
+}
+
+/* is_msvc -- does $CC speak MSVC's flag dialect (/W4, /c, /Fo) rather than
+ * gcc/clang's? True for "cl", "clang-cl" and cross spellings ending in
+ * "-cl"; deliberately false for plain "clang", which takes gcc flags.
+ */
+static bool is_msvc_name(const char *c) {
+    const char *base = c;
+    const char *p;
+    size_t len;
+    for (p = c; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    if (len > 4 && strcmp(base + len - 4, ".exe") == 0) len -= 4;
+    if (len < 2 || strncmp(base + len - 2, "cl", 2) != 0) return false;
+    return len == 2 || base[len - 3] == '-';
+}
+
+static bool is_msvc(void) { return is_msvc_name(cc()); }
+
+/* check_cc_detection -- runs on every invocation; the dialect pick is the
+ * one thing here that silently produces a garbage command line if wrong. */
+static void check_cc_detection(void) {
+    NOB_ASSERT(is_msvc_name("cl"));
+    NOB_ASSERT(is_msvc_name("cl.exe"));
+    NOB_ASSERT(is_msvc_name("C:\\VC\\bin\\cl.exe"));
+    NOB_ASSERT(is_msvc_name("clang-cl"));
+    NOB_ASSERT(!is_msvc_name("clang"));
+    NOB_ASSERT(!is_msvc_name("gcc"));
+    NOB_ASSERT(!is_msvc_name("/usr/bin/x86_64-w64-mingw32-gcc"));
+}
+
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
- * this script produces is built with. XP floor: see PLAN_UNIVERSAL.md's
- * toolchain matrix -- checked today against an ordinary current mingw-w64;
- * the pinned XP toolchain itself is still long-away-planned (Task 0.1).
+ * this script produces is built with, in whichever dialect $CC speaks. XP
+ * floor: see PLAN_UNIVERSAL.md's toolchain matrix -- checked today against
+ * an ordinary current mingw-w64; the pinned XP toolchain itself is still
+ * long-away-planned (Task 0.1).
  */
 static void append_common_flags(Nob_Cmd *cmd) {
-    /* $CC wins if set; otherwise nob_cc() picks whatever this host's
-     * compiler is (cc/clang/cl.exe/tcc). The flags below are the
-     * gcc/clang spelling, so a $CC with a different flag syntax (cl.exe)
-     * needs them adjusted too. */
-    const char *cc = getenv("CC");
-    if (cc && *cc) {
-        nob_cmd_append(cmd, cc);
-    } else {
-        nob_cc(cmd);
+    nob_cmd_append(cmd, cc());
+    if (is_msvc()) {
+        /* No /std: equivalent to -std=c89 -- MSVC's C mode is already C89
+         * plus extensions and /Za (the closest thing) is long discouraged.
+         * /wd4505 is -Wno-unused-function; the CRT one silences the
+         * fopen/getenv "deprecation" that C89 code cannot avoid. cl only
+         * ever targets Windows, so the XP defines are unconditional here. */
+        nob_cmd_append(cmd, "/nologo", "/W4", "/O2");
+        nob_cmd_append(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS");
+        nob_cmd_append(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501");
+        return;
     }
     nob_cmd_append(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2");
     /* helpers used only by one platform branch of a file are dead on the
@@ -117,7 +169,14 @@ static bool compile_objs(const char **srcs, size_t count) {
     if (!nob_mkdir_if_not_exists(OBJ_DIR)) return false;
     for (i = 0; i < count; i++) {
         append_common_flags(&cmd);
-        nob_cmd_append(&cmd, "-c", srcs[i], "-o", obj_of(srcs[i]));
+        if (is_msvc()) {
+            /* /Fo takes its path glued on, no separate argument. The .o
+             * name (rather than MSVC's usual .obj) is fine and keeps
+             * obj_of()/clean() single-dialect. */
+            nob_cmd_append(&cmd, "/c", srcs[i], nob_temp_sprintf("/Fo%s", obj_of(srcs[i])));
+        } else {
+            nob_cmd_append(&cmd, "-c", srcs[i], "-o", obj_of(srcs[i]));
+        }
         if (!nob_cmd_run(&cmd, .async = &procs)) return false;
     }
     return nob_procs_flush(&procs);
@@ -139,6 +198,11 @@ static void append_lib_objs(Nob_Cmd *cmd) {
  * change hunted down by a link error.
  */
 static void append_common_libs(Nob_Cmd *cmd) {
+    if (is_msvc()) {
+        /* cl hands plain .lib arguments straight to the linker. */
+        nob_cmd_append(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib");
+        return;
+    }
 #ifdef _WIN32
     nob_cmd_append(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32");
 #else
@@ -151,7 +215,12 @@ static void append_common_libs(Nob_Cmd *cmd) {
 static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     Nob_Cmd cmd = {0};
     append_common_flags(&cmd);
-    nob_cmd_append(&cmd, "-o", bin, obj_of(main_src));
+    if (is_msvc()) {
+        nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
+    } else {
+        nob_cmd_append(&cmd, "-o", bin);
+    }
+    nob_cmd_append(&cmd, obj_of(main_src));
     append_lib_objs(&cmd);
     append_common_libs(&cmd);
     return nob_cmd_run(&cmd, .async = procs);
@@ -231,6 +300,7 @@ static bool build_all(void) {
 
 int main(int argc, char **argv) {
     NOB_GO_REBUILD_URSELF(argc, argv);
+    check_cc_detection();
 
     const char *program = nob_shift(argv, argc);
     NOB_UNUSED(program);
