@@ -80,6 +80,43 @@ static const char *cc(void) {
     return (env && *env) ? env : DEFAULT_CC;
 }
 
+/* $CC is a command line, not just a program name: "zig cc", "ccache gcc" and
+ * "gcc -m32" are all ordinary values. exec takes one program plus separate
+ * arguments, so split it on spaces once and keep the words. */
+#define CC_MAX_WORDS 16
+static const char *cc_words[CC_MAX_WORDS];
+static size_t cc_word_count = 0;
+
+static void cc_split(void) {
+    char *buf;
+    char *p;
+    if (cc_word_count > 0) return;
+    buf = (char *)malloc(strlen(cc()) + 1); /* leaked on purpose: lives for the run */
+    NOB_ASSERT(buf != NULL);
+    strcpy(buf, cc());
+    for (p = buf; *p;) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        NOB_ASSERT(cc_word_count < CC_MAX_WORDS);
+        cc_words[cc_word_count++] = p;
+        while (*p && *p != ' ' && *p != '\t') p++;
+        if (*p) *p++ = '\0';
+    }
+    NOB_ASSERT(cc_word_count > 0);
+}
+
+/* cc_prog -- the program $CC names, without its arguments. */
+static const char *cc_prog(void) {
+    cc_split();
+    return cc_words[0];
+}
+
+static void append_cc(Nob_Cmd *cmd) {
+    size_t i;
+    cc_split();
+    for (i = 0; i < cc_word_count; i++) nob_cmd_append(cmd, cc_words[i]);
+}
+
 /* is_msvc -- does $CC speak MSVC's flag dialect (/W4, /c, /Fo) rather than
  * gcc/clang's? True for "cl", "clang-cl" and cross spellings ending in
  * "-cl"; deliberately false for plain "clang", which takes gcc flags.
@@ -97,7 +134,7 @@ static bool is_msvc_name(const char *c) {
     return len == 2 || base[len - 3] == '-';
 }
 
-static bool is_msvc(void) { return is_msvc_name(cc()); }
+static bool is_msvc(void) { return is_msvc_name(cc_prog()); }
 
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
@@ -118,7 +155,7 @@ static void check_cc_detection(void) {
  * long-away-planned (Task 0.1).
  */
 static void append_common_flags(Nob_Cmd *cmd) {
-    nob_cmd_append(cmd, cc());
+    append_cc(cmd);
     if (is_msvc()) {
         /* No /std: equivalent to -std=c89 -- MSVC's C mode is already C89
          * plus extensions and /Za (the closest thing) is long discouraged.
