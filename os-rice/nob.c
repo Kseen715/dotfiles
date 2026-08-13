@@ -71,6 +71,8 @@ static const char *test_names[] = {
 #define DEFAULT_CC "cl.exe"
 #elif defined(__clang__)
 #define DEFAULT_CC "clang"
+#elif defined(__GNUC__)
+#define DEFAULT_CC "gcc"
 #else
 #define DEFAULT_CC "cc"
 #endif

@@ -7,6 +7,8 @@
 #include "../lib/config_copy.h"
 #include "../lib/ui.h"
 
+#include <stddef.h>
+
 #ifdef _WIN32
 
 int osrm_pwsh(const char *repo_root, const char *themes_root, const char *map_path,
