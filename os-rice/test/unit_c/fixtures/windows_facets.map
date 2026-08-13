@@ -1,0 +1,44 @@
+# fixture for winpkg_test.c -- facet precedence, bin: rows, plus the malformed
+# rows the real os-rice/windows.map must never contain (they cannot live there,
+# so they live here instead).
+
+# --- facet precedence: release > version > arch > bare -----------------------
+demo@24H2  = choco:demo-release
+demo@11    = winget:Demo.Version
+demo@arm64 = scoop:demo-arch
+demo       = scoop:demo-bare
+
+# no release/version row: the arch row must still beat the bare one
+archonly@arm64 = winget:Arch.Only
+archonly       = scoop:arch-only-bare
+
+# the shape the header of windows.map prescribes for "the manager has no build
+# for this architecture": two rows, each naming ONE provider, the qualified one
+# replacing the bare one outright
+split       = winget:Vendor.Thing
+split@arm64 = bin:https://vendor.invalid/thing-arm64.zip
+
+# --- other well-formed shapes ------------------------------------------------
+bucketed  = scoop:extras/bucketed-app
+commented = winget:Some.Id   # trailing note, must not become part of the id
+
+# equal specificity: the first row wins, a later duplicate never overrides
+dup = scoop:first
+dup = winget:second
+
+# --- bin: as a provider in its own right -------------------------------------
+binurl   = bin:https://example.invalid/only.exe
+bingh    = bin:gh:owner/repo:tool-*-win64.zip
+binkind  = bin:msi:https://example.invalid/tool.msi
+binsetup = bin:setup,/S:https://example.invalid/setup.exe
+
+# --- malformed rows ----------------------------------------------------------
+multi      = scoop:multi choco:multi winget:Multi.Multi
+mgrplusbin = winget:Two.Providers bin:https://example.invalid/a.zip
+twobins    = bin:https://example.invalid/a.zip bin:https://example.invalid/b.zip
+nocolon    = scoop
+emptyid    = winget:
+unknownmgr = apt:whatever
+norhs      =
+badbucket  = scoop:/leading-slash
+emptybin   = bin:

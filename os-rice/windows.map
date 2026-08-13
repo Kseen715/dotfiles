@@ -1,18 +1,108 @@
-# os-rice/windows.map — logical package name -> real id per manager.
-# Windows equivalent of lib/pkgmap/*.map, collapsed into one file because
-# there's one OS here, not five package managers each needing their own
-# map: the "column" that varies per-distro on Linux is a `mgr:id` token on
-# the RHS instead. Ported from the now-retired windows-rice/windows.map
-# (see PLAN_UNIVERSAL.md decision 8) — lib/winpkg.c reads this file.
+# os-rice/windows.map — logical package name -> the ONE provider that installs
+# it on this machine.
 #
-# Format: name = mgr:id [mgr:id ...]   (any subset of scoop/choco/winget; a
-# manager with no token for this name is skipped for it — same "no entry =
-# not available that way" rule as pkgmap). osr_winpkg_install (lib/winpkg.c)
-# tries them in the scoop -> choco -> winget preference order, using whichever
-# manager is actually installed.
+# Format:  <name>[@facet] = <provider>
+#
+#   provider := scoop:<id> | choco:<id> | winget:<id> | bin:<spec>
+#
+# ONE PROVIDER PER ROW. This is the rule the whole file exists to enforce, not
+# a stylistic preference. scoop, choco and winget are independent namespaces:
+# a name that is the real project in one of them can be an unrelated upload by
+# anyone in the next, because the manager a project does not ship to is
+# exactly where its name is still free to claim. A row that listed several
+# providers would mean "try them until one works", which turns "the intended
+# source is missing on this machine" into "install whatever the next namespace
+# has under this name" — a different publisher's software, silently. So a row
+# names one provider, osr uses that provider, and a row that names two is a
+# map error (OSR_WINPKG_BAD_ROW), not a chain. Same rule, same reason, as
+# lib/pkgmap/*.map on the Linux side.
+#
+# A MISSING MANAGER IS INSTALLED, NOT ROUTED AROUND. If a row's manager is not
+# on this machine, osr installs it from its own vendor installer: scoop from
+# get.scoop.sh (per-user, no elevation), choco from
+# community.chocolatey.org/install.ps1, winget from asheroto/winget-install.
+# The last two need Administrator, so the run elevates once, up front, and
+# continues elevated — the Windows equivalent of install.sh's `sudo -v`
+# warm-up. That is why the file needs no fallbacks: the provider a row names
+# can always be made to exist.
+#
+# WHERE A PACKAGE MUST COME FROM SOMEWHERE ELSE ON SOME MACHINES, SAY SO WITH
+# AN @facet ROW. Facet qualifiers work exactly as lib/pkg.sh resolves them
+# (DESIGN §1a), most specific first:
+#
+#   name@<release>   Windows DisplayVersion, e.g. 24H2, 23H2  (~ OSR_CODENAME)
+#   name@<version>   Windows product major, 11 or 10          (~ OSR_VERSION_ID)
+#   name@<arch>      x86_64 | arm64 | x86                     (~ OSR_ARCH)
+#   name             unqualified fallback
+#
+# A qualified row REPLACES the bare row; it does not merge with it. So the way
+# to say "winget everywhere, but winget has no arm64 build of this one" is two
+# rows, the second naming a different provider outright:
+#
+#   thing       = winget:Vendor.Thing
+#   thing@arm64 = bin:https://vendor.example/thing-arm64.zip
+#
+# There are no such rows today, and that is a checked claim rather than an
+# assumption: winget's manifests carry arm64 installers for Microsoft.PowerShell,
+# Starship.Starship and JanDeDobbeleer.OhMyPosh, and scoop's fastfetch manifest
+# has an arm64 URL, so those four managers already resolve the architecture
+# themselves. wez.wezterm is x64-only — but upstream publishes no Windows arm64
+# build at all, so there is nothing for a bin: row to point at either; arm64
+# machines run the x64 build under emulation, as they would from any provider.
+# Re-check before adding a row: an @arm64 bin: row in front of a manager that
+# does have an arm64 build is a downgrade, not a fix.
+#
+# The bin: provider (see lib/winbin.h) installs the vendor's own artifact:
+#
+#   bin:[<kind>:]<source>
+#
+#     <source>  https://host/path/file.zip     a direct URL, or
+#               gh:<owner>/<repo>:<pattern>    newest GitHub release, first
+#                                              asset whose filename matches
+#                                              <pattern> (glob, `*` only) —
+#                                              for version-named assets
+#
+#     <kind>    inferred from the file extension when omitted. Write it only
+#               when the extension is absent or misleading:
+#                 zip     portable archive  -> %LOCALAPPDATA%\osr\bin + PATH
+#                 exe     the program       -> placed there as <command>.exe
+#                 msi     installer package -> msiexec /qn (needs admin)
+#                 setup   installer .exe    -> run with the silent switches
+#                                              the row gives, comma-separated
+#                                              after the kind: `setup,/S:<url>`
+#
+# WHICH MANAGER A ROW NAMES is decided by the project's own Windows install
+# page, not by preference — the manager upstream ships to is the one whose id
+# upstream actually controls. Where upstream ranks its options, the first one
+# wins; where it lists several without ranking, the tie goes to the
+# publisher-qualified id (`Starship.Starship` can only be claimed by starship;
+# a bare `starship` can be claimed by anyone). Every row cites the page it came
+# from — re-check that page before changing a row.
+#
+# A scoop id may carry its bucket as `scoop:extras/wezterm`; osr runs
+# `scoop bucket add extras` before installing. A bare scoop id must therefore
+# be in the `main` bucket, which scoop installs by default.
 
-pwsh       = scoop:pwsh choco:powershell-core winget:Microsoft.PowerShell
-wezterm    = scoop:wezterm choco:wezterm winget:wez.wezterm
-oh-my-posh = scoop:oh-my-posh choco:oh-my-posh winget:JanDeDobbeleer.OhMyPosh
-starship   = scoop:starship choco:starship winget:Starship.Starship
-fastfetch  = scoop:fastfetch choco:fastfetch winget:Fastfetch-cli.Fastfetch
+# Microsoft, "Install PowerShell 7 on Windows": WinGet is listed as the
+# "Recommended way to install PowerShell on Windows clients", and the doc's
+# "Supported installation methods" section covers only the methods it lists —
+# scoop and choco are neither listed nor supported by Microsoft.
+pwsh       = winget:Microsoft.PowerShell
+
+# wezterm.org/install/windows.html lists winget first, then scoop (extras
+# bucket), then choco. Its scoop route would be scoop:extras/wezterm.
+wezterm@x86_64    = winget:wez.wezterm
+
+# ohmyposh.dev/docs/installation/windows leads with winget and cautions that
+# "The chocolatey package is maintained by the community and might not be up to
+# date". Not carried in scoop's main or extras bucket at all.
+oh-my-posh = winget:JanDeDobbeleer.OhMyPosh
+
+# starship's README lists choco, scoop and winget side by side without ranking
+# them, so the tie goes to the publisher-qualified id (see header).
+starship   = winget:Starship.Starship
+
+# fastfetch's README lists scoop first, and fastfetch is in scoop's *main*
+# bucket (ScoopInstaller/Main), which scoop adds on install — no bucket prefix
+# needed. This is the one row that is not winget: upstream ranks scoop first.
+fastfetch  = scoop:fastfetch

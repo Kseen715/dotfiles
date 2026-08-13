@@ -42,6 +42,8 @@
 static const char *lib_srcs[] = {
     "lib/net.c",
     "lib/winpkg.c",
+    "lib/winbin.c",
+    "lib/elevate.c",
     "lib/manifest.c",
     "lib/ui.c",
     "lib/state.c",
@@ -60,7 +62,8 @@ static const char *lib_srcs[] = {
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
 
 static const char *test_names[] = {
-    "net_parse_test", "winpkg_test", "manifest_test", "theme_render_test", "config_copy_test",
+    "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
+    "config_copy_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 

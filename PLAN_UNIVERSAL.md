@@ -189,8 +189,11 @@ session finished the ingestion and deleted `windows-rice/`:
   this reason.
 - **`Install-Scoop` (pkg.ps1) and `Update-SessionEnvironment` (common.ps1)**
   — the two pieces decision 7's port had left out — are now real:
-  `lib/winpkg.c`'s `osr_winpkg_bootstrap_scoop` (installs scoop via
-  `irm get.scoop.sh | iex` when no package manager is present at all) and
+  `lib/winpkg.c`'s `osr_winpkg_ensure_manager` (installs the one manager a
+  `windows.map` row pins the package to, when it is absent -- scoop via
+  `irm get.scoop.sh | iex`, choco and winget via their own documented
+  installers, both of which require elevation; decision 10 replaced the
+  original scoop-only bootstrap) and
   `osr_winpkg_refresh_env` (re-reads Machine + User environment variables,
   including PATH, from the registry after every install attempt, so a
   package a manager just installed is visible to the rest of the same
@@ -243,6 +246,94 @@ wezterm` (no flags) now does what `osr module wezterm` already did on
 Linux — installs and themes it for real, on the first run, with no second
 flag to discover.
 
+**10. `windows.map` pins each package to exactly one package manager, and a
+missing manager is bootstrapped rather than substituted.**
+The file used to list every manager that carried a package
+(`pwsh = scoop:pwsh choco:powershell-core winget:Microsoft.PowerShell`) and
+`lib/winpkg.c` tried them in a fixed scoop -> choco -> winget order, using
+whichever was already installed. That is a trust bug, not just a preference:
+scoop, choco and winget are independent namespaces, so `foo` in one is not
+`foo` in another, and the manager a project does *not* ship to is exactly
+where its name is still free for someone else to publish under. The fallback
+order turned "the intended manager is absent on this machine" into "install
+whatever the next namespace happens to have under that name," with no signal
+that a different publisher answered. Now each row names one manager
+(`name[@facet] = mgr:id`), a row naming several is a map error
+(`OSR_WINPKG_BAD_ROW`) rather than a chain, and if the pinned manager is
+missing osr installs *that* manager: scoop's own per-user installer needs no
+elevation, while choco's and winget's do, so from a non-elevated run those
+print the exact command to run instead of half-installing. Which manager a
+row names follows that project's own Windows install page (Microsoft calls
+winget the recommended route for PowerShell; oh-my-posh's docs warn its choco
+package is community-maintained; fastfetch's README leads with scoop, so that
+row is scoop) — where upstream lists several without ranking them, the tie
+goes to the publisher-qualified id, since `Starship.Starship` can only be
+claimed by starship while a bare `starship` cannot. The `@facet` qualifiers
+(`@24H2` release > `@11` version > `@arm64` arch > bare) are the same
+most-specific-wins scheme `lib/pkg.sh` already resolves for Linux
+(`os-rice/DESIGN.md` §1a), so per-release and per-arch divergence has a home
+without reintroducing a fallback chain. Cost, accepted: a machine that has
+only scoop now bootstraps winget (elevated) for the four winget-pinned rows,
+where before it would have quietly installed scoop's packages instead.
+
+**11. One provider per row -- a missing manager is installed, never
+substituted -- and elevation is asked for once, up front.**
+Decision 10 pinned each package to one manager and rejected rows that named
+two. What it left open was what happens when that manager is not on the
+machine, and since choco's and winget's installers both need Administrator,
+"nothing installs" was a real outcome. The resolution keeps the one-provider
+rule absolute and makes the named provider always obtainable.
+
+`osr_winpkg_ensure_manager` installs a missing manager from its own vendor
+installer: scoop from get.scoop.sh (per-user, no elevation), choco from
+community.chocolatey.org/install.ps1, winget from asheroto/winget-install
+(Microsoft's documented route for a machine without it is the Store, with no
+supported command line). Because the named provider can always be made to
+exist, the map needs no fallbacks at all -- which is what lets the format
+stay at exactly one provider per row, the same shape `lib/pkgmap/*.map` has
+always had on the Linux side. `parse_rhs` rejects a second provider token
+whatever it is: two managers, two `bin:` specs, or a manager paired with a
+`bin:` route are all `OSR_WINPKG_BAD_ROW`.
+
+Elevation is a real path rather than a refusal, ported from what the Linux
+side already does. `install.sh` runs `sudo -v` once at the top of a run so no
+escalating step prompts mid-loop, and `lib/user.sh`'s `as_root` escalates
+only the steps that need it. `lib/elevate.c` is that shape for UAC:
+`install.c` asks `osr_winpkg_run_needs_admin` before doing any work and, if
+some package's provider needs an elevated install, calls `osr_elevate_now` --
+which relaunches this same run under the `runas` verb, waits for it, and
+exits with its status. One prompt covers the whole run, because every later
+`osr_is_admin()` inside the elevated child is simply true. Two details worth
+keeping in view: UAC cannot inherit a console, so the elevated child
+necessarily gets its own window (a property of Windows, not a choice); and
+the child is passed `--user-home`, this port's `$SUDO_USER`, so the profile
+being riced travels across the elevation boundary and configs still land in
+the user's home rather than in whichever admin account answered the prompt --
+exactly the job `as_user` does on Linux.
+
+The fourth provider is `bin:`, in `lib/winbin.c`: the vendor's own artifact,
+named by a direct URL or `gh:<owner>/<repo>:<pattern>` where the asset name
+carries a version. By kind -- inferred from the extension or written
+explicitly -- it expands a `zip` under %LOCALAPPDATA%\osr\bin and puts the
+executable's directory on the user's PATH, places a portable `exe` there
+under the command's name, runs an `msi` through `msiexec /qn`, or runs a
+`setup` installer with the silent switches the row supplies (every installer
+toolkit spells those differently, so the map states them rather than osr
+guessing). It sits alongside the managers rather than behind them: a row
+names it when no manager should serve that package on that machine, most
+often an architecture the manager never shipped, written as a second
+`name@arch` row that replaces the bare one outright.
+
+No row uses `bin:` today, and that is a checked claim rather than an
+oversight: winget's manifests carry arm64 installers for
+Microsoft.PowerShell, Starship.Starship and JanDeDobbeleer.OhMyPosh, and
+scoop's fastfetch manifest has an arm64 URL, so all four already resolve
+architecture themselves. wez.wezterm is x64-only, but upstream publishes no
+Windows arm64 build for a `bin:` row to point at either. An `@arm64` row in
+front of a manager that does have an arm64 build would be a downgrade --
+`bin:` cannot upgrade or uninstall what it drops in -- so the rows stay as
+they are and `winbin.c` stands ready for the case that actually needs it.
+
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
 by three different pinned toolchains for three different reach targets —
@@ -289,9 +380,13 @@ instead of in a separate `universal-core/` tree. What actually exists today:
 
 ```
 os-rice/
-  windows.map           logical package name -> real id per manager
-                        (scoop/choco/winget), read by lib/winpkg.c. Ingested
-                        from the retired windows-rice/windows.map (decision 8).
+  windows.map           logical package name -> the ONE provider that
+                        installs it (`name[@facet] = <provider>`, provider
+                        being scoop:/choco:/winget:<id> or bin:<spec>),
+                        read by lib/winpkg.c.
+                        Ingested from the retired windows-rice/windows.map
+                        (decision 8), reworked to one-manager-per-row +
+                        @facet qualifiers (decision 10).
   install.c            CLI entry, C port of install.sh: rice.list -> package
                         + module resolution, always installs for real (no
                         dry-run gate, matching install.sh -- decision 9),
@@ -316,9 +411,21 @@ os-rice/
                         no OS dependency) + WinInet-backed fetch (Windows
                         only so far; the #else branch is a documented stub,
                         landing spot for a native Linux port later)
-    winpkg.c / winpkg.h windows.map lookup + scoop -> choco -> winget
-                        dispatch, scoop bootstrap (osr_winpkg_bootstrap_scoop)
+    winpkg.c / winpkg.h windows.map lookup (facet-qualified, most specific
+                        key wins) + install through the row's single
+                        provider, installing a missing manager from its
+                        vendor installer first (osr_winpkg_ensure_manager,
+                        elevating once when that needs admin; decision 11)
                         + registry env refresh (osr_winpkg_refresh_env) --
+    winbin.c / winbin.h the bin: provider: resolve a direct URL or a
+                        gh:owner/repo:pattern release asset, download, then
+                        expand a zip / place an exe / run an msi or setup
+                        installer by kind (decision 11)
+    elevate.c/elevate.h one-shot UAC elevation: relaunch this run under
+                        `runas`, carrying --user-home across the boundary
+                        the way sudo carries $SUDO_USER. Port of
+                        install.sh's sudo warm-up + lib/user.sh's as_root
+                        (decision 11)
                         the full package half of the retired windows-rice/
                         src/pkg.ps1 + src/common.ps1 (decision 8). NOT a
                         port of lib/pkg.sh -- that's a different package
@@ -526,19 +633,28 @@ to point at).
 - [ ] **Task 1.3: Windows branch — install dispatch + `fetch_and_place` fallback**
   - **Status: partially done, scope narrower than originally written.**
     `lib/winpkg.c` implements the dispatch half against `windows.map`
-    (scoop -> choco -> winget, ported from `windows-rice/src/pkg.ps1`) and
+    (one pinned manager per package, see decision 10) and
     `install.c` wires it up end to end (`install.exe <rice>` resolves a
-    real `rice.list` and reports/installs each module's package). What's
-    NOT done: the generic `fetch_and_place` fallback this task's title
-    names. It was deliberately not built yet — `windows.map` only carries
-    `mgr:id` pairs, not raw download URLs, so there's no data source to
-    fetch *from* for a name with no map entry; `install.exe` reports those
-    as skipped rather than guessing. Also unverified: a real Win7-without-
-    winget VM run (`osr_winpkg_have_command`/`osr_winpkg_install` are only
-    exercised so far on this dev machine, which already has scoop/winget,
-    plus unit tests for the map-lookup half only — the actual
-    `scoop install`/`choco install`/`winget install` `system()` calls have
-    not been exercised in anger).
+    real `rice.list` and reports/installs each module's package). What
+    decision 11 then added: the generic `fetch_and_place` fallback this
+    task's title names, as the map's `bin:` token and `lib/winbin.c` --
+    every row now carries a vendor-binary route, so a machine with none of
+    the managers still installs, per-user and with no UAC prompt.
+
+    Verified live on the dev machine: `gh:` asset resolution against the
+    real GitHub API, the glob that picks the versioned asset, download,
+    `Expand-Archive`, locating the executable inside the archive, and the
+    HKCU PATH append (checked with a command absent from the machine, so
+    the PATH entry is what made it resolve; %LOCALAPPDATA% was pointed at a
+    scratch tree and the PATH value restored byte-for-byte afterwards).
+
+    Still unverified: a real machine with NO package manager at all -- this
+    dev box has scoop, choco and winget, so the manager bootstraps
+    (`osr_winpkg_ensure_manager`), the elevation relaunch
+    (`osr_elevate_now`), and the `scoop install`/`choco install`/
+    `winget install` calls themselves have not been exercised in anger.
+    The routing that chooses between them is unit-tested; the commands it
+    chooses are not.
   - Acceptance: on a Win7 VM with no winget, `install_pkg("starship")`
     downloads and places the binary without error; on Win10/11 with winget
     present, it uses winget instead.

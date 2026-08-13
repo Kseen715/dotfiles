@@ -26,6 +26,7 @@
  *
  * C89.
  */
+#include "lib/elevate.h"
 #include "lib/net.h"
 #include "lib/winpkg.h"
 #include "lib/manifest.h"
@@ -211,7 +212,7 @@ static void run_one_module(const char *repo_root, const char *map_path, const ch
     if (osr_winpkg_install(map_path, name, NULL)) {
         osr_success("  %-14s installed", name);
     } else {
-        osr_warn("  %-14s FAILED (no windows.map entry, or every available manager failed)", name);
+        osr_warn("  %-14s FAILED (see the windows.map warning above)", name);
     }
 }
 
@@ -254,6 +255,19 @@ static int run_rice(const char *root, const char *repo_root, const char *rice_na
     if (m.requires_list[0] != '\0') osr_info("requires=%s (not preflighted yet)", m.requires_list);
     osr_info("modules=%lu", m.module_count);
 
+    /* install.sh warms the sudo credential at the top of a run so that no
+     * escalating step prompts mid-loop; this is that, for UAC. Asked once,
+     * before any work, and only when some package genuinely has no route
+     * that avoids Administrator -- see osr_winpkg_run_needs_admin. */
+    {
+        char *names[OSR_MANIFEST_MAX_MODULES];
+        for (i = 0; i < m.module_count; i++) names[i] = m.modules[i];
+        if (osr_winpkg_run_needs_admin(map_path, names, (int)m.module_count)) {
+            osr_elevate_now("some packages need a package manager that only an "
+                            "Administrator can install.");
+        }
+    }
+
     for (i = 0; i < m.module_count; i++) {
         run_one_module(repo_root, map_path, m.modules[i], theme);
     }
@@ -268,6 +282,10 @@ static int run_rice(const char *root, const char *repo_root, const char *rice_na
 static int run_modules_direct(const char *repo_root, const char *map_path,
                                char **names, int name_count, const char *theme) {
     int i;
+    if (osr_winpkg_run_needs_admin(map_path, names, name_count)) {
+        osr_elevate_now("some packages need a package manager that only an "
+                        "Administrator can install.");
+    }
     for (i = 0; i < name_count; i++) {
         run_one_module(repo_root, map_path, names[i], theme);
     }
@@ -321,6 +339,7 @@ int main(int argc, char **argv) {
     int theme_only = 0;
     char *rice_name = NULL;
     char *theme_arg = NULL;
+    char *user_home = NULL;
     char *module_names[64];
     int module_count = 0;
     char root[OSR_MAX_PATH_C];
@@ -350,11 +369,19 @@ int main(int argc, char **argv) {
             i++;
             if (i >= argc) { fprintf(stderr, "error: --root needs a path\n"); return 1; }
             copy_bounded(root, sizeof(root), argv[i]);
+        } else if (strcmp(argv[i], "--user-home") == 0) {
+            /* Set by lib/elevate.c when it relaunches this run elevated:
+             * the profile to rice, carried across the elevation boundary
+             * the way sudo carries $SUDO_USER (see elevate.h). Configs must
+             * still land in the user's home, not the admin's. */
+            i++;
+            if (i >= argc) { fprintf(stderr, "error: --user-home needs a path\n"); return 1; }
+            user_home = argv[i];
         } else if (argv[i][0] == '-') {
             fprintf(stderr,
                 "error: unknown option: %s (this C port only implements --list, "
-                "--list-modules, --module, --theme, --theme-only, --root "
-                "-- see install.sh for the full set)\n",
+                "--list-modules, --module, --theme, --theme-only, --root, "
+                "--user-home -- see install.sh for the full set)\n",
                 argv[i]);
             return 1;
         } else if (module_mode) {
@@ -372,6 +399,12 @@ int main(int argc, char **argv) {
     }
 
     if (do_help) { usage(); return 0; }
+
+    /* Before any work: remember how we were invoked, so a step that needs
+     * Administrator can relaunch this exact run elevated instead of failing
+     * (lib/elevate.h -- the port of install.sh's sudo warm-up). */
+    osr_elevate_init(argc, argv);
+    if (user_home != NULL) osr_set_user_home(user_home);
 
     if (root[0] == '\0') dirname_of(argv[0], root, sizeof(root));
     dirname_of(root, repo_root, sizeof(repo_root));
