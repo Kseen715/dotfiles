@@ -9,6 +9,16 @@
 # `ip rule fwmark` sends those packets to a private routing table whose default
 # route points at the ISP link. Nothing else on the box is affected.
 #
+# Three things the group cannot catch, handled separately:
+#   - apt hands its downloads to the '_apt' user, dropping the group; traffic
+#     owned by the users in EXTRA_UIDS is marked as well.
+#   - name lookups are made by the system resolver daemon under its own uid, so
+#     no owner match can see them. Set a DNS server at setup and all port-53
+#     egress is redirected to it over the ISP link, leaving resolv.conf alone.
+#   - some traffic has no useful process to select on: an editor, a language
+#     server or a browser tab talking to api.github.com. Anything addressed to
+#     ISP_NETS / ISP_DOMAINS is marked by destination, whoever opened it.
+#
 #   sudo ./isp-route.sh setup       interactive install
 #   sudo ./isp-route.sh status      show what is currently active
 #   sudo ./isp-route.sh apply       re-apply from saved config (used at boot)
@@ -31,6 +41,8 @@ RT_DIR=/etc/iproute2/rt_tables.d
 RT_FILE=$RT_DIR/isp-route.conf
 PROFILE_FILE=/etc/profile.d/isp-route.sh
 NM_DISPATCH=/etc/NetworkManager/dispatcher.d/90-isp-route
+STATE_DIR=/var/lib/isp-route
+RESOLVED_FILE=$STATE_DIR/resolved.v4
 
 GROUP=ispnet
 TABLE_ID=100
@@ -45,13 +57,29 @@ SHIM_TAG="isp-route-shim"
 # router, mDNS, DHCP, ...).
 EXEMPT4="127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255/32"
 
+# Destination-based selection, for traffic the group can never see: git over
+# ssh from an editor, a GitHub extension polling the API, `curl` in someone
+# else's script. GitHub's own address space is stable and published; these four
+# blocks carry github.com (web, git, ssh), api.github.com, codeload and the
+# *.githubusercontent.com / Pages front ends.
+ISP_NETS_DEFAULT="192.30.252.0/22, 185.199.108.0/22, 140.82.112.0/20, 143.55.64.0/20"
+# Names resolved at every apply and folded into the same set — this is what
+# covers the CDN-fronted hosts (ghcr.io, release assets) whose addresses are not
+# in a published block. Resolution failures fall back to the last good answer.
+ISP_DOMAINS_DEFAULT="github.com api.github.com codeload.github.com raw.githubusercontent.com objects.githubusercontent.com ghcr.io"
+
 # Tools whose real binary lives in system dirs -> shadowed by a shim in
 # /usr/local/bin (this also covers `sudo apt`, since sudo's secure_path has
 # /usr/local/bin ahead of /usr/bin).
-SYS_TOOLS="apt apt-get aptitude apt-file debootstrap pip pip3 pipx npm npx yarn pnpm cargo rustup go gem snap flatpak"
+SYS_TOOLS="apt apt-get aptitude apt-file debootstrap pip pip3 pipx npm npx yarn pnpm cargo rustup go gem snap flatpak git gh"
 # Tools commonly installed per-user (~/.cargo/bin, ~/.local/bin, nvm, ...) that a
 # /usr/local/bin shim cannot shadow -> shell functions instead.
-FN_TOOLS="cargo rustup pip pip3 pipx npm npx yarn pnpm go gem uv poetry"
+FN_TOOLS="cargo rustup pip pip3 pipx npm npx yarn pnpm go gem uv poetry gh"
+
+# Privilege-dropping helpers: apt hands its downloads to the '_apt' user, which
+# discards the group we select on, so the group alone can never catch them.
+# Traffic owned by these users always takes the ISP link.
+EXTRA_UIDS="_apt"
 
 ASSUME_YES=0
 OPT_ISP=""
@@ -156,6 +184,8 @@ load_conf() {
 	BLOCK_IPV6=${BLOCK_IPV6:-yes}
 	DNS_SERVER=${DNS_SERVER:-}
 	SHIMS=${SHIMS:-}
+	ISP_NETS=${ISP_NETS-$ISP_NETS_DEFAULT}
+	ISP_DOMAINS=${ISP_DOMAINS-$ISP_DOMAINS_DEFAULT}
 }
 
 save_conf() {
@@ -170,6 +200,9 @@ PREFER_MODEM_DEFAULT=$PREFER_MODEM_DEFAULT
 BLOCK_IPV6=$BLOCK_IPV6
 DNS_SERVER=$DNS_SERVER
 SHIMS="$SHIMS"
+# destinations always routed over the ISP link, whatever process opens them
+ISP_NETS="$ISP_NETS"
+ISP_DOMAINS="$ISP_DOMAINS"
 EOF
 	ok "wrote $CONF"
 }
@@ -249,8 +282,17 @@ apply_routes() {
 	fi
 }
 
+dest_elements() { # static nets + last resolved addresses, as a comma list
+	local elems=${ISP_NETS:-} cached
+	if [ -r "$RESOLVED_FILE" ]; then
+		cached=$(tr '\n' ',' <"$RESOLVED_FILE" | sed 's/,$//; s/,/, /g')
+		[ -n "$cached" ] && elems="${elems:+$elems, }$cached"
+	fi
+	echo "$elems"
+}
+
 apply_nft() {
-	local dns_rules="" nat_chain="" v6chain="" tmp
+	local dns_rules="" nat_chain="" v6chain="" tmp dest_set="" dest_rule="" elems
 	if [ -n "$DNS_SERVER" ]; then
 		# Must come BEFORE the gid test: lookups are not made by the calling
 		# process, they are made by the system resolver daemon under its own uid,
@@ -264,6 +306,29 @@ apply_nft() {
 		meta mark $FWMARK meta l4proto { tcp, udp } th dport 53 dnat ip to $DNS_SERVER:53
 	}"
 	fi
+	# auto-merge: resolved host addresses usually fall inside one of the static
+	# blocks, and nft refuses overlapping intervals without it.
+	if [ -n "${ISP_NETS:-}${ISP_DOMAINS:-}" ]; then
+		elems=$(dest_elements)
+		dest_set="
+	set dest4 {
+		type ipv4_addr
+		flags interval
+		auto-merge${elems:+
+		elements = { $elems }}
+	}
+"
+		dest_rule="		ip daddr @dest4 meta mark set $FWMARK
+		meta mark $FWMARK return"
+	fi
+
+	local owner_rules="		meta skgid $GID meta mark set $FWMARK" u uid
+	for u in $EXTRA_UIDS; do
+		uid=$(id -u "$u" 2>/dev/null) || continue
+		owner_rules="$owner_rules
+		meta skuid $uid meta mark set $FWMARK"
+	done
+
 	if [ "$BLOCK_IPV6" = yes ]; then
 		v6chain="
 	chain output6 {
@@ -282,14 +347,14 @@ table inet $NFT_TABLE {
 		flags interval
 		elements = { $EXEMPT4 }
 	}
-
+${dest_set}
 	chain output {
 		type route hook output priority mangle; policy accept;
 		ip daddr 127.0.0.0/8 return
 ${dns_rules}
-		meta skgid != $GID return
 		ip daddr @exempt4 return
-		meta mark set $FWMARK
+${dest_rule}
+${owner_rules}
 	}
 
 	chain postrouting {
@@ -319,11 +384,18 @@ apply_iptables() {
 		iptables -t nat -C OUTPUT -m mark --mark "$FWMARK" -p tcp --dport 53 -j DNAT --to-destination "$DNS_SERVER:53" 2>/dev/null ||
 			iptables -t nat -A OUTPUT -m mark --mark "$FWMARK" -p tcp --dport 53 -j DNAT --to-destination "$DNS_SERVER:53"
 	fi
-	iptables -t mangle -A ISP_ROUTE -m owner ! --gid-owner "$GID" -j RETURN
 	for net in ${EXEMPT4//,/ }; do
 		iptables -t mangle -A ISP_ROUTE -d "$net" -j RETURN
 	done
-	iptables -t mangle -A ISP_ROUTE -j MARK --set-mark "$FWMARK"
+	for net in $(dest_elements | tr ',' ' '); do
+		iptables -t mangle -A ISP_ROUTE -d "$net" -j MARK --set-mark "$FWMARK"
+	done
+	iptables -t mangle -A ISP_ROUTE -m owner --gid-owner "$GID" -j MARK --set-mark "$FWMARK"
+	local u uid
+	for u in $EXTRA_UIDS; do
+		uid=$(id -u "$u" 2>/dev/null) || continue
+		iptables -t mangle -A ISP_ROUTE -m owner --uid-owner "$uid" -j MARK --set-mark "$FWMARK"
+	done
 	iptables -t nat -C POSTROUTING -m mark --mark "$FWMARK" -o "$ISP_IF" -j MASQUERADE 2>/dev/null ||
 		iptables -t nat -A POSTROUTING -m mark --mark "$FWMARK" -o "$ISP_IF" -j MASQUERADE
 	if [ "$BLOCK_IPV6" = yes ] && have ip6tables; then
@@ -337,6 +409,56 @@ apply_firewall() {
 	if have nft; then apply_nft
 	elif have iptables; then apply_iptables
 	else die "neither nft nor iptables found — install nftables"; fi
+}
+
+resolve_dest_domains() { # -> one IPv4 per line, deduped
+	local d
+	for d in ${ISP_DOMAINS//,/ }; do
+		# a name that does not resolve must not abort the run (set -e + pipefail)
+		timeout 5 getent ahostsv4 "$d" 2>/dev/null | awk '$1 ~ /^[0-9]+\./ {print $1}' || true
+	done | sort -u | awk -F. '
+		# a poisoned resolver or a captive portal answers with private/bogus
+		# space; marking those would drag LAN traffic onto the ISP table
+		$1 == 10 || $1 == 127 || $1 == 0 || $1 >= 224 { next }
+		($1 == 172 && $2 >= 16 && $2 < 32) || ($1 == 192 && $2 == 168) { next }
+		($1 == 169 && $2 == 254) || ($1 == 100 && $2 >= 64 && $2 < 128) { next }
+		($1 == 198 && ($2 == 18 || $2 == 19)) { next }
+		{ print }'
+}
+
+refresh_dest_cache() { # rewrite $RESOLVED_FILE; true only when the list changed
+	local old="" new
+	[ -r "$RESOLVED_FILE" ] && old=$(cat "$RESOLVED_FILE")
+	new=$(resolve_dest_domains)
+	if [ -z "$new" ]; then
+		[ -n "$old" ] && warn "could not resolve ISP_DOMAINS — keeping the cached addresses" ||
+			warn "could not resolve ISP_DOMAINS — only the static ranges are covered"
+		return 1
+	fi
+	[ "$new" = "$old" ] && return 1
+	mkdir -p "$STATE_DIR"
+	printf '%s\n' "$new" >"$RESOLVED_FILE"
+	return 0
+}
+
+# Runs after the firewall is up, so the lookups themselves already travel over
+# the ISP link (and through DNS_SERVER, when one is configured).
+apply_dest() {
+	[ -n "${ISP_NETS:-}${ISP_DOMAINS:-}" ] || return 0
+	local elems changed=0
+	if [ -n "${ISP_DOMAINS:-}" ]; then
+		refresh_dest_cache && changed=1 || true
+	fi
+	elems=$(dest_elements)
+	[ -n "$elems" ] || return 0
+	if have nft && nft list set inet "$NFT_TABLE" dest4 >/dev/null 2>&1; then
+		nft flush set inet "$NFT_TABLE" dest4 2>/dev/null || true
+		nft add element inet "$NFT_TABLE" dest4 "{ $elems }" ||
+			{ warn "could not load the destination set"; return 0; }
+	elif [ "$changed" = 1 ] && have iptables; then
+		apply_iptables >/dev/null # rebuilds the chain from the refreshed cache
+	fi
+	ok "destinations forced to $ISP_IF: $(printf '%s' "$elems" | tr ',' '\n' | grep -c .) ranges"
 }
 
 flush_firewall() {
@@ -533,6 +655,18 @@ cmd_setup() {
 	dim "  Leave empty to keep DNS exactly as it is today."
 	DNS_SERVER=$(ask "Redirect all DNS to this server over the ISP link (e.g. 9.9.9.9, empty = no change)" "")
 
+	echo
+	dim "  Shims only help when the tool is the one calling out. Cloning from an"
+	dim "  editor, a GitHub extension polling api.github.com or plain 'ssh git@github.com'"
+	dim "  have no installer process to select on, so GitHub can also be routed by"
+	dim "  destination address — that path works for every process on the box."
+	ISP_NETS=$ISP_NETS_DEFAULT
+	ISP_DOMAINS=$ISP_DOMAINS_DEFAULT
+	if ! confirm "Force all GitHub traffic (clone, ssh, api) onto the ISP link by address?" y; then
+		ISP_NETS=""
+		ISP_DOMAINS=""
+	fi
+
 	local do_shims=no do_fns=no do_service=no add_user=""
 	confirm "Install shims so 'apt', 'pip', 'npm', ... automatically use the ISP link?" y && do_shims=yes
 	confirm "Install /etc/profile.d hooks for per-user tools (cargo, pipx, nvm)?" y && do_fns=yes
@@ -550,6 +684,7 @@ cmd_setup() {
 	printf '  selector    -> unix group %s, fwmark %s, table %s (%s)\n' "$GROUP" "$FWMARK" "$TABLE_NAME" "$TABLE_ID"
 	printf '  ipv6 block  -> %s\n' "$BLOCK_IPV6"
 	printf '  dns         -> %s\n' "${DNS_SERVER:-system default}"
+	printf '  by address  -> %s\n' "${ISP_NETS:-none}${ISP_DOMAINS:+ + $ISP_DOMAINS}"
 	echo
 	confirm "Apply this configuration?" y || die "aborted"
 
@@ -558,6 +693,7 @@ cmd_setup() {
 	apply_sysctl
 	apply_routes
 	apply_firewall
+	apply_dest
 	install_wrapper
 	SHIMS=""
 	[ "$do_shims" = yes ] && install_shims
@@ -573,6 +709,8 @@ cmd_setup() {
 	info "Done. Usage:"
 	dim "  viaisp curl https://example.com     # force anything onto the ISP link"
 	dim "  sudo apt update                     # already routed via $ISP_IF (shim)"
+	dim "  git clone git@github.com:you/repo   # GitHub goes via $ISP_IF by address"
+	dim "  sudo isp-route refresh              # re-resolve ISP_DOMAINS after a change"
 	dim "  sudo isp-route status               # inspect"
 	dim "  sudo isp-route test                 # compare exit IPs"
 	dim "  sudo isp-route teardown             # undo everything"
@@ -586,6 +724,7 @@ cmd_apply() {
 	apply_sysctl
 	apply_routes
 	apply_firewall
+	apply_dest
 	[ -x "$WRAPPER" ] || install_wrapper
 }
 
@@ -597,6 +736,8 @@ cmd_status() {
 		printf '  Modem link : %s%s\n' "$MODEM_IF" "${MODEM_GW_STATIC:+ via $MODEM_GW_STATIC}"
 		printf '  Group      : %s (gid %s)\n' "$GROUP" "$(g=$(group_gid); echo "${g:-missing}")"
 		printf '  Shims      : %s\n' "${SHIMS:-none}"
+		printf '  By address : %s\n' "${ISP_NETS:-none}"
+		printf '  Resolved   : %s\n' "${ISP_DOMAINS:-none}"
 	else
 		warn "not configured ($CONF missing)"
 	fi
@@ -648,6 +789,7 @@ cmd_teardown() {
 		systemctl daemon-reload
 	fi
 	rm -f "$INSTALL_PATH" "$CONF"
+	rm -rf "$STATE_DIR"
 	sysctl -q --system >/dev/null 2>&1 || true
 	ok "removed. The group '$GROUP' was left in place (groupdel $GROUP to drop it)."
 	warn "default routes were left as-is; restart NetworkManager/networkd to regenerate them"
@@ -661,10 +803,14 @@ isp-route $VERSION — send installers over the ISP link, everything else over t
   isp-route apply                                   re-apply saved config
   isp-route status                                  show active configuration
   isp-route test                                    compare exit IP on both paths
+  isp-route refresh                                 re-resolve ISP_DOMAINS (GitHub, ...)
   isp-route teardown                                remove everything
   isp-route ifaces                                  list candidate interfaces
 
 After setup, 'viaisp <cmd>' forces any command onto the ISP link.
+GitHub (clone over https or ssh, api.github.com) is routed by destination
+address as well, so editors and extensions reach it without a shim.
+Edit ISP_NETS / ISP_DOMAINS in $CONF to cover more destinations.
 EOF
 }
 
@@ -685,6 +831,7 @@ main() {
 		apply | up) cmd_apply ;;
 		status | show) cmd_status ;;
 		test | check) cmd_test ;;
+		refresh | hosts) need_root; load_conf; apply_dest ;;
 		teardown | down | uninstall) cmd_teardown ;;
 		ifaces | list) mapfile -t IFACES < <(iface_list); print_iface_table ;;
 		-h | --help | help) usage ;;
