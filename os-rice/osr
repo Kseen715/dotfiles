@@ -27,6 +27,7 @@
 #   osr list                                         list available rices
 #   osr themes                                       list available themes
 #   osr modules                                      list available modules
+#   osr test                                         run the test suite
 #
 # switch and install share one idempotent engine (install.sh): because installs
 # never uninstall and install_layer overwrites only os-rice-owned layers, "move
@@ -61,11 +62,12 @@ case "$_cmd" in
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
     themes)  exec "$OSR_SELF_DIR/install.sh" --list-themes ;;
     modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
+    test)    exec sh "$OSR_SELF_DIR/test/run.sh" ;;
     -h|--help|"")
-        sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, list, themes, modules)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, list, themes, modules, test)" >&2
         exit 1
         ;;
 esac

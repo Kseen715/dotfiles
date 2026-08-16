@@ -1,0 +1,18 @@
+# WezTerm palette template — the ONE WezTerm theme layer, rendered per theme
+# (§6b) to ~/.config/wezterm/colors/osr-rice.toml; the dotfiles-owned
+# .wezterm.lua selects it with color_scheme = "osr-rice". Placeholders come from
+# themes/<name>/theme.list — the same 16 colors as the ghostty template.
+
+[metadata]
+name = "osr-rice"
+
+[colors]
+background = "{{background}}"
+foreground = "{{foreground}}"
+cursor_bg = "{{cursor}}"
+cursor_border = "{{cursor}}"
+cursor_fg = "{{background}}"
+selection_bg = "{{selection_background}}"
+selection_fg = "{{selection_foreground}}"
+ansi = ["{{ansi_black}}", "{{ansi_red}}", "{{ansi_green}}", "{{ansi_yellow}}", "{{ansi_blue}}", "{{ansi_magenta}}", "{{ansi_cyan}}", "{{ansi_white}}"]
+brights = ["{{ansi_bright_black}}", "{{ansi_bright_red}}", "{{ansi_bright_green}}", "{{ansi_bright_yellow}}", "{{ansi_bright_blue}}", "{{ansi_bright_magenta}}", "{{ansi_bright_cyan}}", "{{ansi_bright_white}}"]

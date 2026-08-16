@@ -1,0 +1,38 @@
+# Ghostty palette template — the ONE Ghostty theme layer, rendered per theme
+# (§6b). Every placeholder below is filled in from themes/<name>/theme.list's `color:` block;
+# a theme that needs more than a palette substitution (glass's background-blur)
+# ships its own config/ghostty/ghostty-theme and this file is not used.
+#
+# Installed last by the dotfiles-owned ghostty/config, so anything set here wins
+# over the base.
+
+
+background = {{background}}
+foreground = {{foreground}}
+cursor-color = {{cursor}}
+cursor-text = {{background}}
+
+# 0 on every theme that is not deliberately translucent; the glass theme is the
+# one that sets a radius, matching its Hyprland/waybar treatment. Needs a
+# compositor that honours it (Hyprland does); ignored elsewhere.
+background-opacity = {{background_opacity}}
+background-blur = {{background_blur}}
+selection-background = {{selection_background}}
+selection-foreground = {{selection_foreground}}
+
+palette = 0={{ansi_black}}
+palette = 1={{ansi_red}}
+palette = 2={{ansi_green}}
+palette = 3={{ansi_yellow}}
+palette = 4={{ansi_blue}}
+palette = 5={{ansi_magenta}}
+palette = 6={{ansi_cyan}}
+palette = 7={{ansi_white}}
+palette = 8={{ansi_bright_black}}
+palette = 9={{ansi_bright_red}}
+palette = 10={{ansi_bright_green}}
+palette = 11={{ansi_bright_yellow}}
+palette = 12={{ansi_bright_blue}}
+palette = 13={{ansi_bright_magenta}}
+palette = 14={{ansi_bright_cyan}}
+palette = 15={{ansi_bright_white}}

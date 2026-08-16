@@ -1,0 +1,45 @@
+# fixture for winpkg_test.c -- facet precedence, every provider spelling, plus
+# the malformed rows the real os-rice/windows.map must never contain (they
+# cannot live there, so they live here instead).
+
+# --- facet precedence: release > version > arch > bare -----------------------
+demo@24H2  = choco:demo-release
+demo@11    = winget:Demo.Version
+demo@arm64 = scoop:demo-arch
+demo       = scoop:demo-bare
+
+# no release/version row: the arch row must still beat the bare one
+archonly@arm64 = winget:Arch.Only
+archonly       = scoop:arch-only-bare
+
+# the shape windows.map prescribes for "no manager can serve this here": two
+# rows, one provider each, the qualified one replacing the bare one outright
+split       = winget:Vendor.Thing
+split@arm64 = source:provide_thing
+
+# --- other well-formed shapes ------------------------------------------------
+bucketed  = scoop:extras/bucketed-app
+commented = winget:Some.Id   # trailing note, must not become part of the id
+
+# equal specificity: the first row wins, a later duplicate never overrides
+dup = scoop:first
+dup = winget:second
+
+# --- the non-manager providers -----------------------------------------------
+srcrow    = source:provide_thing
+scriptrow = script:https://example.invalid/install.ps1
+
+# a URL's own "https:" must not be mistaken for a provider prefix, and the
+# slashes in it must not be mistaken for a scoop bucket
+scriptgh  = script:https://raw.example.invalid/o/r/main/install.ps1
+
+# --- malformed rows ----------------------------------------------------------
+multi         = scoop:multi choco:multi winget:Multi.Multi
+mgrplussource = winget:Two.Providers source:provide_thing
+twosources    = source:provide_a source:provide_b
+nocolon       = scoop
+emptyid       = winget:
+emptysource   = source:
+unknownprov   = apt:whatever
+norhs         =
+badbucket     = scoop:/leading-slash

@@ -1,7 +1,0 @@
-# catppuccin (mocha) palette — rice-owned colors composed onto the shared starship
-# base (§6). Prompt structure/symbols live in the dotfiles base (starship/starship.toml).
-[palettes.theme]
-accent = "#cba6f7"
-success = "#a6e3a1"
-error = "#f38ba8"
-secondary = "#89b4fa"

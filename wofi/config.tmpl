@@ -1,0 +1,21 @@
+# themes/xin/config/wofi/config - the xin launcher.
+#
+# Absolute pixel size, not the glass theme's percentages: mutter implements no
+# wlr_layer_shell, so on a GNOME session wofi prints "switching to normal window
+# mode" and sizes itself as an ordinary toplevel. A percentage has nothing to be
+# a percentage OF there, and wofi hands GTK a zero height for it
+# ("gdk_wayland_window_configure: assertion 'height > 0' failed"). Fixed numbers
+# render identically under Hyprland, so this costs the wlroots case nothing.
+show=drun
+term=alacritty
+show_all=true
+gtk_dark=true
+location=center
+allow_markup=true
+allow_images=true
+line_wrap=word
+width=600
+height=420
+hide_scroll=true
+insensitive=true
+prompt=search

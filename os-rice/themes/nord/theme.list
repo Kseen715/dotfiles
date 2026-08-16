@@ -1,27 +1,126 @@
-# themes/nord/theme.list — theme metadata, same newline `key: value` shape as
-# rice.list (Decisions: no TOML, a `while read` loop is the whole parser).
+# themes/nord/theme.list — a theme is its PALETTE (§6b). Metadata plus colors, in
+# the same newline `key: value` shape as rice.list (Decisions: no TOML, a
+# `while read` loop is the whole parser).
 #
-# A theme owns every 90-* appearance layer (config/) and its wallpapers/. It is
-# applied independently of any rice: `osr theme nord` rewires the layers of the
-# apps that are installed and leaves the rest alone.
+# There are no per-app config files here: every app's theme layer is ONE template
+# beside that app's dotfiles (btop/btop.theme.tmpl, ghostty/ghostty-theme.tmpl,
+# ...) and the placeholders in it are the names below. Writing a new theme is
+# this file and nothing else.
 #
-#   display:     human name shown in the picker
-#   description: one line, shown under the name
-#   polarity:    dark | light   (lets an app pick a matching icon/GTK variant)
-#   session:     any | x11 | wayland  (which display server the layers target)
-#   config:      whole config/ dirs copied to ~/.config on apply, 0..n lines
-#   color:       <role> <#rrggbb> — the palette Proteus styles itself with and
-#                falls back to when a theme ships no wallpaper.
+#   display:      human name shown in the picker
+#   description:  one line, shown under the name
+#   polarity:     dark | light   (lets an app pick a matching icon/GTK variant)
+#   session:      any | x11 | wayland  (which display server the layers target)
+#   config:       whole config/ dirs copied to ~/.config on apply, 0..n lines
+#   color:        <role> <#rrggbb>
+#
+# Every single-valued field above is also substitutable in a template under its
+# own name, along with `THEME` for this directory's name. A role a template asks
+# for and a theme omits is a warning, not a failed switch: the file still lands
+# with the placeholder left visible, so the gap is obvious and local.
+
 display: Nord
 description: Arctic, north-bluish palette
 polarity: dark
 session: any
 
-color: bg      #2e3440
-color: surface #3b4252
-color: fg      #d8dee9
-color: dim     #4c566a
-color: accent  #88c0d0
-color: success #a3be8c
-color: error   #bf616a
-color: warning #ebcb8b
+# Toolkit and font names. Not colors, but the same kind of thing: what a theme
+# picks, that a per-app template drops into a settings file. Five files used to
+# repeat these (gtk-2.0/gtkrc, gtk-3.0 + gtk-4.0 settings.ini, xsettingsd.conf,
+# icons/index.theme); now they are one template each and these lines.
+gtk_theme: Adwaita-dark
+icon_theme: Papirus-Dark
+cursor_theme: Adwaita
+cursor_size: 24
+ui_font: Noto Sans 10
+ui_font_family: Noto Sans
+ui_font_size: 10
+mono_font: JetBrainsMono Nerd Font
+# GNOME 47+ takes a NAMED accent, not a hex: blue teal green yellow orange
+# red pink purple slate. Nearest name to this theme's accent.
+gnome_accent: teal
+gtk_decoration_layout: menu:minimize,maximize,close
+gtk_animations: 1
+
+# --- the window ---------------------------------------------------------------
+color: background            #2e3440
+color: foreground            #d8dee9
+color: cursor                #d8dee9
+color: selection_background  #434c5e
+color: selection_foreground  #eceff4
+
+# How translucent the terminal is, and how hard the compositor blurs what shows
+# through. Both are part of the LOOK, so they live with the colors rather than in
+# each terminal's base config, where the four terminals had drifted to four
+# different numbers. opacity 1.00 is solid; blur 0 is off.
+color: background_opacity     0.85
+color: background_blur        0
+
+# Three shades off the background, for toolkits that ask for a full ramp (Qt's
+# Dark/Mid/Shadow roles). Derived from the background when the theme was
+# written, not at render time - a theme may retune any of them by hand.
+color: background_sunken     #21252e
+color: surface_mid           #3b4252
+color: shadow                #191d23
+
+# --- the 16 ANSI slots --------------------------------------------------------
+# What a terminal paints text with. Every terminal layer (ghostty, wezterm, foot,
+# alacritty, Xresources) is exactly these.
+color: ansi_black            #3b4252
+color: ansi_red              #bf616a
+color: ansi_green            #a3be8c
+color: ansi_yellow           #ebcb8b
+color: ansi_blue             #81a1c1
+color: ansi_magenta          #b48ead
+color: ansi_cyan             #88c0d0
+color: ansi_white            #e5e9f0
+color: ansi_bright_black     #4c566a
+color: ansi_bright_red       #bf616a
+color: ansi_bright_green     #a3be8c
+color: ansi_bright_yellow    #ebcb8b
+color: ansi_bright_blue      #81a1c1
+color: ansi_bright_magenta   #b48ead
+color: ansi_bright_cyan      #8fbcbb
+color: ansi_bright_white     #eceff4
+
+# --- TUI chrome ---------------------------------------------------------------
+# What a full-screen terminal app (btop, serie) paints its own furniture with.
+# These are a CHOICE, not a copy of the ANSI slots: most themes accent with the
+# bright set, and a muted theme accents with the normal one. That choice is the
+# reason these roles exist instead of the templates hard-coding an intensity.
+color: text_primary          #e5e9f0
+color: text_metadata        #b48ead
+color: text_muted            #4c566a
+color: panel_background      #3b4252
+color: border                #4c566a
+color: highlight             #bf616a
+color: accent_red            #bf616a
+color: accent_green          #a3be8c
+color: accent_yellow         #ebcb8b
+color: accent_blue           #81a1c1
+color: accent_magenta        #b48ead
+color: accent_cyan           #8fbcbb
+color: text_faint            #616e88
+color: accent_orange         #d08770
+color: urgent                #bf616a
+
+# btop draws one box per subsystem and one gradient per meter. gradient_mid and
+# gradient_peak are the warm/hot end of a load ramp - the colors a theme wants a
+# saturated CPU to be, which is not always its yellow and red.
+color: box_cpu               #8fbcbb
+color: box_memory            #a3be8c
+color: box_network           #b48ead
+color: box_process           #81a1c1
+color: gradient_mid          #ebcb8b
+color: gradient_peak         #bf616a
+
+# --- semantic roles -----------------------------------------------------------
+# Read by Proteus (which styles its own overlay from a theme it has never seen)
+# and by the prompt. Not terminal colors: a theme may point them anywhere.
+color: surface               #3b4252
+color: text_dim              #4c566a
+color: accent                #88c0d0
+color: success               #a3be8c
+color: error                 #bf616a
+color: warning               #ebcb8b
+color: prompt_secondary      #eceff4

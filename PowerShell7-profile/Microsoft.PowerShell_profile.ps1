@@ -4,14 +4,27 @@
 # Tweaked & enhanced by Denis Korenev (@Kseen715)
 
 # REQUIRES:
-# - choco
-# - oh-my-posh (get it from choco)
-# - fastfetch (get it from choco)
-# - config file for fastfetch
+# - starship (prompt)
+# - oh-my-posh (kept installed as a fallback prompt engine, see below)
+# - fastfetch
+#
+# All installed and configured by os-rice/osr.ps1 (scoop -> choco ->
+# winget, see os-rice/modules.c -- both prompt engines are installed by the
+# "oh-my-posh" module, see os-rice/modules/oh-my-posh.c). fastfetch's
+# config.jsonc is theme-owned -- rendered from fastfetch/config.jsonc.tmpl
+# against whichever theme's os-rice/themes/<theme>/theme.list is active --
+# and installed to ~\.config\fastfetch\, fastfetch's own first config search
+# path, so the bare `fastfetch` call below finds it with no -c flag needed.
+#
+# The prompt is Starship, themed with the SAME starship/starship.toml +
+# rice palette that Linux's zsh rice uses (installed to
+# ~\.config\starship.toml by os-rice/modules/oh-my-posh.c), so the pwsh
+# prompt looks like the zsh one. PSReadLine's ListView prediction dropdown
+# (Set-PSReadLineOption -PredictionViewStyle ListView, below) is unaffected
+# by the prompt engine -- it's history/readline config, not a prompt.
 
 
-# Run `$profile` in PS to get place where you need to put this file 
-# and fastfetch config
+# Run `$profile` in PS to get place where you need to put this file
 
 
 # Hotkeys:
@@ -33,9 +46,6 @@
 using namespace System.Management.Automation
 using namespace System.Management.Automation.Language
 
-$profileFolder = Split-Path -Parent $profile
-$ffConfigPath = Join-Path -Path $profileFolder -ChildPath 'ff-startup.jsonc'
-
 if ($host.Name -eq 'ConsoleHost') {
     Import-Module -Name PSReadLine
 }
@@ -48,7 +58,10 @@ if ($host.Name -eq 'ConsoleHost') {
     # Set-PoshPrompt -Theme iterm2
 #>
 
-oh-my-posh --init --shell pwsh --config $env:POSH_THEMES_PATH\M365Princess++.omp.json | Invoke-Expression
+# oh-my-posh --init --shell pwsh --config $env:POSH_THEMES_PATH\M365Princess++.omp.json | Invoke-Expression
+
+$env:STARSHIP_CONFIG = "$HOME\.config\starship.toml"
+Invoke-Expression (&starship init powershell --print-full-init | Out-String)
 
 
 Register-ArgumentCompleter -Native -CommandName winget -ScriptBlock {
@@ -248,4 +261,3 @@ if (Test-Path("$env:ChocolateyInstall\helpers\chocolateyProfile.psm1")) {
 }
 
 cls
-# fastfetch -c $ffConfigPath

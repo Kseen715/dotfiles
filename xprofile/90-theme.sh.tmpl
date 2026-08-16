@@ -1,0 +1,16 @@
+# ~/.config/xprofile.d/90-theme.sh — theme-owned toolkit env, rendered per theme
+# (§6b). Swapped on theme switch; the session env in 10-session.sh and your
+# 00-env.sh / 99-local.sh are untouched by a switch.
+#
+# These have to be env vars, not config files: GTK_THEME is the only thing some
+# GTK4/libadwaita apps honour, and XCURSOR_* is what X clients read before any
+# settings daemon is up.
+
+export GTK_THEME={{gtk_theme}}
+export GTK_APPLICATION_PREFER_DARK_THEME=1
+# qt5ct, not qt6ct: the qt6ct plugin answers to both keys, the Qt5 one only to
+# its own, so this single value themes Qt5 and Qt6 apps alike (see 10-session.sh).
+export QT_QPA_PLATFORMTHEME=qt5ct
+export XCURSOR_THEME={{cursor_theme}}
+export XCURSOR_SIZE={{cursor_size}}
+export OSR_RICE_THEME={{THEME}}

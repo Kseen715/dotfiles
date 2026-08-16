@@ -34,70 +34,13 @@ fi
 
 as_user mkdir -p "$OSR_HOME/.cache/cliphist/thumbs"
 
-# ---- GNOME: autostart cliphist store daemon --------------------------------
 _desktop_autostart="$OSR_HOME/.config/autostart"
 
-# ---- helper functions (must be defined before they are called) --------------
-
-# _gnome_unbind_super_v — free Super+V from GNOME Shell's calendar/notification
-# popover so our custom shortcut can take it.
-_gnome_unbind_super_v() {
-    _freed=0
-    for _key in \
-        "org.gnome.shell.keybindings toggle-message-tray" \
-        "org.gnome.shell.keybindings toggle-calendar" \
-        "org.gnome.shell.keybindings show-notification-list" \
-        "org.gnome.desktop.wm.keybindings switch-input-source"; do
-        _schema="${_key% *}"
-        _prop="${_key##* }"
-        _cur=$(as_user gsettings get "$_schema" "$_prop" 2>/dev/null || true)
-        if echo "$_cur" | grep -qi "super.*v\|<Super>v"; then
-            as_user gsettings set "$_schema" "$_prop" "[]" 2>/dev/null || true
-            info "  freed Super+V from $_schema.$_prop (was $_cur)"
-            _freed=1
-        fi
-    done
-    [ "$_freed" -eq 0 ] && info "  Super+V was not bound to a known GNOME Shell key -- nothing to unbind"
-}
-
-# _gnome_cliphist_keybind — register Super+V → wofi clip history via gsettings.
-# Idempotent: skips if the shortcut already exists under a known path.
-_gnome_cliphist_keybind() {
-    _schema="org.gnome.settings-daemon.plugins.media-keys"
-    _schema_child="$_schema.custom-keybinding"
-    _base="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
-    _path="$_base/cliphist/"
-
-    # Already registered?
-    _existing=$(as_user gsettings get "$_schema" custom-keybindings 2>/dev/null || true)
-    if echo "$_existing" | grep -q "$_path"; then
-        info "  cliphist Super+V shortcut already registered"
-        return 0
-    fi
-
-    as_user gsettings set "$_schema_child:$_path" name "Clipboard History"
-    as_user gsettings set "$_schema_child:$_path" binding "<Super>v"
-    as_user gsettings set "$_schema_child:$_path" command \
-        "cliphist-wofi-img | wl-copy"
-
-    # Append to the parent list.
-    if [ "$_existing" = "@as []" ] || [ -z "$_existing" ]; then
-        as_user gsettings set "$_schema" custom-keybindings "['$_path']"
-    else
-        _list="${_existing%]}"
-        as_user gsettings set "$_schema" custom-keybindings "$_list, '$_path']"
-    fi
-
-    info "  cliphist Super+V shortcut registered at $_path"
-}
-
-# ---- GNOME detection and setup ---------------------------------------------
-
-_is_gnome=0
-case "${XDG_CURRENT_DESKTOP:-}" in *GNOME*|*gnome*) _is_gnome=1 ;; esac
-case "${XDG_SESSION_DESKTOP:-}" in *gnome*|*GNOME*) _is_gnome=1 ;; esac
-
-if [ "$_is_gnome" -eq 1 ]; then
+# ---- GNOME: autostart daemon + Super+V shortcut -----------------------------
+# Keybinding helpers live in lib/gnome.sh (shared with wofi's Super+R). Super+V
+# is stock GNOME's message-tray/calendar toggle, and a Shell binding wins over a
+# custom one, so it has to be freed before ours is registered.
+if gnome_is_session; then
     run_step "cliphist GNOME autostart" \
         as_user mkdir -p "$_desktop_autostart"
 
@@ -115,11 +58,9 @@ NoDisplay=true
 AUTOSTART_EOF
     fi
 
-    # ---- GNOME: unbind Super+V from the calendar toggle first ---------------
-    run_step "cliphist unbind Super+V from GNOME Shell" _gnome_unbind_super_v
-
-    # ---- GNOME: Super+V keybinding to open wofi clip history ----------------
-    run_step "cliphist Super+V shortcut" _gnome_cliphist_keybind
+    run_step "cliphist unbind Super+V from GNOME Shell" gnome_free_binding "<Super>v"
+    run_step "cliphist Super+V shortcut" gnome_keybind \
+        cliphist "Clipboard History" "<Super>v" "cliphist-wofi-img | wl-copy"
 fi
 
 # ---- wofi config (theme-aware) ---------------------------------------------

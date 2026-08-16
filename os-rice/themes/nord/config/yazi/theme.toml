@@ -1,4 +1,0 @@
-# Rice-owned yazi theme (90, §6): selects the nord flavor shipped in
-# dotfiles/yazi/flavors/nord.yazi. Swapped on rice switch.
-[flavor]
-dark = "nord"

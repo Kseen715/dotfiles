@@ -1,2 +1,13 @@
 .cache/
 alias/
+
+# C core build artifacts (see nob.c, PLAN_UNIVERSAL.md)
+*.exe
+*.exe.old
+*.o
+build/
+# ...and the suffixless equivalents from a Linux/CI host build
+nob
+install
+wallpaper
+test/unit_c/*_test

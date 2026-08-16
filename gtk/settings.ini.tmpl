@@ -1,0 +1,22 @@
+# GTK settings.ini template — the ONE GTK settings layer, rendered per theme
+# (§6b) into both ~/.config/gtk-3.0/ and ~/.config/gtk-4.0/. Toolkit and font
+# NAMES, not colors: gtk.css carries the accents.
+#
+# Five files used to repeat these same six values (this one twice, gtk-2.0/gtkrc,
+# xsettingsd.conf, and the cursor index.theme). They are theme.list fields now.
+[Settings]
+gtk-theme-name={{gtk_theme}}
+gtk-application-prefer-dark-theme=1
+gtk-icon-theme-name={{icon_theme}}
+gtk-cursor-theme-name={{cursor_theme}}
+gtk-cursor-theme-size={{cursor_size}}
+gtk-font-name={{ui_font}}
+gtk-decoration-layout={{gtk_decoration_layout}}
+gtk-enable-animations={{gtk_animations}}
+gtk-xft-antialias=1
+gtk-xft-hinting=1
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=rgb
+gtk-menu-images=1
+gtk-button-images=1
+gtk-primary-button-warps-slider=0

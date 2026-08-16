@@ -8,19 +8,24 @@ OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
 OSR_LIB="$OSR_ROOT/lib"; export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_PKG=apt
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER
-. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"
+. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"
+. "$OSR_LIB/theme.sh"; . "$OSR_LIB/config.sh"
 . "$HERE/../lib.sh"
 
 H=$(mktemp -d); OSR_HOME="$H"; export OSR_HOME
 RC="$OSR_HOME/.config/osr/zsh/rc.d"
 
 apply_rice() {
-    OSR_THEME_DIR="$OSR_ROOT/themes/$1"; export OSR_THEME_DIR
+    OSR_THEME=$1; OSR_THEME_DIR="$OSR_ROOT/themes/$1"; export OSR_THEME OSR_THEME_DIR
     seed_once     "$OSR_DOTFILES/zsh/rc.d/00-env.zsh"     "$RC/00-env.zsh" >/dev/null
     install_layer "$OSR_DOTFILES/zsh/rc.d/20-aliases.zsh" "$RC/20-aliases.zsh" >/dev/null
-    install_layer "$OSR_THEME_DIR/config/zsh/90-theme.zsh" "$RC/90-theme.zsh" >/dev/null
+    # Both layers resolve the §6b way now: the theme's own file when it ships
+    # one, else the app's template rendered from the theme's palette.
+    install_theme_layer zsh 90-theme.zsh "$RC/90-theme.zsh" >/dev/null
+    _pal=$(osr_theme_source starship starship.palette.toml)
     compose_starship_config "$OSR_DOTFILES/starship/starship.toml" \
-        "$OSR_THEME_DIR/config/starship.palette.toml" "$OSR_HOME/.config/starship.toml" >/dev/null
+        "$_pal" "$OSR_HOME/.config/starship.toml" >/dev/null
+    case "$_pal" in "${TMPDIR:-/tmp}"/osr-theme-*) rm -f "$_pal" ;; esac
     seed_empty "$RC/99-local.zsh"
     apply_wallpaper >/dev/null
 }

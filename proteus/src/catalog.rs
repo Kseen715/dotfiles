@@ -142,7 +142,7 @@ impl Theme {
 ///
 /// A comment is `#` at the start of a line, or a hash with whitespace on BOTH
 /// sides. It cannot be "everything after the first `#`", because a palette value
-/// *is* a hash: `color: bg #2e3440` would strip to nothing. `#rrggbb` never has
+/// *is* a hash: `color: background #2e3440` would strip to nothing. `#rrggbb` never has
 /// a space after the hash, so the two are unambiguous.
 ///
 /// If this ever disagrees with the shell, the picker and the thing it drives
@@ -242,17 +242,20 @@ impl Theme {
         }
 
         // Roles the UI needs; anything else stays available under `extra` so a
-        // theme can carry more without this struct growing a field per colour.
-        if let Some(c) = named.remove("bg") {
+        // theme can carry more without this struct growing a field per colour -
+        // and it carries a lot more now that a theme.list is the ONLY place a
+        // theme's colours live (os-rice DESIGN section 6b): the 16 ANSI slots,
+        // the TUI chrome roles, the per-app accents. Proteus wants five of them.
+        if let Some(c) = named.remove("background") {
             palette.bg = c;
         }
         if let Some(c) = named.remove("surface") {
             palette.surface = c;
         }
-        if let Some(c) = named.remove("fg") {
+        if let Some(c) = named.remove("foreground") {
             palette.fg = c;
         }
-        if let Some(c) = named.remove("dim") {
+        if let Some(c) = named.remove("text_dim") {
             palette.dim = c;
         }
         if let Some(c) = named.remove("accent") {
@@ -348,11 +351,11 @@ mod tests {
     #[test]
     fn comment_rule_matches_shell() {
         // A palette value is a hash and must survive.
-        assert_eq!(strip_comment("color: bg #2e3440"), "color: bg #2e3440");
+        assert_eq!(strip_comment("color: background #2e3440"), "color: background #2e3440");
         // A hash with space on both sides is a comment.
         assert_eq!(
-            strip_comment("color: bg #2e3440 # muted").trim(),
-            "color: bg #2e3440"
+            strip_comment("color: background #2e3440 # muted").trim(),
+            "color: background #2e3440"
         );
         // A full-line comment is nothing.
         assert_eq!(strip_comment("# just a note"), "");
@@ -375,9 +378,9 @@ mod tests {
              polarity: dark\n\
              session: any\n\
              \n\
-             color: bg      #2e3440\n\
+             color: background #2e3440\n\
              color: surface #3b4252\n\
-             color: fg      #d8dee9\n\
+             color: foreground #d8dee9\n\
              color: dim     #4c566a\n\
              color: accent  #88c0d0\n\
              color: success #a3be8c\n",

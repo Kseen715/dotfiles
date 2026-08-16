@@ -1,2 +1,5 @@
+# yazi/theme.toml — the UNTHEMED fallback, used only when no theme is resolved
+# (`osr module yazi` outside a theme). Selects nothing, so yazi keeps its own
+# built-in look rather than naming a flavor directory that no longer exists: the
+# flavors are rendered per theme now (yazi/flavor.toml.tmpl, DESIGN 6b).
 [flavor]
-dark = "catppuccin-mocha"

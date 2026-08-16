@@ -1,22 +1,131 @@
-# themes/gruvbox/theme.list — see themes/nord/theme.list for the field docs.
+# themes/gruvbox/theme.list — a theme is its PALETTE (§6b). Metadata plus colors, in
+# the same newline `key: value` shape as rice.list (Decisions: no TOML, a
+# `while read` loop is the whole parser).
 #
-# The three `config:` dirs were the rice.list `config:` line before themes became
-# first-class: they are pure appearance (GTK4 colors, the xsettingsd theme names,
-# font rendering), so they belong to the theme and travel with it onto any rice.
+# There are no per-app config files here: every app's theme layer is ONE template
+# beside that app's dotfiles (btop/btop.theme.tmpl, ghostty/ghostty-theme.tmpl,
+# ...) and the placeholders in it are the names below. Writing a new theme is
+# this file and nothing else.
+#
+#   display:      human name shown in the picker
+#   description:  one line, shown under the name
+#   polarity:     dark | light   (lets an app pick a matching icon/GTK variant)
+#   session:      any | x11 | wayland  (which display server the layers target)
+#   config:       whole config/ dirs copied to ~/.config on apply, 0..n lines
+#   color:        <role> <#rrggbb>
+#
+# Every single-valued field above is also substitutable in a template under its
+# own name, along with `THEME` for this directory's name. A role a template asks
+# for and a theme omits is a warning, not a failed switch: the file still lands
+# with the placeholder left visible, so the gap is obvious and local.
+
 display: Gruvbox
 description: Retro groove, dark medium contrast
 polarity: dark
 session: any
 
+# Whole config/ dirs no module owns, copied to ~/.config on apply.
 config: gtk-4.0
 config: fontconfig
 config: xsettingsd
 
-color: bg      #282828
-color: surface #504945
-color: fg      #ebdbb2
-color: dim     #928374
-color: accent  #fabd2f
-color: success #8ec07c
-color: error   #fb4934
-color: warning #d79921
+# Toolkit and font names. Not colors, but the same kind of thing: what a theme
+# picks, that a per-app template drops into a settings file. Five files used to
+# repeat these (gtk-2.0/gtkrc, gtk-3.0 + gtk-4.0 settings.ini, xsettingsd.conf,
+# icons/index.theme); now they are one template each and these lines.
+gtk_theme: Breeze
+icon_theme: Gruvbox
+cursor_theme: PearDarkCursors
+cursor_size: 24
+ui_font: FiraCode Nerd Font Mono,  10
+ui_font_family: FiraCode Nerd Font Mono
+ui_font_size: 10
+mono_font: FiraCode Nerd Font Mono
+# GNOME 47+ takes a NAMED accent, not a hex: blue teal green yellow orange
+# red pink purple slate. Nearest name to this theme's accent.
+gnome_accent: orange
+gtk_decoration_layout: icon:minimize,maximize,close
+gtk_animations: 0
+
+# --- the window ---------------------------------------------------------------
+color: background            #282828
+color: foreground            #ebdbb2
+color: cursor                #ebdbb2
+color: selection_background  #504945
+color: selection_foreground  #ebdbb2
+
+# How translucent the terminal is, and how hard the compositor blurs what shows
+# through. Both are part of the LOOK, so they live with the colors rather than in
+# each terminal's base config, where the four terminals had drifted to four
+# different numbers. opacity 1.00 is solid; blur 0 is off.
+color: background_opacity     0.85
+color: background_blur        0
+
+# Three shades off the background, for toolkits that ask for a full ramp (Qt's
+# Dark/Mid/Shadow roles). Derived from the background when the theme was
+# written, not at render time - a theme may retune any of them by hand.
+color: background_sunken     #1d1d1d
+color: surface_mid           #3c3836
+color: shadow                #161616
+
+# --- the 16 ANSI slots --------------------------------------------------------
+# What a terminal paints text with. Every terminal layer (ghostty, wezterm, foot,
+# alacritty, Xresources) is exactly these.
+color: ansi_black            #282828
+color: ansi_red              #cc241d
+color: ansi_green            #98971a
+color: ansi_yellow           #d79921
+color: ansi_blue             #458588
+color: ansi_magenta          #b16286
+color: ansi_cyan             #689d6a
+color: ansi_white            #a89984
+color: ansi_bright_black     #928374
+color: ansi_bright_red       #fb4934
+color: ansi_bright_green     #b8bb26
+color: ansi_bright_yellow    #fabd2f
+color: ansi_bright_blue      #83a598
+color: ansi_bright_magenta   #d3869b
+color: ansi_bright_cyan      #8ec07c
+color: ansi_bright_white     #ebdbb2
+
+# --- TUI chrome ---------------------------------------------------------------
+# What a full-screen terminal app (btop, serie) paints its own furniture with.
+# These are a CHOICE, not a copy of the ANSI slots: most themes accent with the
+# bright set, and a muted theme accents with the normal one. That choice is the
+# reason these roles exist instead of the templates hard-coding an intensity.
+color: text_primary          #a89984
+color: text_metadata        #b16286
+color: text_muted            #928374
+color: panel_background      #282828
+color: border                #928374
+color: highlight             #fb4934
+color: accent_red            #fb4934
+color: accent_green          #b8bb26
+color: accent_yellow         #fabd2f
+color: accent_blue           #83a598
+color: accent_magenta        #d3869b
+color: accent_cyan           #8ec07c
+color: text_faint            #928374
+color: accent_orange         #fe8019
+color: urgent                #fb4934
+
+# btop draws one box per subsystem and one gradient per meter. gradient_mid and
+# gradient_peak are the warm/hot end of a load ramp - the colors a theme wants a
+# saturated CPU to be, which is not always its yellow and red.
+color: box_cpu               #8ec07c
+color: box_memory            #b8bb26
+color: box_network           #d3869b
+color: box_process           #83a598
+color: gradient_mid          #fabd2f
+color: gradient_peak         #fb4934
+
+# --- semantic roles -----------------------------------------------------------
+# Read by Proteus (which styles its own overlay from a theme it has never seen)
+# and by the prompt. Not terminal colors: a theme may point them anywhere.
+color: surface               #504945
+color: text_dim              #928374
+color: accent                #fabd2f
+color: success               #8ec07c
+color: error                 #fb4934
+color: warning               #d79921
+color: prompt_secondary      #83a598

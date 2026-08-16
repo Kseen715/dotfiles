@@ -1,12 +1,12 @@
-# void-i3-rosemuted
+# i3-rosemary
 
 A full i3/X11 desktop on Void Linux in a muted rose dark palette.
 
 ```sh
-./osr install void-i3-rosemuted           # full install
-./osr switch  void-i3-rosemuted           # from another rice (packages accrete,
+./osr install i3-rosemary           # full install
+./osr switch  i3-rosemary           # from another rice (packages accrete,
                                           # only the 90-* theme layers change)
-./osr module  polybar --theme void-i3-rosemuted   # one module, this rice's theme
+./osr module  polybar --theme i3-rosemary   # one module, this rice's theme
 ```
 
 ## Where the look comes from
@@ -58,13 +58,13 @@ desaturated neutral. Keep it that way when adding modules.
 | `config/betterlockscreen/*` | `~/.config/betterlockscreen/` |
 | `config/lightdm/*` | `/etc/lightdm/` (root — the greeter has no home) |
 | `config/{ghostty,wezterm,btop,serie}/*`, `starship.palette.toml`, `zsh/90-theme.zsh` | terminal + shell |
-| `config/micro/{settings.json,rosemuted.micro}` | merged over the dotfiles micro base |
+| `config/micro/{settings.json,rosemary.micro}` | merged over the dotfiles micro base |
 | `config/evolution/gsettings.conf` | applied with `gsettings` (key-by-key) |
 | `config/evolution/gtk.css` | `~/.local/share/themes/osr-evolution/gtk-3.0/` |
 | `config/firefox/userChrome.css`, `config/thunderbird/userChrome.css` | into every Mozilla profile |
 | `config/{zathura,mpv,vlc}/*` | document + media viewers |
 | `config/fastfetch/config.jsonc` | truecolor, so a screenshot keeps the palette |
-| `config/yazi/theme.toml` | selects `dotfiles/yazi/flavors/rosemuted.yazi` |
+| `config/yazi/theme.toml` | selects `dotfiles/yazi/flavors/rosemary.yazi` |
 
 Everything else in `~/.config` belongs to the dotfiles base layer or to you.
 `99-local.conf` / `99-local.sh` are yours and are never rewritten.

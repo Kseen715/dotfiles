@@ -109,10 +109,13 @@ osr_apply_theme() {
 # osr_theme_modules — echo the modules that carry a theme layer, in manifest
 # order when the installed rice is known.
 #
-# A module is theme-carrying when it names $OSR_THEME_DIR; that is the same
-# grep a person would run, and it cannot go stale. Narrowing by the recorded
-# rice matters: without it a theme apply would write ~/.config/polybar on a
-# Hyprland box, creating configs for programs that are not installed.
+# A module is theme-carrying when it names $OSR_THEME_DIR or goes through one of
+# the §6b template helpers (install_theme_layer / osr_theme_source, which resolve
+# OSR_THEME_DIR themselves); that is the same grep a person would run, and it
+# cannot go stale. Narrowing by the recorded rice matters: without it a theme
+# apply would write ~/.config/polybar on a Hyprland box, creating configs for
+# programs that are not installed.
+OSR_THEME_MARKERS='OSR_THEME_DIR|install_theme_layer|osr_theme_source'
 osr_theme_modules() {
     _tm_rice=${1:-}
     if [ -n "$_tm_rice" ] && [ -f "$OSR_ROOT/rices/$_tm_rice/rice.list" ]; then
@@ -121,14 +124,14 @@ osr_theme_modules() {
                 *:*) continue ;;    # require: / theme: / themes: - not modules
             esac
             [ -f "$OSR_ROOT/modules/$_tm_l.sh" ] || continue
-            grep -q 'OSR_THEME_DIR' "$OSR_ROOT/modules/$_tm_l.sh" || continue
+            grep -qE "$OSR_THEME_MARKERS" "$OSR_ROOT/modules/$_tm_l.sh" || continue
             printf '%s\n' "$_tm_l"
         done
     else
         # No recorded rice (first run, or a hand-built system): every module that
         # can paint something. Overshoots rather than under-paints.
         for _tm_f in "$OSR_ROOT"/modules/*.sh; do
-            grep -q 'OSR_THEME_DIR' "$_tm_f" || continue
+            grep -qE "$OSR_THEME_MARKERS" "$_tm_f" || continue
             _tm_b=$(basename "$_tm_f")
             printf '%s\n' "${_tm_b%.sh}"
         done

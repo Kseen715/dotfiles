@@ -661,6 +661,288 @@ DESKTOP
     # `osr install thunderbird` (this builder) is the update path.
 }
 
+# --- DataGrip (JetBrains tarball) --------------------------------------------
+# JetBrains ships DataGrip as a Linux tarball only (no repo, no deb/rpm; the
+# jetbrains.com/datagrip/download page's "Linux" tab is that .tar.gz). It is a
+# self-contained tree with its own JBR, so unpacking it under /opt IS the
+# supported install - Toolbox does the same thing in $HOME.
+#
+# OSR_DATAGRIP_PREFIX is the one tree this builder owns; anything else on the box
+# (Toolbox, snap, flatpak, a distro/AUR package, a hand-unpacked /opt/datagrip-*)
+# is reported and left alone - §5, we own only what we wrote.
+OSR_DATAGRIP_PREFIX=/opt/datagrip
+OSR_DATAGRIP_FEED="https://data.services.jetbrains.com/products/releases?code=DG&latest=true&type=release"
+
+# _datagrip_latest — echo "<version> <url> <bytes>" for this arch's Linux
+# tarball, resolved from JetBrains' releases feed so no version is hard-coded
+# (G4). The feed is one JSON object per product with a downloads map; splitting
+# on commas isolates each `"<key>":{"link":"...","size":N` fragment, so the arch
+# key matches exactly ("linux" never matches "linuxARM64"). The size is what
+# turns the ~1 GB fetch into a progress readout (osr_download's third argument);
+# it is optional, so a feed that ever drops it just means a silent download.
+_datagrip_latest() {
+    case "$OSR_ARCH" in
+        x86_64)  _dg_key=linux ;;
+        aarch64) _dg_key=linuxARM64 ;;
+        *)       error "JetBrains publishes no Linux $OSR_ARCH DataGrip build (x86_64/aarch64 only)" ;;
+    esac
+    _dg_feed=$(osr_fetch_stdout "$OSR_DATAGRIP_FEED") \
+        || error "failed to query the JetBrains releases feed for DataGrip"
+    _dg_v=$(printf '%s' "$_dg_feed" \
+        | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+    _dg_u=$(printf '%s' "$_dg_feed" | tr ',' '\n' \
+        | sed -n 's|.*"'"$_dg_key"'":{"link":"\([^"]*\)".*|\1|p' | head -n 1)
+    # The size sits in the same object as the link, so it is read off the whole
+    # feed rather than a comma-split fragment; the arch key is unique in it.
+    _dg_sz=$(printf '%s' "$_dg_feed" \
+        | sed -n 's|.*"'"$_dg_key"'":{"link":"[^"]*","size":\([0-9]*\).*|\1|p' | head -n 1)
+    case "$_dg_u" in
+        https://*.tar.gz) ;;
+        *) error "could not resolve the DataGrip $_dg_key tarball from the JetBrains feed" ;;
+    esac
+    [ -n "$_dg_v" ] || error "could not resolve the DataGrip version from the JetBrains feed"
+    printf '%s %s %s' "$_dg_v" "$_dg_u" "${_dg_sz:-0}"
+}
+
+# _datagrip_version_at <dir> — echo the version of an unpacked DataGrip tree.
+# product-info.json sits at the root of every JetBrains IDE tarball and opens
+# with the product name and version.
+_datagrip_version_at() {
+    [ -f "$1/product-info.json" ] || return 1
+    _dv=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/product-info.json" \
+        | head -n 1)
+    [ -n "$_dv" ] || return 1
+    printf '%s' "$_dv"
+}
+
+# _datagrip_report_foreign — find the DataGrip copies this builder does NOT own
+# and name them. They matter even though we never touch them: a Toolbox or snap
+# launcher earlier on PATH is the one that actually opens when the user types
+# `datagrip`, so a silent "upgraded" here would be an upgrade of a tree nobody
+# runs. Reported, never removed (§5, G2).
+_datagrip_report_foreign() {
+    command -v snap >/dev/null 2>&1 && snap list datagrip >/dev/null 2>&1 \
+        && warn "a DataGrip snap is installed - it is separate from $OSR_DATAGRIP_PREFIX and is not upgraded here"
+    command -v flatpak >/dev/null 2>&1 && flatpak info com.jetbrains.DataGrip >/dev/null 2>&1 \
+        && warn "the com.jetbrains.DataGrip flatpak is installed - separate from $OSR_DATAGRIP_PREFIX, not upgraded here"
+    _native_installed datagrip \
+        && warn "a native 'datagrip' package is installed - separate from $OSR_DATAGRIP_PREFIX, not upgraded here"
+    for _df in "$OSR_HOME"/.local/share/JetBrains/Toolbox/apps/[Dd]ata[Gg]rip*; do
+        [ -d "$_df" ] || continue
+        warn "JetBrains Toolbox has its own DataGrip at $_df - Toolbox updates that one, this module updates $OSR_DATAGRIP_PREFIX"
+    done
+    for _df in /opt/[Dd]ata[Gg]rip*; do
+        [ -d "$_df" ] || continue
+        [ "$_df" = "$OSR_DATAGRIP_PREFIX" ] && continue
+        warn "an unpacked DataGrip tree at $_df is not owned by this module - remove it if it is a leftover"
+    done
+    return 0
+}
+
+# _datagrip_desktop_entry — launcher symlink + menu entry for the installed tree.
+# The tarball ships no .desktop (JetBrains leaves that to Toolbox), so write the
+# minimal one; the icon comes out of the tree itself, which is why this runs
+# after the tree is in place. Rerun-safe, so it also repairs a box whose entry
+# was lost while the tree stayed current.
+_datagrip_desktop_entry() {
+    _dg_exec="$OSR_DATAGRIP_PREFIX/bin/datagrip"
+    [ -x "$_dg_exec" ] || _dg_exec="$OSR_DATAGRIP_PREFIX/bin/datagrip.sh"
+    [ -x "$_dg_exec" ] || error "no DataGrip launcher under $OSR_DATAGRIP_PREFIX/bin"
+    # /usr/local/bin precedes /usr/bin, and this is also the _via_source probe.
+    as_root ln -sf "$_dg_exec" /usr/local/bin/datagrip
+
+    _dg_icon=""
+    for _di in "$OSR_DATAGRIP_PREFIX/bin/datagrip.png" "$OSR_DATAGRIP_PREFIX/bin/datagrip.svg"; do
+        [ -f "$_di" ] && { _dg_icon=$_di; break; }
+    done
+    [ -n "$_dg_icon" ] || warn "no datagrip icon in the tarball - the menu entry will use the theme fallback"
+    # StartupWMClass is what the IDE actually sets on its window
+    # (jetbrains-datagrip); without it the taskbar shows a second, unnamed entry.
+    as_root tee /usr/share/applications/datagrip.desktop >/dev/null <<DESKTOP
+[Desktop Entry]
+Name=DataGrip
+Comment=Database IDE
+Exec=$_dg_exec %f
+Icon=${_dg_icon:-datagrip}
+Terminal=false
+Type=Application
+Categories=Development;IDE;Database;
+Keywords=sql;database;jetbrains;
+StartupNotify=true
+StartupWMClass=jetbrains-datagrip
+DESKTOP
+    command -v update-desktop-database >/dev/null 2>&1 \
+        && as_root update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
+}
+
+# provide_datagrip — install or UPGRADE DataGrip from the vendor tarball.
+#
+# Idempotency goes beyond _via_source's `command -v datagrip` probe (§2, same
+# shape as provide_chafa): presence is not sufficiency for an IDE that ships a
+# new build every few weeks, so the builder compares the installed tree's
+# product-info.json against the feed and returns early only when they match.
+# That is what makes `osr module datagrip` the update path - modules/datagrip.sh
+# calls this function directly for exactly that reason.
+#
+# Staging happens inside /opt, not $TMPDIR: the tarball is ~1 GB and unpacks to
+# ~2.5 GB, which a tmpfs /tmp on a 16 GB box will not hold, and it makes the
+# swap a same-filesystem rename instead of a cross-device copy. The old tree is
+# removed only once the new one is unpacked and verified.
+provide_datagrip() {
+    pkg_install tar gzip
+    _dg_latest=$(_datagrip_latest)
+    _dg_ver=${_dg_latest%% *}
+    _dg_rest=${_dg_latest#* }
+    _dg_url=${_dg_rest%% *}
+    _dg_size=${_dg_rest#* }
+    _datagrip_report_foreign
+
+    _dg_have=$(_datagrip_version_at "$OSR_DATAGRIP_PREFIX" 2>/dev/null) || _dg_have=""
+    if [ "$_dg_have" = "$_dg_ver" ]; then
+        info "DataGrip $_dg_ver is already the current release - skipping the download"
+        _datagrip_desktop_entry
+        return 0
+    fi
+    if [ -n "$_dg_have" ]; then
+        info "upgrading DataGrip $_dg_have -> $_dg_ver"
+    else
+        info "installing DataGrip $_dg_ver"
+    fi
+
+    _dg_parent=$(dirname "$OSR_DATAGRIP_PREFIX")
+    as_root mkdir -p "$_dg_parent"
+    _dg_tmp=$(as_root mktemp -d "$_dg_parent/.datagrip-XXXXXX") \
+        || error "failed to create a staging directory under $_dg_parent"
+    # Handed to the invoking user so the download and the unpack are the same
+    # unprivileged osr_download/tar every other builder uses (osr_download is a
+    # shell function, so it cannot cross an `as_root`/`as_user` sudo boundary);
+    # ownership goes back to root after the swap.
+    as_root chown "$(id -un)" "$_dg_tmp"
+    info "downloading $(basename "$_dg_url") ($((${_dg_size:-0} / 1048576)) MiB)"
+    osr_download "$_dg_url" "$_dg_tmp/datagrip.tar.gz" "$_dg_size" \
+        || { as_root rm -rf "$_dg_tmp"; error "failed to download $_dg_url"; }
+    tar -xzf "$_dg_tmp/datagrip.tar.gz" -C "$_dg_tmp" \
+        || { as_root rm -rf "$_dg_tmp"; error "failed to extract the DataGrip tarball"; }
+    rm -f "$_dg_tmp/datagrip.tar.gz"
+    # The tarball unpacks into a single versioned dir (DataGrip-2026.2.3/).
+    _dg_src=$(find "$_dg_tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    [ -n "$_dg_src" ] && [ -f "$_dg_src/product-info.json" ] \
+        || { as_root rm -rf "$_dg_tmp"; error "the DataGrip tarball has an unexpected layout (no product-info.json)"; }
+
+    as_root rm -rf "$OSR_DATAGRIP_PREFIX"
+    as_root mv "$_dg_src" "$OSR_DATAGRIP_PREFIX" \
+        || { as_root rm -rf "$_dg_tmp"; error "failed to install DataGrip into $OSR_DATAGRIP_PREFIX"; }
+    as_root rm -rf "$_dg_tmp"
+    as_root chown -R 0:0 "$OSR_DATAGRIP_PREFIX"
+    _datagrip_desktop_entry
+    # /opt is root-owned, so the IDE's own updater cannot patch this tree:
+    # `osr module datagrip` (this builder) is the update path.
+}
+
+# --- Telegram Desktop (vendor tarball) ---------------------------------------
+# telegram.org/desktop's Linux button is a redirect to the current
+# tsetup.<version>.tar.xz, which unpacks to a self-contained Telegram/ tree (the
+# app plus its Updater). Distro packages exist, but they lag - a messenger whose
+# protocol moves is one of the few things worth taking straight from upstream.
+#
+# The tree is owned by the INVOKING USER, not root, which is the one place this
+# builder differs from provide_datagrip. Telegram ships its own updater and that
+# updater writes into this directory; a root-owned tree silently breaks it and
+# makes `osr module telegram` the only update path for a security-sensitive app.
+# User-owned, Telegram keeps itself current and this builder is just the install
+# and the occasional repair.
+#
+# Leaving the updater enabled also means Telegram writes its OWN .desktop entry
+# and icon into ~/.local/share on first run (Platform::InstallLauncher, which
+# returns early when the updater is disabled) - so, unlike DataGrip, there is no
+# menu entry to write here.
+OSR_TELEGRAM_PREFIX=${OSR_TELEGRAM_PREFIX:-/opt/telegram-desktop}
+OSR_TELEGRAM_URL=${OSR_TELEGRAM_URL:-https://telegram.org/dl/desktop/linux}
+
+# _telegram_latest — echo "<version> <url> <bytes>" for the current release,
+# resolved from the redirect the download link answers with (G4: no version is
+# ever written down here).
+_telegram_latest() {
+    [ "$OSR_ARCH" = x86_64 ] \
+        || error "Telegram publishes no Linux $OSR_ARCH desktop tarball (x86_64 only)"
+    _tg_url=$(osr_final_url "$OSR_TELEGRAM_URL")
+    case "$_tg_url" in
+        *tsetup.*.tar.xz) ;;
+        *) error "could not resolve the Telegram tarball from $OSR_TELEGRAM_URL" ;;
+    esac
+    _tg_file=${_tg_url##*/}
+    _tg_ver=${_tg_file#tsetup.}; _tg_ver=${_tg_ver%.tar.xz}
+    printf '%s %s %s' "$_tg_ver" "$_tg_url" "$(_osr_remote_size "$_tg_url")"
+}
+
+# _telegram_report_foreign — name the copies of Telegram this builder does not
+# own. Reported, never removed (§5, G2): a snap/flatpak/distro launcher earlier
+# on PATH is the one that opens, and each keeps its own tdata, so the wrong one
+# looks like "my chats are gone".
+_telegram_report_foreign() {
+    command -v snap >/dev/null 2>&1 && snap list telegram-desktop >/dev/null 2>&1 \
+        && warn "a telegram-desktop snap is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    command -v flatpak >/dev/null 2>&1 && flatpak info org.telegram.desktop >/dev/null 2>&1 \
+        && warn "the org.telegram.desktop flatpak is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    _native_installed telegram-desktop \
+        && warn "a native 'telegram-desktop' package is installed - separate from $OSR_TELEGRAM_PREFIX, not updated here"
+    return 0
+}
+
+# provide_telegram — install or update Telegram Desktop from the vendor tarball.
+#
+# Version-idempotent, like provide_datagrip: the installed version is a stamp
+# file this builder writes, because the binary has no -version flag and the tree
+# carries no manifest. When Telegram has updated ITSELF the stamp goes stale and
+# a rerun reinstalls the same version once - a wasted 80 MB in the rare case,
+# against re-downloading on every rice run if presence were the test.
+provide_telegram() {
+    pkg_install tar xz
+    _tg_latest=$(_telegram_latest)
+    _tg_ver=${_tg_latest%% *}
+    _tg_rest=${_tg_latest#* }
+    _tg_url=${_tg_rest%% *}
+    _tg_size=${_tg_rest#* }
+    _telegram_report_foreign
+
+    _tg_stamp="$OSR_TELEGRAM_PREFIX/.osr-version"
+    if [ -x "$OSR_TELEGRAM_PREFIX/Telegram" ] && [ -f "$_tg_stamp" ] \
+        && [ "$(cat "$_tg_stamp")" = "$_tg_ver" ]; then
+        info "Telegram Desktop $_tg_ver is already installed - skipping the download"
+        as_root ln -sf "$OSR_TELEGRAM_PREFIX/Telegram" /usr/local/bin/telegram-desktop
+        return 0
+    fi
+
+    _tg_parent=$(dirname "$OSR_TELEGRAM_PREFIX")
+    as_root mkdir -p "$_tg_parent"
+    _tg_tmp=$(as_root mktemp -d "$_tg_parent/.telegram-XXXXXX") \
+        || error "failed to create a staging directory under $_tg_parent"
+    # Same reason as provide_datagrip: the download and unpack run unprivileged
+    # (osr_download is a shell function and cannot cross an as_root boundary),
+    # staged on the destination filesystem so the swap is a rename.
+    as_root chown "$(id -un)" "$_tg_tmp"
+    info "installing Telegram Desktop $_tg_ver"
+    osr_download "$_tg_url" "$_tg_tmp/telegram.tar.xz" "$_tg_size" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to download $_tg_url"; }
+    tar -xf "$_tg_tmp/telegram.tar.xz" -C "$_tg_tmp" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to extract the Telegram tarball"; }
+    rm -f "$_tg_tmp/telegram.tar.xz"
+    # The tarball unpacks into a single Telegram/ dir holding the app and Updater.
+    _tg_src=$(find "$_tg_tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    [ -n "$_tg_src" ] && [ -x "$_tg_src/Telegram" ] \
+        || { as_root rm -rf "$_tg_tmp"; error "the Telegram tarball has an unexpected layout (no Telegram binary)"; }
+    printf '%s\n' "$_tg_ver" >"$_tg_src/.osr-version"
+
+    as_root rm -rf "$OSR_TELEGRAM_PREFIX"
+    as_root mv "$_tg_src" "$OSR_TELEGRAM_PREFIX" \
+        || { as_root rm -rf "$_tg_tmp"; error "failed to install Telegram into $OSR_TELEGRAM_PREFIX"; }
+    as_root rm -rf "$_tg_tmp"
+    # The riced user owns the tree so Telegram's own updater can replace the
+    # binary - that account is the one that runs it (§8).
+    as_root chown -R "$OSR_USER" "$OSR_TELEGRAM_PREFIX"
+    as_root ln -sf "$OSR_TELEGRAM_PREFIX/Telegram" /usr/local/bin/telegram-desktop
+}
+
 # provide_yandex_browser — Yandex Browser on Debian/Ubuntu from the vendor's own
 # apt repo (repo.yandex.ru/yandex-browser/deb), the route yandex.ru/support/
 # browser/ru/about/install documents. A repo and not the one-off
@@ -787,7 +1069,7 @@ provide_yandex_browser_deb() {
 provide_proteus() {
     _pr_cargo="$OSR_HOME/.cargo/bin/cargo"
     as_user test -x "$_pr_cargo" \
-        || error "cargo not found for proteus — install 'rust' before proteus (manifest order, §4)"
+        || error "cargo not found for proteus - install 'rust' before proteus (manifest order, section 4)"
 
     _pr_src="$OSR_DOTFILES/proteus"
     [ -f "$_pr_src/Cargo.toml" ] \

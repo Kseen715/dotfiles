@@ -13,7 +13,12 @@ export XDG_SESSION_TYPE=x11
 export XDG_SESSION_DESKTOP=i3
 
 # Qt: without a platform theme, Qt apps ignore your theme and look like 2009.
-export QT_QPA_PLATFORMTHEME=qt6ct
+# `qt5ct`, not `qt6ct`, because one variable has to serve both Qt versions: the
+# qt6ct plugin registers BOTH keys (qt6ct, qt5ct) and still reads its own
+# ~/.config/qt6ct, while the Qt5 plugin answers to `qt5ct` only. Setting `qt6ct`
+# leaves every Qt5 app (VLC's interface among them) on the default light palette
+# — dark toolbar, white menus.
+export QT_QPA_PLATFORMTHEME=qt5ct
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 
 # Java/Swing (JetBrains, MATLAB) renders a grey rectangle under any

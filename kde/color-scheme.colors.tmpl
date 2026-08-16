@@ -1,0 +1,119 @@
+# KDE color scheme template (§6b) -> ~/.local/share/color-schemes/os-rice.colors,
+# the palette every KDE/Qt app (Kate, Dolphin, Okular) reads once it is selected
+# in Plasma's Colors KCM or via qt6ct.
+#
+# File basename, [General] ColorScheme and [General] Name are all `os-rice` on
+# purpose. An app records the scheme it uses under whichever of the three it
+# treats as the id (Kate writes `BreezeDark` for a scheme named "Breeze Dark",
+# which is both the basename AND the name with its spaces removed), so keeping
+# them identical - and free of the theme's display name, which changes on every
+# rice switch - is what lets kate/katerc name the scheme statically.
+#
+# The two literal Color= values in [ColorEffects:*] are Breeze's disabled and
+# inactive TINTS, not palette entries - they are the same grey whatever the
+# theme, which is why they are the only numbers left in here.
+[ColorEffects:Disabled]
+Color=56,56,56
+ColorAmount=0
+ColorEffect=0
+ContrastAmount=0.65000000000000002
+ContrastEffect=1
+IntensityAmount=0.10000000000000001
+IntensityEffect=2
+
+[ColorEffects:Inactive]
+ChangeSelectionColor=true
+Color=112,111,110
+ColorAmount=0.025000000000000001
+ColorEffect=2
+ContrastAmount=0.10000000000000001
+ContrastEffect=2
+Enable=true
+IntensityAmount=0
+IntensityEffect=0
+
+[Colors:Button]
+BackgroundAlternate={{surface_mid_dec}}
+BackgroundNormal={{panel_background_dec}}
+DecorationFocus={{ansi_cyan_dec}}
+DecorationHover={{accent_blue_dec}}
+ForegroundActive={{success_dec}}
+ForegroundInactive={{text_muted_dec}}
+ForegroundLink={{accent_green_dec}}
+ForegroundNegative={{error_dec}}
+ForegroundNeutral={{warning_dec}}
+ForegroundNormal={{foreground_dec}}
+ForegroundPositive={{success_dec}}
+ForegroundVisited={{text_muted_dec}}
+
+[Colors:Selection]
+BackgroundAlternate={{success_dec}}
+BackgroundNormal={{ansi_cyan_dec}}
+DecorationFocus={{ansi_cyan_dec}}
+DecorationHover={{accent_blue_dec}}
+ForegroundActive={{ansi_bright_white_dec}}
+ForegroundInactive={{foreground_dec}}
+ForegroundLink={{accent_yellow_dec}}
+ForegroundNegative={{error_dec}}
+ForegroundNeutral={{warning_dec}}
+ForegroundNormal={{foreground_dec}}
+ForegroundPositive={{success_dec}}
+ForegroundVisited={{text_primary_dec}}
+
+[Colors:Tooltip]
+BackgroundAlternate={{surface_mid_dec}}
+BackgroundNormal={{panel_background_dec}}
+DecorationFocus={{ansi_cyan_dec}}
+DecorationHover={{accent_blue_dec}}
+ForegroundActive={{accent_green_dec}}
+ForegroundInactive={{text_muted_dec}}
+ForegroundLink={{success_dec}}
+ForegroundNegative={{error_dec}}
+ForegroundNeutral={{warning_dec}}
+ForegroundNormal={{foreground_dec}}
+ForegroundPositive={{success_dec}}
+ForegroundVisited={{text_muted_dec}}
+
+[Colors:View]
+BackgroundAlternate={{surface_mid_dec}}
+BackgroundNormal={{panel_background_dec}}
+DecorationFocus={{ansi_cyan_dec}}
+DecorationHover={{accent_blue_dec}}
+ForegroundActive={{accent_green_dec}}
+ForegroundInactive={{text_muted_dec}}
+ForegroundLink={{success_dec}}
+ForegroundNegative={{error_dec}}
+ForegroundNeutral={{warning_dec}}
+ForegroundNormal={{foreground_dec}}
+ForegroundPositive={{success_dec}}
+ForegroundVisited={{text_muted_dec}}
+
+[Colors:Window]
+BackgroundAlternate={{surface_mid_dec}}
+BackgroundNormal={{panel_background_dec}}
+DecorationFocus={{ansi_cyan_dec}}
+DecorationHover={{accent_blue_dec}}
+ForegroundActive={{accent_green_dec}}
+ForegroundInactive={{text_muted_dec}}
+ForegroundLink={{success_dec}}
+ForegroundNegative={{error_dec}}
+ForegroundNeutral={{warning_dec}}
+ForegroundNormal={{foreground_dec}}
+ForegroundPositive={{success_dec}}
+ForegroundVisited={{text_muted_dec}}
+
+[General]
+ColorScheme=os-rice
+Name=os-rice
+shadeSortColumn=true
+
+[KDE]
+contrast=4
+
+[WM]
+activeBackground={{panel_background_dec}}
+activeBlend={{foreground_dec}}
+activeForeground={{foreground_dec}}
+inactiveBackground={{panel_background_dec}}
+inactiveBlend={{surface_mid_dec}}
+inactiveForeground={{foreground_dec}}

@@ -32,8 +32,8 @@ fi
 # dotfiles default covers a rice that ships no palette. In --module mode
 # OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
 _wt_colors="$OSR_HOME/.config/wezterm/colors/osr-rice.toml"
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/wezterm/wezterm-theme.toml" ]; then
-    install_layer "$OSR_THEME_DIR/config/wezterm/wezterm-theme.toml" "$_wt_colors"
+if install_theme_layer wezterm wezterm-theme.toml "$_wt_colors"; then
+    :
 elif [ -f "$OSR_DOTFILES/wezterm/wezterm-theme.toml" ]; then
     install_layer "$OSR_DOTFILES/wezterm/wezterm-theme.toml" "$_wt_colors"
 fi

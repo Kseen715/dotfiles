@@ -30,3 +30,16 @@ amneziavpn = source:provide_amneziavpn
 # has no meaning apart from these dotfiles, so a source build (from ../proteus)
 # is the only route on every target — same class as wezterm.
 proteus = source:provide_proteus
+
+# datagrip: JetBrains publishes a Linux .tar.gz and nothing else (no repo, no
+# deb/rpm), so the vendor tarball is the route on every target. Note that a rice
+# listing `datagrip` installs it ONCE - the source: probe is presence-based -
+# while `osr module datagrip` (modules/datagrip.sh) upgrades it, because that
+# calls the builder directly and the builder compares versions.
+datagrip = source:provide_datagrip
+
+# telegram-desktop: the packaged builds lag upstream, and the vendor tarball
+# (telegram.org/desktop) carries its own updater, so it is the route everywhere.
+# Same presence-vs-version caveat as datagrip above: modules/telegram.sh calls
+# provide_telegram directly so `osr module telegram` can repair a stale tree.
+telegram-desktop = source:provide_telegram

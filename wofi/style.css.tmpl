@@ -1,0 +1,79 @@
+/* themes/xin/config/wofi/style.css - the xin palette on wofi.
+ *
+ * Opaque, unlike the glass theme's translucent twin: xin is `session: any` and
+ * runs under GNOME/mutter as often as under Hyprland, and mutter does not blur
+ * layer surfaces. A transparent panel there is not frosted glass, it is the
+ * desktop showing through the entry text. */
+
+@define-color bg      {{background}};
+@define-color surface {{selection_background}};
+@define-color fg      {{foreground}};
+@define-color dim     {{text_muted}};
+@define-color accent  {{accent}};
+
+* {
+  border: none;
+  border-radius: 8px;
+  min-height: 0;
+  font-family: {{mono_font}}, JetBrains Mono, monospace;
+  font-size: 14px;
+  padding: 0;
+  background-color: transparent;
+}
+
+#window {
+  background-color: @bg;
+  border: 1px solid @surface;
+  border-radius: 12px;
+  padding: 0px;
+}
+
+#input {
+  color: @accent;
+  background-color: @surface;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  padding: 8px 12px;
+  outline: none;
+}
+
+/* wofi never clears the GTK focus ring on its own; without these the entry
+ * keeps a stock-blue outline that belongs to no palette here. */
+#input:focus,
+#input:focus-visible,
+#input:active {
+  border: none;
+  outline: none;
+  outline-offset: 0px;
+}
+
+#scroll #inner-box {
+  background: transparent;
+}
+
+#entry {
+  color: @fg;
+  background: transparent;
+  padding: 0.6rem 1rem;
+  margin: 2px 5px 5px 5px;
+}
+
+#entry:focus {
+  color: @fg;
+}
+
+#entry:selected {
+  color: @accent;
+  background-color: @surface;
+  outline-color: @accent;
+  -gtk-outline-radius: 12px;
+}
+
+#unselected {
+  color: @dim;
+}
+
+#img {
+  margin-right: 6px;
+  margin-left: 0px;
+}

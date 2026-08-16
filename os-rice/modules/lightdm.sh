@@ -12,7 +12,8 @@ run_step "Installing LightDM" pkg_install lightdm lightdm-gtk-greeter
 
 # The greeter needs the same GTK theme + icons as the session, or the login
 # screen is stock grey while everything after it is themed.
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/lightdm/lightdm-gtk-greeter.conf" ]; then
+_ld_src=$(osr_theme_source lightdm lightdm-gtk-greeter.conf) || _ld_src=""
+if [ -n "$_ld_src" ]; then
     info "installing LightDM greeter theme"
     as_root mkdir -p /etc/lightdm
     if [ -f /etc/lightdm/lightdm-gtk-greeter.conf ] \
@@ -22,9 +23,9 @@ if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/lightdm/lightdm-gt
     # The greeter background is the rice wallpaper, installed once by §6's
     # helper into the user's Pictures dir and readable by the greeter user.
     _ld_wp=$(osr_install_wallpaper)
-    sed "s#{{WALLPAPER_PATH}}#${_ld_wp}#g" \
-        "$OSR_THEME_DIR/config/lightdm/lightdm-gtk-greeter.conf" \
+    sed "s#{{WALLPAPER_PATH}}#${_ld_wp}#g" "$_ld_src" \
         | as_root tee /etc/lightdm/lightdm-gtk-greeter.conf >/dev/null
+    case "$_ld_src" in "${TMPDIR:-/tmp}"/osr-theme-*) rm -f "$_ld_src" ;; esac
 fi
 
 enable_service lightdm || warn "could not enable lightdm (needs a real init)"

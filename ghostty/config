@@ -22,6 +22,10 @@ alpha-blending = linear-corrected
 window-padding-x = 4
 window-padding-y = 2
 window-padding-balance = true
+# Startup size in cells (rows x columns), not pixels. Ignored once a window
+# manager restores a remembered geometry.
+window-height = 30
+window-width = 110
 # An accidental ctrl+d / close on a live ssh session is expensive: confirm when a
 # surface still has a running command.
 confirm-close-surface = true
@@ -70,6 +74,12 @@ clipboard-read = ask
 clipboard-paste-protection = true
 clipboard-trim-trailing-spaces = true
 copy-on-select = false
+
+# --- notifications ------------------------------------------------------------
+# Programs inside the terminal (Claude Code, notify-send wrappers) fire OSC 9 /
+# OSC 777 desktop notifications. On GNOME each one lands in the notification
+# list and leaves an unread badge on the dash icon until dismissed by hand.
+desktop-notifications = false
 
 # --- ssh: misc ----------------------------------------------------------------
 # These three are already Ghostty defaults; they are restated because they are

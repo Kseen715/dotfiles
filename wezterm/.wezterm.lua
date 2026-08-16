@@ -20,7 +20,32 @@ config.animation_fps = 1
 config.cursor_blink_rate = 500
 config.term = "xterm-256color" -- Set the terminal type
 config.prefer_egl = true -- Use universal rendering backend
-local windows_pwsh_path = { "C:/Program Files/PowerShell/7/pwsh.exe", "-nologo" }
+-- pwsh's install location depends on how it was installed (MSI/winget ->
+-- Program Files, scoop -> ~\scoop\apps\pwsh\current, choco -> often Program
+-- Files too but not guaranteed) -- a single hardcoded path breaks for whoever
+-- didn't use that particular installer (wezterm then fails to spawn at all:
+-- "exited with code 1", no shell, no error dialog explaining why). Probe the
+-- real candidates in order and fall back to relying on PATH, then to
+-- Windows PowerShell (always present) rather than a dead terminal.
+local function get_windows_pwsh_path()
+	local candidates = {
+		"C:/Program Files/PowerShell/7/pwsh.exe", -- MSI / winget
+		wezterm.home_dir .. "/scoop/apps/pwsh/current/pwsh.exe", -- scoop
+		"C:/ProgramData/chocolatey/lib/powershell-core/tools/pwsh.exe", -- choco
+	}
+	for _, path in ipairs(candidates) do
+		local f = io.open(path, "rb")
+		if f then
+			f:close()
+			return path
+		end
+	end
+	-- Not at any known install path -- let Windows resolve it via PATH
+	-- (covers scoop's shim, a custom install dir, etc).
+	return "pwsh.exe"
+end
+
+local windows_pwsh_path = { get_windows_pwsh_path(), "-nologo" }
 local linux_shell_path = { os.getenv 'SHELL', "--login" }
 config.scrollback_lines = 10000
 config.check_for_updates = false
@@ -57,6 +82,89 @@ config.window_padding = {
 config.hide_tab_bar_if_only_one_tab = false
 config.use_fancy_tab_bar = true
 -- config.tab_bar_at_bottom = true
+config.show_tab_index_in_tab_bar = false -- format-tab-title draws its own index below
+config.tab_max_width = 40
+
+-- Modern tab styling: floating rounded-pill tabs (Zed/Arc-style) with a
+-- per-process icon, separated by gaps of the bar's own background rather than
+-- touching edge-to-edge. The caps are half-circle glyphs (ple_*_half_circle)
+-- whose shape is unambiguous either way round -- unlike a powerline arrow's
+-- direction, a left cap only ever bulges left -- which is why this shape was
+-- picked over a chevron divider: nothing to get backwards without a live
+-- render to check against. Icon keys are pulled from wezterm's own built-in
+-- wezterm.nerdfonts table (verified present against the installed
+-- JetBrainsMono Nerd Font, not hand-picked codepoints) so they render
+-- correctly rather than as tofu boxes.
+-- Matches window_frame's titlebar bg below (#181818) and the terminal's own
+-- background -- #010203 (near-pure black) was a hard, unrelated void against
+-- both of those, most visible as a stark black strip wherever there's no
+-- pill (the gaps, and all the empty bar past the last tab).
+local TAB_BAR_BG = "#181818"
+local TAB_ACCENT = "#7aa2f7"
+local TAB_ACTIVE_BG = "#333a56"
+local TAB_ACTIVE_FG = "#ffffff"
+local TAB_INACTIVE_BG = "#242631"
+local TAB_INACTIVE_FG = "#8b8fa3"
+local CAP_LEFT = wezterm.nerdfonts.ple_left_half_circle_thick
+local CAP_RIGHT = wezterm.nerdfonts.ple_right_half_circle_thick
+
+local TAB_ICONS = {
+	pwsh = wezterm.nerdfonts.seti_powershell,
+	powershell = wezterm.nerdfonts.seti_powershell,
+	cmd = wezterm.nerdfonts.md_console,
+	bash = wezterm.nerdfonts.cod_terminal_bash,
+	sh = wezterm.nerdfonts.cod_terminal_bash,
+	zsh = wezterm.nerdfonts.seti_shell,
+	nvim = wezterm.nerdfonts.custom_vim,
+	vim = wezterm.nerdfonts.custom_vim,
+	git = wezterm.nerdfonts.dev_git,
+	node = wezterm.nerdfonts.dev_nodejs_small,
+	python = wezterm.nerdfonts.md_language_python,
+	python3 = wezterm.nerdfonts.md_language_python,
+	docker = wezterm.nerdfonts.dev_docker,
+}
+local TAB_ICON_DEFAULT = wezterm.nerdfonts.fa_terminal
+
+local function tab_icon(tab)
+	local process = tab.active_pane and tab.active_pane.foreground_process_name or ""
+	-- Windows hands back a full "...\pwsh.exe" path; take the basename and
+	-- drop the extension so it matches the lookup table either way.
+	local name = process:match("([^\\/]+)$") or process
+	name = name:gsub("%.exe$", ""):lower()
+	return TAB_ICONS[name] or TAB_ICON_DEFAULT
+end
+
+wezterm.on("format-tab-title", function(tab, tabs, panes, tab_config, hover, max_width)
+	local active = tab.is_active
+	local bg = active and TAB_ACTIVE_BG or TAB_INACTIVE_BG
+	local fg = active and TAB_ACTIVE_FG or TAB_INACTIVE_FG
+	local icon_fg = active and TAB_ACCENT or fg
+
+	local title = (tab.tab_title and #tab.tab_title > 0) and tab.tab_title or tab.active_pane.title
+	local budget = math.max(max_width - 8, 6)
+	if #title > budget then
+		title = title:sub(1, budget - 1) .. "…"
+	end
+
+	return {
+		-- gap before the pill
+		{ Background = { Color = TAB_BAR_BG } },
+		{ Text = " " },
+		-- left cap: bulges into the bar's background, flat side meets the pill
+		{ Foreground = { Color = bg } },
+		{ Text = CAP_LEFT },
+		-- pill body
+		{ Background = { Color = bg } },
+		{ Foreground = { Color = icon_fg } },
+		{ Text = tab_icon(tab) .. " " },
+		{ Foreground = { Color = fg } },
+		{ Text = (tab.tab_index + 1) .. ": " .. title },
+		-- right cap: mirrors the left, back out to the bar's background
+		{ Background = { Color = TAB_BAR_BG } },
+		{ Foreground = { Color = bg } },
+		{ Text = CAP_RIGHT },
+	}
+end)
 
 -- config.inactive_pane_hsb = {
 -- 	saturation = 0.0,
@@ -340,30 +448,42 @@ end
 -- config.color_scheme = "GruvboxDarkHard"
 
 -- Window chrome only: background/cursor/selection come from the palette above,
--- so a rice switch actually changes them.
+-- so a rice switch actually changes them. active_tab/inactive_tab here are the
+-- base colors wezterm falls back to outside what format-tab-title explicitly
+-- paints (padding, hover edges) -- kept in sync with TAB_ACTIVE_*/TAB_INACTIVE_*
+-- above so there's no color seam between the two.
 config.colors = {
 	tab_bar = {
-		background = "#010203",
+		background = "#181818",
 		active_tab = {
-			bg_color = "#010203",
-			fg_color = "#fdfeff",
-			intensity = "Normal",
-			-- undderlined
+			bg_color = "#333a56",
+			fg_color = "#ffffff",
+			intensity = "Bold",
 			underline = "None",
 			italic = false,
 			strikethrough = false,
 		},
 		inactive_tab = {
-			bg_color = "#010203",
-			fg_color = "#a8a9aa",
+			bg_color = "#242631",
+			fg_color = "#8b8fa3",
 			intensity = "Normal",
 			underline = "None",
 			italic = false,
 			strikethrough = false,
 		},
+		inactive_tab_hover = {
+			bg_color = "#2c2f3d",
+			fg_color = "#7aa2f7",
+			italic = false,
+		},
 		new_tab = {
-			bg_color = "#010203",
-			fg_color = "#fdfeff",
+			bg_color = "#181818",
+			fg_color = "#7aa2f7",
+			italic = false,
+		},
+		new_tab_hover = {
+			bg_color = "#333a56",
+			fg_color = "#7aa2f7",
 			italic = true,
 		},
 	},

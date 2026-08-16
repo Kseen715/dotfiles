@@ -548,6 +548,100 @@ Three properties that make it hotkey-safe:
 `themes:` (the set the picker offers). Both are advisory - they say what the
 rice was designed against, not what may be applied.
 
+### 6b. A theme is a palette, not a directory of app configs
+
+Splitting themes out of rices fixed the *cost* of a switch. It did nothing about
+the cost of **owning** themes, which was quadratic: every theme kept a full
+config file per app, so adding a seventh theme meant writing seven more files,
+and adding an eighth app meant editing six themes. Six themes x seven shared apps
+was 31 files that all said the same thing in six palettes - and they drifted,
+because nothing forced the sixth copy to be updated with the first five.
+
+So the config moved to where there is one of it, and the theme kept only what is
+actually different between themes: the colors.
+
+```
+<app>/<file>.tmpl           ONE template per app, beside that app's dotfiles
+                            (ghostty/ghostty-theme.tmpl, btop/btop.theme.tmpl, ...)
+themes/<name>/theme.list    the palette that fills it in
+```
+
+A template is the app's real config with `{{role}}` where a color goes.
+`render_theme_template` (lib/config.sh) substitutes every `color:` role, every
+single-valued meta field, and `{{THEME}}` from the theme's own `theme.list`. The
+whole substitution engine is one generated sed script (`_osr_theme_sed`,
+lib/theme.sh) - no template language, same reason `theme.list` is not TOML.
+
+The palette has four groups, and the names are spelled out rather than
+abbreviated because they are the API a template is written against:
+
+| group | roles |
+|---|---|
+| the window | `background` `foreground` `cursor` `selection_background` `selection_foreground` `background_opacity` `background_blur` |
+| the 16 ANSI slots | `ansi_black` .. `ansi_white`, `ansi_bright_black` .. `ansi_bright_white` |
+| TUI chrome | `text_primary` `text_metadata` `text_muted` `panel_background` `border` `highlight` `accent_red` .. `accent_cyan` `box_cpu` `box_memory` `box_network` `box_process` `gradient_mid` `gradient_peak` |
+| semantic | `surface` `text_dim` `accent` `success` `error` `warning` `prompt_secondary` |
+
+`background_opacity` and `background_blur` are in the palette for the same reason
+the colours are: how translucent a terminal is, is part of how the theme *looks*.
+They used to sit in each terminal's base config, where four terminals had drifted
+to four different numbers (ghostty 0.85, wezterm 0.9, foot 0.7, alacritty 0.7)
+with no theme able to say otherwise. Now glass is 0.7 everywhere because glass
+says so.
+
+Every colour role has three spellings, because the configs os-rice owns write a
+colour three ways: `{{role}}` is `#rrggbb` (GTK, Xresources, most TUIs),
+`{{role_rgb}}` is bare `rrggbb` (foot), `{{role_dec}}` is `r,g,b` (KDE colour
+schemes, Konsole, CSS `rgba()`). One value, three shapes, nothing hard-coded into
+a template to get the one its app parses.
+
+Not every theme field is a colour. `gtk_theme`, `icon_theme`, `cursor_theme`,
+`cursor_size`, `ui_font`, `mono_font`, `gnome_accent` are names,
+and they substitute the same way - which is what collapsed five files that each
+repeated the same six toolkit names (`gtk-2.0/gtkrc`, GTK3 and GTK4
+`settings.ini`, `xsettingsd.conf`, the cursor `index.theme`) into one template
+each. `modules/theming.sh` no longer parses those names back out of the file it
+just wrote to feed `gsettings`; it reads `theme.list`.
+
+The chrome group is why this is a vocabulary and not just a colour list. A
+full-screen app paints furniture the ANSI slots have no name for, and *which*
+intensity it accents with is a design choice: most themes accent with the bright
+set, rosemary accents with the normal one because it is deliberately muted. A
+template that hard-coded `ansi_bright_green` would force every theme into the
+first choice. `accent_green` lets the theme answer.
+
+Writing a new theme is that block and nothing else - one file, no per-app
+directories. `themes/nord/` and `themes/catppuccin/` are now exactly a
+`theme.list` and a `wallpapers/`.
+
+**A theme can still ship a literal file**, and it wins over the template:
+`osr_theme_source <app> <name>` returns `themes/<t>/config/<app>/<name>` when it
+exists and a rendered template otherwise. That escape hatch is what made the
+migration incremental rather than a flag day, and it is what a genuinely bespoke
+layer would use - but none of the shared apps need it today. Where a theme looked
+bespoke, the honest fix was a role: glass's blur became `background_blur`, and
+rosemary's muted look became the `accent_*` group rather than two hand-written
+config files.
+
+yazi was the last holdout and the clearest case. A flavor there is a DIRECTORY -
+`flavor.toml` plus the `tmtheme.xml` that colours file previews - so the tree
+carried five vendored flavors, ~4400 lines, and only the four themes that had one
+were painted. Both files are palette maps with a 600-line icon table attached, so
+both are templates now: every theme gets a flavor named after itself, and
+syntax-highlighted previews, from the same palette its terminal uses. The
+`yazi_flavor` field retired with them - the flavor is `{{THEME}}`, so the
+selector and the flavor cannot disagree about a name.
+
+A theme's `config/` now holds only what is genuinely single-theme - glass's
+Hyprland/waybar/sddm tree, rosemary's i3/polybar/GTK tree. Those are not
+duplication; no other theme has a copy to drift from.
+
+Modules go through `install_theme_layer <app> <name> <dst>`, which is that
+resolution plus `install_layer`, and returns non-zero when the theme has
+neither, which is the module's cue to fall back to its dotfiles default. Because the
+helpers no longer name `$OSR_THEME_DIR` directly, `osr_theme_modules` greps for
+them too (`OSR_THEME_MARKERS`) when deciding which modules carry a theme layer.
+
 The GUI half is **Proteus** (`../proteus`), a standalone Rust crate: a
 rofi-style overlay listing the themes with their wallpapers as previews, on both
 X11 and Wayland from one binary. It reads `theme.list` directly and shells out

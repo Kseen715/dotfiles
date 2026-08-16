@@ -21,13 +21,20 @@
 
 run_step "Installing Firefox" pkg_install firefox
 
+# Ubuntu's `firefox` deb is a snap stub (Version: 1:1snapN), and the snap keeps
+# its profile under ~/snap/firefox/common/.mozilla/firefox — the classic root
+# stays empty forever, so the layer would land nowhere. Unlike Thunderbird there
+# is no de-snap route worth taking here (packages.mozilla.org/apt publishes
+# firefox but the archive stub wins, and the snap is Mozilla's own current
+# build), so follow the profile instead of fighting the package.
 _ff_root="$OSR_HOME/.mozilla/firefox"
+if [ ! -d "$_ff_root" ] && [ -d "$OSR_HOME/snap/firefox/common/.mozilla/firefox" ]; then
+    _ff_root="$OSR_HOME/snap/firefox/common/.mozilla/firefox"
+fi
 _ff_js=""
 _ff_css=""
 [ -f "$OSR_DOTFILES/firefox/user.js" ] && _ff_js="$OSR_DOTFILES/firefox/user.js"
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/firefox/userChrome.css" ]; then
-    _ff_css="$OSR_THEME_DIR/config/firefox/userChrome.css"
-fi
+_ff_css=$(osr_theme_source firefox userChrome.css) || _ff_css=""
 
 if [ -n "$_ff_js" ] || [ -n "$_ff_css" ]; then
     install_mozilla_layer "$_ff_root" "$_ff_js" "$_ff_css"

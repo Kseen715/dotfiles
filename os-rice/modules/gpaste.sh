@@ -18,11 +18,7 @@ run_step "Installing GPaste" pkg_install gpaste
 
 _gp_uuid="GPaste@gnome-shell-extensions.gnome.org"
 
-_is_gnome=0
-case "${XDG_CURRENT_DESKTOP:-}" in *GNOME*|*gnome*) _is_gnome=1 ;; esac
-case "${XDG_SESSION_DESKTOP:-}" in *gnome*|*GNOME*) _is_gnome=1 ;; esac
-
-if [ "$_is_gnome" -eq 1 ]; then
+if gnome_is_session; then
     # Enabling needs a live session bus, which an installer run over ssh or from
     # a TTY does not have. Not fatal: the settings below still land in dconf, and
     # the extension can be switched on from the Extensions app afterwards.

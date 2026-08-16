@@ -18,7 +18,11 @@ NO_COLOR=1
 . "$HERE/../lib.sh"
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+# PATH is restored before the cleanup runs: the absent-chafa probes below shrink
+# it to the fake-bin dir, and a crash in that window would otherwise leave the
+# trap with no `rm` on PATH and the temp dir behind.
+ORIG_PATH="$PATH"
+trap 'PATH="$ORIG_PATH"; rm -rf "$TMP"' EXIT
 OUT="$TMP/out"; : >"$OUT"
 BIN="$TMP/bin"; mkdir -p "$BIN"; PATH="$BIN:$PATH"; export PATH
 
@@ -54,9 +58,17 @@ if _chafa_ok; then ok "1.18.2 accepted (Arch/Void/resolute)"; else fail "1.18.2 
 fake_chafa 2.0.0
 if _chafa_ok; then ok "2.0.0 accepted (major bump beats the minor floor)"; else fail "2.0.0 rejected"; fi
 
+# "Absent" has to mean absent on the developer's box too: removing the fake is
+# not enough when the host itself ships a chafa in /usr/bin. PATH shrinks to the
+# fake dir for these two probes only - _chafa_version returns at `command -v`
+# with no external tool behind it, and the asserts are shell builtins.
 fake_chafa no
-if _chafa_ok; then fail "absent chafa reported as ok"; else ok "absent chafa is not ok"; fi
-assert_eq "" "$(_chafa_version)" "absent chafa reports an empty version"
+_saved_path="$PATH"; PATH="$BIN"
+_chafa_ok && _absent_ok=1 || _absent_ok=0
+_absent_ver=$(_chafa_version)
+PATH="$_saved_path"
+[ "$_absent_ok" -eq 0 ] && ok "absent chafa is not ok" || fail "absent chafa reported as ok"
+assert_eq "" "$_absent_ver" "absent chafa reports an empty version"
 
 # --- builder: §2 no-op when the chafa present is already good ----------------
 : >"$OUT"; fake_chafa 1.18.2

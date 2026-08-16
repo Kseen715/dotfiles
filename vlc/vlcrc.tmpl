@@ -1,0 +1,22 @@
+# vlcrc — theme-owned VLC interface settings, rendered per theme (§6b). Swapped on theme
+# switch (§6). VLC's Qt widgets follow the theme Qt palette (modules/theming.sh);
+# these are the few knobs Qt theming cannot reach.
+#
+# VLC rewrites this file when you change settings in its own preferences dialog,
+# and os-rice overwrites it back on the next run — edit the theme, not the GUI.
+
+[qt]
+qt-privacy-ask=0
+qt-notification=0
+qt-system-tray=1
+qt-fs-controller=1
+qt-minimal-view=0
+# VLC's own dark palette, for the widgets it paints itself. It does NOT reach the
+# menus - those take the Qt platform palette, which is why theming.sh exports
+# QT_QPA_PLATFORMTHEME. (`qt-interface-style` was the VLC 4 name and is silently
+# ignored by the 3.0.x that every distro still ships.)
+qt-dark-palette=1
+
+[core]
+metadata-network-access=0
+album-art=0

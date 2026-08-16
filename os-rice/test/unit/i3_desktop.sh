@@ -51,11 +51,11 @@ check_map i3 i3
 T=$(mktemp -d)
 OSR_HOME="$T/home"; OSR_USER=$(id -un)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
-OSR_THEME_DIR="$OSR_ROOT/themes/rosemary"
+OSR_THEME=rosemary; OSR_THEME_DIR="$OSR_ROOT/themes/rosemary"
 OSR_RICE_DIR="$OSR_ROOT/rices/i3-rosemary"
-export OSR_HOME OSR_USER OSR_DOTFILES OSR_THEME_DIR OSR_RICE_DIR
+export OSR_HOME OSR_USER OSR_DOTFILES OSR_THEME OSR_THEME_DIR OSR_RICE_DIR
 mkdir -p "$OSR_HOME"
-. "$OSR_LIB/user.sh"; . "$OSR_LIB/config.sh"
+. "$OSR_LIB/user.sh"; . "$OSR_LIB/theme.sh"; . "$OSR_LIB/config.sh"
 as_user()  { "$@"; }
 as_root()  { echo "as_root $*" >> "$T/root-calls"; }
 CALLS="$T/pkg-calls"; : > "$CALLS"
@@ -84,9 +84,9 @@ refute_contains "$OSR_HOME/.config/i3/config.d/90-theme.conf" "^bindsym" \
 # The editors that keep everything in one settings.json have no include, so the
 # §5 split is done by composition. The base must survive, the rice must win.
 printf '{"a":1,"colorscheme":"base","keep":"yes"}\n' > "$T/base.json"
-printf '{"colorscheme":"rosemuted"}\n' > "$T/frag.json"
+printf '{"colorscheme":"rosemary"}\n' > "$T/frag.json"
 compose_json_config "$T/base.json" "$T/frag.json" "$T/out.json"
-assert_eq rosemuted "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["colorscheme"])' "$T/out.json")" \
+assert_eq rosemary "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["colorscheme"])' "$T/out.json")" \
     "rice fragment overrides the base key"
 assert_eq yes "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["keep"])' "$T/out.json")" \
     "base keys the rice does not mention survive"
@@ -169,7 +169,7 @@ assert_contains "$GS_LOG" "layout 1" "known keys are still applied"
 
 # The theme must ship the scoped Evolution theme, not a global gtk.css edit —
 # GTK3 has no per-app selector, so a global one would restyle every GTK app.
-assert_contains "$OSR_ROOT/themes/rosemary/config/evolution/gtk.css" \
+assert_contains "$OSR_DOTFILES/evolution/gtk.css.tmpl" \
     "resource:///org/gtk/libgtk/theme/Adwaita" "the Evolution theme extends Adwaita rather than replacing it"
 assert_contains "$OSR_ROOT/modules/evolution.sh" "GTK_THEME=osr-evolution" \
     "the .desktop override is what scopes the theme to Evolution"

@@ -70,15 +70,21 @@ fi
 if [ -f "$OSR_DOTFILES/yazi/package.toml" ]; then
     install_layer "$OSR_DOTFILES/yazi/package.toml" "$_yazi_cfg/package.toml"
 fi
-if [ -d "$OSR_DOTFILES/yazi/flavors" ]; then
-    as_user mkdir -p "$_yazi_cfg/flavors"
-    as_user cp -rf "$OSR_DOTFILES/yazi/flavors/." "$_yazi_cfg/flavors/"
+# The flavor itself (theme-owned, §6b). yazi wants a DIRECTORY per flavor -
+# flavor.toml plus the tmtheme.xml that colors file previews - so the theme
+# renders one named after itself. Five vendored flavor trees used to live in
+# dotfiles/yazi/flavors/ and only the four themes that had one were painted;
+# now every theme has both files, from the same palette its terminal uses.
+if [ -n "${OSR_THEME:-}" ]; then
+    _yazi_fl="$_yazi_cfg/flavors/$OSR_THEME.yazi"
+    as_user mkdir -p "$_yazi_fl"
+    install_theme_layer yazi flavor.toml "$_yazi_fl/flavor.toml" || :
+    install_theme_layer yazi tmtheme.xml "$_yazi_fl/tmtheme.xml" || :
 fi
 
-# Flavor selection is the rice-owned theme (§6): rice override wins, dotfiles
-# default covers a rice that ships none.
-if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/yazi/theme.toml" ]; then
-    install_layer "$OSR_THEME_DIR/config/yazi/theme.toml" "$_yazi_cfg/theme.toml"
+# ...and the one-line file that selects it.
+if install_theme_layer yazi theme.toml "$_yazi_cfg/theme.toml"; then
+    :
 elif [ -f "$OSR_DOTFILES/yazi/theme.toml" ]; then
     install_layer "$OSR_DOTFILES/yazi/theme.toml" "$_yazi_cfg/theme.toml"
 fi

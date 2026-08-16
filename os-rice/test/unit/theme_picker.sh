@@ -54,7 +54,7 @@ assert_eq "any" "$(OSR_ROOT=$T osr_theme_session bare)" "session defaults to any
 # Palette: every theme must define the roles Proteus styles itself with, or the
 # picker falls back to unreadable defaults on exactly the theme you are choosing.
 for t in $LIST; do
-    for role in bg surface fg dim accent; do
+    for role in background surface foreground text_dim accent; do
         _c=$(osr_theme_color "$t" "$role")
         case "$_c" in
             "#"[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) ;;
@@ -62,13 +62,18 @@ for t in $LIST; do
         esac
     done
 done
-ok "every theme defines bg/surface/fg/dim/accent as #rrggbb"
+ok "every theme defines background/surface/foreground/text_dim/accent as #rrggbb"
 assert_eq "#88c0d0" "$(osr_theme_color nord accent)" "the nord accent is the one starship uses"
 
-# A `color:` role that is a prefix of another must not match it (bg vs bg2): the
-# parser anchors on whitespace after the role, not on the role alone.
-printf 'color: bg2 #111111\ncolor: bg #222222\n' >> "$T/themes/bare/theme.list"
-assert_eq "#222222" "$(OSR_ROOT=$T osr_theme_color bare bg)" "color: bg does not match bg2"
+# A `color:` role that is a prefix of another must not match it - and with the
+# §6b vocabulary that is no longer hypothetical: `accent` sits in front of
+# `accent_red`, `background` in front of `background_blur`. The parser anchors on
+# the whitespace AFTER the role, not on the role alone.
+printf 'color: accent_red #111111\ncolor: accent #222222\n' >> "$T/themes/bare/theme.list"
+assert_eq "#222222" "$(OSR_ROOT=$T osr_theme_color bare accent)" "color: accent does not match accent_red"
+assert_eq "#bf616a" "$(osr_theme_color nord accent_red)" "and the longer role still reads back"
+assert_eq "#2e3440" "$(osr_theme_color nord background)" "background does not swallow background_blur"
+assert_eq "0" "$(osr_theme_color nord background_blur)" "background_blur reads its own value"
 
 # --- config: dirs travel with the theme ---------------------------------------
 _cfgs=$(osr_theme_configs gruvbox | tr '\n' ' ' | sed 's/ *$//')

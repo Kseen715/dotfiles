@@ -1,0 +1,488 @@
+// Telegram Desktop palette template (§6b) -> os-rice.tdesktop-palette.
+//
+// Telegram paints its own widgets - it is not a GTK or Qt-themed app, so the
+// GTK/Qt layers every other module installs do nothing to it. Its ONE theming
+// mechanism is this file: a list of `constant: value;` lines, where a value is
+// #rrggbb, #rrggbbaa, or the name of a constant defined earlier.
+//
+// Applying it is a manual click, once, and that is a Telegram limitation, not a
+// gap here: the selected theme lives inside the encrypted tdata blob, so nothing
+// outside the app can select it, and a file path on the command line is treated
+// as a file to SEND, not a theme to load. Load it from inside the client instead
+// (Settings -> Chat Settings -> "Choose from file", or send the file to Saved
+// Messages and click it -> "Apply This Theme").
+//
+// One click total: a theme applied from a real path is watched
+// (ChatBackground::refreshThemeWatcher) and re-applied on every change of that
+// file, so a later `osr theme <name>` re-themes a running Telegram by itself.
+//
+// Constants left out fall back to Telegram's built-in DEFAULTS, which are the
+// LIGHT scheme - hence the deliberately wide coverage below rather than a dozen
+// base colors. The leading p* names are not Telegram keys: an unknown name is
+// remembered and resolvable by later lines (that is how a palette declares its
+// own variables), which is what keeps the theme roles in one block.
+//
+// Structure and key inventory follow the upstream Theme Reference
+// (github.com/telegramdesktop/tdesktop/wiki/Theme-Reference).
+
+// --- the theme's palette -----------------------------------------------------
+pBg: {{background}};
+pBgSunken: {{background_sunken}};
+pPanel: {{panel_background}};
+pMid: {{surface_mid}};
+pSel: {{selection_background}};
+pSelFg: {{selection_foreground}};
+pFg: {{foreground}};
+pDim: {{text_dim}};
+pMuted: {{text_muted}};
+pBorder: {{border}};
+pAccent: {{accent}};
+pRed: {{accent_red}};
+pGreen: {{accent_green}};
+pYellow: {{accent_yellow}};
+pBlue: {{accent_blue}};
+pMagenta: {{accent_magenta}};
+pCyan: {{accent_cyan}};
+pOrange: {{accent_orange}};
+pError: {{error}};
+pSuccess: {{success}};
+pWarning: {{warning}};
+
+// Alpha variants. A theme role is #rrggbb, and Telegram wants #rrggbbaa in the
+// places that overlay something - so the alpha byte is appended to the rendered
+// role right here rather than being a second palette entry per theme.
+pShadow: {{background_sunken}}f0;
+pLayerBg: {{background_sunken}}b0;
+pRippleLight: {{foreground}}18;
+pRippleHeavy: {{foreground}}30;
+pSeparator: {{border}}60;
+pServiceBg: {{surface_mid}}cc;
+pServiceFg: {{foreground}}cc;
+pDateImgBg: {{background_sunken}}99;
+pMediaviewBg: {{background}}e6;
+pAttentionOver: {{error}}30;
+
+// Fully transparent. Written off a theme role rather than as #00000000 so this
+// template holds no literal color at all - a hex here would be one theme's
+// color leaking into every other theme's render (test/unit/theme_template.sh
+// fails on exactly that).
+cTransparent: {{background}}00;
+
+// --- window chrome ------------------------------------------------------------
+windowBg: pBg;
+windowFg: pFg;
+windowBgOver: pPanel;
+windowBgRipple: pRippleLight;
+windowFgOver: windowFg;
+windowSubTextFg: pDim;
+windowSubTextFgOver: pMuted;
+windowBoldFg: pFg;
+windowBoldFgOver: windowBoldFg;
+windowBgActive: pAccent;
+windowFgActive: pBg;
+windowActiveTextFg: pAccent;
+windowShadowFg: pShadow;
+windowShadowFgFallback: pBgSunken;
+shadowFg: pSeparator;
+slideFadeOutBg: pLayerBg;
+slideFadeOutShadowFg: windowShadowFg;
+imageBg: pBgSunken;
+imageBgTransparent: pFg;
+
+// --- buttons -------------------------------------------------------------------
+activeButtonBg: pAccent;
+activeButtonBgOver: pBlue;
+activeButtonBgRipple: pRippleHeavy;
+activeButtonFg: pBg;
+activeButtonFgOver: activeButtonFg;
+activeButtonSecondaryFg: pBg;
+activeButtonSecondaryFgOver: activeButtonSecondaryFg;
+activeLineFg: pAccent;
+activeLineFgError: pError;
+lightButtonBg: windowBg;
+lightButtonBgOver: pPanel;
+lightButtonBgRipple: pRippleLight;
+lightButtonFg: pAccent;
+lightButtonFgOver: lightButtonFg;
+attentionButtonFg: pError;
+attentionButtonFgOver: attentionButtonFg;
+attentionButtonBgOver: pAttentionOver;
+attentionButtonBgRipple: pRippleLight;
+outlineButtonBg: windowBg;
+outlineButtonBgOver: pPanel;
+outlineButtonOutlineFg: pAccent;
+outlineButtonFg: pFg;
+outlineButtonFgOver: outlineButtonFg;
+outlineButtonBgRipple: pRippleLight;
+
+// --- menus, scrollbars, inputs ---------------------------------------------------
+menuBg: pPanel;
+menuBgOver: pMid;
+menuBgRipple: pRippleLight;
+menuIconFg: pDim;
+menuIconFgOver: pFg;
+menuSubmenuArrowFg: pDim;
+menuFgDisabled: pMuted;
+menuSeparatorFg: pSeparator;
+scrollBarBg: pMuted;
+scrollBarBgOver: pDim;
+scrollBg: pBgSunken;
+scrollBgOver: scrollBg;
+smallCloseIconFg: pDim;
+smallCloseIconFgOver: pError;
+radialFg: pAccent;
+radialBg: pBgSunken;
+placeholderFg: pMuted;
+placeholderFgActive: pDim;
+inputBorderFg: pBorder;
+filterInputBorderFg: pAccent;
+filterInputInactiveBg: pPanel;
+checkboxFg: pBorder;
+sliderBgInactive: pMid;
+sliderBgActive: pAccent;
+tooltipBg: pPanel;
+tooltipFg: pFg;
+tooltipBorderFg: pBorder;
+
+// --- title bar and tray -----------------------------------------------------------
+titleBg: pPanel;
+titleBgActive: titleBg;
+titleShadow: pSeparator;
+titleFg: pDim;
+titleFgActive: pFg;
+titleButtonBg: cTransparent;
+titleButtonFg: pDim;
+titleButtonBgOver: pMid;
+titleButtonFgOver: pFg;
+titleButtonBgActive: titleButtonBg;
+titleButtonFgActive: titleButtonFg;
+titleButtonBgActiveOver: titleButtonBgOver;
+titleButtonFgActiveOver: titleButtonFgOver;
+titleButtonCloseBg: cTransparent;
+titleButtonCloseFg: pDim;
+titleButtonCloseBgOver: pError;
+titleButtonCloseFgOver: pBg;
+titleButtonCloseBgActive: titleButtonCloseBg;
+titleButtonCloseFgActive: titleButtonCloseFg;
+titleButtonCloseBgActiveOver: titleButtonCloseBgOver;
+titleButtonCloseFgActiveOver: titleButtonCloseFgOver;
+trayCounterBg: pError;
+trayCounterBgMute: pMuted;
+trayCounterFg: pBg;
+trayCounterBgMacInvert: pFg;
+trayCounterFgMacInvert: pBg;
+
+// --- layers, boxes, contacts, intro -------------------------------------------------
+layerBg: pLayerBg;
+cancelIconFg: pDim;
+cancelIconFgOver: pFg;
+boxBg: pPanel;
+boxTextFg: pFg;
+boxTextFgGood: pSuccess;
+boxTextFgError: pError;
+boxTitleFg: pFg;
+boxSearchBg: boxBg;
+boxSearchCancelIconFg: cancelIconFg;
+boxSearchCancelIconFgOver: cancelIconFgOver;
+boxTitleAdditionalFg: pDim;
+boxTitleCloseFg: cancelIconFg;
+boxTitleCloseFgOver: cancelIconFgOver;
+membersAboutLimitFg: pDim;
+contactsBg: pPanel;
+contactsBgOver: pMid;
+contactsNameFg: pFg;
+contactsStatusFg: pDim;
+contactsStatusFgOver: pDim;
+contactsStatusFgOnline: pAccent;
+photoCropFadeBg: layerBg;
+photoCropPointFg: pRippleHeavy;
+introBg: windowBg;
+introTitleFg: pFg;
+introDescriptionFg: pDim;
+introErrorFg: pError;
+introCoverTopBg: pPanel;
+introCoverBottomBg: pBg;
+introCoverIconsFg: pAccent;
+introCoverPlaneTrace: pMid;
+introCoverPlaneInner: pAccent;
+introCoverPlaneOuter: pBlue;
+introCoverPlaneTop: pFg;
+
+// --- chat list (left column) ----------------------------------------------------------
+dialogsMenuIconFg: menuIconFg;
+dialogsMenuIconFgOver: menuIconFgOver;
+dialogsBg: windowBg;
+dialogsNameFg: pFg;
+dialogsChatIconFg: pDim;
+dialogsDateFg: pDim;
+dialogsTextFg: pDim;
+dialogsTextFgService: pAccent;
+dialogsDraftFg: pError;
+dialogsVerifiedIconBg: pAccent;
+dialogsVerifiedIconFg: pBg;
+dialogsSendingIconFg: pMuted;
+dialogsSentIconFg: pSuccess;
+dialogsUnreadBg: pAccent;
+dialogsUnreadBgMuted: pMuted;
+dialogsUnreadFg: pBg;
+dialogsBgOver: pPanel;
+dialogsNameFgOver: dialogsNameFg;
+dialogsChatIconFgOver: dialogsChatIconFg;
+dialogsDateFgOver: dialogsDateFg;
+dialogsTextFgOver: dialogsTextFg;
+dialogsTextFgServiceOver: dialogsTextFgService;
+dialogsDraftFgOver: dialogsDraftFg;
+dialogsVerifiedIconBgOver: dialogsVerifiedIconBg;
+dialogsVerifiedIconFgOver: dialogsVerifiedIconFg;
+dialogsSendingIconFgOver: dialogsSendingIconFg;
+dialogsSentIconFgOver: dialogsSentIconFg;
+dialogsUnreadBgOver: dialogsUnreadBg;
+dialogsUnreadBgMutedOver: dialogsUnreadBgMuted;
+dialogsUnreadFgOver: dialogsUnreadFg;
+dialogsBgActive: pSel;
+dialogsNameFgActive: pSelFg;
+dialogsChatIconFgActive: pSelFg;
+dialogsDateFgActive: pSelFg;
+dialogsTextFgActive: pSelFg;
+dialogsTextFgServiceActive: pAccent;
+dialogsDraftFgActive: pError;
+dialogsVerifiedIconBgActive: pAccent;
+dialogsVerifiedIconFgActive: pBg;
+dialogsSendingIconFgActive: pMuted;
+dialogsSentIconFgActive: pSuccess;
+dialogsUnreadBgActive: pAccent;
+dialogsUnreadBgMutedActive: pMuted;
+dialogsUnreadFgActive: pBg;
+dialogsForwardBg: dialogsBgActive;
+dialogsForwardFg: dialogsNameFgActive;
+searchedBarBg: pPanel;
+searchedBarBorder: pBorder;
+searchedBarFg: pDim;
+
+// --- folders side bar ---------------------------------------------------------------
+sideBarBg: pBgSunken;
+sideBarBgActive: pSel;
+sideBarBgRipple: pRippleLight;
+sideBarTextFg: pDim;
+sideBarTextFgActive: pSelFg;
+sideBarIconFg: pDim;
+sideBarIconFgActive: pAccent;
+sideBarBadgeBg: pAccent;
+sideBarBadgeBgMuted: pMuted;
+sideBarBadgeFg: pBg;
+
+// --- history (the chat itself) -------------------------------------------------------
+topBarBg: pPanel;
+emojiPanBg: pPanel;
+emojiPanCategories: pBgSunken;
+emojiPanHeaderFg: pDim;
+emojiPanHeaderBg: pPanel;
+stickerPanDeleteBg: pAttentionOver;
+stickerPanDeleteFg: pError;
+stickerPreviewBg: pLayerBg;
+historyTextInFg: pFg;
+historyTextOutFg: pFg;
+historyCaptionInFg: historyTextInFg;
+historyCaptionOutFg: historyTextOutFg;
+historyFileNameInFg: historyTextInFg;
+historyFileNameOutFg: historyTextOutFg;
+historyLinkInFg: pAccent;
+historyLinkInFgSelected: pAccent;
+historyLinkOutFg: pAccent;
+historyLinkOutFgSelected: pAccent;
+historyOutIconFg: pSuccess;
+historyOutIconFgSelected: pSuccess;
+historyIconFgInverted: pBg;
+historySendingOutIconFg: pMuted;
+historySendingInIconFg: pMuted;
+historySendingInvertedIconFg: pMuted;
+historySystemBg: pServiceBg;
+historySystemBgSelected: pSel;
+historySystemFg: pFg;
+historyUnreadBarBg: pPanel;
+historyUnreadBarBorder: pBorder;
+historyUnreadBarFg: pDim;
+historyForwardChooseBg: pLayerBg;
+historyForwardChooseFg: pFg;
+historyPeer1NameFg: pRed;
+historyPeer1UserpicBg: pRed;
+historyPeer2NameFg: pGreen;
+historyPeer2UserpicBg: pGreen;
+historyPeer3NameFg: pYellow;
+historyPeer3UserpicBg: pYellow;
+historyPeer4NameFg: pBlue;
+historyPeer4UserpicBg: pBlue;
+historyPeer5NameFg: pMagenta;
+historyPeer5UserpicBg: pMagenta;
+historyPeer6NameFg: pCyan;
+historyPeer6UserpicBg: pCyan;
+historyPeer7NameFg: pOrange;
+historyPeer7UserpicBg: pOrange;
+historyPeer8NameFg: pAccent;
+historyPeer8UserpicBg: pAccent;
+historyPeerUserpicFg: pBg;
+historyScrollBarBg: scrollBarBg;
+historyScrollBarBgOver: scrollBarBgOver;
+historyScrollBg: scrollBg;
+historyScrollBgOver: scrollBgOver;
+
+// --- message bubbles -------------------------------------------------------------------
+msgInBg: pPanel;
+msgInBgSelected: pSel;
+msgOutBg: pMid;
+msgOutBgSelected: pSel;
+msgSelectOverlay: pRippleLight;
+msgStickerOverlay: pRippleHeavy;
+msgInServiceFg: pAccent;
+msgInServiceFgSelected: pAccent;
+msgOutServiceFg: pAccent;
+msgOutServiceFgSelected: pAccent;
+msgInShadow: cTransparent;
+msgInShadowSelected: cTransparent;
+msgOutShadow: cTransparent;
+msgOutShadowSelected: cTransparent;
+msgInDateFg: pDim;
+msgInDateFgSelected: pFg;
+msgOutDateFg: pDim;
+msgOutDateFgSelected: pFg;
+msgServiceFg: pServiceFg;
+msgServiceBg: pServiceBg;
+msgServiceBgSelected: pSel;
+msgInReplyBarColor: pAccent;
+msgInReplyBarSelColor: pAccent;
+msgOutReplyBarColor: pAccent;
+msgOutReplyBarSelColor: pAccent;
+msgImgReplyBarColor: pAccent;
+msgInMonoFg: pOrange;
+msgOutMonoFg: pOrange;
+msgDateImgFg: pFg;
+msgDateImgBg: pDateImgBg;
+msgDateImgBgOver: pBgSunken;
+msgDateImgBgSelected: pSel;
+msgFileThumbLinkInFg: pAccent;
+msgFileThumbLinkInFgSelected: pAccent;
+msgFileThumbLinkOutFg: pAccent;
+msgFileThumbLinkOutFgSelected: pAccent;
+msgFileInBg: pAccent;
+msgFileInBgOver: pBlue;
+msgFileInBgSelected: pAccent;
+msgFileOutBg: pAccent;
+msgFileOutBgOver: pBlue;
+msgFileOutBgSelected: pAccent;
+msgFile1Bg: pBlue;
+msgFile1BgDark: pBlue;
+msgFile1BgOver: pBlue;
+msgFile1BgSelected: pAccent;
+msgFile2Bg: pGreen;
+msgFile2BgDark: pGreen;
+msgFile2BgOver: pGreen;
+msgFile2BgSelected: pAccent;
+msgFile3Bg: pRed;
+msgFile3BgDark: pRed;
+msgFile3BgOver: pRed;
+msgFile3BgSelected: pAccent;
+msgFile4Bg: pYellow;
+msgFile4BgDark: pYellow;
+msgFile4BgOver: pYellow;
+msgFile4BgSelected: pAccent;
+msgWaveformInActive: pAccent;
+msgWaveformInActiveSelected: pAccent;
+msgWaveformInInactive: pMuted;
+msgWaveformInInactiveSelected: pDim;
+msgWaveformOutActive: pAccent;
+msgWaveformOutActiveSelected: pAccent;
+msgWaveformOutInactive: pMuted;
+msgWaveformOutInactiveSelected: pDim;
+msgBotKbOverBgAdd: pRippleLight;
+msgBotKbIconFg: pFg;
+msgBotKbRippleBg: pRippleLight;
+mediaInFg: pDim;
+mediaInFgSelected: pFg;
+mediaOutFg: pDim;
+mediaOutFgSelected: pFg;
+youtubePlayIconBg: pError;
+youtubePlayIconFg: pFg;
+videoPlayIconBg: pDateImgBg;
+videoPlayIconFg: pFg;
+toastBg: pServiceBg;
+toastFg: pFg;
+reportSpamBg: pPanel;
+reportSpamFg: pFg;
+
+// --- compose area ---------------------------------------------------------------------
+historyToDownBg: pPanel;
+historyToDownShadow: pSeparator;
+historyComposeAreaBg: pPanel;
+historyComposeAreaFg: pFg;
+historyComposeAreaFgService: pDim;
+historyComposeIconFg: menuIconFg;
+historyComposeIconFgOver: menuIconFgOver;
+historySendIconFg: pAccent;
+historySendIconFgOver: pFg;
+historyPinnedBg: pPanel;
+historyReplyBg: pPanel;
+historyReplyIconFg: pAccent;
+historyReplyCancelFg: cancelIconFg;
+historyReplyCancelFgOver: cancelIconFgOver;
+historyComposeButtonBg: pPanel;
+historyComposeButtonBgOver: pMid;
+historyComposeButtonBgRipple: pRippleLight;
+
+// --- overview, profile, notifications, main menu -----------------------------------------
+overviewCheckBg: pDateImgBg;
+overviewCheckFg: pFg;
+overviewCheckFgActive: pBg;
+overviewPhotoSelectOverlay: pRippleHeavy;
+profileStatusFgOver: pDim;
+profileVerifiedCheckBg: pAccent;
+notificationsBoxMonitorFg: pFg;
+notificationsBoxScreenBg: pPanel;
+notificationSampleUserpicFg: pAccent;
+notificationSampleCloseFg: pDim;
+notificationSampleTextFg: pDim;
+notificationSampleNameFg: pFg;
+notificationBg: pPanel;
+mainMenuBg: pPanel;
+mainMenuCoverBg: pSel;
+mainMenuCoverFg: pFg;
+
+// --- media player and media viewer ---------------------------------------------------------
+mediaPlayerBg: pPanel;
+mediaPlayerActiveFg: pAccent;
+mediaPlayerInactiveFg: pMuted;
+mediaPlayerDisabledFg: pMuted;
+mediaviewFileBg: pPanel;
+mediaviewFileNameFg: pFg;
+mediaviewFileSizeFg: pDim;
+mediaviewFileRedCornerFg: pRed;
+mediaviewFileYellowCornerFg: pYellow;
+mediaviewFileGreenCornerFg: pGreen;
+mediaviewFileBlueCornerFg: pBlue;
+mediaviewFileExtFg: pBg;
+mediaviewMenuBg: pPanel;
+mediaviewMenuBgOver: pMid;
+mediaviewMenuBgRipple: pRippleLight;
+mediaviewMenuFg: pFg;
+mediaviewBg: pMediaviewBg;
+mediaviewVideoBg: imageBg;
+mediaviewControlBg: pDateImgBg;
+mediaviewControlFg: pFg;
+mediaviewCaptionBg: pDateImgBg;
+mediaviewCaptionFg: pFg;
+mediaviewTextLinkFg: pAccent;
+mediaviewSaveMsgBg: toastBg;
+mediaviewSaveMsgFg: toastFg;
+mediaviewPlaybackActive: pAccent;
+mediaviewPlaybackInactive: pMuted;
+mediaviewPlaybackActiveOver: pAccent;
+mediaviewPlaybackInactiveOver: pDim;
+mediaviewPlaybackProgressFg: pFg;
+mediaviewPlaybackIconFg: pFg;
+mediaviewPlaybackIconFgOver: pAccent;
+mediaviewPipControlsFg: pFg;
+mediaviewPipControlsFgOver: pAccent;
+mediaviewPipFade: pMediaviewBg;
+mediaviewPipPlaybackActive: pAccent;
+mediaviewPipPlaybackInactive: pMuted;
+mediaviewTransparentBg: pBgSunken;
+mediaviewTransparentFg: pMuted;
