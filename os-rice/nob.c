@@ -21,6 +21,12 @@
  * named cl/clang-cl gets MSVC's spelling (/W4, /c, /Fo, *.lib), everything
  * else gets gcc/clang's.
  *
+ * Builds are incremental: a source is recompiled only when its object is
+ * older than the source, and a binary is relinked only when it is older
+ * than the objects it is made of, so a second run in a row does nothing
+ * (see needs_compile/needs_link below). `./build/nob clean` forces the
+ * next build to be a full one.
+ *
  * After the first bootstrap you never type that gcc line again -- nob.h's
  * "Go Rebuild Urself" technology (NOB_GO_REBUILD_URSELF below) recompiles
  * nob on the spot whenever nob.c itself changes, before doing anything
@@ -224,15 +230,103 @@ static const char *obj_of(const char *src) {
     return obj;
 }
 
+/* mkdir_if_needed -- nob_mkdir_if_not_exists() logs "directory `x` already
+ * exists" on every single run; now that an up-to-date build prints nothing
+ * else, those two lines would be the whole output. Only call it when there
+ * is actually a directory to create, so the "created directory" line still
+ * shows up the one time it matters. */
+static bool mkdir_if_needed(const char *path) {
+    if (nob_file_exists(path) > 0) return true;
+    return nob_mkdir_if_not_exists(path);
+}
+
+/* --- incremental builds ---------------------------------------------
+ *
+ * The rule is the usual make one, done with file timestamps: an object is
+ * recompiled only when it is older than something it is made of, a binary
+ * relinked only when it is older than its objects. Two runs in a row with
+ * nothing edited in between means the second one runs no compiler at all.
+ *
+ * deps -- what every object depends on besides its own .c file: nob.c
+ * (the compiler flags live in it, so editing them has to invalidate every
+ * object) and every .h in the tree. Which .c includes which .h is
+ * deliberately not tracked -- no -MMD dep files to parse, nothing that
+ * works in only one compiler's dialect -- so touching any header rebuilds
+ * everything. That over-builds, but it cannot under-build, and
+ * under-building is the failure mode that silently links a stale object
+ * and costs an afternoon. A full build of this tree is a couple seconds.
+ */
+static Nob_File_Paths deps = {0};
+static bool deps_collected = false;
+static bool deps_usable = false;
+
+/* actions -- compiler/linker commands actually issued this run; 0 means
+ * everything was already up to date and main() says so. */
+static size_t actions = 0;
+
+static bool collect_dep(Nob_Walk_Entry entry) {
+    size_t len;
+    if (entry.type == NOB_FILE_DIRECTORY) {
+        const char *base = nob_path_name(entry.path);
+        /* build/ is our own output (and holds nob.exe.old after a
+         * self-rebuild); .git holds nothing that is ever compiled. */
+        if (strcmp(base, BUILD_DIR) == 0 || strcmp(base, ".git") == 0) {
+            *entry.action = NOB_WALK_SKIP;
+        }
+        return true;
+    }
+    len = strlen(entry.path);
+    if (len > 2 && strcmp(entry.path + len - 2, ".h") == 0) {
+        nob_da_append(&deps, nob_temp_strdup(entry.path));
+    }
+    return true;
+}
+
+/* collect_deps -- walk the tree once per run for headers. If the walk
+ * fails (an unreadable directory, say) deps_usable stays false and every
+ * timestamp check below answers "rebuild": without the full header list
+ * we cannot prove anything is up to date, and guessing wrong ships a
+ * stale binary. */
+static void collect_deps(void) {
+    if (deps_collected) return;
+    deps_collected = true;
+    deps_usable = nob_walk_dir(".", collect_dep);
+    nob_da_append(&deps, "nob.c");
+}
+
+/* needs_compile -- is src's object missing, older than src, or older than
+ * any of deps? A timestamp we could not read (-1) counts as "yes" for the
+ * same reason as above. */
+static bool needs_compile(const char *src) {
+    const char *obj = obj_of(src);
+    collect_deps();
+    if (!deps_usable) return true;
+    if (nob_needs_rebuild1(obj, src) != 0) return true;
+    return nob_needs_rebuild(obj, deps.items, deps.count) != 0;
+}
+
+/* needs_link -- is bin missing or older than any object linked into it?
+ * Called only after compile_objs() has flushed, so the objects' mtimes
+ * are final by the time we look at them. */
+static bool needs_link(const char *bin, const char *main_src) {
+    const char *objs[LIB_SRCS_COUNT + 1];
+    size_t i;
+    objs[0] = obj_of(main_src);
+    for (i = 0; i < LIB_SRCS_COUNT; i++) objs[i + 1] = obj_of(lib_srcs[i]);
+    return nob_needs_rebuild(bin, objs, LIB_SRCS_COUNT + 1) != 0;
+}
+
 /* compile_objs -- one gcc -c per source, all started at once (nob caps the
  * batch at nob_nprocs()), waited on together. */
 static bool compile_objs(const char **srcs, size_t count) {
     Nob_Procs procs = {0};
     Nob_Cmd cmd = {0};
     size_t i;
-    if (!nob_mkdir_if_not_exists(BUILD_DIR)) return false;
-    if (!nob_mkdir_if_not_exists(OBJ_DIR)) return false;
+    if (!mkdir_if_needed(BUILD_DIR)) return false;
+    if (!mkdir_if_needed(OBJ_DIR)) return false;
     for (i = 0; i < count; i++) {
+        if (!needs_compile(srcs[i])) continue;
+        actions++;
         append_common_flags(&cmd);
         if (is_msvc()) {
             /* /Fo takes its path glued on, no separate argument. The .o
@@ -279,6 +373,8 @@ static void append_common_libs(Nob_Cmd *cmd) {
  * is given, so the binaries of one batch link in parallel too. */
 static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     Nob_Cmd cmd = {0};
+    if (!needs_link(bin, main_src)) return true;
+    actions++;
     append_common_flags(&cmd);
     if (is_msvc()) {
         nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
@@ -312,7 +408,7 @@ static bool build_tests(void) {
     size_t i;
     for (i = 0; i < TEST_COUNT; i++) srcs[i] = nob_temp_sprintf("test/unit_c/%s.c", test_names[i]);
     if (!compile_objs(srcs, TEST_COUNT)) return false;
-    if (!nob_mkdir_if_not_exists(TEST_BIN_DIR)) return false;
+    if (!mkdir_if_needed(TEST_BIN_DIR)) return false;
     for (i = 0; i < TEST_COUNT; i++) {
         const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]);
         if (!link_exe(bin, srcs[i], &procs)) return false;
@@ -374,7 +470,9 @@ int main(int argc, char **argv) {
     const char *subcommand = argc > 0 ? nob_shift(argv, argc) : NULL;
 
     if (subcommand == NULL || strcmp(subcommand, "all") == 0) {
-        return build_all() ? 0 : 1;
+        if (!build_all()) return 1;
+        if (actions == 0) nob_log(NOB_INFO, "everything up to date");
+        return 0;
     }
     if (strcmp(subcommand, "test") == 0) {
         if (!build_all()) return 1;
