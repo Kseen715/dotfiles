@@ -13,6 +13,11 @@ run_step "Installing zsh-autosuggestions" \
     install_zsh_plugin zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions
 run_step "Installing zsh-syntax-highlighting" \
     install_zsh_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting
+# Live prediction dropdown (PSReadLine ListView equivalent). Pure zsh, no
+# binary, so it needs no pkgmap row. Load order is load-bearing — see the
+# plugins array in zsh/rc.d/10-omz.zsh.
+run_step "Installing zsh-autocomplete" \
+    install_zsh_plugin zsh-autocomplete https://github.com/marlonrichert/zsh-autocomplete
 
 # Layered rc.d config (§5): os-rice writes only what it owns.
 OSR_RCDIR="$OSR_HOME/.config/osr/zsh/rc.d"
