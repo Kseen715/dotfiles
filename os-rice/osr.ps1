@@ -66,6 +66,13 @@ function Show-Usage {
     Write-Host "modules.c knows how to fully install+theme fastfetch, wezterm, pwsh, and"
     Write-Host "oh-my-posh; every other rice.list entry is package-only. See install.c and"
     Write-Host "PLAN_UNIVERSAL.md for the exact scope line."
+    Write-Host ""
+    Write-Host "Windows OS passes (change the system, not your apps -- ask for them by"
+    Write-Host "name, they are never part of a rice):"
+    Write-Host "  osr.ps1 module win-tweaks    debloat services, Explorer/taskbar/snap, sudo"
+    Write-Host "  osr.ps1 module win-update    ask Windows Update to run now"
+    Write-Host "  osr.ps1 module win-debloat   Raphire's Win11Debloat (third-party)"
+    Write-Host "  osr.ps1 module win-winutil   Chris Titus WinUtil (third-party, interactive)"
 }
 
 # Ensure-Nob -- compile build\nob.exe from nob.c if it doesn't exist yet

@@ -9,7 +9,9 @@ rationale.
 > modules are complete and pass the idempotency matrix on apt/apk/pacman. Every
 > legacy per-distro tree is gone: the last one,
 > `linux-arch-x86_64-hyprland-glass/`, is now `rices/arch-hyprland-glass/` +
-> `modules/*.sh`. `windows-11-x86_64/` is untouched and still its own thing.
+> `modules/*.sh`. The Windows side is gone from sh entirely: the old
+> `windows-11-x86_64/` PowerShell tree now lives in the C core as
+> `modules/windows/` + `lib/wintweak.c` (see [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md)).
 
 ## Layout
 
@@ -131,8 +133,9 @@ debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).
 ## Not yet migrated (Out of MVP)
 
 Still deliberately out of scope (see DESIGN "MVP scope"): the
-`repo:`/`tarball:`/`brew:`/`flatpak:` providers, `osr prune`, and Windows —
-`windows-11-x86_64/` remains its own PowerShell tree.
+`repo:`/`tarball:`/`brew:`/`flatpak:` providers and `osr prune`. Windows is no
+longer on this list: it is a C core (`install.c`, `lib/*.c`, `modules/windows/`)
+driven by `osr.ps1`, not a POSIX-sh target and not a PowerShell tree.
 
 The legacy per-distro bash trees are done. What their migration cannot claim is
 *verification*: modules that need a GPU, a display, a real kernel or a

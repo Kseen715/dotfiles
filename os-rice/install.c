@@ -5,6 +5,10 @@
  *   - rice.list package resolution + real module installs (lib/manifest.c,
  *     modules.c) for the finite set of Windows modules modules.c knows
  *     (fastfetch, wezterm, pwsh, oh-my-posh -- see modules.c's header)
+ *   - the Windows OS passes ported from the retired windows-11-x86_64/
+ *     ps1 tree (win-tweaks, win-update, win-debloat, win-winutil --
+ *     modules/windows/, lib/wintweak.c), reached the same way any module is:
+ *     `install --module win-tweaks`
  *   - theme rendering + apply, including --theme-only (lib/theme_render.c,
  *     modules.c's osr_apply_module_theme)
  *   - wallpaper apply as part of a rice/theme apply (lib/wallpaper.c);
@@ -152,6 +156,15 @@ static void list_modules(const char *modules_dir) {
 
     printf("\nModules this C core can actually run (package + config, see modules.c):\n");
     printf("  fastfetch\n  wezterm\n  pwsh\n  oh-my-posh\n");
+
+    /* Listed apart because they are a different kind of thing: these change
+     * the operating system rather than installing an app, so nothing here
+     * belongs in a rice.list by habit -- you ask for them on purpose. */
+    printf("\nWindows OS passes (no package, no theme -- see modules/windows/):\n");
+    printf("  win-tweaks   debloat services + Explorer/taskbar/snap settings + sudo\n");
+    printf("  win-update   ask Windows Update to run now\n");
+    printf("  win-debloat  Raphire's Win11Debloat (third-party, fetched at run time)\n");
+    printf("  win-winutil  Chris Titus WinUtil (third-party, interactive)\n");
 }
 
 /* -------------------------------------------------------------------------
@@ -188,6 +201,13 @@ static void usage(void) {
         "oh-my-posh (ports of windows-rice's own modules); every other rice.list\n"
         "entry falls back to a plain windows.map package install, package only,\n"
         "no config. See modules.c and PLAN_UNIVERSAL.md for the exact scope line.\n"
+    );
+    printf(
+        "\n"
+        "It also knows four Windows OS passes -- win-tweaks, win-update,\n"
+        "win-debloat, win-winutil (--list-modules describes them) -- which\n"
+        "change the system itself rather than installing anything, and which are\n"
+        "meant to be asked for by name rather than listed in a rice.\n"
     );
 }
 

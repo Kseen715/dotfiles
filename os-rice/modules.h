@@ -1,8 +1,25 @@
 /* modules.h -- the finite set of Windows modules this C tier can actually
- * run: fastfetch, oh-my-posh, pwsh, wezterm. Ported once from the
- * now-retired windows-rice/modules folder (*.ps1) -- see PLAN_UNIVERSAL.md
- * decision 8 -- and now the only Windows rice implementation this repo
- * ships. See modules.c's header comment for the full ps1-to-C mapping.
+ * run. Two groups, and the difference between them matters:
+ *
+ *   app modules      fastfetch, oh-my-posh, pwsh, wezterm -- install a
+ *                    program and paint its config. Ported once from the
+ *                    now-retired windows-rice/modules folder (*.ps1), see
+ *                    PLAN_UNIVERSAL.md decision 8.
+ *   OS passes        win-tweaks, win-update, win-debloat, win-winutil --
+ *                    change the operating system itself (services,
+ *                    registry, Windows Update, third-party debloat tools).
+ *                    No package, no config, no theme layer. Ported from
+ *                    the also-retired windows-11-x86_64/ ps1 tree; they
+ *                    live together under modules/windows/ because none of
+ *                    them is a standalone app module. Named win-, not
+ *                    win11-: that folder's name was the narrower claim.
+ *                    Every service row and most of the Explorer ones go
+ *                    back to Windows 7/10 -- only the snap group, the
+ *                    taskbar End-task row and sudo are 11-only, and each
+ *                    is a no-op where the feature does not exist.
+ *
+ * Together these are now the only Windows implementation this repo ships.
+ * See modules.c's header comment for the full ps1-to-C mapping.
  *
  * This is NOT an attempt at the ~70 Linux os-rice/modules folder (*.sh) -- those
  * assume a Linux desktop (X11/Wayland, GTK, systemd units) that has no
@@ -36,6 +53,8 @@ int osr_run_module(const char *repo_root, const char *name, const char *theme);
  * "neutralize every install verb" behavior. pwsh carries no theme layer
  * (its config is dotfiles-owned, not theme-owned) and is a silent no-op
  * success here, matching install.sh's OSR_THEME_MARKERS grep excluding it.
+ * The win-* passes are no-ops here for a stronger reason: they have no
+ * config at all, and a re-theme must never quietly reconfigure the OS.
  */
 int osr_apply_module_theme(const char *repo_root, const char *name, const char *theme);
 

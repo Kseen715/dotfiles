@@ -66,6 +66,7 @@ static const char *lib_srcs[] = {
     "lib/config_copy.c",
     "lib/fonts.c",
     "lib/wallpaper.c",
+    "lib/wintweak.c",
     "provide_module.c",
     "modules.c",
     "modules/src/common.c",
@@ -73,12 +74,15 @@ static const char *lib_srcs[] = {
     "modules/wezterm.c",
     "modules/pwsh.c",
     "modules/oh-my-posh.c",
+    "modules/windows/tweaks.c",
+    "modules/windows/update.c",
+    "modules/windows/debloat.c",
 };
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
 
 static const char *test_names[] = {
     "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
-    "config_copy_test",
+    "config_copy_test", "wintweak_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 

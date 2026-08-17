@@ -74,8 +74,11 @@ Distro variance lives in exactly one place (`pkg.sh` + `pkgmap/` + `detect.sh`),
 not smeared across every module. New distro = teach `pkg.sh` its verbs and add a
 `pkgmap`; most modules light up for free.
 
-> Windows (`windows-11-x86_64`) stays its own PowerShell world — different
-> package model, different language. Do **not** force it into this abstraction.
+> Windows stays its own world — different package model, different language.
+> Do **not** force it into this abstraction. It is not PowerShell any more
+> either: it is the C core (`install.c`, `lib/*.c`, `modules/windows/`,
+> `windows.map`), which has its own package dispatch and its own OS-tweak
+> layer. See [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md).
 
 ---
 
