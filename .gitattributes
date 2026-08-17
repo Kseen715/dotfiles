@@ -1,3 +1,6 @@
 *.tmpl linguist-detectable=false
 *.c linguist-language=C
 *.h linguist-language=C
+
+# Vendored: single-header build system from tsoding/nob.h
+os-rice/nob.h linguist-vendored
