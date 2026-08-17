@@ -23,11 +23,16 @@ plugins=(
 # `-PredictionViewStyle ListView`). These must be set before oh-my-zsh.sh,
 # because autocomplete reads them once at plugin-load time.
 #
-# default-context makes the live list *history* rather than completions, which
-# is the half zsh-autosuggestions doesn't cover — it only does the inline ghost
-# (PSReadLine's InlineView). Drop this one line to get autocomplete's stock
-# completion-first list back; Tab completion is unaffected either way.
-zstyle ':autocomplete:*' default-context history-incremental-search-backward
+# The PowerShell split is reproduced across three mechanisms rather than one:
+# zsh-autosuggestions' inline ghost is InlineView, ↑ opens the styled history
+# menu below (ListView — everything from the "dropdown styling" block down
+# applies to it), and the live list while typing stays on completions.
+#
+# Deliberately NO `default-context history-incremental-search-backward` here.
+# Forcing the live list to history also forces TAB into the history context, so
+# `cd wezt<TAB>` cannot reach wezterm/ — Tab silently stops completing anything
+# that is not already in $HISTFILE. Live history is not worth a Tab key that only
+# works on commands you have already run.
 zstyle ':autocomplete:*' min-input 1  # nothing on an empty line, like ListView
 
 # No trailing "./osr module zsh;" while the menu is open. Autocomplete appends an
@@ -37,7 +42,17 @@ zstyle ':autocomplete:*' min-input 1  # nothing on an empty line, like ListView
 # `zstyle -T` at completion time and never set at init, so it sticks from here.
 zstyle ':autocomplete:*' add-semicolon no
 zstyle -e ':autocomplete:*:*' list-lines 'reply=( $(( LINES / 3 )) )'
-zstyle ':autocomplete:history-search-backward:*' list-lines 16
+# How far ↑ can reach back, NOT how many rows are drawn. The menu only ever
+# renders what fits on screen (~$LINES-3) and scrolls, so this is the depth limit:
+# at 16 the menu simply stops after 16 entries no matter how long you hold ↑.
+#
+# Cost is flat until it is not — measured, keypress to rendered, on a 2461-line
+# history: 16->19ms  100->16ms  200->21ms  300->29ms  500->56ms  1000->199ms
+# 2000->224ms. 300 buys ~20x the reach of 16 for ~10ms, which is still under a
+# frame; past ~500 it turns into a visible stall, so upstream's suggested 2000 is
+# a bad trade here. For anything deeper than this, Ctrl-R searches the whole
+# history and is ranked by match quality (see the sort-key patch below).
+zstyle ':autocomplete:history-search-backward:*' list-lines 300
 
 # autocomplete's recent-dirs module points chpwd_recent_filehandler at
 # $XDG_DATA_HOME/zsh/chpwd-recent-dirs but never creates the directory — it
@@ -110,7 +125,7 @@ zstyle ':completion:*:descriptions' format $'%F{8}%d%f'
 # upstream change of mind.
 ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
 
-# Two things _autocomplete__history_lines gives no zstyle for, so both are done by
+# Three things _autocomplete__history_lines gives no zstyle for, all done by
 # rewriting the loaded function body rather than vendoring a forked copy of it.
 # `autoload +X` is needed first because completion functions load lazily and
 # $functions is empty until then. Every substitution degrades safely: if upstream
@@ -163,6 +178,22 @@ if autoload +X _autocomplete__history_lines 2>/dev/null; then
         #    Padding happens before the uniqueness test because truncation is what
         #    creates the collision. Dropping the duplicate row loses nothing: it was
         #    visually identical.
+        # 3. Ctrl-R ranking: stop recency from outvoting match quality. The sort key
+        #    is `HISTNO - num + 64*$#match[3] + 16*mbegin[3] + 4*$#match[1]`, lowest
+        #    first — recency plus a penalty for a longer, later-starting match. The
+        #    quality half maxes out in the low hundreds, but recency is added raw and
+        #    scales with the whole history, so past a few hundred commands it decides
+        #    the order on its own. Measured with `cat` on a 2461-line history:
+        #
+        #      cat ~/.ssh/id_hosting   span 3 @1 (perfect)  recency 382  -> 674
+        #      deactivate              span 6 @4 (c..a..t)  recency  57  -> 545
+        #
+        #    so a sloppy subsequence match won purely by being 325 commands newer.
+        #    Dividing recency by 8 keeps it as a tie-breaker between comparable
+        #    matches while letting a prefix match win: the same two become 255 and
+        #    455. Raise the divisor to favour quality harder, lower it for recency.
+        body=${body/'HISTNO - num + 64 * $#match[3]'/'(HISTNO - num) / 8 + 64 * $#match[3]'}
+
         local marker='> '
         body=${body//'"=(#b)${numpat}'/'"=(#b)(['${marker% }'][[:blank:]]#)'}
         body=${body/'local tag=history-lines'/'local -A _osr_seen=(); local -a _osr_d=() _osr_m=()
