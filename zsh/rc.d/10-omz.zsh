@@ -29,6 +29,13 @@ plugins=(
 # completion-first list back; Tab completion is unaffected either way.
 zstyle ':autocomplete:*' default-context history-incremental-search-backward
 zstyle ':autocomplete:*' min-input 1  # nothing on an empty line, like ListView
+
+# No trailing "./osr module zsh;" while the menu is open. Autocomplete appends an
+# auto-removable `;` so you can chain a second command straight onto the one you
+# picked; it never reaches the executed line, but it is visual noise on a menu
+# being used to recall a single command. The style is only ever read via
+# `zstyle -T` at completion time and never set at init, so it sticks from here.
+zstyle ':autocomplete:*' add-semicolon no
 zstyle -e ':autocomplete:*:*' list-lines 'reply=( $(( LINES / 3 )) )'
 zstyle ':autocomplete:history-search-backward:*' list-lines 16
 
@@ -139,23 +146,32 @@ if autoload +X _autocomplete__history_lines 2>/dev/null; then
         #    `ma=` bar only covers the display string, so short rows give a bar that
         #    stops early and leaves the command line's own echo on the same terminal
         #    row, which then wraps and reads as a stray unprefixed suggestion.
-        #    Then re-unique the rows, in lockstep with $matches. This is the part
-        #    that is easy to miss: the number was also what kept two rows apart
-        #    that are identical up to the truncation point. Strip it and e.g.
-        #    `source /long/path/a.zsh` and `source /long/path/b.zsh` both truncate
-        #    to the same 79 chars. compadd pairs -ld displays with -a matches by
-        #    index, so a collapsed display leaves a match with no display of its
-        #    own, and that orphan renders as raw text — a row with no marker, which
-        #    looks like a stray unprefixed suggestion at the bottom of the ↑ menu.
-        #    Dropping the duplicate row loses nothing: it was visually identical.
+        #    The rewrite must NOT be assigned straight back into $displays, and this
+        #    is the subtle part. Upstream declares `local -aU displays` — a
+        #    unique-constrained array. While every row still carries its history
+        #    number they are all distinct, so the constraint never fires. Strip the
+        #    number and rows that are identical up to the truncation point collapse
+        #    (`source /long/path/a.zsh` and `.../b.zsh` truncate to the same 79
+        #    chars), so the moment the stripped list is assigned, zsh SILENTLY drops
+        #    one element — leaving $displays one shorter than $matches, which
+        #    compadd pairs by index. Everything after the collapse is then off by
+        #    one: the highlighted row and the command the menu inserts disagree.
+        #
+        #    So build the rows in a plain array, de-duplicate in lockstep with
+        #    $matches while the two are still aligned, and only then assign back —
+        #    by which point the values are unique and -U has nothing to remove.
+        #    Padding happens before the uniqueness test because truncation is what
+        #    creates the collision. Dropping the duplicate row loses nothing: it was
+        #    visually identical.
         local marker='> '
         body=${body//'"=(#b)${numpat}'/'"=(#b)(['${marker% }'][[:blank:]]#)'}
-        body=${body/'local tag=history-lines'/'displays=( "${(@mr:COLUMNS-1:)${(@)${(@)displays##$~numpat}/#/'$marker'}}" )
-  local -A _osr_seen=(); local -a _osr_d=() _osr_m=(); local -i _osr_i=
+        body=${body/'local tag=history-lines'/'local -A _osr_seen=(); local -a _osr_d=() _osr_m=()
+  local -i _osr_i=; local _osr_t=
   for _osr_i in {1..$#displays}; do
-    [[ -n ${_osr_seen[$displays[_osr_i]]-} ]] && continue
-    _osr_seen[$displays[_osr_i]]=1
-    _osr_d+=( "$displays[_osr_i]" ); _osr_m+=( "$matches[_osr_i]" )
+    _osr_t="${(mr:COLUMNS-1:)${${displays[_osr_i]##$~numpat}/#/'$marker'}}"
+    [[ -n ${_osr_seen[$_osr_t]-} ]] && continue
+    _osr_seen[$_osr_t]=1
+    _osr_d+=( "$_osr_t" ); _osr_m+=( "$matches[_osr_i]" )
   done
   displays=( "$_osr_d[@]" ); matches=( "$_osr_m[@]" )
   local tag=history-lines'}

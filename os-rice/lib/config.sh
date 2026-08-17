@@ -51,6 +51,25 @@ unset _f
 EOF
 }
 
+# install_zsh_zshenv <zshenv> — own a marked block in ~/.zshenv, same shape as
+# install_zsh_loader. This has to be .zshenv and not an rc.d layer: zsh reads
+# /etc/zsh/zshrc *before* ~/.zshrc, so by the time any rc.d file runs it is
+# already too late to influence it.
+#
+# Debian and Ubuntu ship an /etc/zsh/zshrc that calls compinit unconditionally on
+# Ubuntu, and oh-my-zsh then calls it again with its own fpath. Measured on a
+# 9800X3D: 82 ms for a compinit whose result is thrown away. skip_global_compinit
+# is the opt-out those distros document for exactly this. Completions are
+# unaffected — omz's own compinit still runs (verified: 1779 compdefs, _git
+# still defined). On a distro whose /etc/zsh/zshrc never reads the variable this
+# is simply an unused assignment, so it ships unconditionally.
+install_zsh_zshenv() {
+    _iz_zshenv=$1
+    ensure_block "$_iz_zshenv" "zshenv" <<'EOF'
+skip_global_compinit=1
+EOF
+}
+
 # install_xprofile_loader <dir> <xprofile> — own a marked loader block in
 # ~/.xprofile that sources <dir>/*.sh in lexical order (§5), the same shape as
 # install_zsh_loader. ~/.xprofile is read by every display manager and by

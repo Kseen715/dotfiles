@@ -33,12 +33,20 @@ export STARSHIP_LOG=error  # silence scan_timeout warns without slowing scans
 # shellenv` prepends brew's bin dirs unconditionally, so: this block is the ONLY
 # place they enter PATH (adding them above too is what duplicated the entry), and
 # the HOMEBREW_PREFIX guard makes a re-source a no-op.
+#
+# Probed by absolute path, never `command -v brew`. A PATH lookup that MISSES has
+# to stat every entry, and under WSL interop $PATH carries ~25 /mnt/c Windows
+# dirs: one failed lookup measured 44.5 ms, which was the whole cost of this file
+# on a box without brew. The three prefixes below are where brew actually installs
+# (linuxbrew, macOS ARM, macOS Intel); an install anywhere else needs
+# HOMEBREW_PREFIX exported, or its own line in 99-local.zsh.
 if [ -z "${HOMEBREW_PREFIX:-}" ]; then
-    if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-    elif command -v brew >/dev/null 2>&1; then
-        eval "$(brew shellenv)"
-    fi
+    for _osr_brew in /home/linuxbrew/.linuxbrew/bin/brew /opt/homebrew/bin/brew /usr/local/bin/brew; do
+        [ -x "$_osr_brew" ] || continue
+        eval "$("$_osr_brew" shellenv)"
+        break
+    done
+    unset _osr_brew
 fi
 
 # Keep the distro's .pc files findable. Brew's pkgconf (installed as a pyenv

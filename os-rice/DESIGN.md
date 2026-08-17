@@ -154,6 +154,7 @@ os-rice write **only what it owns**:
 | `00-env`   | user / machine | seeded once if absent, then kept | no           |
 | `10-*`     | dotfiles repo  | overwrite on update              | no           |
 | `20-*`     | dotfiles repo  | overwrite on update              | no           |
+| `30-*`     | dotfiles repo  | overwrite on update              | no           |
 | `90-theme` | rice           | **swapped** on rice switch       | **yes**      |
 | `99-local` | machine        | gitignored, never touched        | no           |
 
@@ -416,6 +417,10 @@ get the same split via their native include mechanisms.
   00-env.zsh      user / per-machine   seeded once if absent, then never touched
   10-aliases.zsh  dotfiles             overwrite on update, rice-independent
   20-func.zsh     dotfiles             overwrite on update
+  30-tools.zsh    dotfiles             overwrite on update; guarded tool init
+                                       (lazy nvm, shared ssh-agent) that must
+                                       reach new machines, so it cannot live in
+                                       99-local
   90-theme.zsh    rice-owned           swapped on rice switch (prompt/omz theme)
   99-local.zsh    per-machine          gitignored, never touched
 ```
