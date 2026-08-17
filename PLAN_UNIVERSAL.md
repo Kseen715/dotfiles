@@ -408,10 +408,21 @@ decision 8:** the C core runs the 4 Windows modules (fastfetch, wezterm,
 pwsh, oh-my-posh) — `modules.c`. That is not the ~70-module tree this
 section rules out; it is the same already-decided, already-finite Windows
 module set the now-retired `windows-rice/` tree had, ported rather than
-reinvented. No Linux module gets a C port under this rule; a *sixth*
-Windows module would need a person to write it (like the first 4 were),
-not a generic framework to auto-generate it (see "Not doing" below, which
-still holds).
+reinvented. No Linux module gets a C port under this rule; a *fifth* app
+module would need a person to write it (like the first 4 were), not a
+generic framework to auto-generate it (see "Not doing" below, which still
+holds).
+
+**Second exception, same shape:** the C core also runs 4 Windows *OS
+passes* — `win-tweaks`, `win-update`, `win-debloat`, `win-winutil`
+(`modules/windows/`, over `lib/wintweak.c`). These are the ingest of the
+other retired PowerShell tree, `windows-11-x86_64/`, which was ~25 .ps1
+files doing three things: write a registry DWORD, disable a service, run a
+vendor debloat script. They are deliberately not app modules — no package,
+no config, no theme layer — and deliberately not part of any rice: they
+change the operating system, so they are asked for by name. The same
+"already-decided, already-finite set, ported not reinvented" rule applies;
+this does not open the door to a generic Windows-tweak framework.
 
 ### Source layout
 
@@ -445,6 +456,32 @@ os-rice/
   modules.c / modules.h the finite Windows module set (fastfetch, wezterm,
                         pwsh, oh-my-posh) -- see decision 7/8 and this
                         file's own header comment for the exact mapping
+  modules/windows/        the OS-tweak group, ingested from the also-retired
+                        windows-11-x86_64/ ps1 tree (setup.ps1,
+                        win-update.ps1, winutils.ps1, src/common.ps1 and 19
+                        microscripts). NOT app modules -- no package, no
+                        font, no config, no theme layer; each is one pass
+                        over the operating system, which is why they are
+                        named win-* and asked for by name rather than
+                        listed in a rice.list:
+                          tweaks.c   12 registry rows + 7 service rows as
+                                     two declarative tables (the 12
+                                     reg-*.ps1 and 6 disable-*.ps1 files
+                                     differed only in a key, a value name or
+                                     a service name); rows that tree carried
+                                     but never applied are kept with
+                                     enabled = 0 rather than dropped
+                          update.c   trigger a Windows Update run: wuauclt
+                                     for the older reach targets, usoclient
+                                     where that is the live interface
+                          debloat.c  the two third-party vendor scripts
+                                     (Raphire's Win11Debloat, Chris Titus
+                                     WinUtil), opt-in, over winbin's
+                                     run_script
+                          data/      the two non-code files that tree
+                                     carried (ooshutup10.cfg,
+                                     winutils.json): saved profiles for
+                                     tools this repo does not drive
   themes/
     osr-rice/            a Windows-native palette (theme.list + the one
                         Windows-only asset, config/oh-my-posh/
@@ -499,6 +536,13 @@ os-rice/
                         check + scoop/choco dispatch (the manual GitHub-zip
                         fallback is a documented, permanent scope cut -- see
                         decision 8 and the file's own header comment)
+    wintweak.c / .h     registry DWORD writes, service stop/start-type
+                        control and recursive purges, straight through
+                        Win32 (RegCreateKeyEx, OpenSCManager/
+                        ChangeServiceConfig) rather than by spawning a
+                        PowerShell. The mechanism half of the retired
+                        windows-11-x86_64/src/common.ps1; the policy half
+                        is modules/windows/tweaks.c's tables
     wallpaper.c / .h    theme wallpaper library + apply +
                         SystemParametersInfo live-set, C port of the
                         wallpaper half of lib/config.sh (fresh port from sh,
@@ -522,6 +566,11 @@ os-rice/
                         fixture matching test/unit/theme_template.sh's own,
                         plus a real template rendered against a real theme
       config_copy_test.c   lib/config_copy.c: ~ expansion + file copy
+      wintweak_test.c      lib/wintweak.c's key parser + every row of
+                        modules/windows/tweaks.c's two tables. Touches
+                        nothing: the verbs change the machine they run on,
+                        but the tables ARE the port, so asserting them row
+                        by row is what catches a setting lost in the ingest
     fixtures/            synthetic theme.list/.tmpl fixtures for
                         theme_render_test.c (mirrors test/unit/
                         theme_template.sh's own synthetic scenario)
