@@ -1,12 +1,16 @@
 .cache/
 alias/
 
-# C core build artifacts (see nob.c, PLAN_UNIVERSAL.md)
+# C core build artifacts. nob.c writes every one of them under build/ --
+# the programs, the test binaries, the objects and nob itself -- so this
+# single line covers the lot on both a Windows and a Linux/CI host.
+build/
+
+# Stragglers from before that rule: a checkout built by an older nob still
+# has binaries sitting next to the sources.
 *.exe
 *.exe.old
 *.o
-build/
-# ...and the suffixless equivalents from a Linux/CI host build
 nob
 install
 wallpaper

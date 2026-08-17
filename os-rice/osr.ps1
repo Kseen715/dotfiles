@@ -26,12 +26,13 @@
 #   osr.ps1 modules                     list available modules
 #   osr.ps1 test                        build + run the C unit tests
 #
-# Bootstraps its own build tool on first use: if nob.exe isn't next to this
-# script, compiles it from nob.c with whatever gcc is on PATH (nob.c/nob.h
-# are the build system now, replacing the old Makefile -- see
-# PLAN_UNIVERSAL.md decision 6). nob.exe then builds install.exe/wallpaper.exe
-# on demand the same way, so a first run here is the only time a build
-# command runs by hand at all.
+# Bootstraps its own build tool on first use: if build\nob.exe doesn't exist,
+# compiles it from nob.c with whatever gcc is on PATH (nob.c/nob.h are the
+# build system now, replacing the old Makefile -- see PLAN_UNIVERSAL.md
+# decision 6). nob.exe then builds install.exe/wallpaper.exe on demand the
+# same way, so a first run here is the only time a build command runs by
+# hand at all. Every one of those binaries lives in build\, never next to
+# the sources -- see nob.c's BUILD_DIR.
 #
 # Requires PowerShell, so this is the Win7/10/11 entry point. osr.bat next
 # to it is a thin cmd.exe launcher for this file, for anyone who'd rather
@@ -67,31 +68,35 @@ function Show-Usage {
     Write-Host "PLAN_UNIVERSAL.md for the exact scope line."
 }
 
-# Ensure-Nob -- compile nob.exe from nob.c if it doesn't exist yet. Returns
-# $true if nob.exe is ready to run, $false (with a message already printed)
-# if there's no gcc to bootstrap it with.
+# Ensure-Nob -- compile build\nob.exe from nob.c if it doesn't exist yet
+# (creating build\ first: it is the one directory the bootstrap cannot ask
+# nob to make for it). Returns $true if nob.exe is ready to run, $false
+# (with a message already printed) if there's no gcc to bootstrap it with.
 function Ensure-Nob {
-    if (Test-Path (Join-Path $ScriptDir "nob.exe")) { return $true }
+    $buildDir = Join-Path $ScriptDir "build"
+    if (Test-Path (Join-Path $buildDir "nob.exe")) { return $true }
     $gcc = Get-Command gcc -ErrorAction SilentlyContinue
     if (-not $gcc) {
-        ErrMsg "nob.exe not found and no gcc on PATH -- install a mingw-w64 gcc (e.g. 'scoop install gcc') and try again"
+        ErrMsg "build\nob.exe not found and no gcc on PATH -- install a mingw-w64 gcc (e.g. 'scoop install gcc') and try again"
         return $false
     }
-    Info "nob.exe not found -- bootstrapping it with gcc..."
-    & gcc -o nob.exe nob.c
+    Info "build\nob.exe not found -- bootstrapping it with gcc..."
+    if (-not (Test-Path $buildDir)) { New-Item -ItemType Directory -Path $buildDir | Out-Null }
+    & gcc -o build\nob.exe nob.c
     return $LASTEXITCODE -eq 0
 }
 
-# Ensure-Binaries -- make sure install.exe and wallpaper.exe are built, via
-# nob.exe's default target (which builds both -- see nob.c's build_all).
+# Ensure-Binaries -- make sure build\install.exe and build\wallpaper.exe are
+# built, via nob.exe's default target (which builds both -- see nob.c's
+# build_all).
 function Ensure-Binaries {
     if (-not (Ensure-Nob)) { return $false }
-    & .\nob.exe
+    & .\build\nob.exe
     return $LASTEXITCODE -eq 0
 }
 
-# current theme, read straight from the state file -- same file
-# install.exe/wallpaper.exe write to, no need to shell out for a read.
+# current theme, read straight from the state file -- same file the
+# install/wallpaper binaries write to, no need to shell out for a read.
 function Get-CurrentTheme {
     $statePath = Join-Path $env:USERPROFILE ".config\osr\state"
     if (-not (Test-Path $statePath)) { return $null }
@@ -112,7 +117,7 @@ switch ($Command) {
         for ($i = 1; $i -lt $Rest.Count; $i++) {
             if ($Rest[$i] -eq "-Theme" -and $i + 1 -lt $Rest.Count) { $flags += @("--theme", $Rest[$i + 1]); $i++ }
         }
-        & .\install.exe @flags
+        & .\build\install.exe @flags
         exit $LASTEXITCODE
     }
     "theme" {
@@ -122,7 +127,7 @@ switch ($Command) {
             exit 0
         }
         if (-not (Ensure-Binaries)) { exit 1 }
-        & .\install.exe --theme-only --theme $Rest[0]
+        & .\build\install.exe --theme-only --theme $Rest[0]
         exit $LASTEXITCODE
     }
     "wallpaper" {
@@ -133,7 +138,7 @@ switch ($Command) {
             elseif ($a -eq "-Next") { $flags += "--next" }
             else { $flags += $a }
         }
-        & .\wallpaper.exe @flags
+        & .\build\wallpaper.exe @flags
         exit $LASTEXITCODE
     }
     "module" {
@@ -148,22 +153,22 @@ switch ($Command) {
             if ($Rest[$i] -eq "-Theme" -and $i + 1 -lt $Rest.Count) { $flags += @("--theme", $Rest[$i + 1]); $i++ }
             else { $names += $Rest[$i] }
         }
-        & .\install.exe @flags @names
+        & .\build\install.exe @flags @names
         exit $LASTEXITCODE
     }
     "list" {
         if (-not (Ensure-Binaries)) { exit 1 }
-        & .\install.exe --list
+        & .\build\install.exe --list
         exit $LASTEXITCODE
     }
     "modules" {
         if (-not (Ensure-Binaries)) { exit 1 }
-        & .\install.exe --list-modules
+        & .\build\install.exe --list-modules
         exit $LASTEXITCODE
     }
     "test" {
         if (-not (Ensure-Nob)) { exit 1 }
-        & .\nob.exe test
+        & .\build\nob.exe test
         exit $LASTEXITCODE
     }
     "" {

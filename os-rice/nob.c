@@ -4,10 +4,17 @@
  * one more thing to install/PATH-manage besides gcc -- see
  * PLAN_UNIVERSAL.md decision 6). Bootstrap once, then just run it:
  *
- *   cc -o nob nob.c      (nob.exe on Windows)
- *   ./nob                (builds install)
- *   ./nob test           (builds + runs the C unit tests)
- *   ./nob clean
+ *   mkdir build
+ *   cc -o build/nob nob.c   (build\nob.exe on Windows)
+ *   ./build/nob             (builds build/install)
+ *   ./build/nob test        (builds + runs the C unit tests)
+ *   ./build/nob clean
+ *
+ * Every binary this script produces -- nob itself included -- lands under
+ * build/, never next to the sources: build/install, build/wallpaper, the
+ * test binaries in build/test/, the objects in build/obj/. So the source
+ * tree stays clean, one .gitignore line (build/) covers the lot, and
+ * `clean` has a single place to look.
  *
  * The compiler used for the actual build is the host's default; set $CC
  * to override it (CC=clang ./nob). Both flag dialects are handled: a $CC
@@ -17,8 +24,9 @@
  * After the first bootstrap you never type that gcc line again -- nob.h's
  * "Go Rebuild Urself" technology (NOB_GO_REBUILD_URSELF below) recompiles
  * nob on the spot whenever nob.c itself changes, before doing anything
- * else. osr.ps1/osr.bat lean on exactly this: they just run `nob.exe`,
- * even the very first time nob.exe doesn't exist yet (see osr.ps1).
+ * else. osr.ps1/osr.bat lean on exactly this: they just run
+ * `build\nob.exe`, even the very first time it doesn't exist yet (see
+ * osr.ps1, which creates build/ and bootstraps into it).
  *
  * nob.c/nob.h are build-time tooling, run only on the developer/CI host --
  * unlike install.c/lib/*.c they are never cross-compiled for the XP
@@ -182,15 +190,29 @@ static void append_common_flags(Nob_Cmd *cmd) {
 #endif
 }
 
-#define OBJ_DIR "build/obj"
+/* Everything this script writes goes under BUILD_DIR: programs directly in
+ * it, test binaries in its test/ subdirectory, objects in obj/. Nothing is
+ * ever written next to a source file, so the tree a developer reads stays
+ * free of build output and `clean` (plus .gitignore) has one place to look.
+ * install.c/wallpaper.c know about this layout too -- being one level down
+ * from the os-rice root is exactly why they resolve rices/themes/modules
+ * from their exe's *parent* directory (see install.c's main). */
+#define BUILD_DIR "build"
+#define OBJ_DIR BUILD_DIR "/obj"
+#define TEST_BIN_DIR BUILD_DIR "/test"
+
+/* BIN -- a program's path in the build directory, with the host's suffix:
+ * BIN("install") is "build/install.exe" on Windows, "build/install"
+ * elsewhere. A macro, not a function, so it stays a plain literal usable
+ * anywhere a string is. */
+#define BIN(name) BUILD_DIR "/" name EXE
 
 /* obj_of -- "lib/net.c" -> "build/obj/lib_net.o". All objects live in one
- * flat directory so the source tree stays clean and `clean` has a single
- * place to look; the path separators become '_' to keep names unique
+ * flat directory; the path separators become '_' to keep names unique
  * without having to mirror the directory layout under build/obj.
  * Objects, not one big gcc line per binary, so the shared lib/modules
  * translation units are compiled once in parallel and then linked into all
- * of install.exe/wallpaper.exe/the test binaries.
+ * of install/wallpaper/the test binaries.
  */
 static const char *obj_of(const char *src) {
     size_t len = strlen(src);
@@ -208,7 +230,7 @@ static bool compile_objs(const char **srcs, size_t count) {
     Nob_Procs procs = {0};
     Nob_Cmd cmd = {0};
     size_t i;
-    if (!nob_mkdir_if_not_exists("build")) return false;
+    if (!nob_mkdir_if_not_exists(BUILD_DIR)) return false;
     if (!nob_mkdir_if_not_exists(OBJ_DIR)) return false;
     for (i = 0; i < count; i++) {
         append_common_flags(&cmd);
@@ -270,10 +292,11 @@ static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
 }
 
 /* run_test -- tests read fixtures via a path relative to test/unit_c/, so
- * the binary runs from there, same as it did under the old Makefile.
+ * that is still the working directory they run in; only the binary itself
+ * moved out to build/test/, hence the climb back up in its path.
  */
 static bool run_test(const char *name) {
-    const char *bin_name = nob_temp_sprintf("./%s" EXE, name);
+    const char *bin_name = nob_temp_sprintf("../../" TEST_BIN_DIR "/%s" EXE, name);
     Nob_Cmd cmd = {0};
     nob_log(NOB_INFO, "--- %s ---", name);
     nob_cmd_append(&cmd, bin_name);
@@ -289,8 +312,9 @@ static bool build_tests(void) {
     size_t i;
     for (i = 0; i < TEST_COUNT; i++) srcs[i] = nob_temp_sprintf("test/unit_c/%s.c", test_names[i]);
     if (!compile_objs(srcs, TEST_COUNT)) return false;
+    if (!nob_mkdir_if_not_exists(TEST_BIN_DIR)) return false;
     for (i = 0; i < TEST_COUNT; i++) {
-        const char *bin = nob_temp_sprintf("test/unit_c/%s" EXE, test_names[i]);
+        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]);
         if (!link_exe(bin, srcs[i], &procs)) return false;
     }
     return nob_procs_flush(&procs);
@@ -312,13 +336,13 @@ static void delete_if_exists(const char *path) {
 
 static bool clean(void) {
     size_t i;
-    delete_if_exists("install" EXE);
-    delete_if_exists("wallpaper" EXE);
+    delete_if_exists(BIN("install"));
+    delete_if_exists(BIN("wallpaper"));
     delete_if_exists(obj_of("install.c"));
     delete_if_exists(obj_of("wallpaper.c"));
     for (i = 0; i < LIB_SRCS_COUNT; i++) delete_if_exists(obj_of(lib_srcs[i]));
     for (i = 0; i < TEST_COUNT; i++) {
-        delete_if_exists(nob_temp_sprintf("test/unit_c/%s" EXE, test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
         delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", test_names[i])));
     }
     return true;
@@ -336,8 +360,8 @@ static bool build_all(void) {
     srcs[LIB_SRCS_COUNT + 1] = "wallpaper.c";
 
     if (!compile_objs(srcs, LIB_SRCS_COUNT + 2)) return false;
-    if (!link_exe("install" EXE, "install.c", &procs)) return false;
-    if (!link_exe("wallpaper" EXE, "wallpaper.c", &procs)) return false;
+    if (!link_exe(BIN("install"), "install.c", &procs)) return false;
+    if (!link_exe(BIN("wallpaper"), "wallpaper.c", &procs)) return false;
     return nob_procs_flush(&procs);
 }
 

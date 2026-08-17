@@ -179,7 +179,8 @@ static void usage(void) {
         "  <rice>        name of a directory under rices/\n"
         "  --theme <name> which theme paints module configs (default: the rice's\n"
         "                own `theme:`, else '" OSR_DEFAULT_THEME "')\n"
-        "  --root <path> os-rice root (default: the directory this program is in)\n"
+        "  --root <path> os-rice root (default: the parent of this program's own\n"
+        "                directory -- it is built into <os-rice>/build/)\n"
         "\n"
     );
     printf(
@@ -406,7 +407,15 @@ int main(int argc, char **argv) {
     osr_elevate_init(argc, argv);
     if (user_home != NULL) osr_set_user_home(user_home);
 
-    if (root[0] == '\0') dirname_of(argv[0], root, sizeof(root));
+    /* Default root: not the directory holding this exe, but its parent --
+     * nob.c links every binary into <os-rice>/build/ rather than next to the
+     * sources, so rices/, themes/, modules/ and windows.map sit one level up
+     * from argv[0]. --root overrides it when the tree lives somewhere else. */
+    if (root[0] == '\0') {
+        char exe_dir[OSR_MAX_PATH_C];
+        dirname_of(argv[0], exe_dir, sizeof(exe_dir));
+        dirname_of(exe_dir, root, sizeof(root));
+    }
     dirname_of(root, repo_root, sizeof(repo_root));
 
     path_join(rices_dir, sizeof(rices_dir), root, "rices");

@@ -83,6 +83,7 @@ static void usage(void) {
 }
 
 int main(int argc, char **argv) {
+    char exe_dir[OSR_MAX_PATH_C];
     char root[OSR_MAX_PATH_C];
     char themes_dir[OSR_MAX_PATH_C];
     char theme_dir[OSR_MAX_PATH_C];
@@ -100,7 +101,11 @@ int main(int argc, char **argv) {
         else { action = "set"; target = argv[1]; }
     }
 
-    dirname_of(argv[0], root, sizeof(root));
+    /* themes/ is one level above this exe, not next to it: nob.c builds
+     * every binary into <os-rice>/build/ instead of the source tree (same
+     * reasoning as install.c's own root default). */
+    dirname_of(argv[0], exe_dir, sizeof(exe_dir));
+    dirname_of(exe_dir, root, sizeof(root));
     path_join(themes_dir, sizeof(themes_dir), root, "themes");
 
     osr_state_get("theme", theme, sizeof(theme));

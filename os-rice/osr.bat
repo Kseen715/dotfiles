@@ -10,8 +10,8 @@ if errorlevel 1 (
     echo osr.bat: no 'powershell' found on PATH.
     echo This C-core tier's dispatcher needs PowerShell today ^(a fully
     echo PowerShell-free path is future work, tracked alongside the XP
-    echo toolchain in PLAN_UNIVERSAL.md^). If install.exe is already built,
-    echo you can run it directly instead, e.g.: install.exe --list
+    echo toolchain in PLAN_UNIVERSAL.md^). If the C core is already built,
+    echo you can run it directly instead, e.g.: build\install.exe --list
     exit /b 1
 )
 

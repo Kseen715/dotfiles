@@ -11,11 +11,13 @@
 # the build still works exactly the same; delete nob.c and nothing does.
 
 CC ?= cc
-# .exe on Windows (where make comes from a mingw/msys shell), bare elsewhere.
+# build/ is where nob puts every binary it produces, itself included, so the
+# source tree never holds build output (see nob.c's BUILD_DIR). .exe on
+# Windows (where make comes from a mingw/msys shell), bare elsewhere.
 ifeq ($(OS),Windows_NT)
-NOB ?= ./nob.exe
+NOB ?= ./build/nob.exe
 else
-NOB ?= ./nob
+NOB ?= ./build/nob
 endif
 
 .PHONY: all test clean
@@ -29,8 +31,10 @@ test: $(NOB)
 clean: $(NOB)
 	$(NOB) clean
 
-# The one-time bootstrap from nob.c's header. After this, nob rebuilds
-# itself whenever nob.c changes (NOB_GO_REBUILD_URSELF), so this rule
-# effectively never runs again.
+# The one-time bootstrap from nob.c's header -- it has to create build/
+# itself, being the one step that runs before any nob exists. After this,
+# nob rebuilds itself whenever nob.c changes (NOB_GO_REBUILD_URSELF), so
+# this rule effectively never runs again.
 $(NOB): nob.c nob.h
+	mkdir -p build
 	$(CC) -o $(NOB) nob.c

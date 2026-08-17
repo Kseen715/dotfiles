@@ -133,16 +133,24 @@ Windows box (this session's own dev machine didn't have it — had to
 build script, `nob.h` (`os-rice/nob.h`, vendored verbatim, public domain,
 <https://github.com/tsoding/nob.h>) is a single-header library it uses for
 running compiler commands. Bootstrap once —
-`gcc -o nob.exe nob.c` — and every run after that is just `nob.exe`;
-nob.h's "Go Rebuild Urself" technology recompiles `nob.exe` on the spot
-whenever `nob.c` changes, so nobody types that `gcc` line a second time.
+`mkdir build && gcc -o build/nob.exe nob.c` — and every run after that is
+just `build\nob.exe`; nob.h's "Go Rebuild Urself" technology recompiles it
+on the spot whenever `nob.c` changes, so nobody types that `gcc` line a
+second time. Every binary `nob` produces — the programs, the test
+binaries, the objects, and `nob` itself — lands under `os-rice/build/`,
+never beside the sources, so the tree a developer reads holds only source
+and one `.gitignore` line covers the output. `install.exe`/`wallpaper.exe`
+are built knowing that: their default root (where `rices/`, `themes/`,
+`modules/`, `windows.map` live) is the *parent* of the directory they sit
+in, overridable with `--root`.
 `nob.c`/`nob.h` are build-time tooling only (run on the dev/CI host, never
 cross-compiled for a target), so — unlike `install.c`/`lib/*.c` — they're
 written in ordinary C99, matching what `nob.h` itself requires; this does
 not loosen decision 3's C89/XP-floor rule for the actual product code.
-`osr.ps1` leans on this directly: it bootstraps `nob.exe` the same way if
-it isn't already there, so a fresh clone needs nothing typed by hand at
-all, PowerShell included (see `osr.ps1`'s own header comment).
+`osr.ps1` leans on this directly: it creates `build/` and bootstraps
+`nob.exe` into it the same way if it isn't already there, so a fresh clone
+needs nothing typed by hand at all, PowerShell included (see `osr.ps1`'s
+own header comment).
 
 **7. Decided: port windows-rice's own 4 modules (fastfetch, wezterm, pwsh,
 oh-my-posh), not a generic module framework.**
@@ -519,14 +527,22 @@ os-rice/
                         theme_template.sh's own synthetic scenario)
   nob.c / nob.h         build script + vendored build-system library,
                         replaces the Makefile the first version of this
-                        used (see decision 6). `gcc -o nob.exe nob.c` once,
-                        then `nob.exe` (builds install.exe + wallpaper.exe)
-                        / `nob.exe test` / `nob.exe clean`.
+                        used (see decision 6).
+                        `mkdir build && gcc -o build/nob.exe nob.c` once,
+                        then `build\nob.exe` (builds build\install.exe +
+                        build\wallpaper.exe) / `build\nob.exe test` /
+                        `build\nob.exe clean`.
+  build/                every binary, and nothing else: install.exe,
+                        wallpaper.exe, nob.exe, test/ (the unit-test
+                        binaries) and obj/ (the shared .o files). Written
+                        by nob, git-ignored whole, never mixed in with the
+                        sources.
   osr.ps1               the Windows front end -- the only one now that
                         windows-rice/ is retired (decision 8) -- mirrors
                         ./osr in full (install/switch/theme/wallpaper/module/
-                        list/modules/test). Bootstraps nob.exe/install.exe/
-                        wallpaper.exe itself if they don't exist yet.
+                        list/modules/test). Bootstraps build/nob.exe and
+                        the binaries under build/ itself if they don't
+                        exist yet.
   osr.bat               thin cmd.exe launcher for osr.ps1
 ```
 
