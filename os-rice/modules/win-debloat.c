@@ -1,7 +1,7 @@
-/* modules/windows/debloat.c -- port of the retired windows-11-x86_64/
+/* modules/win-debloat.c -- port of the retired windows-11-x86_64/
  * winutils.ps1 and microscripts/raphire-win11debloat.ps1: the two
  * third-party debloat tools that tree deferred to for the work
- * modules/windows/tweaks.c does not do itself (removing preinstalled apps,
+ * modules/win-tweaks.c does not do itself (removing preinstalled apps,
  * the big vendor tweak catalogues).
  *
  * Both ps1 files were one line each -- fetch a vendor script and run it --
@@ -18,18 +18,18 @@
  * something a rice install should do on your behalf.
  *
  * The tweak selection the winutil run was meant to be given
- * (windows-11-x86_64/winutils.json, now modules/windows/data/winutils.json)
- * is carried alongside these -- see that folder's README for how to feed it
+ * (windows-11-x86_64/winutils.json, now modules/win-data/winutils.json)
+ * is carried alongside these -- see modules/WINDOWS.md for how to feed it
  * in. The ps1 never passed it either; it is a saved profile for winutil's
  * own UI, not an argument this module invents.
  *
  * C89.
  */
-#include "../src/common.h"
+#include "src/common.h"
 
-#include "../../lib/elevate.h"
-#include "../../lib/winbin.h"
-#include "../../lib/winui.h"
+#include "../lib/elevate.h"
+#include "../lib/winbin.h"
+#include "../lib/winui.h"
 
 #include <stddef.h>
 

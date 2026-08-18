@@ -1,8 +1,8 @@
-/* modules/src/common.h -- shared internals of the Windows module implementations
- * (one file per module next to this one, plus the windows/ group, see
- * modules.h/modules.c for the public surface and the ps1-to-C mapping).
- * Not a public header: nothing outside modules.c, the per-module files and
- * the unit tests that inspect the windows tweak tables should include it.
+/* modules/src/common.h -- shared internals of the Windows branches of the
+ * modules (one file per module in modules/, see modules.h/modules.c for the
+ * public surface and the ps1-to-C mapping). Not a public header: nothing
+ * outside modules.c, the per-module files and the unit tests that inspect the
+ * windows tweak tables should include it.
  *
  * C89.
  */
@@ -43,7 +43,15 @@ int osrm_resolve_posh_themes_path(char *out, unsigned long out_sz);
  * verb (package, font, dotfiles-owned config) and reinstalls just the
  * theme-owned layer. themes_root is unused by modules that carry no theme
  * layer (pwsh). Each returns 1 on success, 0 after warning.
+ *
+ * Windows-only, deliberately: a module file holds both operating systems'
+ * branches now (modules/fastfetch.c), and the POSIX branch of such a file
+ * exports the SAME osrm_<name> symbol with the POSIX tier's own signature --
+ * int osrm_fastfetch(void), declared in lib/modules.c. The two never compile
+ * together, and this guard is what keeps it that way even if a POSIX
+ * translation unit ever includes this header for osrm_path_join.
  */
+#ifdef _WIN32
 int osrm_fastfetch(const char *repo_root, const char *themes_root, const char *map_path,
                    const char *theme, int theme_only);
 int osrm_wezterm(const char *repo_root, const char *themes_root, const char *map_path,
@@ -53,11 +61,11 @@ int osrm_pwsh(const char *repo_root, const char *themes_root, const char *map_pa
 int osrm_oh_my_posh(const char *repo_root, const char *themes_root, const char *map_path,
                     const char *theme, int theme_only);
 
-/* The windows/ group -- OS-level passes over a Windows machine rather than
+/* The win- group -- OS-level passes over a Windows machine rather than
  * app modules: no package, no font, no config file, and so no theme layer
  * either (all three ignore themes_root/theme and treat theme_only as a
  * successful no-op). Ported from the retired windows-11-x86_64/ ps1 tree;
- * see modules/windows/tweaks.c's header for the file-by-file mapping.
+ * see modules/win-tweaks.c's header for the file-by-file mapping.
  */
 int osrm_win_tweaks(const char *repo_root, const char *themes_root, const char *map_path,
                       const char *theme, int theme_only);
@@ -67,6 +75,7 @@ int osrm_win_debloat(const char *repo_root, const char *themes_root, const char 
                        const char *theme, int theme_only);
 int osrm_win_winutil(const char *repo_root, const char *themes_root, const char *map_path,
                        const char *theme, int theme_only);
+#endif /* _WIN32 */
 
 /* The two policy tables behind osrm_win_tweaks, exposed so they can be
  * asserted on without applying anything -- see test/unit_c/wintweak_test.c.

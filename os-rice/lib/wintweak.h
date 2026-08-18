@@ -14,7 +14,7 @@
  *
  * so those three verbs are what this file provides, and the policy -- which
  * key, which value, which service -- stays a plain table in
- * modules/windows/tweaks.c. That is exactly the split the ps1 tree already
+ * modules/win-tweaks.c. That is exactly the split the ps1 tree already
  * had between src/common.ps1 (mechanism) and setup.ps1 (the list): nothing
  * here knows what a good tweak is, and nothing there knows how a registry
  * write works.

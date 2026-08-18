@@ -1,7 +1,7 @@
 # test/ref/flameshot_sh_ref.sh — the sh implementation of modules/flameshot.sh, FROZEN.
 #
 # The last pure-sh version, kept as the specification of what the C module
-# (modules/linux/flameshot.c) must do: test/unit/module_c_parity.sh runs both under
+# (modules/flameshot.c) must do: test/unit/module_c_parity.sh runs both under
 # stubbed package tooling and diffs what they did. Nothing installs it.
 #
 # --- original -----------------------------------------------------------------

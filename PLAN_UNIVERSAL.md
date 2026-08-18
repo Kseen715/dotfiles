@@ -375,6 +375,34 @@ manager row that means installing the manager first if it is missing
 the builder or the script. Nothing falls through to a second provider, and a
 package manager is never substituted for another one at any step.
 
+**12. Decided: one file per module, holding every OS it runs on, instead of
+one folder per OS.**
+The port started with `modules/*.c` for Windows and, once the POSIX core grew
+a C module tier, `modules/linux/*.c` beside it — so `fastfetch` was two files
+in two directories, doing the same job (install the package, paint the one
+`config.jsonc` it reads) with no way to see one from the other. That is the
+shape that lets two implementations of one module drift apart quietly: a fix
+to the Linux fallback rule, or a new config layer, lands in one file and
+nobody reading the other has any signal it happened.
+
+So a module is now exactly `modules/<name>.c` on every OS, with the platform
+split inside the file: the Windows implementation under `#ifdef _WIN32` (a row
+in `modules.c`'s dispatch, called with `repo_root/themes_root/map_path/theme/
+theme_only`), the POSIX one after the `#else` (a row in `lib/modules.c`'s
+registry, called with no arguments). Both export the same `osrm_<name>`, which
+is safe precisely because they are never compiled together — `nob.c` hands the
+file to the Windows core's source list or the POSIX one, never both, and
+`modules/src/common.h` declares the Windows signatures under the same guard.
+A module only one system can have is simply a file whose other branch is
+empty: `win-tweaks`/`win-update`/`win-debloat` (Windows-only, and the `win-`
+name prefix rather than a `windows/` folder is what groups them now),
+`docker`/`flameshot` (POSIX-only). Nothing about a module's *reach* is
+expressed by where its file sits any more; it is expressed by which branches
+that file has, which is the thing a reader has to check anyway.
+
+This is decision 5's reasoning ("direct sh-to-C comparison" — keep the files
+you have to compare one `ls` apart) applied to the two C tiers themselves.
+
 **Net effect:** this is not "rewrite everything in C." It is one small,
 narrow-scope C core (install dispatch + theme rendering, nothing else) built
 by three different pinned toolchains for three different reach targets —
@@ -415,7 +443,7 @@ holds).
 
 **Second exception, same shape:** the C core also runs 4 Windows *OS
 passes* — `win-tweaks`, `win-update`, `win-debloat`, `win-winutil`
-(`modules/windows/`, over `lib/wintweak.c`). These are the ingest of the
+(`modules/win-*.c`, over `lib/wintweak.c`). These are the ingest of the
 other retired PowerShell tree, `windows-11-x86_64/`, which was ~25 .ps1
 files doing three things: write a registry DWORD, disable a service, run a
 vendor debloat script. They are deliberately not app modules — no package,
@@ -456,32 +484,41 @@ os-rice/
   modules.c / modules.h the finite Windows module set (fastfetch, wezterm,
                         pwsh, oh-my-posh) -- see decision 7/8 and this
                         file's own header comment for the exact mapping
-  modules/windows/        the OS-tweak group, ingested from the also-retired
+  modules/<name>.c      ONE file per module, never one per OS (decision 12):
+                        the Windows implementation behind `#ifdef _WIN32`,
+                        the POSIX one after the `#else`, both exporting the
+                        same osrm_<name> because only one is ever compiled.
+                        fastfetch.c is the file that has both today;
+                        wezterm/pwsh/oh-my-posh are Windows-only so far,
+                        docker/flameshot POSIX-only. modules/src/common.h
+                        is what the Windows branches share.
+  modules/win-*.c       the OS-tweak group, ingested from the also-retired
                         windows-11-x86_64/ ps1 tree (setup.ps1,
                         win-update.ps1, winutils.ps1, src/common.ps1 and 19
                         microscripts). NOT app modules -- no package, no
                         font, no config, no theme layer; each is one pass
-                        over the operating system, which is why they are
-                        named win-* and asked for by name rather than
-                        listed in a rice.list:
-                          tweaks.c   12 registry rows + 7 service rows as
-                                     two declarative tables (the 12
+                        over the operating system, which is why the win-
+                        prefix (not a folder of their own) marks them and
+                        why they are asked for by name rather than listed
+                        in a rice.list:
+                          win-tweaks.c   12 registry rows + 7 service rows
+                                     as two declarative tables (the 12
                                      reg-*.ps1 and 6 disable-*.ps1 files
                                      differed only in a key, a value name or
                                      a service name); rows that tree carried
                                      but never applied are kept with
                                      enabled = 0 rather than dropped
-                          update.c   trigger a Windows Update run: wuauclt
-                                     for the older reach targets, usoclient
-                                     where that is the live interface
-                          debloat.c  the two third-party vendor scripts
+                          win-update.c   trigger a Windows Update run:
+                                     wuauclt for the older reach targets,
+                                     usoclient where that is the live
+                                     interface
+                          win-debloat.c  the two third-party vendor scripts
                                      (Raphire's Win11Debloat, Chris Titus
                                      WinUtil), opt-in, over winbin's
                                      run_script
-                          data/      the two non-code files that tree
-                                     carried (ooshutup10.cfg,
-                                     winutils.json): saved profiles for
-                                     tools this repo does not drive
+  modules/win-data/     the two non-code files that tree carried
+                        (ooshutup10.cfg, winutils.json): saved profiles for
+                        tools this repo does not drive
   themes/
     osr-rice/            a Windows-native palette (theme.list + the one
                         Windows-only asset, config/oh-my-posh/
@@ -542,7 +579,7 @@ os-rice/
                         ChangeServiceConfig) rather than by spawning a
                         PowerShell. The mechanism half of the retired
                         windows-11-x86_64/src/common.ps1; the policy half
-                        is modules/windows/tweaks.c's tables
+                        is modules/win-tweaks.c's tables
     wallpaper.c / .h    theme wallpaper library + apply +
                         SystemParametersInfo live-set, C port of the
                         wallpaper half of lib/config.sh (fresh port from sh,
@@ -567,7 +604,7 @@ os-rice/
                         plus a real template rendered against a real theme
       config_copy_test.c   lib/config_copy.c: ~ expansion + file copy
       wintweak_test.c      lib/wintweak.c's key parser + every row of
-                        modules/windows/tweaks.c's two tables. Touches
+                        modules/win-tweaks.c's two tables. Touches
                         nothing: the verbs change the machine they run on,
                         but the tables ARE the port, so asserting them row
                         by row is what catches a setting lost in the ingest

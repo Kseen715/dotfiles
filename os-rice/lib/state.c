@@ -37,6 +37,14 @@
 #include "cmds.h"
 
 #include <fcntl.h>
+/* tcc (0.9.27) reports __STDC_VERSION__ as C99 whatever -std= asks for, so
+ * glibc's regex.h takes the branch that sizes regexec's __pmatch with a VLA
+ * parameter -- which tcc then cannot parse ("'__nmatch' undeclared"). The
+ * header leaves this macro as the override hook; empty is its own pre-C99
+ * spelling, and that size was only ever documentation. */
+#ifndef _REGEX_NELTS
+#define _REGEX_NELTS(n)
+#endif
 #include <regex.h>
 #include <pwd.h>
 #include <sys/stat.h>

@@ -1,15 +1,18 @@
-# modules/windows
+# The `win-` modules
 
-OS-level passes over a Windows machine: debloat, tweaks, updates. This is what
-the old `windows-11-x86_64/` PowerShell tree did, ported into the C core and
-deleted.
+OS-level passes over a Windows machine: debloat, tweaks, updates —
+`modules/win-tweaks.c`, `modules/win-update.c`, `modules/win-debloat.c`. This
+is what the old `windows-11-x86_64/` PowerShell tree did, ported into the C
+core and deleted.
 
 These are **not** app modules. `modules/fastfetch.c` and its siblings install a
 program and paint its config; nothing here installs anything or has a theme
-layer — each one changes the operating system. That is why they sit in their
-own folder and why they carry a `win-` prefix: they are asked for by name,
-never listed in a `rice.list`. A `--theme-only` run treats every one of them as
-a no-op, on purpose.
+layer — each one changes the operating system. That is what the `win-` prefix
+says, and it is a prefix rather than a folder because every module in this repo
+is one file in `modules/`, whichever operating systems it runs on (see
+[PLAN_UNIVERSAL.md](../../PLAN_UNIVERSAL.md) decision 12). They are asked for
+by name, never listed in a `rice.list`. A `--theme-only` run treats every one
+of them as a no-op, on purpose.
 
 ```powershell
 .\osr.ps1 module win-tweaks     # services + Explorer/taskbar/snap + sudo
@@ -28,12 +31,12 @@ skipped with one warning.
 ## Not `win11`
 
 The source tree was named `windows-11-x86_64/`, but almost nothing in it is
-Windows 11 specific, so this folder is not named for 11 either:
+Windows 11 specific, so these modules are not named for 11 either:
 
 | scope | rows |
 | --- | --- |
 | XP/Vista/7 era | `HideFileExt`, `Hidden`, `DontPrettyPath`, `DisallowShaking`; the `WSearch`, `SysMain`, `DPS`, `Fax`, `wuauserv` services |
-| Windows 10+ | `SnapAssist`; the `DiagTrack` and `dmwappushservice` services; `usoclient` in `update.c`; both vendor tools in `debloat.c` |
+| Windows 10+ | `SnapAssist`; the `DiagTrack` and `dmwappushservice` services; `usoclient` in `win-update.c`; both vendor tools in `win-debloat.c` |
 | Windows 11 only | `EnableTaskGroups`, `EnableSnapBar`, `EnableSnapAssistFlyout`, `DITest`, `TaskbarEndTask`, and `sudo` (24H2+) |
 | Windows 10 only | `ShowCortanaButton` — 11 has no such button and never reads it |
 
@@ -47,10 +50,10 @@ setting the machine did want fails silently.
 
 | file | was |
 | --- | --- |
-| `tweaks.c` | `setup.ps1` + `microscripts/reg-*.ps1` + `microscripts/disable-*.ps1` |
-| `update.c` | `win-update.ps1` + `microscripts/update-windows.ps1` |
-| `debloat.c` | `winutils.ps1` + `microscripts/raphire-win11debloat.ps1` |
-| `../../lib/wintweak.c` | `src/common.ps1`'s `UpdateRegistryValue`, `Stop-Service`/`Set-Service`, `Remove-Item -Recurse` |
+| `win-tweaks.c` | `setup.ps1` + `microscripts/reg-*.ps1` + `microscripts/disable-*.ps1` |
+| `win-update.c` | `win-update.ps1` + `microscripts/update-windows.ps1` |
+| `win-debloat.c` | `winutils.ps1` + `microscripts/raphire-win11debloat.ps1` |
+| `../lib/wintweak.c` | `src/common.ps1`'s `UpdateRegistryValue`, `Stop-Service`/`Set-Service`, `Remove-Item -Recurse` |
 
 `src/common.ps1`'s other half needed no port: its `EchoInfo`/`EchoWarning`/
 `EchoError`/`InvokeEcho` were already `lib/ui.c`, and `Test-IsElevated` /
@@ -58,14 +61,14 @@ setting the machine did want fails silently.
 
 The twelve `reg-*.ps1` files differed from each other only in a key, a value
 name and a default, and the six `disable-*.ps1` files only in a service name —
-so they are now two tables in `tweaks.c` rather than eighteen files. Every
+so they are now two tables in `win-tweaks.c` rather than eighteen files. Every
 setting they carried is still there, including the two that were deliberately
 switched off (`DontPrettyPath`, which `setup.ps1` never called, and the Fax
 service, whose line was commented out). `test/unit_c/wintweak_test.c` asserts
 the tables row by row, so a lost or flipped setting fails the build rather than
 a desktop.
 
-## data/
+## `win-data/`
 
 Two files the ps1 tree carried but never actually used from a script. Neither
 is code, so neither was ported; both are kept because re-deriving a tweak

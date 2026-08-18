@@ -1,4 +1,4 @@
-/* modules/windows/tweaks.c -- port of the retired windows-11-x86_64/setup.ps1
+/* modules/win-tweaks.c -- port of the retired windows-11-x86_64/setup.ps1
  * and the ~19 microscripts it called: the OS debloat pass
  * (telemetry, diagnostics, search indexing, superfetch, Windows Update's
  * start type) plus the Explorer/taskbar/snap registry settings and the
@@ -20,13 +20,15 @@
  * other comment in this tree is English and because DESIGN's ASCII-only
  * rule applies to source as much as to output.
  *
- * These modules live under modules/windows/ rather than beside
- * modules/fastfetch.c: they are not standalone app modules (no package, no
- * theme layer, nothing to install), they are one OS-level pass over a
- * Windows machine, and they only make sense as a group.
+ * The win- prefix, not a modules/windows/ folder, is what marks this group
+ * apart from modules/fastfetch.c and its siblings: every module is one file
+ * in modules/, and the OS a module can run on is a question its #ifdefs
+ * answer, not its directory. What the prefix says is that these are not
+ * standalone app modules (no package, no theme layer, nothing to install) --
+ * they are one OS-level pass over a Windows machine, and they only make
+ * sense as a group. See modules/WINDOWS.md for the group as a whole.
  *
- * Not modules/win11/, despite where the ps1 files came from: that folder
- * name overclaimed. Every service row here exists on Windows 7 or 10, as do
+ * Not win11-, despite where the ps1 files came from: that name overclaimed. Every service row here exists on Windows 7 or 10, as do
  * HideFileExt/Hidden/DontPrettyPath (XP-era), DisallowShaking (7) and
  * SnapAssist (10). Only the four snap-layout rows, TaskbarEndTask and sudo
  * are genuinely 11-only, and ShowCortanaButton is the opposite case -- a 10
@@ -42,11 +44,11 @@
  *
  * C89.
  */
-#include "../src/common.h"
+#include "src/common.h"
 
-#include "../../lib/wintweak.h"
-#include "../../lib/elevate.h"
-#include "../../lib/winui.h"
+#include "../lib/wintweak.h"
+#include "../lib/elevate.h"
+#include "../lib/winui.h"
 
 #include <stddef.h>
 

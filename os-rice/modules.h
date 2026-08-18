@@ -9,10 +9,11 @@
  *                    change the operating system itself (services,
  *                    registry, Windows Update, third-party debloat tools).
  *                    No package, no config, no theme layer. Ported from
- *                    the also-retired windows-11-x86_64/ ps1 tree; they
- *                    live together under modules/windows/ because none of
+ *                    the also-retired windows-11-x86_64/ ps1 tree; the
+ *                    win- prefix (not a folder of their own -- every
+ *                    module is one file in modules/) is what says none of
  *                    them is a standalone app module. Named win-, not
- *                    win11-: that folder's name was the narrower claim.
+ *                    win11-: that ps1 folder's name was the narrower claim.
  *                    Every service row and most of the Explorer ones go
  *                    back to Windows 7/10 -- only the snap group, the
  *                    taskbar End-task row and sudo are 11-only, and each

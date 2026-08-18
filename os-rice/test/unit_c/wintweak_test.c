@@ -1,5 +1,5 @@
 /* test/unit_c/wintweak_test.c -- lib/wintweak.c's parsers and the two
- * policy tables in modules/windows/tweaks.c.
+ * policy tables in modules/win-tweaks.c.
  *
  * Deliberately touches nothing: not one assertion here calls a verb that
  * writes a registry value, stops a service or deletes a path. Those cannot

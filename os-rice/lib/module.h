@@ -1,8 +1,11 @@
 /* lib/module.h -- the API a Linux module written in C calls.
  *
- * A module is one translation unit under modules/linux/, registered in
- * lib/modules.c, that installs one thing: package, config, service. This
- * header is everything it is allowed to assume. Nothing here needs a shell:
+ * A module is one translation unit at modules/<name>.c, registered in
+ * lib/modules.c, that installs one thing: package, config, service. That file
+ * is the module on every OS, not just this one: a module both systems can
+ * have holds a Windows branch too (modules/fastfetch.c), behind #ifdef
+ * _WIN32, and only the branch below the #else is what this header describes.
+ * This header is everything a POSIX module is allowed to assume. Nothing here needs a shell:
  * the point of writing a module in C is that `osr_run_step` can fork a real
  * function or a real command, where the sh `run_step` could only fork a shell
  * function -- which is the single reason lib/ui.sh still exists.

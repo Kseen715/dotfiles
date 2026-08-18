@@ -11,7 +11,7 @@ rationale.
 > `linux-arch-x86_64-hyprland-glass/`, is now `rices/arch-hyprland-glass/` +
 > `modules/*.sh`. The Windows side is gone from sh entirely: the old
 > `windows-11-x86_64/` PowerShell tree now lives in the C core as
-> `modules/windows/` + `lib/wintweak.c` (see [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md)).
+> `modules/win-*.c` + `lib/wintweak.c` (see [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md)).
 
 ## Layout
 
@@ -44,8 +44,13 @@ os-rice/
     pkgmap/            logical name -> real package(s), per manager
     servicemap         logical service -> real unit (only where they differ)
   modules/             ONE copy each, POSIX, distro-agnostic (zsh.sh)
-    linux/*.c          modules written in C instead - same rice.list entry,
-                       registered in lib/modules.c (see "Writing a module")
+    <name>.c           modules written in C instead - same rice.list entry,
+                       registered in lib/modules.c (see "Writing a module").
+                       One file per module, never one per OS: a module both
+                       systems can have holds both branches behind #ifdef
+                       _WIN32 (fastfetch.c), a Windows-only one is all
+                       Windows branch (wezterm.c, the win-* OS passes)
+    win-data/          data files the win-* passes carry (see WINDOWS.md)
   rices/<name>/        rice.list manifest: which PACKAGES, and which themes
   themes/<name>/       theme.list + config/ (the 90-* layers) + wallpapers/
   install.sh           the shared runner: sources the libs and the modules
@@ -60,14 +65,19 @@ os-rice/
 ## Writing a module
 
 A module installs one thing. It can be a POSIX shell script under `modules/`
-(what the ~116 existing ones are) or a C translation unit under
-`modules/linux/`. A rice manifest names the module either way; `install.sh`
-asks `osr module has <name>` and, when the core owns it, runs it there instead
-of sourcing the script.
+(what the ~116 existing ones are) or a C translation unit `modules/<name>.c`.
+A rice manifest names the module either way; `install.sh` asks `osr module has
+<name>` and, when the core owns it, runs it there instead of sourcing the
+script.
+
+There is exactly one C file per module, never one per OS. A module only Linux
+can have is all POSIX code; a module both systems can have carries the Windows
+implementation in the same file behind `#ifdef _WIN32`, where it is a row in
+`modules.c`'s dispatch instead (`modules/fastfetch.c` is both at once).
 
 ```c
-/* modules/linux/flameshot.c */
-#include "../../lib/module.h"
+/* modules/flameshot.c */
+#include "../lib/module.h"
 
 int osrm_flameshot(void) {
     static const char *const pkgs[] = { "flameshot", "maim", "slop", "xclip", NULL };
@@ -180,7 +190,7 @@ debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).
 
 Still deliberately out of scope (see DESIGN "MVP scope"): the
 `repo:`/`tarball:`/`brew:`/`flatpak:` providers and `osr prune`. Windows is no
-longer on this list: it is a C core (`install.c`, `lib/*.c`, `modules/windows/`)
+longer on this list: it is a C core (`install.c`, `lib/*.c`, `modules/win-*.c`)
 driven by `osr.ps1`, not a POSIX-sh target and not a PowerShell tree.
 
 The legacy per-distro bash trees are done. What their migration cannot claim is

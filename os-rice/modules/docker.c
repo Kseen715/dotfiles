@@ -1,4 +1,4 @@
-/* modules/linux/docker.c -- Docker engine. Native-first: install the distro's
+/* modules/docker.c -- Docker engine. Native-first: install the distro's
  * engine package (`docker.io` on Debian/Ubuntu, `moby-engine` on Fedora,
  * `docker` elsewhere - resolved by pkgmap), so it updates through the package
  * manager.
@@ -6,8 +6,8 @@
  * Port of modules/docker.sh, kept as the reference at
  * test/ref/docker_sh_ref.sh. C89.
  */
-#include "../../lib/module.h"
-#include "../../lib/common.h"
+#include "../lib/module.h"
+#include "../lib/common.h"
 
 #include <stddef.h>
 #include <string.h>

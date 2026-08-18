@@ -1,11 +1,11 @@
-/* modules/windows/update.c -- port of the retired windows-11-x86_64/
+/* modules/win-update.c -- port of the retired windows-11-x86_64/
  * win-update.ps1 + microscripts/update-windows.ps1: trigger a Windows
  * Update run on demand.
  *
- * This is the other half of modules/windows/tweaks.c's wuauserv row. That
- * row sets Windows Update to Manual so nothing installs behind your back;
- * this module is how you then ask for updates on purpose. Neither makes
- * much sense without the other, which is why they are one folder.
+ * This is the other half of modules/win-tweaks.c's wuauserv row. That row
+ * sets Windows Update to Manual so nothing installs behind your back; this
+ * module is how you then ask for updates on purpose. Neither makes much
+ * sense without the other, which is why they share the win- prefix.
  *
  * The ps1 ran `wuauclt /detectnow` + `wuauclt /updatenow`. Those verbs are
  * a Windows 7-era interface: wuauclt.exe still exists on Windows 10/11 and
@@ -20,11 +20,11 @@
  *
  * C89.
  */
-#include "../src/common.h"
+#include "src/common.h"
 
-#include "../../lib/elevate.h"
-#include "../../lib/winpkg.h"
-#include "../../lib/winui.h"
+#include "../lib/elevate.h"
+#include "../lib/winpkg.h"
+#include "../lib/winui.h"
 
 #include <stddef.h>
 

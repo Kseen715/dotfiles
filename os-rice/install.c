@@ -7,7 +7,7 @@
  *     (fastfetch, wezterm, pwsh, oh-my-posh -- see modules.c's header)
  *   - the Windows OS passes ported from the retired windows-11-x86_64/
  *     ps1 tree (win-tweaks, win-update, win-debloat, win-winutil --
- *     modules/windows/, lib/wintweak.c), reached the same way any module is:
+ *     modules/win-*.c, lib/wintweak.c), reached the same way any module is:
  *     `install --module win-tweaks`
  *   - theme rendering + apply, including --theme-only (lib/theme_render.c,
  *     modules.c's osr_apply_module_theme)
@@ -160,7 +160,7 @@ static void list_modules(const char *modules_dir) {
     /* Listed apart because they are a different kind of thing: these change
      * the operating system rather than installing an app, so nothing here
      * belongs in a rice.list by habit -- you ask for them on purpose. */
-    printf("\nWindows OS passes (no package, no theme -- see modules/windows/):\n");
+    printf("\nWindows OS passes (no package, no theme -- see modules/WINDOWS.md):\n");
     printf("  win-tweaks   debloat services + Explorer/taskbar/snap settings + sudo\n");
     printf("  win-update   ask Windows Update to run now\n");
     printf("  win-debloat  Raphire's Win11Debloat (third-party, fetched at run time)\n");

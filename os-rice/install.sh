@@ -162,7 +162,7 @@ OSR_STEP_N=0
 export OSR_STEP_TOTAL OSR_STEP_N
 
 # --- run modules -------------------------------------------------------------
-# A module is either a C one in the harness core (modules/linux/*.c, listed by
+# A module is either a C one in the harness core (modules/<name>.c, listed by
 # `osr module list`) or a shell script under modules/. The core wins where both
 # exist, and a rice.list never says which kind it asked for.
 run_module() {

@@ -2,10 +2,11 @@
  *
  * A rice manifest names modules and install.sh runs each one. A module is
  * either a shell script under modules (the ~118 that exist today) or a C
- * function registered here (under modules/linux). install.sh asks `osr module
- * has <name>` and, when the answer is yes, runs `osr module run <name>` instead
- * of sourcing the script -- so the two kinds coexist and a rice.list never
- * has to know which is which.
+ * function registered here (modules/<name>.c, the POSIX branch of it where
+ * the file also has a Windows one). install.sh asks `osr module has <name>`
+ * and, when the answer is yes, runs `osr module run <name>` instead of
+ * sourcing the script -- so the two kinds coexist and a rice.list never has
+ * to know which is which.
  *
  * Writing one in C buys what the sh tier cannot have: `osr_step` can
  * fork a FUNCTION of this program, where the shell run_step could

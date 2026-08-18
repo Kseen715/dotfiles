@@ -1,5 +1,5 @@
 #!/bin/sh
-# Proves the Linux modules written in C (modules/linux/*.c, run by
+# Proves the Linux modules written in C (the POSIX branch of modules/*.c, run by
 # `osr module run <name>`) do what the shell modules they replaced did, frozen
 # at test/ref/<name>_sh_ref.sh.
 #

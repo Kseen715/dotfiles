@@ -9,6 +9,13 @@
  *   ./build/nob             (builds build/install)
  *   ./build/nob test        (builds + runs the C unit tests)
  *   ./build/nob clean
+ *   ./build/nob -v          (any of the above, with full command lines)
+ *
+ * Commands are echoed in a shortened form -- "tcc <flags> <src> -o
+ * build/obj/lib_net.o" -- so a full build reads as one line per output
+ * instead of one wrapped paragraph; -v/--verbose (or NOB_VERBOSE=1, for
+ * the `make` wrapper, which forwards no arguments) prints them whole. See
+ * "condensed command echo" near main().
  *
  * Every binary this script produces -- nob itself included -- lands under
  * build/, never next to the sources: build/install, build/wallpaper, the
@@ -16,10 +23,14 @@
  * tree stays clean, one .gitignore line (build/) covers the lot, and
  * `clean` has a single place to look.
  *
- * The compiler used for the actual build is the host's default; set $CC
- * to override it (CC=clang ./nob). Both flag dialects are handled: a $CC
- * named cl/clang-cl gets MSVC's spelling (/W4, /c, /Fo, *.lib), everything
- * else gets gcc/clang's.
+ * The compiler is chosen for you: with $CC unset, the fastest of a short
+ * preferred list that actually works on this host wins (tcc, then "zig cc",
+ * then gcc, then cc -- see "picking the compiler" below), and the answer is
+ * cached in build/cc.detected. Set $CC to override it outright (CC=clang
+ * ./nob); `./build/nob clean` re-runs the detection. Both flag dialects are
+ * handled: a compiler named cl/clang-cl gets MSVC's spelling (/W4, /c, /Fo,
+ * *.lib), everything else gets gcc/clang's. Switching compilers forces a
+ * full rebuild, because objects are not portable between them.
  *
  * Builds are incremental: a source is recompiled only when its object is
  * older than the source, and a binary is relinked only when it is older
@@ -53,6 +64,27 @@
 #define EXE ""
 #endif
 
+/* Everything this script writes goes under BUILD_DIR: programs directly in
+ * it, test binaries in its test/ subdirectory, objects in obj/. Nothing is
+ * ever written next to a source file, so the tree a developer reads stays
+ * free of build output and `clean` (plus .gitignore) has one place to look.
+ * install.c/wallpaper.c know about this layout too -- being one level down
+ * from the os-rice root is exactly why they resolve rices/themes/modules
+ * from their exe's *parent* directory (see install.c's main). */
+#define BUILD_DIR "build"
+#define OBJ_DIR BUILD_DIR "/obj"
+#define TEST_BIN_DIR BUILD_DIR "/test"
+
+/* mkdir_if_needed -- nob_mkdir_if_not_exists() logs "directory `x` already
+ * exists" on every single run; now that an up-to-date build prints nothing
+ * else, those two lines would be the whole output. Only call it when there
+ * is actually a directory to create, so the "created directory" line still
+ * shows up the one time it matters. */
+static bool mkdir_if_needed(const char *path) {
+    if (nob_file_exists(path) > 0) return true;
+    return nob_mkdir_if_not_exists(path);
+}
+
 static const char *lib_srcs[] = {
     "lib/net.c",
     "lib/winpkg.c",
@@ -70,13 +102,27 @@ static const char *lib_srcs[] = {
     "provide_module.c",
     "modules.c",
     "modules/src/common.c",
-    "modules/fastfetch.c",
     "modules/wezterm.c",
     "modules/pwsh.c",
     "modules/oh-my-posh.c",
-    "modules/windows/tweaks.c",
-    "modules/windows/update.c",
-    "modules/windows/debloat.c",
+    "modules/win-tweaks.c",
+    "modules/win-update.c",
+    "modules/win-debloat.c",
+#ifdef _WIN32
+    /* Modules that exist on BOTH systems are one file holding both branches
+     * (modules/<name>.c, never modules/<os>/<name>.c) -- and the two branches
+     * export the same osrm_<name> with their own tier's signature, so exactly
+     * one core may have the object: the Windows core here, the POSIX harness
+     * in posix_srcs below. Everything above this line is Windows-only code
+     * whose POSIX branch is a stub, which is why those rows are unconditional
+     * (test/unit_c/wintweak_test.c reads win-tweaks.c's tables on a Linux CI
+     * host, and only gets to because that object is built there).
+     *
+     * Split on the HOST, like the -DWINVER flags and the -lwininet line
+     * further down: this script has always assumed the host it runs on is the
+     * system it builds for. */
+    "modules/fastfetch.c",
+#endif
 };
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
 
@@ -102,9 +148,14 @@ static const char *posix_srcs[] = {
     "lib/render.c",
     "lib/module.c",
     "lib/modules.c",
-    "modules/linux/flameshot.c",
-    "modules/linux/docker.c",
-    "modules/linux/fastfetch.c",
+    "modules/flameshot.c",
+    "modules/docker.c",
+#ifndef _WIN32
+    /* the other half of the split described in lib_srcs: this file's POSIX
+     * branch is the Linux fastfetch module, its Windows branch is the Windows
+     * one, and only one of them is ever in a binary. */
+    "modules/fastfetch.c",
+#endif
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
 
@@ -114,9 +165,29 @@ static const char *test_names[] = {
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 
-/* DEFAULT_CC -- what to build with when $CC is unset: the same family of
- * compiler that built nob itself, which is the one known to exist on this
- * host. */
+/* --- picking the compiler --------------------------------------------
+ *
+ * $CC still wins outright, and is still a command line rather than a bare
+ * program name: "zig cc", "ccache gcc" and "gcc -m32" are all ordinary
+ * values, so it gets split on spaces once and kept as words.
+ *
+ * What is new is what happens when $CC is unset. It used to mean "the same
+ * family of compiler that built nob", which is safe but slow: gcc takes
+ * about two seconds over this tree where tcc takes a tenth of one, and for
+ * a build that runs on the way to every `osr` invocation that gap is the
+ * whole cost of the build. So instead, walk cc_ladder in order and take the
+ * first entry that can actually compile and link a program on this host.
+ *
+ * The probe is deliberately shallow -- it proves a candidate exists, runs,
+ * and speaks our flag dialect, not that it can digest every header this
+ * tree includes. A compiler that passes the probe and then fails the real
+ * build is exactly what $CC is there to override.
+ *
+ * A probe costs a process spawn, which is more than an already-up-to-date
+ * build otherwise spends, so the answer is remembered in build/cc.detected
+ * and reused from then on. `nob clean` throws it away, which is also how
+ * you get a newly installed compiler noticed.
+ */
 #if defined(_MSC_VER)
 #define DEFAULT_CC "cl.exe"
 #elif defined(__clang__)
@@ -127,33 +198,160 @@ static const char *test_names[] = {
 #define DEFAULT_CC "cc"
 #endif
 
-static const char *cc(void) {
-    const char *env = getenv("CC");
-    return (env && *env) ? env : DEFAULT_CC;
+/* cc_ladder -- fastest first, and DEFAULT_CC last. That tail matters on a
+ * host where none of the names ahead of it resolve -- an MSVC-only Windows
+ * box, say: whatever compiled nob demonstrably exists here, so it is the
+ * one candidate that cannot leave us with nothing. */
+static const char *cc_ladder[] = {"tcc", "zig cc", "gcc", "cc", DEFAULT_CC};
+#define CC_LADDER_COUNT (sizeof(cc_ladder) / sizeof(cc_ladder[0]))
+
+#define CC_DETECTED BUILD_DIR "/cc.detected"
+#define CC_STAMP BUILD_DIR "/cc.stamp"
+#define CC_PROBE_SRC BUILD_DIR "/cc_probe.c"
+#define CC_PROBE_OBJ BUILD_DIR "/cc_probe.o"
+#define CC_PROBE_BIN BUILD_DIR "/cc_probe" EXE
+
+/* DEV_NULL -- where a probe's own diagnostics go. A candidate that fails is
+ * the expected case here, not something to report. */
+#ifdef _WIN32
+#define DEV_NULL "NUL"
+#else
+#define DEV_NULL "/dev/null"
+#endif
+
+/* split_words -- "zig cc" -> {"zig", "cc"}, returning the count. The words
+ * point into a copy of s that is leaked on purpose: it has to outlive the
+ * call, and it lives exactly as long as the run does. */
+#define CC_MAX_WORDS 16
+static size_t split_words(const char *s, const char **out, size_t max) {
+    char *buf = (char *)malloc(strlen(s) + 1);
+    char *p;
+    size_t n = 0;
+    NOB_ASSERT(buf != NULL);
+    strcpy(buf, s);
+    for (p = buf; *p;) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p) break;
+        NOB_ASSERT(n < max);
+        out[n++] = p;
+        while (*p && *p != ' ' && *p != '\t') p++;
+        if (*p) *p++ = '\0';
+    }
+    return n;
 }
 
-/* $CC is a command line, not just a program name: "zig cc", "ccache gcc" and
- * "gcc -m32" are all ordinary values. exec takes one program plus separate
- * arguments, so split it on spaces once and keep the words. */
-#define CC_MAX_WORDS 16
+/* is_msvc_name -- does this program name speak MSVC's flag dialect (/W4,
+ * /c, /Fo) rather than gcc/clang's? True for "cl", "clang-cl" and cross
+ * spellings ending in "-cl"; deliberately false for plain "clang", which
+ * takes gcc flags.
+ */
+static bool is_msvc_name(const char *c) {
+    const char *base = c;
+    const char *p;
+    size_t len;
+    for (p = c; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    if (len > 4 && strcmp(base + len - 4, ".exe") == 0) len -= 4;
+    if (len < 2 || strncmp(base + len - 2, "cl", 2) != 0) return false;
+    return len == 2 || base[len - 3] == '-';
+}
+
+/* cc_probe -- can `candidate` build a program at all? Compile *and* link,
+ * because the interesting failure is not "no such program": a compiler
+ * whose runtime library is missing compiles a translation unit perfectly
+ * well and only falls over at the link. */
+static bool cc_probe(const char *candidate) {
+    const char *words[CC_MAX_WORDS];
+    size_t n = split_words(candidate, words, CC_MAX_WORDS);
+    Nob_Log_Level saved = nob_minimal_log_level;
+    Nob_Cmd cmd = {0};
+    bool ok;
+    size_t i;
+    if (n == 0) return false;
+    for (i = 0; i < n; i++) nob_cmd_append(&cmd, words[i]);
+    if (is_msvc_name(words[0])) {
+        nob_cmd_append(&cmd, "/nologo", CC_PROBE_SRC, "/Fo" CC_PROBE_OBJ, "/Fe" CC_PROBE_BIN);
+    } else {
+        nob_cmd_append(&cmd, CC_PROBE_SRC, "-o", CC_PROBE_BIN);
+    }
+    /* the "CMD: ..." line for a candidate we are only trying out is noise */
+    nob_minimal_log_level = NOB_WARNING;
+    ok = nob_cmd_run(&cmd, .stdout_path = DEV_NULL, .stderr_path = DEV_NULL);
+    nob_minimal_log_level = saved;
+    return ok;
+}
+
+/* cc_probe_cleanup -- the scratch files are the probe's, not the build's, so
+ * drop them once the walk is over and leave build/ holding only real output.
+ * Silently: three "deleting ..." lines about files the caller never asked
+ * for would be most of what a first build prints. */
+static void cc_probe_cleanup(void) {
+    Nob_Log_Level saved = nob_minimal_log_level;
+    nob_minimal_log_level = NOB_WARNING;
+    if (nob_file_exists(CC_PROBE_SRC) > 0) nob_delete_file(CC_PROBE_SRC);
+    if (nob_file_exists(CC_PROBE_OBJ) > 0) nob_delete_file(CC_PROBE_OBJ);
+    if (nob_file_exists(CC_PROBE_BIN) > 0) nob_delete_file(CC_PROBE_BIN);
+    nob_minimal_log_level = saved;
+}
+
+/* cc_detect -- the cached ladder walk. Returns a string that lives for the
+ * rest of the run. */
+static const char *cc_detect(void) {
+    Nob_String_Builder sb = {0};
+    size_t i;
+
+    if (nob_file_exists(CC_DETECTED) > 0 && nob_read_entire_file(CC_DETECTED, &sb) && sb.count > 0) {
+        while (sb.count > 0 && (unsigned char)sb.items[sb.count - 1] <= ' ') sb.count--;
+        nob_sb_append_null(&sb);
+        if (sb.count > 1) return sb.items; /* leaked on purpose, as above */
+    }
+    nob_sb_free(sb);
+
+    /* the probe writes a source file and a binary, so it needs build/ --
+     * which on a first-ever run does not exist yet. */
+    if (!mkdir_if_needed(BUILD_DIR)) return DEFAULT_CC;
+    if (!nob_write_entire_file(CC_PROBE_SRC, "int main(void) { return 0; }\n", 29)) return DEFAULT_CC;
+
+    for (i = 0; i < CC_LADDER_COUNT; i++) {
+        if (!cc_probe(cc_ladder[i])) continue;
+        cc_probe_cleanup();
+        nob_log(NOB_INFO, "compiler: %s (set $CC to override, `nob clean` to re-detect)", cc_ladder[i]);
+        return cc_ladder[i];
+    }
+    cc_probe_cleanup();
+    nob_log(NOB_WARNING, "no compiler on the preferred list works here; trying %s anyway", DEFAULT_CC);
+    return DEFAULT_CC;
+}
+
+/* cc_autodetected -- false when $CC named the compiler. Only a detected one
+ * is worth writing to build/cc.detected; caching an explicit $CC there would
+ * make a one-off "CC=gcc nob" stick around for every later run. */
+static bool cc_autodetected = false;
+
+static const char *cc(void) {
+    static const char *cached = NULL;
+    const char *env;
+    if (cached != NULL) return cached;
+    env = getenv("CC");
+    if (env != NULL && *env != '\0') {
+        cached = env;
+        return cached;
+    }
+    cc_autodetected = true;
+    cached = cc_detect();
+    return cached;
+}
+
+/* $CC is a command line, not just a program name, so split it once and keep
+ * the words -- exec takes one program plus separate arguments. */
 static const char *cc_words[CC_MAX_WORDS];
 static size_t cc_word_count = 0;
 
 static void cc_split(void) {
-    char *buf;
-    char *p;
     if (cc_word_count > 0) return;
-    buf = (char *)malloc(strlen(cc()) + 1); /* leaked on purpose: lives for the run */
-    NOB_ASSERT(buf != NULL);
-    strcpy(buf, cc());
-    for (p = buf; *p;) {
-        while (*p == ' ' || *p == '\t') p++;
-        if (!*p) break;
-        NOB_ASSERT(cc_word_count < CC_MAX_WORDS);
-        cc_words[cc_word_count++] = p;
-        while (*p && *p != ' ' && *p != '\t') p++;
-        if (*p) *p++ = '\0';
-    }
+    cc_word_count = split_words(cc(), cc_words, CC_MAX_WORDS);
     NOB_ASSERT(cc_word_count > 0);
 }
 
@@ -169,23 +367,6 @@ static void append_cc(Nob_Cmd *cmd) {
     for (i = 0; i < cc_word_count; i++) nob_cmd_append(cmd, cc_words[i]);
 }
 
-/* is_msvc -- does $CC speak MSVC's flag dialect (/W4, /c, /Fo) rather than
- * gcc/clang's? True for "cl", "clang-cl" and cross spellings ending in
- * "-cl"; deliberately false for plain "clang", which takes gcc flags.
- */
-static bool is_msvc_name(const char *c) {
-    const char *base = c;
-    const char *p;
-    size_t len;
-    for (p = c; *p; p++) {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    len = strlen(base);
-    if (len > 4 && strcmp(base + len - 4, ".exe") == 0) len -= 4;
-    if (len < 2 || strncmp(base + len - 2, "cl", 2) != 0) return false;
-    return len == 2 || base[len - 3] == '-';
-}
-
 static bool is_msvc(void) { return is_msvc_name(cc_prog()); }
 
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
@@ -198,6 +379,12 @@ static void check_cc_detection(void) {
     NOB_ASSERT(!is_msvc_name("clang"));
     NOB_ASSERT(!is_msvc_name("gcc"));
     NOB_ASSERT(!is_msvc_name("/usr/bin/x86_64-w64-mingw32-gcc"));
+    {
+        const char *w[CC_MAX_WORDS];
+        NOB_ASSERT(split_words("gcc", w, CC_MAX_WORDS) == 1);
+        NOB_ASSERT(split_words("  zig   cc ", w, CC_MAX_WORDS) == 2 && strcmp(w[1], "cc") == 0);
+        NOB_ASSERT(split_words("", w, CC_MAX_WORDS) == 0);
+    }
 }
 
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
@@ -228,17 +415,6 @@ static void append_common_flags(Nob_Cmd *cmd) {
 #endif
 }
 
-/* Everything this script writes goes under BUILD_DIR: programs directly in
- * it, test binaries in its test/ subdirectory, objects in obj/. Nothing is
- * ever written next to a source file, so the tree a developer reads stays
- * free of build output and `clean` (plus .gitignore) has one place to look.
- * install.c/wallpaper.c know about this layout too -- being one level down
- * from the os-rice root is exactly why they resolve rices/themes/modules
- * from their exe's *parent* directory (see install.c's main). */
-#define BUILD_DIR "build"
-#define OBJ_DIR BUILD_DIR "/obj"
-#define TEST_BIN_DIR BUILD_DIR "/test"
-
 /* BIN -- a program's path in the build directory, with the host's suffix:
  * BIN("install") is "build/install.exe" on Windows, "build/install"
  * elsewhere. A macro, not a function, so it stays a plain literal usable
@@ -260,16 +436,6 @@ static const char *obj_of(const char *src) {
         if (*p == '/' || *p == '\\') *p = '_';
     }
     return obj;
-}
-
-/* mkdir_if_needed -- nob_mkdir_if_not_exists() logs "directory `x` already
- * exists" on every single run; now that an up-to-date build prints nothing
- * else, those two lines would be the whole output. Only call it when there
- * is actually a directory to create, so the "created directory" line still
- * shows up the one time it matters. */
-static bool mkdir_if_needed(const char *path) {
-    if (nob_file_exists(path) > 0) return true;
-    return nob_mkdir_if_not_exists(path);
 }
 
 /* --- incremental builds ---------------------------------------------
@@ -498,6 +664,48 @@ static bool clean(void) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
         delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", test_names[i])));
     }
+    /* the compiler bookkeeping goes too: with no objects left there is no
+     * toolchain to record, and dropping the detection cache is what makes
+     * `clean` the way to have a newly installed compiler noticed. */
+    delete_if_exists(CC_DETECTED);
+    delete_if_exists(CC_STAMP);
+    delete_if_exists(CC_PROBE_SRC);
+    delete_if_exists(CC_PROBE_OBJ);
+    delete_if_exists(CC_PROBE_BIN);
+    return true;
+}
+
+/* cc_toolchain_check -- objects belong to the compiler that produced them.
+ * Nothing in the timestamp rules notices a change of compiler, so without
+ * this a build that switches (CC=gcc after a default tcc build, or a
+ * detection that now lands somewhere else) finds every object newer than
+ * its source, skips straight to the link, and hands one toolchain's objects
+ * to another's linker -- which fails, if you are lucky, with something as
+ * opaque as "undefined reference to `__va_arg`".
+ *
+ * So the compiler that built the current objects is recorded next to them,
+ * and a mismatch means a full rebuild. Failing to write the stamp is not
+ * fatal: the cost is re-cleaning next run, not a wrong build.
+ */
+static bool cc_toolchain_check(void) {
+    const char *current = cc();
+    Nob_String_Builder sb = {0};
+    bool same = false;
+
+    if (nob_file_exists(CC_STAMP) > 0 && nob_read_entire_file(CC_STAMP, &sb)) {
+        nob_sb_append_null(&sb);
+        same = strcmp(sb.items, current) == 0;
+    }
+    nob_sb_free(sb);
+    if (same) return true;
+
+    if (nob_file_exists(OBJ_DIR) > 0) {
+        nob_log(NOB_INFO, "compiler is now %s -- rebuilding everything", current);
+        if (!clean()) return false;
+    }
+    if (!mkdir_if_needed(BUILD_DIR)) return false;
+    if (cc_autodetected) nob_write_entire_file(CC_DETECTED, current, strlen(current));
+    nob_write_entire_file(CC_STAMP, current, strlen(current));
     return true;
 }
 
@@ -508,6 +716,8 @@ static bool build_all(void) {
     size_t count = 0;
     Nob_Procs procs = {0};
     size_t i;
+
+    if (!cc_toolchain_check()) return false;
 
     for (i = 0; i < LIB_SRCS_COUNT; i++) srcs[count++] = lib_srcs[i];
     srcs[count++] = "install.c";
@@ -527,8 +737,177 @@ static bool build_all(void) {
     return true;
 }
 
+/* --- condensed command echo ------------------------------------------
+ *
+ * nob.h echoes every command it starts in full, and offers no knob for it
+ * short of NOB_NO_ECHO, which silences its whole log. At this tree's size
+ * the full lines are unreadable: forty compiler invocations differing in
+ * one filename each, then a link line naming twenty-three objects.
+ *
+ * The vendored header stays untouched -- its log handler hook is the
+ * override point. Every command echo is rewritten to the part that differs
+ * between commands, with the flag soup and the long input lists standing in
+ * as <flags>/<src>/<obj>:
+ *
+ *   [INFO] CMD: tcc <flags> <src> -o build/obj/lib_net.o
+ *   [INFO] CMD: tcc <flags> -o build/install <obj>
+ *
+ * Little is actually dropped: the flags are identical for every command in
+ * a run (append_common_flags is the only source of them), and an object's
+ * name says which source produced it (obj_of). `nob -v` / `nob --verbose`
+ * -- or NOB_VERBOSE=1 in the environment, for the `make` wrapper, which
+ * forwards no arguments -- leaves nob.h's own full lines alone. Every log
+ * record that is not a command echo is passed through either way.
+ */
+
+/* the exact format string nob.h logs a started command with (see
+ * nob__cmd_start_process); matching on it is what tells a command echo
+ * apart from every other record the handler is handed. */
+#define CMD_ECHO_FMT "CMD: %s"
+
+static bool is_verbose_flag(const char *arg) {
+    return strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0;
+}
+
+/* Tok_Class -- what one rendered argument is, for the purpose of deciding
+ * whether it survives into the short line. FLAG/SRC/OBJ collapse into a
+ * placeholder; KEEP (program names, output paths) is printed as it is. */
+typedef enum { TOK_KEEP, TOK_FLAG, TOK_SRC, TOK_OBJ, TOK_COUNT } Tok_Class;
+
+static bool tok_ends_with(const char *tok, size_t n, const char *suffix) {
+    size_t m = strlen(suffix);
+    return n >= m && memcmp(tok + n - m, suffix, m) == 0;
+}
+
+/* tok_class -- .lib counts as a flag because that is how cl takes a link
+ * library, the same role -lwininet plays for gcc: bulk, never the thing
+ * that identifies the command. */
+static Tok_Class tok_class(const char *tok, size_t n) {
+    if (tok_ends_with(tok, n, ".c")) return TOK_SRC;
+    if (tok_ends_with(tok, n, ".o") || tok_ends_with(tok, n, ".obj")) return TOK_OBJ;
+    if (tok_ends_with(tok, n, ".lib")) return TOK_FLAG;
+    if (n > 1 && (tok[0] == '-' || tok[0] == '/')) return TOK_FLAG;
+    return TOK_KEEP;
+}
+
+/* is_out_arg -- the flag naming where the output goes, the one part of a
+ * compile/link line worth keeping in full. cl glues the path on
+ * (/Fobuild/obj/x.o), everything else takes it as the next argument. */
+static bool is_out_arg(const char *tok, size_t n) {
+    if (n == 2 && memcmp(tok, "-o", 2) == 0) return true;
+    return n > 3 && (memcmp(tok, "/Fo", 3) == 0 || memcmp(tok, "/Fe", 3) == 0);
+}
+
+/* brief_cmd -- rewrite one rendered command line into its short form. A
+ * placeholder appears at most once, where the first argument of its kind
+ * was: later arguments of an already-collapsed kind are dropped rather than
+ * repeated, so a link line reads "<flags> -o build/install <obj>" instead
+ * of trailing a second "<flags>" for the link libraries.
+ *
+ * The input is what nob_cmd_render() produced, so an argument containing a
+ * space arrives wrapped in single quotes -- hence the quote handling in the
+ * scanner; anything else splits on spaces. */
+static void brief_cmd(const char *line, Nob_String_Builder *out) {
+    static const char *placeholder[] = { NULL, "<flags>", "<src>", "<obj>" };
+    bool emitted[TOK_COUNT] = { false, false, false, false };
+    bool keep_next = false;
+    bool after_flag = false;
+    size_t i = 0;
+    size_t argi = 0;
+
+    while (line[i] != '\0') {
+        const char *tok;
+        size_t n;
+        char quote = '\0';
+        Tok_Class cls;
+
+        while (line[i] == ' ') i++;
+        if (line[i] == '\0') break;
+        if (line[i] == '\'') { quote = '\''; i++; }
+        tok = line + i;
+        while (line[i] != '\0' && line[i] != (quote != '\0' ? quote : ' ')) i++;
+        n = (size_t)(line + i - tok);
+        if (quote != '\0' && line[i] == quote) i++;
+
+        /* argv[0] is the program, whatever it looks like: an absolute
+         * /usr/bin/gcc must not be mistaken for a flag. */
+        cls = (argi == 0 || keep_next) ? TOK_KEEP : tok_class(tok, n);
+        keep_next = false;
+        argi++;
+
+        if (cls == TOK_KEEP && after_flag && !is_out_arg(tok, n)) {
+            /* a flag's value, given as its own argument: "-x c" is how the
+             * self-rebuild command names its language. It belongs to the
+             * flag that just collapsed, so it goes the same way -- printing
+             * it alone would leave a bare "c" after <flags>. */
+            after_flag = false;
+            continue;
+        }
+        after_flag = false;
+
+        if (cls == TOK_KEEP || is_out_arg(tok, n)) {
+            if (out->count > 0) nob_sb_append_cstr(out, " ");
+            nob_da_append_many(out, tok, n);
+            /* the argument after a bare -o is the output path, which ends
+             * in .o for an object and must not collapse into <obj>. */
+            if (n == 2 && memcmp(tok, "-o", 2) == 0) keep_next = true;
+        } else {
+            if (cls == TOK_FLAG) after_flag = true;
+            if (!emitted[cls]) {
+                emitted[cls] = true;
+                if (out->count > 0) nob_sb_append_cstr(out, " ");
+                nob_sb_append_cstr(out, placeholder[cls]);
+            }
+        }
+    }
+}
+
+static void brief_log_handler(Nob_Log_Level level, const char *fmt, va_list args) {
+    if (level == NOB_INFO && strcmp(fmt, CMD_ECHO_FMT) == 0) {
+        Nob_String_Builder sb = {0};
+        brief_cmd(va_arg(args, const char *), &sb);
+        nob_sb_append_null(&sb);
+        /* nob_log() would come straight back in here, so hand this one line
+         * to the stock handler with the hook out of the way -- that keeps
+         * the prefix and the nob_minimal_log_level check in one place. */
+        nob_set_log_handler(&nob_default_log_handler);
+        nob_log(level, CMD_ECHO_FMT, sb.items);
+        nob_set_log_handler(&brief_log_handler);
+        nob_sb_free(sb);
+        return;
+    }
+    nob_default_log_handler(level, fmt, args);
+}
+
+/* want_verbose -- read-only on argv: it still has to reach
+ * NOB_GO_REBUILD_URSELF intact, so that a nob which re-execs itself after
+ * rebuilding keeps the flag it was given. */
+static bool want_verbose(int argc, char **argv) {
+    const char *env = getenv("NOB_VERBOSE");
+    int i;
+    if (env != NULL && *env != '\0' && strcmp(env, "0") != 0) return true;
+    for (i = 1; i < argc; i++) {
+        if (is_verbose_flag(argv[i])) return true;
+    }
+    return false;
+}
+
+/* drop_verbose_flags -- compact argv so the subcommand parse in main() sees
+ * subcommands only, and `nob -v test` works in either order. */
+static int drop_verbose_flags(int argc, char **argv) {
+    int i;
+    int n = 0;
+    for (i = 0; i < argc; i++) {
+        if (i > 0 && is_verbose_flag(argv[i])) continue;
+        argv[n++] = argv[i];
+    }
+    return n;
+}
+
 int main(int argc, char **argv) {
+    if (!want_verbose(argc, argv)) nob_set_log_handler(&brief_log_handler);
     NOB_GO_REBUILD_URSELF(argc, argv);
+    argc = drop_verbose_flags(argc, argv);
     check_cc_detection();
 
     const char *program = nob_shift(argv, argc);
@@ -548,6 +927,6 @@ int main(int argc, char **argv) {
         return clean() ? 0 : 1;
     }
 
-    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: (none)/all, test, clean)", subcommand);
+    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: (none)/all, test, clean; -v for full command lines)", subcommand);
     return 1;
 }

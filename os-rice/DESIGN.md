@@ -76,7 +76,7 @@ not smeared across every module. New distro = teach `pkg.sh` its verbs and add a
 
 > Windows stays its own world — different package model, different language.
 > Do **not** force it into this abstraction. It is not PowerShell any more
-> either: it is the C core (`install.c`, `lib/*.c`, `modules/windows/`,
+> either: it is the C core (`install.c`, `lib/*.c`, `modules/win-*.c`,
 > `windows.map`), which has its own package dispatch and its own OS-tweak
 > layer. See [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md).
 
@@ -172,11 +172,22 @@ fill. Until then, custom C never enters.
 ### A module may be a C unit instead of a script
 
 The Windows core has always dispatched its modules from C (`modules.c`). The
-POSIX side can now do both: `modules/linux/*.c` registered in `lib/modules.c`,
+POSIX side can now do both: `modules/<name>.c` registered in `lib/modules.c`,
 against the API in `lib/module.h`, with `modules/*.sh` unchanged beside them.
 `install.sh` asks `osr module has <name>` per manifest entry, so a rice never
 says which kind it wants and a module can move from one to the other without
 touching a rice.
+
+A module is **one file, not one per OS**. `modules/fastfetch.c` holds both
+implementations — the Windows one behind `#ifdef _WIN32`, dispatched from
+`modules.c`; the POSIX one after the `#else`, registered in `lib/modules.c` —
+and they export the same `osrm_fastfetch`, because only one of them is ever
+compiled. `nob.c` gives the object to whichever core the host is building.
+Modules only one system can have (the `win-*` OS passes, `flameshot`) are
+simply files whose other branch is empty. The alternative, a `linux/` and a
+`windows/` folder, made the same module two files that could drift apart
+without anyone noticing; asking "do these still agree" should not need a
+`diff` between trees.
 
 What C buys is precisely what forced the sh tier's shape: `osr_step` runs the
 live step window around a **function of the program**, where `run_step` could

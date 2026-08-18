@@ -21,19 +21,19 @@
  *                                             switch-back-able fallback.
  *
  * And from the also-retired windows-11-x86_64/ tree (the OS debloat/tweak
- * side, which never had a C tier at all) to modules/windows/ -- grouped in
- * their own folder because they are not app modules: no package, no font,
- * no config, no theme layer, just one OS-level pass each:
+ * side, which never had a C tier at all) to the win- files -- named apart
+ * from the app modules because that is what they are not: no package, no
+ * font, no config, no theme layer, just one OS-level pass each:
  *
- *   setup.ps1 +           -> modules/windows/tweaks.c   12 registry rows + 7
+ *   setup.ps1 +           -> modules/win-tweaks.c   12 registry rows + 7
  *   microscripts/reg-*.ps1                            service rows, as two
  *   microscripts/disable-*.ps1                        tables driving
  *   src/common.ps1                                    lib/wintweak.c's three
  *                                                     verbs
- *   win-update.ps1 +      -> modules/windows/update.c   trigger an update run
+ *   win-update.ps1 +      -> modules/win-update.c   trigger an update run
  *   microscripts/update-windows.ps1
  *
- *   winutils.ps1 +        -> modules/windows/debloat.c  the two third-party
+ *   winutils.ps1 +        -> modules/win-debloat.c  the two third-party
  *   microscripts/raphire-win11debloat.ps1             vendor scripts, opt-in
  *
  * src/common.ps1's other half needed no port at all: its EchoInfo/

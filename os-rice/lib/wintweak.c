@@ -6,7 +6,7 @@
 
 /* -------------------------------------------------------------------------
  * parsing -- pure, builds on every host so the tables in
- * modules/windows/tweaks.c can be unit-tested without a registry
+ * modules/win-tweaks.c can be unit-tested without a registry
  * ---------------------------------------------------------------------- */
 
 /* prefix_len -- length of `prefix` if `spec` starts with it (case
