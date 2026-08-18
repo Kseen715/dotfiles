@@ -25,6 +25,12 @@ BIN="$TMP/bin"; mkdir -p "$BIN"
 
 PASSWD="$SYS/etc/passwd"; SHELLS="$SYS/etc/shells"
 FAKE_PASSWD="$PASSWD"; export FAKE_PASSWD
+# The reading half of the user model is C now (lib/user.c), so the sandbox
+# is declared rather than sed-substituted into a copy of the lib: these two
+# names point both halves at the fake /etc, and OSR_PASSWD_FILE also turns NSS
+# off so "tester" is answered from the sandbox and not from this machine.
+OSR_PASSWD_FILE="$PASSWD"; OSR_SHELLS_FILE="$SHELLS"
+export OSR_PASSWD_FILE OSR_SHELLS_FILE
 
 # lib/user.sh writes system files by absolute path (§5a); under test it runs
 # from a copy rebased into the sandbox, so a wrong mock can't reach the real

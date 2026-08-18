@@ -1,4 +1,4 @@
-/* lib/state.h -- what is currently applied, C port of lib/state.sh.
+/* lib/winstate.h -- what is currently applied, C port of lib/state.sh.
  * `%USERPROFILE%\.config\osr\state`, `key=value` lines -- same path shape
  * windows-rice already uses for app configs (`~\.config\fastfetch\...`),
  * so this state file lives in the same tree a user would expect to find
@@ -6,8 +6,8 @@
  *
  * C89.
  */
-#ifndef OSR_STATE_H
-#define OSR_STATE_H
+#ifndef OSR_WINSTATE_H
+#define OSR_WINSTATE_H
 
 /* osr_state_get -- copy the value for key into out (bounded); out is "" if
  * the key is unset or the state file doesn't exist yet. Last assignment
@@ -20,4 +20,4 @@ void osr_state_get(const char *key, char *out, unsigned long out_sz);
  */
 int osr_state_set(const char *key, const char *value);
 
-#endif /* OSR_STATE_H */
+#endif /* OSR_WINSTATE_H */

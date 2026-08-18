@@ -11,7 +11,7 @@ OSR_ROOT_REAL=$(cd -- "$HERE/../.." && pwd)
 OSR_LIB="$OSR_ROOT_REAL/lib"; export OSR_LIB
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER NO_COLOR
 . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"
-. "$OSR_LIB/state.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/theme.sh"
+. "$OSR_LIB/config.sh"; . "$OSR_LIB/theme.sh"
 . "$HERE/../lib.sh"
 
 T=$(mktemp -d)

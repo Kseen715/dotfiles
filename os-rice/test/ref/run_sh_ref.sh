@@ -1,4 +1,12 @@
 #!/bin/sh
+# test/ref/run_sh_ref.sh — the sh implementation of test/run.sh, FROZEN.
+#
+# The last pure-sh test/run.sh, kept verbatim as the specification of what the
+# C port (test/run.c) must print: test/unit/testrun_c_parity.sh runs both over
+# a tree of fixture tests and diffs their bytes. Nothing runs it for real.
+#
+# --- original -----------------------------------------------------------------
+#
 # test/run.sh — the fast, no-container test suite: POSIX lint + unit tests.
 # Runs anywhere (CI per-commit). The docker idempotency matrix is test/matrix.sh.
 set -eu

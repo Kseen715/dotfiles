@@ -137,7 +137,7 @@ run_apply() {
         . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/detect.sh"
         . "$OSR_LIB/user.sh"; . "$OSR_LIB/net.sh"; . "$OSR_LIB/pkg.sh"; . "$OSR_LIB/git.sh"
         . "$OSR_LIB/service.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/theme.sh"
-        . "$OSR_LIB/state.sh"; . "$OSR_LIB/apply.sh"; . "$OSR_LIB/fonts.sh"
+        . "$OSR_LIB/apply.sh"; . "$OSR_LIB/fonts.sh"
         . "$OSR_LIB/build.sh"
         osr_detect >/dev/null 2>&1
         # OSR_HOME must survive everything above: if a lib ever resolves it from

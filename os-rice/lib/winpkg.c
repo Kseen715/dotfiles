@@ -243,7 +243,7 @@ int osr_winpkg_lookup(const char *map_path, const char *name,
 
 #include "../provide_module.h"
 #include "elevate.h"
-#include "ui.h"
+#include "winui.h"
 #include "winbin.h"
 
 #ifndef PROCESSOR_ARCHITECTURE_ARM64

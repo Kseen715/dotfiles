@@ -199,7 +199,7 @@ int osr_winbin_pick_asset(const char *json, const char *pattern,
 #include "config_copy.h"
 #include "elevate.h"
 #include "net.h"
-#include "ui.h"
+#include "winui.h"
 #include "winpkg.h"
 
 /* osr_dir -- %LOCALAPPDATA%\osr\<sub>\<name>. Per-user by construction: no

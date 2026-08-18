@@ -111,7 +111,7 @@ int osr_wintweak_needs_admin_services(const osr_wintweak_service *rows, unsigned
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "ui.h"
+#include "winui.h"
 
 /* STOP_TIMEOUT_MS -- how long to wait for a stopping service to actually
  * report STOPPED. Stop-Service's own default wait is 30s; nothing here has

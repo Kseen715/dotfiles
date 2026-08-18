@@ -192,7 +192,10 @@ while IFS= read -r _l || [ -n "$_l" ]; do
     _l=$(printf '%s' "$_l" | tr -d ' \t')
     [ -n "$_l" ] || continue
     case "$_l" in require:*|config:*|theme:*|themes:*) continue ;; esac
-    [ -f "$OSR_ROOT/modules/$_l.sh" ] || _missing="$_missing $_l"
+    # A module is a script under modules/ OR one the harness core implements
+    # in C (`osr module has`), and a rice.list never says which.
+    [ -f "$OSR_ROOT/modules/$_l.sh" ] || "$OSR_BIN" module has "$_l" \
+        || _missing="$_missing $_l"
 done < "$OSR_RICE_DIR/rice.list"
 assert_eq "" "$_missing" "every module in i3-rosemary/rice.list exists"
 

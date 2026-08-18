@@ -50,7 +50,7 @@ case "$_cmd" in
                 . "$OSR_SELF_DIR/lib/ui.sh"
                 . "$OSR_SELF_DIR/lib/log.sh"
                 . "$OSR_SELF_DIR/lib/state.sh"
-                _cur=$(osr_state_get theme)
+                _cur=$("$OSR_BIN" state get theme)
                 printf '%s\n' "${_cur:-(none applied)}"
                 exit 0
                 ;;
@@ -62,7 +62,14 @@ case "$_cmd" in
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
     themes)  exec "$OSR_SELF_DIR/install.sh" --list-themes ;;
     modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
-    test)    exec sh "$OSR_SELF_DIR/test/run.sh" ;;
+    test)
+        # The runner is part of the harness core now; ui.sh is sourced only to
+        # resolve (and if needed build) it.
+        . "$OSR_SELF_DIR/lib/ui.sh"
+        # Not `exec`: that would drop ui.sh's EXIT trap, which is what gives
+        # the cursor back on a terminal.
+        "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
+        ;;
     -h|--help|"")
         sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
         ;;

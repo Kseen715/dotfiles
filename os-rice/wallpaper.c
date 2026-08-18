@@ -12,9 +12,9 @@
  *
  * C89.
  */
-#include "lib/state.h"
+#include "lib/winstate.h"
 #include "lib/wallpaper.h"
-#include "lib/ui.h"
+#include "lib/winui.h"
 
 #include <stdio.h>
 #include <string.h>

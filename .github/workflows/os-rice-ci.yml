@@ -19,7 +19,7 @@ jobs:
       - name: Install dash, shellcheck, zsh
         run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh
       - name: Lint + unit tests
-        run: sh os-rice/test/run.sh
+        run: sh os-rice/osr test
 
   # The idempotency matrix: install the rice TWICE per distro image; the double
   # run must be all-skips with no duplicate PATH entries (DESIGN §9).

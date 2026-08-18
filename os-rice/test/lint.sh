@@ -38,8 +38,9 @@ if command -v shellcheck >/dev/null 2>&1; then
     # no arrays); SC2016 the single-quoted in-container script in matrix.sh;
     # SC2034 vars a sourced lib reads (NO_COLOR, OSR_*); SC2044 find loops over
     # repo-controlled paths; SC2015 the `grep -q X && ok || fail` test idiom;
-    # SC2329 module stubs called indirectly by the code under test.
-    SC_EXCLUDE=SC1090,SC1091,SC1003,SC1087,SC2016,SC2034,SC2044,SC2015,SC2329
+    # SC2329 module stubs called indirectly by the code under test; SC2163
+    # lib/detect.sh's `export $*` over a caller-supplied list of names.
+    SC_EXCLUDE=SC1090,SC1091,SC1003,SC1087,SC2016,SC2034,SC2044,SC2015,SC2329,SC2163
     sec "shellcheck -s sh:"
     for f in $SH_FILES; do
         if shellcheck -s sh -e "$SC_EXCLUDE" "$f" >/dev/null 2>&1; then

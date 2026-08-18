@@ -20,7 +20,7 @@
 #include "../lib/fonts.h"
 #include "../lib/theme_render.h"
 #include "../lib/config_copy.h"
-#include "../lib/ui.h"
+#include "../lib/winui.h"
 
 #include <stdio.h>
 #include <stdlib.h>

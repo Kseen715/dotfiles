@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lib/ui.h"
+#include "lib/winui.h"
 #include "lib/winbin.h"
 #include "lib/winpkg.h"
 

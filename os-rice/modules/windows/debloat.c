@@ -29,7 +29,7 @@
 
 #include "../../lib/elevate.h"
 #include "../../lib/winbin.h"
-#include "../../lib/ui.h"
+#include "../../lib/winui.h"
 
 #include <stddef.h>
 

@@ -1,3 +1,12 @@
+# test/ref/fastfetch_sh_ref.sh — the sh implementation of modules/fastfetch.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/linux/fastfetch.c) must do: test/unit/module_c_parity.sh runs both
+# under stubbed package tooling and diffs what they did, the rendered config
+# file included. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
 # modules/fastfetch.sh — fastfetch system info tool + layered config. ONE copy,
 # POSIX, distro-agnostic. "Easiest method per distro" is expressed entirely in

@@ -433,7 +433,7 @@ osr_theme_wallpapers() {
 osr_theme_wallpaper() {
     [ -n "${OSR_THEME_DIR:-}" ] || return 0
     if [ -n "${OSR_THEME:-}" ]; then
-        _rw_pick=$(osr_state_get "wallpaper.$OSR_THEME" 2>/dev/null || true)
+        _rw_pick=$("$OSR_BIN" state get "wallpaper.$OSR_THEME" 2>/dev/null || true)
         # A recorded choice that no longer exists (image deleted, checkout moved)
         # falls back to the theme default rather than failing the apply.
         if [ -n "$_rw_pick" ] && osr_is_image "$_rw_pick"; then
@@ -512,8 +512,8 @@ osr_wallpaper_record() {
     _wr_img=$1
     as_user mkdir -p "$OSR_HOME/.config/osr"
     printf '%s\n' "$_wr_img" | as_user tee "$OSR_HOME/.config/osr/wallpaper" >/dev/null
-    if command -v osr_state_set >/dev/null 2>&1; then
-        osr_state_set wallpaper "$_wr_img"
+    if [ -n "${OSR_BIN:-}" ]; then
+        "$OSR_BIN" state set wallpaper "$_wr_img"
     fi
 }
 
@@ -560,8 +560,8 @@ osr_choose_wallpaper() {
         /*) ;;
         *) _cw_src="$(cd -- "$(dirname -- "$_cw_src")" && pwd)/$(basename "$_cw_src")" ;;
     esac
-    if [ -n "${OSR_THEME:-}" ] && command -v osr_state_set >/dev/null 2>&1; then
-        osr_state_set "wallpaper.$OSR_THEME" "$_cw_src"
+    if [ -n "${OSR_THEME:-}" ] && [ -n "${OSR_BIN:-}" ]; then
+        "$OSR_BIN" state set "wallpaper.$OSR_THEME" "$_cw_src"
     fi
     _cw_installed=$(osr_install_wallpaper_file "$_cw_src")
     # This function's stdout IS its return value (the installed path), so the

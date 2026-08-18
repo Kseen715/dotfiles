@@ -1,36 +1,37 @@
-# lib/log.sh — logging primitives (POSIX sh)
+# lib/log.sh — the shell-callable surface of the logger (POSIX sh)
 #
-# debug / info / warn / error / success / check_error. No color logic here;
-# ui.sh owns colors and exports the escape vars. When ui.sh has not been sourced
-# these are empty, so log output degrades to plain text.
+# debug / info / warn / error / success / check_error. The lines are printed by
+# `osr log` in the harness core (lib/log.c); what stays here is the shell
+# part: error()'s `exit 1` — a separate process can print the message, but only
+# this shell can end the run — and the palette defaults, so log output degrades
+# to plain text when ui.sh has not been sourced.
+#
+# Byte-for-byte the sh original, frozen at test/ref/log_sh_ref.sh and diffed by
+# test/unit/log_c_parity.sh.
 
 : "${OSR_RED:=}" "${OSR_GREEN:=}" "${OSR_YELLOW:=}" "${OSR_CYAN:=}" "${OSR_DIM:=}" "${OSR_NC:=}"
+export OSR_RED OSR_GREEN OSR_YELLOW OSR_CYAN OSR_DIM OSR_NC
 
-info() {
-    printf '%b%-8s%b%s\n' "$OSR_CYAN" "[INFO]" "$OSR_NC" "$*"
-}
+# ui.sh resolves $OSR_BIN (and builds it if needed) for every shim; it is
+# always sourced first, but this is a standalone lib, so make sure.
+if [ -z "${OSR_BIN:-}" ]; then
+    . "${OSR_LIB:?log.sh: source lib/ui.sh first, or export OSR_LIB}/ui.sh"
+fi
 
-# debug — off unless OSR_DEBUG is set. A theme apply skips dozens of package and
-# build steps by design (lib/apply.sh); printing each one would bury the handful
-# of lines that say what actually changed, and printing none makes "why did my
-# font not update" unanswerable. This is the switch between the two.
-debug() {
-    [ -n "${OSR_DEBUG:-}" ] || return 0
-    printf '%b%-8s%b%s\n' "$OSR_DIM" "[DEBUG]" "$OSR_NC" "$*" >&2
-}
+# Each of these took "$*" — every argument joined with a space — so the shim
+# joins the same way and hands the core one message.
+info()    { "$OSR_BIN" log info "$*"; }
+warn()    { "$OSR_BIN" log warn "$*"; }
+success() { "$OSR_BIN" log success "$*"; }
 
-warn() {
-    printf '%b%-8s%b%s\n' "$OSR_YELLOW" "[WARN]" "$OSR_NC" "$*" >&2
-}
-
-success() {
-    printf '%b%-8s%b%s\n' "$OSR_GREEN" "[DONE]" "$OSR_NC" "$*"
-}
+# debug — off unless OSR_DEBUG is set (the core makes that call, so the rule
+# lives in one place).
+debug()   { "$OSR_BIN" log debug "$*"; }
 
 # error prints and terminates the whole run. A single fatal path keeps modules
 # from limping on after a mutation half-applied.
 error() {
-    printf '%b%-8s%b%s\n' "$OSR_RED" "[ERROR]" "$OSR_NC" "$*" >&2
+    "$OSR_BIN" log error "$*" || :
     exit 1
 }
 

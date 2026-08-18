@@ -46,7 +46,7 @@
 
 #include "../../lib/wintweak.h"
 #include "../../lib/elevate.h"
-#include "../../lib/ui.h"
+#include "../../lib/winui.h"
 
 #include <stddef.h>
 

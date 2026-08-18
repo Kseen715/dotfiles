@@ -18,7 +18,7 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES
 
 . "$OSR_LIB/ui.sh"
 . "$OSR_LIB/log.sh"
-for _lib in detect user config theme state; do
+for _lib in detect user config theme; do
     . "$OSR_LIB/$_lib.sh"
 done
 
@@ -44,7 +44,7 @@ osr_resolve_user "$OSR_ARG_USER"
 
 # The current theme decides which wallpapers are on offer and which key the
 # choice is stored under. With no theme applied yet, fall back to the default.
-OSR_THEME=$(osr_state_get theme)
+OSR_THEME=$("$OSR_BIN" state get theme)
 [ -n "$OSR_THEME" ] || OSR_THEME=$OSR_DEFAULT_THEME
 osr_theme_exists "$OSR_THEME" || error "recorded theme '$OSR_THEME' no longer exists (see: osr themes)"
 OSR_THEME_DIR="$OSR_ROOT/themes/$OSR_THEME"

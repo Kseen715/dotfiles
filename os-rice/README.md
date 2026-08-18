@@ -17,30 +17,76 @@ rationale.
 
 ```text
 os-rice/
-  lib/                 shared POSIX-sh library (single copy)
-    log.sh  ui.sh      logging; colors + spinner + step progress
-    detect.sh          OSR_DISTRO / OSR_PKG / OSR_INIT, detected once
-    user.sh            OSR_USER model: as_user/as_root, ensure_*, backup_copy
+  osr.c                the POSIX harness core: one binary (build/osr) that
+                       nob.c links from the lib/ units below, the same
+                       way install.c + lib/*.c make the Windows core
+  lib/                 the shell-callable surface + the core's units
+    ui.sh  log.sh      run_step's fork, error()'s exit, the palette
+    user.sh            as_user/as_root and the writes that go through them
+    detect.sh  theme.sh   eval the facts the core prints, for modules to read
+    ui.c  log.c  state.c  user.c  detect.c  theme.c  install.c  testrun.c
+                       what those shims call, one unit per <name>.sh:
+                       `osr ui`, `osr log`, `osr state`, `osr user`,
+                       `osr detect`, `osr theme`, `osr install`, `osr test-run`.
+                       state.c owns its writes outright - there is no state.sh
+    module.h  module.c  the API a Linux module written in C may call
+    modules.c          the registry of those modules (`osr module`)
+    common.h/.c        what the units share (buffer, printf %b, log line)
+    cmds.h             one declaration per command entry point
+    winui.* winstate.* the WINDOWS core's own ui/state (its win* family, next
+                       to winpkg/winbin/wintweak) - unrelated to the units above
     pkg.sh             pkg_install/installed/refresh/remove + provider dispatch
     net.sh git.sh      download + github_latest; git repo / oh-my-zsh helpers
     service.sh         enable_service/disable_service (systemd/openrc/runit/sysv)
     config.sh          layered config: seed_once / install_layer / loader block
-    theme.sh           themes as objects: discovery, theme.list, palette (6a)
     apply.sh           theme-only apply: the hotkey path, mutating verbs stubbed
     reload.sh          tell the running apps to re-read their new config
-    state.sh           ~/.config/osr/state: what rice/theme/wallpaper is applied
     pkgmap/            logical name -> real package(s), per manager
     servicemap         logical service -> real unit (only where they differ)
   modules/             ONE copy each, POSIX, distro-agnostic (zsh.sh)
+    linux/*.c          modules written in C instead - same rice.list entry,
+                       registered in lib/modules.c (see "Writing a module")
   rices/<name>/        rice.list manifest: which PACKAGES, and which themes
   themes/<name>/       theme.list + config/ (the 90-* layers) + wallpapers/
-  install.sh           the shared runner
+  install.sh           the shared runner: sources the libs and the modules
   wallpaper.sh         set/query the wallpaper of the current theme
   osr                  front-end CLI (install / switch / theme / wallpaper / list)
   bootstrap.sh         barebone entry: find downloader, clone repo, hand off
   test/                lint + hermetic unit tests + docker idempotency matrix
+    ref/               frozen sh implementations the C ports are diffed against
 ../proteus/            the GUI picker (standalone Rust crate, X11 + Wayland)
 ```
+
+## Writing a module
+
+A module installs one thing. It can be a POSIX shell script under `modules/`
+(what the ~116 existing ones are) or a C translation unit under
+`modules/linux/`. A rice manifest names the module either way; `install.sh`
+asks `osr module has <name>` and, when the core owns it, runs it there instead
+of sourcing the script.
+
+```c
+/* modules/linux/flameshot.c */
+#include "../../lib/module.h"
+
+int osrm_flameshot(void) {
+    static const char *const pkgs[] = { "flameshot", "maim", "slop", "xclip", NULL };
+    return osr_pkg_install_step("Installing screenshot tools", pkgs);
+}
+```
+
+Then one row in `lib/modules.c` (name, session marker, function) and one line
+in `nob.c`'s `posix_srcs`. Everything a module may call is `lib/module.h`:
+packages (`osr_pkg_install`, resolved through `lib/pkgmap/` exactly as
+`pkg_install` does), steps (`osr_run_step` for a command, `osr_step` for a
+function of your own — the thing the shell tier could not do), services,
+`as_root`/`as_user` execs, the config-file primitives, and the detected facts.
+
+Three are ported already (`flameshot`, `docker`, `fastfetch`); their shell originals are
+frozen under `test/ref/` and `test/unit/module_c_parity.sh` runs both against
+stubbed package tooling and diffs every command they issue. Provider-tagged
+packages (`cargo:`, `script:`, `aur:`, `source:`) are still `lib/pkg.sh`'s job
+— a C module that needs one fails loudly and should stay a script for now.
 
 ## Usage
 
@@ -122,7 +168,7 @@ to its real Void `xbps` package — including the ones Void does not ship.
 ## Testing
 
 ```sh
-sh os-rice/test/run.sh            # fast: POSIX lint + hermetic unit tests
+sh os-rice/osr test              # fast: POSIX lint + hermetic unit tests
 sh os-rice/test/matrix.sh gruvbox # docker/podman double-run idempotency matrix
 OSR_TEST_IMAGES="alpine:latest" sh os-rice/test/matrix.sh   # one image
 ```

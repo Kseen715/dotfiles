@@ -75,7 +75,7 @@ osr_apply_theme() {
     # modules a rice install runs. What is left of them is the file copying.
     osr_apply_stub_mutators
 
-    _at_rice=$(osr_state_get rice)
+    _at_rice=$("$OSR_BIN" state get rice)
     OSR_RICE=${_at_rice:-}
     [ -n "$OSR_RICE" ] && OSR_RICE_DIR="$OSR_ROOT/rices/$OSR_RICE"
     export OSR_RICE OSR_RICE_DIR
@@ -102,8 +102,8 @@ osr_apply_theme() {
 
     osr_apply_theme_configs
     apply_wallpaper
-    osr_state_set theme "$OSR_THEME"
-    osr_state_set applied "$(date +%s 2>/dev/null || echo 0)"
+    "$OSR_BIN" state set theme "$OSR_THEME"
+    "$OSR_BIN" state set applied "$(date +%s 2>/dev/null || echo 0)"
 }
 
 # osr_theme_modules — echo the modules that carry a theme layer, in manifest

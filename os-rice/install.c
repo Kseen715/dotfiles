@@ -35,8 +35,8 @@
 #include "lib/winpkg.h"
 #include "lib/manifest.h"
 #include "lib/wallpaper.h"
-#include "lib/state.h"
-#include "lib/ui.h"
+#include "lib/winstate.h"
+#include "lib/winui.h"
 #include "modules.h"
 
 #include <stdio.h>

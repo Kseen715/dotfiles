@@ -11,7 +11,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
-#include "ui.h"
+#include "winui.h"
 
 static char g_args[2048];
 static int g_have_args = 0;

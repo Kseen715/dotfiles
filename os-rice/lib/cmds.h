@@ -1,0 +1,28 @@
+/* lib/cmds.h -- the POSIX harness's commands.
+ *
+ * One binary (build/osr) holds all of them, the same way the Windows core
+ * links install.c with its lib units; osr.c dispatches on argv[1] and each
+ * command lives in its own translation unit, named after the lib/<x>.sh it
+ * replaced. Every entry takes the argument vector AFTER the command word and
+ * returns the exit status.
+ *
+ * C89 + POSIX.
+ */
+#ifndef OSR_CMDS_H
+#define OSR_CMDS_H
+
+int osr_ui_main(int argc, char **argv);       /* lib/ui.sh */
+int osr_log_main(int argc, char **argv);      /* lib/log.sh */
+int osr_state_main(int argc, char **argv);    /* lib/state.sh */
+int osr_user_main(int argc, char **argv);     /* lib/user.sh */
+int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
+int osr_detect_main(int argc, char **argv);   /* lib/detect.sh */
+int osr_install_main(int argc, char **argv);  /* install.sh */
+int osr_module_main(int argc, char **argv);   /* the Linux C modules */
+
+/* osr_module_names -- the C modules' names, one per line, for the listing
+ * install.sh prints (which merges them with the shell ones). */
+void osr_module_names(Str *out);
+int osr_testrun_main(int argc, char **argv);  /* test/run.sh */
+
+#endif /* OSR_CMDS_H */

@@ -121,6 +121,84 @@ download some tools"), not speed. But:
 **Trigger to revisit:** a concrete bootstrap need that busybox genuinely can't
 fill. Until then, custom C never enters.
 
+> **Superseded, deliberately, for the harness itself (not for bootstrap).** The
+> POSIX side is C now, arranged exactly like the Windows core: `nob.c` links
+> `osr.c` (a command dispatcher) with one translation unit per file it
+> replaced into a single binary, `build/osr`. Each unit is named after the
+> shell file it replaced (`lib/ui.sh` -> `lib/ui.c`); the Windows core's own
+> ui/state units moved into its `win*` family (`lib/winui.c`,
+> `lib/winstate.c`, next to `winpkg`/`winbin`/`wintweak`) to free those names. No per-file helper binaries, no
+> build step hidden in a shell script — `./osr`, like `osr.ps1`, just runs nob.
+>
+> | shell file | unit | command | what moved |
+> |---|---|---|---|
+> | `lib/ui.sh` | `lib/ui.c` | `osr ui` | palette, live step window, step counter |
+> | `lib/log.sh` | `lib/log.c` | `osr log` | the five log lines |
+> | `lib/state.sh` | `lib/state.c` | `osr state` | the whole thing — **file removed** |
+> | `lib/user.sh` | `lib/user.c` | `osr user` | user model, login shells, file primitives |
+> | `lib/detect.sh` | `lib/detect.c` | `osr detect` | every distro and hardware probe |
+> | `lib/theme.sh` | `lib/theme.c` | `osr theme` | manifests, palette, the {{key}} script |
+> | `install.sh` | `lib/install.c` | `osr install` | help, listings, option loop, manifest, report |
+> | `test/run.sh` | `lib/testrun.c` | `osr test-run` | the suite runner |
+>
+> `test/run.sh`, `lib/state.sh` and the build shim are **gone**, not shrunk:
+> nothing was left in them that the core could not do. state.sh existed only
+> for its `as_user tee` write, and `osr state set` performs that escalation
+> itself. The six that remain are not
+> implementations — they are the shell-callable surface, which cannot go away
+> while ~120 modules are shell scripts:
+>
+> - `run_step`'s arguments are shell FUNCTIONS (`pkg_install`, `as_root`), so
+>   only a shell can fork them;
+> - `error` must `exit` the running shell;
+> - `as_user`/`as_root` are command prefixes wrapping `sudo`, and every write
+>   that must land as the riced user goes through them;
+> - `osr_detect`/`osr_resolve_theme` set the variables modules branch on, so
+>   the core prints assignments and the shim evals them;
+> - `install.sh` SOURCES each module.
+>
+> The reasoning above still holds where it was aimed: **`bootstrap.sh` stays
+> pure sh and compiles nothing** — it has to run before a toolchain is a given.
+> Past that point the tool assumes a C compiler.
+>
+> The contract for each slice is byte-for-byte identical output: the sh version
+> is frozen under `test/ref/` and diffed against the C one by a unit test
+> (`test/unit/*_c_parity.sh` — 317 checks over the eight). Exactly one
+> divergence has been accepted, and it is asserted rather than hidden: an
+> install.sh option missing its operand was `${2:?--user needs a name}`, whose
+> diagnostic and exit status came from the shell itself; it is now an ordinary
+> `[ERROR]` line, exit 1.
+
+### A module may be a C unit instead of a script
+
+The Windows core has always dispatched its modules from C (`modules.c`). The
+POSIX side can now do both: `modules/linux/*.c` registered in `lib/modules.c`,
+against the API in `lib/module.h`, with `modules/*.sh` unchanged beside them.
+`install.sh` asks `osr module has <name>` per manifest entry, so a rice never
+says which kind it wants and a module can move from one to the other without
+touching a rice.
+
+What C buys is precisely what forced the sh tier's shape: `osr_step` runs the
+live step window around a **function of the program**, where `run_step` could
+only fork a *shell* function. That is why `run_step pkg_install foo` had to
+stay in `lib/ui.sh`, and why a module in C needs no shell at all.
+
+What C costs is the property the module system was built for: a module is one
+readable POSIX script that anyone can copy and edit. So this is not a migration
+plan — it is an option, for modules whose logic is real (dispatch on tooling,
+group membership, per-distro branching) rather than three lines of package
+install. `flameshot`, `docker` and `fastfetch` are the first three, kept honest by
+`test/unit/module_c_parity.sh`, which diffs them against their frozen scripts
+command for command — and, for fastfetch, byte for byte on the config file it
+renders.
+
+> Not ported: the provider methods (`cargo:`, `script:`, `aur:`, `source:`).
+> `osr_pkg_install` covers the native path and hands a provider row back to
+> `lib/pkg.sh`, which owns them — `source:` in particular dispatches into
+> `lib/build.sh`, 1250 lines of per-package downloaders and builders. That one
+> call is the only place the C tier calls back into sh, and it disappears when
+> those are ported.
+
 ### Rices are declarative manifests, not folders of scripts
 
 The headline lever. A rice = a plain list of modules/apps + configs to copy,
@@ -349,6 +427,11 @@ run_step() {                         # run_step "Cloning oh-my-zsh" git clone ..
 > Honest caveat: spinner + hidden output means a hang shows a spinner, not the
 > tool's live output. Mitigate with `--verbose` and the on-failure log dump —
 > the standard tradeoff (what `brew`, `paru`, etc. do).
+>
+> Implementation note: the sketch above is still the shape of `run_step`, but
+> the painting is `osr ui` (`lib/ui.c`); `lib/ui.sh` keeps only the fork,
+> because a step's argv is a shell *function* (`pkg_install`). See the C
+> rewrite note under Decisions.
 
 ---
 

@@ -1,50 +1,45 @@
-/* lib/ui.h -- colored status lines, C port of lib/log.sh + lib/ui.sh (the
- * spinner/step window). Same four tags, same meaning:
+/* lib/ui.h -- the live step window, for callers inside the core.
  *
- *   osr_info    [INFO]    stdout, cyan tag
- *   osr_warn    [WARN]    stderr, yellow tag, does not stop the run
- *   osr_error   [ERROR]   stderr, red tag, PRINTS THEN exit(1) -- same
- *                         "one fatal path" contract as lib/log.sh's error()
- *   osr_success [DONE]    stdout, green tag
+ * `osr ui` (lib/ui.c) is driven from lib/ui.sh for shell modules; a module
+ * written in C drives the same paint loop directly through these, which is
+ * what lib/module.c's osr_run_step does. Not to be confused with lib/winui.h,
+ * the Windows core's own console layer.
  *
- * osr_run_step is the C port of ui.sh's run_step/_step_paint/_spin: a
- * live-repainting block (dimmed tail of the command's own output, a
- * spinner line last) that collapses to one `[ok]`/`[!!] desc` line when
- * the command finishes, same TTY-only auto-degrade (§3) as the sh
- * original -- piped/redirected output or OSR_VERBOSE set gets plain
- * streamed lines instead. UNLIKE ui.sh's run_step, this does not call
- * osr_error() on a non-zero exit -- it returns the exit code and lets the
- * caller decide, because its actual caller (lib/winpkg.c's package-manager
- * dispatch) already has its own non-fatal "try the next manager" contract
- * ported from windows-rice/src/pkg.ps1's Install-RicePackage, which was
- * never a "one fatal path" design to begin with; forcing run_step's sh
- * fatality here would silently change that behavior.
+ * C89 + POSIX.
+ */
+#ifndef OSR_POSIX_UI_H
+#define OSR_POSIX_UI_H
+
+#include <sys/types.h>
+
+/* osr_ui_live -- does the live window apply? `[ -t 1 ] && [ -z "$OSR_VERBOSE" ]`
+ * (§3 auto-degrade). */
+int osr_ui_live(void);
+
+/* osr_ui_spin_pid -- repaint the block until pid exits, tailing log_path.
+ * Returns how many rows the last paint left on screen, which is what
+ * osr_ui_result needs to erase.
  *
- * C89. Windows: uses classic console API (SetConsoleTextAttribute,
- * SetConsoleCursorPosition, FillConsoleOutputCharacterA), not ANSI escape
- * codes -- real XP/Win7 consoles don't interpret VT sequences at all, only
- * the classic console API works there.
- */
-#ifndef OSR_UI_H
-#define OSR_UI_H
+ * For a pid that is NOT our child: it polls with kill(pid, 0), which is what
+ * lib/ui.sh's `_spin` did, and works there because the pid belongs to the
+ * shell that reaps it. Waiting on our OWN child this way would hang forever --
+ * an exited child stays a pid until someone reaps it -- so use
+ * osr_ui_spin_child for that. */
+int osr_ui_spin_pid(pid_t pid, const char *desc, const char *log_path);
 
-void osr_info(const char *fmt, ...);
-void osr_warn(const char *fmt, ...);
-void osr_success(const char *fmt, ...);
+/* osr_ui_spin_child -- the same window around a child of THIS process: reaps
+ * it as part of the loop (waitpid(WNOHANG)) instead of asking whether the pid
+ * still exists, and reports its exit status. */
+int osr_ui_spin_child(pid_t pid, const char *desc, const char *log_path, int *exit_status);
 
-/* osr_error -- prints to stderr, then exit(1). Never returns. */
-void osr_error(const char *fmt, ...);
+/* osr_ui_result -- erase those rows and leave one `[ok]`/`[!!] <desc>` line. */
+void osr_ui_result(int painted, int ok, const char *desc);
 
-/* osr_info_step -- osr_info with a "[03/12] " prefix, install.sh's
- * step_prefix()+info() combo. total == 0 omits the prefix entirely.
- */
-void osr_info_step(unsigned long n, unsigned long total, const char *fmt, ...);
+/* osr_ui_fail_tail -- the last n lines of a failed step's log, to stderr. */
+void osr_ui_fail_tail(long n, const char *log_path);
 
-/* osr_run_step -- run cmd (a full command line, passed to the platform's
- * command interpreter the same way system() would) under a live status
- * line labeled desc. Returns cmd's exit code (0 on success). See this
- * file's header comment for the sh-vs-C fatality difference.
- */
-int osr_run_step(const char *desc, const char *cmd);
+/* osr_ui_append_log -- append the per-step log to $OSR_LOG, so the run log
+ * stays complete (`cat "$_OSR_STEP_LOG" >>"$OSR_LOG"`). */
+void osr_ui_append_log(const char *step_log);
 
-#endif /* OSR_UI_H */
+#endif /* OSR_POSIX_UI_H */

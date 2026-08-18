@@ -1,3 +1,12 @@
+# test/ref/state_sh_ref.sh — the sh implementation of lib/state.sh, FROZEN.
+#
+# The last pure-sh lib/state.sh, kept verbatim as the specification of what the
+# C port (lib/state.c) must produce: test/unit/state_c_parity.sh sources
+# this file and diffs its bytes, and the state files it writes, against the
+# binary's. Nothing in the installer sources it, and it must never be "fixed".
+#
+# --- original header ---------------------------------------------------------
+#
 # lib/state.sh — what is currently applied (POSIX sh)
 #
 # ~/.config/osr/state, `key=value`, one per line. Small on purpose: this is not

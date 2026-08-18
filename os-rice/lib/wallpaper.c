@@ -1,6 +1,6 @@
 /* lib/wallpaper.c -- see lib/wallpaper.h. C89. */
 #include "wallpaper.h"
-#include "state.h"
+#include "winstate.h"
 
 #include <stdio.h>
 #include <stdlib.h>

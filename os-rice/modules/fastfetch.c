@@ -6,7 +6,7 @@
 #include "../lib/winpkg.h"
 #include "../lib/theme_render.h"
 #include "../lib/config_copy.h"
-#include "../lib/ui.h"
+#include "../lib/winui.h"
 
 #include <stddef.h>
 

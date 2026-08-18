@@ -59,8 +59,8 @@ static const char *lib_srcs[] = {
     "lib/winbin.c",
     "lib/elevate.c",
     "lib/manifest.c",
-    "lib/ui.c",
-    "lib/state.c",
+    "lib/winui.c",
+    "lib/winstate.c",
     "lib/theme_list.c",
     "lib/theme_render.c",
     "lib/config_copy.c",
@@ -79,6 +79,34 @@ static const char *lib_srcs[] = {
     "modules/windows/debloat.c",
 };
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
+
+/* posix_srcs -- the POSIX harness core. One binary, build/osr, linked from
+ * osr.c (the dispatcher) plus one translation unit per lib/<x>.sh that has
+ * been rewritten -- the same arrangement as the Windows core's install.c plus
+ * its lib units, and the reason the remaining sh files need no build step of
+ * their own: they just exec build/osr.
+ *
+ * POSIX-only by design (unistd, termios, glob, sudo), so the whole binary is
+ * skipped on a Windows host, where the sh side does not run at all.
+ */
+static const char *posix_srcs[] = {
+    "lib/common.c",
+    "lib/ui.c",
+    "lib/log.c",
+    "lib/state.c",
+    "lib/user.c",
+    "lib/detect.c",
+    "lib/theme.c",
+    "lib/install.c",
+    "lib/testrun.c",
+    "lib/render.c",
+    "lib/module.c",
+    "lib/modules.c",
+    "modules/linux/flameshot.c",
+    "modules/linux/docker.c",
+    "modules/linux/fastfetch.c",
+};
+#define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
 
 static const char *test_names[] = {
     "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
@@ -373,6 +401,28 @@ static void append_common_libs(Nob_Cmd *cmd) {
 #endif
 }
 
+/* link_posix -- link the POSIX harness core: osr.c's object plus every
+ * lib/osr_*.c object, and none of the Windows core's objects or link
+ * libraries. Nothing here includes a Windows header, and nothing there is
+ * reachable from ./osr. */
+static bool link_posix(const char *bin) {
+    Nob_Cmd cmd = {0};
+    const char *objs[POSIX_SRCS_COUNT + 1];
+    size_t i;
+    objs[0] = obj_of("osr.c");
+    for (i = 0; i < POSIX_SRCS_COUNT; i++) objs[i + 1] = obj_of(posix_srcs[i]);
+    if (nob_needs_rebuild(bin, objs, POSIX_SRCS_COUNT + 1) == 0) return true;
+    actions++;
+    append_common_flags(&cmd);
+    if (is_msvc()) {
+        nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
+    } else {
+        nob_cmd_append(&cmd, "-o", bin);
+    }
+    for (i = 0; i < POSIX_SRCS_COUNT + 1; i++) nob_cmd_append(&cmd, objs[i]);
+    return nob_cmd_run(&cmd);
+}
+
 /* link_exe -- main_src's own object + every shared object. Async when procs
  * is given, so the binaries of one batch link in parallel too. */
 static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
@@ -438,8 +488,11 @@ static bool clean(void) {
     size_t i;
     delete_if_exists(BIN("install"));
     delete_if_exists(BIN("wallpaper"));
+    delete_if_exists(BIN("osr"));
     delete_if_exists(obj_of("install.c"));
     delete_if_exists(obj_of("wallpaper.c"));
+    delete_if_exists(obj_of("osr.c"));
+    for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_if_exists(obj_of(posix_srcs[i]));
     for (i = 0; i < LIB_SRCS_COUNT; i++) delete_if_exists(obj_of(lib_srcs[i]));
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
@@ -451,18 +504,27 @@ static bool clean(void) {
 /* build_all -- every shared object plus the two program objects compiled in
  * one parallel batch, then both binaries linked from them. */
 static bool build_all(void) {
-    const char *srcs[LIB_SRCS_COUNT + 2];
+    const char *srcs[LIB_SRCS_COUNT + 2 + POSIX_SRCS_COUNT + 1];
+    size_t count = 0;
     Nob_Procs procs = {0};
     size_t i;
 
-    for (i = 0; i < LIB_SRCS_COUNT; i++) srcs[i] = lib_srcs[i];
-    srcs[LIB_SRCS_COUNT] = "install.c";
-    srcs[LIB_SRCS_COUNT + 1] = "wallpaper.c";
+    for (i = 0; i < LIB_SRCS_COUNT; i++) srcs[count++] = lib_srcs[i];
+    srcs[count++] = "install.c";
+    srcs[count++] = "wallpaper.c";
+#ifndef _WIN32
+    srcs[count++] = "osr.c";
+    for (i = 0; i < POSIX_SRCS_COUNT; i++) srcs[count++] = posix_srcs[i];
+#endif
 
-    if (!compile_objs(srcs, LIB_SRCS_COUNT + 2)) return false;
+    if (!compile_objs(srcs, count)) return false;
     if (!link_exe(BIN("install"), "install.c", &procs)) return false;
     if (!link_exe(BIN("wallpaper"), "wallpaper.c", &procs)) return false;
-    return nob_procs_flush(&procs);
+    if (!nob_procs_flush(&procs)) return false;
+#ifndef _WIN32
+    if (!link_posix(BIN("osr"))) return false;
+#endif
+    return true;
 }
 
 int main(int argc, char **argv) {
