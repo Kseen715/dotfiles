@@ -32,3 +32,8 @@ ueberzugpp-build-deps = vips-dev libsixel-dev openssl-dev onetbb-dev libxcb-dev 
 
 # Alpine ships perf only; no turbostat package exists.
 kernel-tools = perf
+
+# TinyCC on Alpine splits the compiler from the static libs it links against
+# (tcc-libs-static), and musl's headers live in musl-dev - the bare `tcc`
+# package alone compiles nothing.
+tcc = tcc tcc-libs-static musl-dev

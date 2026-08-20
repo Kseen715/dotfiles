@@ -166,6 +166,7 @@ static const char *posix_srcs[] = {
     "lib/modules.c",
     "modules/flameshot.c",
     "modules/docker.c",
+    "modules/tcc.c",
 #ifndef _WIN32
     /* the other half of the split described in lib_srcs: this file's POSIX
      * branch is the Linux fastfetch module, its Windows branch is the Windows

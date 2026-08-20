@@ -41,11 +41,13 @@ typedef struct {
 int osrm_docker(void);
 int osrm_fastfetch(void);
 int osrm_flameshot(void);
+int osrm_tcc(void);
 
 static const ModuleRow modules[] = {
     { "docker",    "x11+wayland", 0, osrm_docker },
     { "fastfetch", "x11+wayland", 1, osrm_fastfetch },
-    { "flameshot", "x11",         0, osrm_flameshot }
+    { "flameshot", "x11",         0, osrm_flameshot },
+    { "tcc",       "x11+wayland", 0, osrm_tcc }
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 

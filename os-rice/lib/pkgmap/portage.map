@@ -17,3 +17,6 @@ chafa-build-deps = dev-libs/glib media-libs/freetype media-libs/libjpeg-turbo me
 
 # turbostat/perf on Gentoo.
 kernel-tools = sys-power/cpupower dev-util/perf
+
+# TinyCC is dev-lang/tcc; the bare name does not resolve to an atom.
+tcc = dev-lang/tcc

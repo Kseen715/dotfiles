@@ -67,7 +67,8 @@ hex() {
          /^STUB state_set /d
          /^  docker$/d
          /^  fastfetch$/d
-         /^  flameshot$/d" | od -An -tx1 | tr -d ' \n'
+         /^  flameshot$/d
+         /^  tcc$/d" | od -An -tx1 | tr -d ' \n'
 }
 
 same() {
