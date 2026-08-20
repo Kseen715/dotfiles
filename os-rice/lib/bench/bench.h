@@ -57,6 +57,10 @@ int bench_read_ulong(const char *path, unsigned long *out);
 void bench_join3(Str *out, const char *a, const char *b, const char *c);
 void bench_set_str(char *dst, size_t cap, const char *src);
 double bench_now_sec(void);
+/* bench_is_wsl -- a Hyper-V guest, where no local sensor exists and no driver
+ * load can create one. Both the detector and the diagnostic ask, so that
+ * neither offers a fix that cannot work there. */
+int bench_is_wsl(void);
 
 /* --- power ---------------------------------------------------------------- */
 
@@ -156,6 +160,12 @@ int bench_deps_missing(Str *out);
  * Returns 1 when at least the throughput phases ran; a machine with no power
  * sensor still produces a useful result, so a missing meter is not a failure. */
 int bench_cpu(const BenchOpts *o, BenchResult *r);
+
+/* bench_sensors_report -- `osr benchmark sensors`: every probe pwr_detect and
+ * find_cpu_temp make, with its verdict, plus a census of the three sysfs trees
+ * they read. The benchmark prints the conclusion; this prints the working, so
+ * "no power reported" can be diagnosed on a machine nobody can log into. */
+void bench_sensors_report(Str *out);
 
 /* bench_parse_yaml_ops -- pull the summed bogo-ops-per-second-real-time out of
  * a stress-ng --yaml report. Parsing YAML rather than the human metrics table

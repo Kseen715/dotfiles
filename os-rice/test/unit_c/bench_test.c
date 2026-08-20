@@ -23,6 +23,8 @@
 #include "../../lib/common.c"
 
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 /* --- stress-ng YAML ------------------------------------------------------- */
 
@@ -294,8 +296,274 @@ static void test_cpu_name_squeeze(void) {
     str_free(&t);
 }
 
+/* --- sensor detection, on machines this one is not -------------------------
+ *
+ * Every interesting case is a machine nobody running the suite is sitting at:
+ * an Intel laptop whose powercap driver was never loaded, a kernel that made
+ * the RAPL counters root-only, a part that publishes psys and no package
+ * domain, a board whose hwmon chip offers `power1_average` and not
+ * `power1_input`. Those are exactly the machines that report no power, so they
+ * are built out of directories here and pointed at with OSR_POWERCAP /
+ * OSR_HWMON / OSR_THERMAL.
+ */
+
+static char fx_root[512];
+
+static void fx_mkdir(const char *rel) {
+    char path[640];
+    sprintf(path, "%s/%s", fx_root, rel);
+    mkdir(path, 0755);
+}
+
+/* fx_write -- one sysfs-shaped attribute: a value and a newline. mode is the
+ * point of several of these: 0400 is what a post-PLATYPUS energy_uj looks
+ * like to a non-root reader. */
+static void fx_write(const char *rel, const char *value, int mode) {
+    char path[640];
+    FILE *f;
+    sprintf(path, "%s/%s", fx_root, rel);
+    f = fopen(path, "w");
+    if (f == NULL) return;
+    fprintf(f, "%s\n", value);
+    fclose(f);
+    chmod(path, mode);
+}
+
+static void fx_reset(void) {
+    char cmd[700];
+    sprintf(cmd, "rm -rf %s && mkdir -p %s/powercap %s/hwmon %s/thermal",
+            fx_root, fx_root, fx_root, fx_root);
+    if (system(cmd) != 0) return;
+}
+
+/* fx_rapl -- detect_rapl on its own.
+ *
+ * Not through pwr_detect: that walks on to hwmon and battery, either of which
+ * may exist on the machine running the suite and would replace the RAPL
+ * verdict these tests are about. */
+static int fx_rapl(PwrMeter *m) {
+    memset(m, 0, sizeof(*m));
+    m->source = PWR_NONE;
+    return detect_rapl(m);
+}
+
+static void fx_use(void) {
+    char p[640];
+    sprintf(p, "%s/powercap/", fx_root); setenv("OSR_POWERCAP", p, 1);
+    sprintf(p, "%s/hwmon/", fx_root);    setenv("OSR_HWMON", p, 1);
+    sprintf(p, "%s/thermal/", fx_root);  setenv("OSR_THERMAL", p, 1);
+    /* Bare metal unless a case says otherwise. The suite itself may well be
+     * running under WSL, which would otherwise change what the detector says
+     * about a fixture that has nothing to do with WSL. */
+    sprintf(p, "%s/osrelease", fx_root); setenv("OSR_OSRELEASE", p, 1);
+    fx_write("osrelease", "6.12.0-generic", 0644);
+}
+
+/* fx_be_wsl -- the same fixture, on a Hyper-V guest. */
+static void fx_be_wsl(void) {
+    fx_write("osrelease", "6.6.87.2-microsoft-standard-WSL2", 0644);
+}
+
+/* The one that matters for an Intel desktop reporting nothing: the tree is
+ * there, and empty, because intel_rapl_msr is a module nobody loaded. The old
+ * message for this was "no power sensor", which names no fix. */
+static void test_empty_powercap_names_the_driver(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    osr_t_true("an empty powercap tree finds no source", !fx_rapl(&m));
+    osr_t_true("...and blames the unloaded driver by name",
+               strstr(m.detail, "intel_rapl_msr") != NULL);
+}
+
+/* The same empty tree in a Hyper-V guest, where loading that driver would
+ * achieve nothing. Same symptom, opposite advice -- which is the whole reason
+ * the check exists. */
+static void test_empty_powercap_under_wsl_does_not(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_be_wsl();
+    osr_t_true("an empty powercap tree in WSL finds no source", !fx_rapl(&m));
+    osr_t_true("...and does not send the reader to modprobe",
+               strstr(m.detail, "intel_rapl_msr") == NULL);
+    osr_t_true("...naming Hyper-V as the reason",
+               strstr(m.detail, "Hyper-V") != NULL);
+}
+
+/* A kernel without CONFIG_POWERCAP at all is a different diagnosis: there is
+ * no module to load, and telling someone to modprobe one wastes their time. */
+static void test_absent_powercap_is_distinct(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    setenv("OSR_POWERCAP", "/nonexistent-powercap/", 1);
+    osr_t_true("an absent powercap tree finds no source", !fx_rapl(&m));
+    osr_t_true("...and says the kernel lacks it",
+               strstr(m.detail, "no powercap support") != NULL);
+    osr_t_true("...without suggesting a modprobe",
+               strstr(m.detail, "intel_rapl_msr") == NULL);
+}
+
+static void test_package_beats_its_children(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_mkdir("powercap/intel-rapl:0");
+    fx_write("powercap/intel-rapl:0/name", "package-0", 0644);
+    fx_write("powercap/intel-rapl:0/energy_uj", "123456789", 0644);
+    fx_write("powercap/intel-rapl:0/max_energy_range_uj", "262143328850", 0644);
+    /* the core domain, which is a fraction of the package */
+    fx_mkdir("powercap/intel-rapl:0:0");
+    fx_write("powercap/intel-rapl:0:0/name", "core", 0644);
+    fx_write("powercap/intel-rapl:0:0/energy_uj", "60000000", 0644);
+
+    osr_t_true("a package domain is found", pwr_detect(&m));
+    osr_t_eq_int("...as RAPL", (long)m.source, (long)PWR_RAPL);
+    osr_t_true("...reading the package, not the core child",
+               strstr(m.path, "intel-rapl:0/energy_uj") != NULL);
+    osr_t_eq_int("...with the wrap point read", (long)(m.max_range_uj / 1000000UL), 262143L);
+}
+
+/* Intel laptops since Skylake often publish psys and no package domain. Wider
+ * than the CPU, but a real reading -- and the report has to say so. */
+static void test_psys_is_used_and_labelled(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_mkdir("powercap/intel-rapl-mmio:0");
+    fx_write("powercap/intel-rapl-mmio:0/name", "psys", 0644);
+    fx_write("powercap/intel-rapl-mmio:0/energy_uj", "555000", 0644);
+
+    osr_t_true("psys alone is still a power source", pwr_detect(&m));
+    osr_t_eq_int("...as RAPL", (long)m.source, (long)PWR_RAPL);
+    osr_t_true("...labelled as the platform domain, not the package",
+               strstr(m.detail, "psys") != NULL);
+    osr_t_true("...and warned about", strstr(m.detail, "whole board") != NULL);
+}
+
+static void test_package_wins_over_psys(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_mkdir("powercap/intel-rapl:1");
+    fx_write("powercap/intel-rapl:1/name", "psys", 0644);
+    fx_write("powercap/intel-rapl:1/energy_uj", "555000", 0644);
+    fx_mkdir("powercap/intel-rapl:0");
+    fx_write("powercap/intel-rapl:0/name", "package-0", 0644);
+    fx_write("powercap/intel-rapl:0/energy_uj", "123456789", 0644);
+
+    osr_t_true("both present, one is chosen", pwr_detect(&m));
+    osr_t_true("...and it is the package", strstr(m.path, "intel-rapl:0/") != NULL);
+}
+
+/* 0400 since CVE-2020-8694. The fix is `sudo`, and the message has to say it.
+ * Skipped when the suite runs as root, where the mode is not a barrier. */
+static void test_rootonly_rapl_says_so(void) {
+    PwrMeter m;
+    if (geteuid() == 0) {
+        osr_t_ok("root-only RAPL: skipped, this test runs as root");
+        return;
+    }
+    fx_reset();
+    fx_use();
+    fx_mkdir("powercap/intel-rapl:0");
+    fx_write("powercap/intel-rapl:0/name", "package-0", 0644);
+    /* Mode 0, not 0400: the suite runs as the file's OWNER, and 0400 is
+     * readable by its owner. 0 is the only mode that denies a non-root reader
+     * the way a root-owned 0400 denies this user on a real machine. */
+    fx_write("powercap/intel-rapl:0/energy_uj", "123456789", 0);
+
+    osr_t_true("an unreadable counter is not a source", !fx_rapl(&m));
+    osr_t_true("...and the fix is named", strstr(m.detail, "root") != NULL);
+}
+
+/* Several super-I/O and BMC chips publish only the averaging window. */
+static void test_hwmon_average_is_accepted(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    setenv("OSR_POWERCAP", "/nonexistent-powercap/", 1);
+    fx_mkdir("hwmon/hwmon3");
+    fx_write("hwmon/hwmon3/name", "nct6687", 0644);
+    fx_write("hwmon/hwmon3/power1_average", "42000000", 0644);
+
+    osr_t_true("power1_average counts as a sensor", pwr_detect(&m));
+    osr_t_eq_int("...as hwmon", (long)m.source, (long)PWR_HWMON);
+    osr_t_true("...and the driver is named", strstr(m.detail, "nct6687") != NULL);
+}
+
+/* On a big Intel part temp1..tempN are the cores and the package is somewhere
+ * further along. Picking temp1 reports one core, which runs cooler than the
+ * package under a single-threaded load -- the exact phase this benchmark has. */
+static void test_temp_prefers_the_labelled_package(void) {
+    char out[BENCH_PATH_MAX];
+    fx_reset();
+    fx_use();
+    fx_mkdir("hwmon/hwmon2");
+    fx_write("hwmon/hwmon2/name", "coretemp", 0644);
+    fx_write("hwmon/hwmon2/temp1_label", "Core 0", 0644);
+    fx_write("hwmon/hwmon2/temp1_input", "51000", 0644);
+    fx_write("hwmon/hwmon2/temp5_label", "Package id 0", 0644);
+    fx_write("hwmon/hwmon2/temp5_input", "67000", 0644);
+
+    out[0] = '\0';
+    osr_t_true("a labelled hwmon temperature is found", find_cpu_temp(out, sizeof(out)));
+    osr_t_true("...and it is the package, not core 0",
+               strstr(out, "temp5_input") != NULL);
+}
+
+/* The last resort: no hwmon at all, one thermal zone. x86_pkg_temp must win
+ * over acpitz even though acpitz is the lower-numbered zone. */
+static void test_temp_falls_back_to_thermal_zones(void) {
+    char out[BENCH_PATH_MAX];
+    fx_reset();
+    fx_use();
+    fx_mkdir("thermal/thermal_zone0");
+    fx_write("thermal/thermal_zone0/type", "acpitz", 0644);
+    fx_write("thermal/thermal_zone0/temp", "27800", 0644);
+    fx_mkdir("thermal/thermal_zone3");
+    fx_write("thermal/thermal_zone3/type", "x86_pkg_temp", 0644);
+    fx_write("thermal/thermal_zone3/temp", "64000", 0644);
+
+    out[0] = '\0';
+    osr_t_true("a thermal zone is found when hwmon has nothing",
+               find_cpu_temp(out, sizeof(out)));
+    osr_t_true("...and the package zone beats the lower-numbered acpitz",
+               strstr(out, "thermal_zone3") != NULL);
+}
+
+static void run_detection_tests(void) {
+    const char *tmp = getenv("TMPDIR");
+    sprintf(fx_root, "%s/osr-bench-fx-%ld", tmp != NULL ? tmp : "/tmp", (long)getpid());
+
+    test_empty_powercap_names_the_driver();
+    test_empty_powercap_under_wsl_does_not();
+    test_absent_powercap_is_distinct();
+    test_package_beats_its_children();
+    test_psys_is_used_and_labelled();
+    test_package_wins_over_psys();
+    test_rootonly_rapl_says_so();
+    test_hwmon_average_is_accepted();
+    test_temp_prefers_the_labelled_package();
+    test_temp_falls_back_to_thermal_zones();
+
+    {
+        char cmd[700];
+        sprintf(cmd, "rm -rf %s", fx_root);
+        if (system(cmd) != 0) return;
+    }
+    unsetenv("OSR_POWERCAP");
+    unsetenv("OSR_HWMON");
+    unsetenv("OSR_THERMAL");
+    unsetenv("OSR_OSRELEASE");
+}
+
 int main(void) {
     OSR_T_INIT();
+
+    run_detection_tests();
+
 
     test_cpu_name_squeeze();
 

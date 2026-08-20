@@ -33,7 +33,8 @@
 #define BENCH_EXIT_DEPS 3
 
 static int usage(void) {
-    fputs("usage: osr benchmark cpu [options]\n\n", stderr);
+    fputs("usage: osr benchmark cpu [options]\n", stderr);
+    fputs("       osr benchmark sensors\n\n", stderr);
     fputs("  --seconds N     per-phase duration (default 20)\n", stderr);
     fputs("  --json          machine-readable output\n", stderr);
     fputs("  --verbose       let the workload's own output through\n", stderr);
@@ -46,6 +47,8 @@ static int usage(void) {
     fputs("\nThe workload (stress-ng) is installed automatically when missing.\n", stderr);
     fputs("--install-deps additionally pulls in the optional cross-check tools\n", stderr);
     fputs("(lm_sensors, turbostat/perf), which nothing here calls.\n", stderr);
+    fputs("\n`osr benchmark sensors` reports which power and temperature sources\n", stderr);
+    fputs("this machine has, and what to do about the ones it does not.\n", stderr);
     return 2;
 }
 
@@ -332,9 +335,25 @@ static int cmd_cpu(int argc, char **argv) {
     return 0;
 }
 
+/* cmd_sensors -- the working behind "no power sensor".
+ *
+ * Deliberately not a flag on `cpu`: it answers a question you ask INSTEAD of
+ * benchmarking, and making it a flag would mean either loading the machine for
+ * a minute first or having a flag that silently skips the thing the command is
+ * named after. */
+static int cmd_sensors(void) {
+    Str out;
+    str_init(&out);
+    bench_sensors_report(&out);
+    out_flush(&out);
+    str_free(&out);
+    return 0;
+}
+
 int osr_benchmark_main(int argc, char **argv) {
     if (argc < 2) return usage();
     if (strcmp(argv[1], "cpu") == 0) return cmd_cpu(argc - 2, argv + 2);
-    fprintf(stderr, "osr benchmark: unknown object '%s' (only 'cpu' so far)\n", argv[1]);
+    if (strcmp(argv[1], "sensors") == 0) return cmd_sensors();
+    fprintf(stderr, "osr benchmark: unknown object '%s' (try: cpu, sensors)\n", argv[1]);
     return usage();
 }

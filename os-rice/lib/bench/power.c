@@ -34,76 +34,179 @@ unsigned long pwr_energy_delta(unsigned long a, unsigned long b, unsigned long m
 
 /* RAPL. The powercap tree names the Intel driver's nodes "intel-rapl:N" even
  * on AMD parts, so the directory name is not the thing to match on -- the
- * `name` attribute is, and "package-0" is the whole-socket domain we want
- * rather than one of its "core"/"uncore" children. */
+ * `name` attribute is.
+ *
+ * Which domain matters. A socket publishes several, and they measure
+ * different things:
+ *
+ *   package-N  the whole socket. What "CPU power" means, and what every other
+ *              tool reports. Preferred.
+ *   psys       the PLATFORM domain, present on most Intel laptops since
+ *              Skylake: the whole board's budget, CPU included. Wider than
+ *              asked for, but a real measurement and far better than nothing
+ *              -- so it is taken when there is no package domain, and the
+ *              report says which one it was.
+ *   core/uncore/dram  children ("intel-rapl:0:1"), each a fraction of the
+ *              package. Reporting one as the package power would understate
+ *              the machine several-fold, so they are skipped entirely.
+ */
+static int rapl_rank(const char *name) {
+    if (strncmp(name, "package", 7) == 0) return 3;
+    if (strcmp(name, "psys") == 0) return 2;
+    return 0;
+}
+
 static int detect_rapl(PwrMeter *m) {
-    static const char *base = "/sys/class/powercap/";
+    /* Overridable so the fixtures in test/unit_c/bench_test.c can present an
+     * Intel box with an unloaded driver, a root-only counter, or a psys-only
+     * laptop -- none of which the machine running the tests is. Same device
+     * lib/detect.c uses for OSR_MEMINFO/OSR_DRM. */
+    const char *base = env_str("OSR_POWERCAP", "/sys/class/powercap/");
     DIR *d;
     struct dirent *e;
-    Str path, name;
-    int found = 0;
+    Str path, name, best_path;
+    int best = 0;
+    int entries = 0;         /* domains present, readable or not */
+    int denied = 0;          /* ...of which some were unreadable */
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (d == NULL) {
+        /* No powercap tree at all: CONFIG_POWERCAP is off, or this is a guest
+         * whose kernel never had it. Distinct from "empty", which is a driver
+         * that merely has not been loaded. */
+        bench_set_str(m->detail, sizeof(m->detail),
+                "no /sys/class/powercap - this kernel has no powercap support");
+        return 0;
+    }
     str_init(&path);
     str_init(&name);
+    str_init(&best_path);
 
-    while (!found && (e = readdir(d)) != NULL) {
+    while ((e = readdir(d)) != NULL) {
         unsigned long probe;
+        int rank;
         if (e->d_name[0] == '.') continue;
         /* Only top-level domains: a child looks like "intel-rapl:0:1". */
         if (strchr(e->d_name, ':') == NULL) continue;
+        if (strchr(strchr(e->d_name, ':') + 1, ':') != NULL) continue;
+        entries++;
 
         str_reset(&name);
         bench_join3(&path, base, e->d_name, "/name");
         if (!bench_read_trim(&name, str_text(&path))) continue;
-        if (strncmp(str_text(&name), "package", 7) != 0) continue;
+        rank = rapl_rank(str_text(&name));
+        if (rank <= best) continue;
 
         bench_join3(&path, base, e->d_name, "/energy_uj");
         if (!bench_read_ulong(str_text(&path), &probe)) {
             /* Present but unreadable is the common case: since the PLATYPUS
-             * side channel these are 0400. Worth saying so explicitly, because
-             * "run it as root" is an actionable answer. */
-            bench_set_str(m->detail, sizeof(m->detail),
-                    geteuid() == 0 ? "RAPL present but energy_uj unreadable"
-                                   : "RAPL present but root-only - re-run as root for power numbers");
+             * side channel (CVE-2020-8694) these are 0400. Worth saying so
+             * explicitly, because "run it as root" is an actionable answer. */
+            denied++;
             continue;
         }
-        bench_set_str(m->path, sizeof(m->path), str_text(&path));
-        m->source = PWR_RAPL;
+
+        best = rank;
+        str_reset(&best_path);
+        str_addz(&best_path, str_text(&path));
         m->max_range_uj = 0;
         bench_join3(&path, base, e->d_name, "/max_energy_range_uj");
         bench_read_ulong(str_text(&path), &m->max_range_uj);
-        bench_set_str(m->detail, sizeof(m->detail), "RAPL package energy counter");
-        found = 1;
+        str_reset(&path);
+        str_addz(&path, rank == 3 ? "RAPL package energy counter"
+                                  : "RAPL psys (platform) energy counter - whole board, not just the CPU");
+        bench_set_str(m->detail, sizeof(m->detail), str_text(&path));
     }
     closedir(d);
+
+    if (best > 0) {
+        bench_set_str(m->path, sizeof(m->path), str_text(&best_path));
+        m->source = PWR_RAPL;
+    } else if (denied > 0) {
+        bench_set_str(m->detail, sizeof(m->detail),
+                geteuid() == 0 ? "RAPL present but energy_uj unreadable"
+                               : "RAPL present but root-only - re-run as root for power numbers");
+    } else if (entries == 0) {
+        /* The tree exists and is empty. On bare metal that is nearly always
+         * the one fixable cause of "no power": the powercap RAPL driver is a
+         * module and nothing has loaded it. `osr module benchmark` does.
+         *
+         * In a Hyper-V guest the tree is empty for a reason no modprobe can
+         * fix -- the RAPL MSRs are not passed through -- so the same symptom
+         * gets the opposite advice. Same check the diagnostic makes. */
+        bench_set_str(m->detail, sizeof(m->detail),
+                bench_is_wsl()
+                    ? "no sensor in a WSL guest - Hyper-V does not pass the RAPL MSRs through"
+                    : "powercap tree is empty - the intel_rapl_msr driver is not loaded "
+                      "(run: osr module benchmark)");
+    } else {
+        bench_set_str(m->detail, sizeof(m->detail),
+                "powercap has no package or psys domain - only per-domain children");
+    }
+
     str_free(&path);
     str_free(&name);
-    return found;
+    str_free(&best_path);
+    return best > 0;
 }
 
-/* hwmon power1_input, in microwatts. Instantaneous, so it needs polling. */
+/* hwmon, in microwatts. Instantaneous, so it needs polling.
+ *
+ * Not just `power1_input`. The hwmon ABI defines both `powerN_input` (the
+ * instantaneous reading) and `powerN_average` (the chip's own averaging
+ * window), and which one a driver publishes is the driver's choice -- several
+ * super-I/O and BMC chips offer only the average. Looking for one name was
+ * enough on the desks this was written on and reports nothing on a board that
+ * made the other choice.
+ *
+ * The index is scanned too: on a board with several rails the CPU one is not
+ * reliably first, and a partial reading beats no reading. Nothing here can
+ * tell which rail is which, so the attribute found first wins and the report
+ * names the driver it came from -- honest about what it is rather than
+ * claiming to be the package.
+ */
 static int detect_hwmon(PwrMeter *m) {
-    static const char *base = "/sys/class/hwmon/";
+    const char *base = env_str("OSR_HWMON", "/sys/class/hwmon/");
+    static const char *const attrs[] = { "input", "average" };
     DIR *d;
     struct dirent *e;
-    Str path, name;
+    Str path, name, found_at;
     int found = 0;
 
     d = opendir(base);
     if (d == NULL) return 0;
     str_init(&path);
     str_init(&name);
+    str_init(&found_at);
 
     while (!found && (e = readdir(d)) != NULL) {
         unsigned long probe;
+        int idx;
+        size_t a;
         if (e->d_name[0] == '.') continue;
-        bench_join3(&path, base, e->d_name, "/power1_input");
-        if (!bench_read_ulong(str_text(&path), &probe)) continue;
+
+        for (idx = 1; !found && idx <= 3; idx++) {
+            for (a = 0; a < sizeof(attrs) / sizeof(attrs[0]); a++) {
+                Str leaf;
+                str_init(&leaf);
+                str_addz(&leaf, "/power");
+                str_addl(&leaf, idx);
+                str_addc(&leaf, '_');
+                str_addz(&leaf, attrs[a]);
+                bench_join3(&path, base, e->d_name, str_text(&leaf));
+                str_free(&leaf);
+                if (!bench_read_ulong(str_text(&path), &probe)) continue;
+
+                str_reset(&found_at);
+                str_addz(&found_at, str_text(&path));
+                found = 1;
+                break;
+            }
+        }
+        if (!found) continue;
 
         str_reset(&name);
-        bench_set_str(m->path, sizeof(m->path), str_text(&path));
+        bench_set_str(m->path, sizeof(m->path), str_text(&found_at));
         bench_join3(&path, base, e->d_name, "/name");
         bench_read_trim(&name, str_text(&path));
 
@@ -116,11 +219,11 @@ static int detect_hwmon(PwrMeter *m) {
             str_addc(&path, ')');
         }
         bench_set_str(m->detail, sizeof(m->detail), str_text(&path));
-        found = 1;
     }
     closedir(d);
     str_free(&path);
     str_free(&name);
+    str_free(&found_at);
     return found;
 }
 

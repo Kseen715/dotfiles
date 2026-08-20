@@ -25,17 +25,97 @@
 
 /* --- sensors -------------------------------------------------------------- */
 
-/* find_cpu_temp -- the hwmon input most likely to be the CPU package.
+/* find_cpu_temp -- the sysfs attribute most likely to be the CPU package.
  *
- * Resolved once and cached, because doing this per poll would mean opening the
- * whole hwmon tree four times a second. The driver names are the reliable
- * signal: k10temp/zenpower on AMD, coretemp on Intel, cpu_thermal on ARM.
+ * Resolved once and cached, because doing this per poll would mean walking the
+ * whole hwmon tree four times a second.
+ *
+ * Three routes, in falling order of confidence:
+ *
+ *   1. a hwmon tempN_label that SAYS what it is -- "Package id 0" on Intel's
+ *      coretemp, "Tctl"/"Tdie" on AMD's k10temp. This is the only route that
+ *      is certain, and it is tried first because on a multi-core Intel part
+ *      temp1..tempN are the individual cores and the package is not reliably
+ *      at any fixed index.
+ *   2. tempN_input under a driver known to be a CPU driver, which is where
+ *      the label is absent (most ARM SoCs).
+ *   3. /sys/class/thermal, for a machine whose only sensor is an ACPI thermal
+ *      zone. Coarse -- acpitz is often the board, not the die -- so it is
+ *      last, but a coarse temperature is still a temperature.
  */
-static int find_cpu_temp(char *out, size_t cap) {
+
+/* temp_label_rank -- how confident are we that this label is the package? */
+static int temp_label_rank(const char *label) {
+    if (strncmp(label, "Package id", 10) == 0) return 4;
+    if (strcmp(label, "Tctl") == 0 || strcmp(label, "Tdie") == 0) return 4;
+    if (strcmp(label, "CPU") == 0 || strcmp(label, "CPU Temperature") == 0) return 3;
+    if (strncmp(label, "Core ", 5) == 0) return 1;
+    return 0;
+}
+
+/* by_label -- route 1. */
+static int temp_by_label(char *out, size_t cap) {
+    const char *base = env_str("OSR_HWMON", "/sys/class/hwmon/");
+    DIR *d;
+    struct dirent *e;
+    Str path, label, best;
+    int best_rank = 0;
+
+    d = opendir(base);
+    if (d == NULL) return 0;
+    str_init(&path);
+    str_init(&label);
+    str_init(&best);
+
+    while ((e = readdir(d)) != NULL) {
+        int idx;
+        if (e->d_name[0] == '.') continue;
+        /* Intel publishes one per core plus the package, so the scan has to go
+         * wider than a couple of indices to reach the package on a big part. */
+        for (idx = 1; idx <= 32; idx++) {
+            Str leaf;
+            long probe;
+            int rank;
+
+            str_init(&leaf);
+            str_addz(&leaf, "/temp");
+            str_addl(&leaf, idx);
+            str_addz(&leaf, "_label");
+            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_free(&leaf);
+
+            str_reset(&label);
+            if (!bench_read_trim(&label, str_text(&path))) continue;
+            rank = temp_label_rank(str_text(&label));
+            if (rank <= best_rank) continue;
+
+            str_init(&leaf);
+            str_addz(&leaf, "/temp");
+            str_addl(&leaf, idx);
+            str_addz(&leaf, "_input");
+            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_free(&leaf);
+            if (!bench_read_long(str_text(&path), &probe)) continue;
+
+            best_rank = rank;
+            str_reset(&best);
+            str_addz(&best, str_text(&path));
+        }
+    }
+    closedir(d);
+    if (best_rank > 0) bench_set_str(out, cap, str_text(&best));
+    str_free(&path);
+    str_free(&label);
+    str_free(&best);
+    return best_rank > 0;
+}
+
+/* by_driver -- route 2: an unlabelled input under a driver we recognise. */
+static int temp_by_driver(char *out, size_t cap) {
     static const char *const drivers[] = {
-        "k10temp", "zenpower", "coretemp", "cpu_thermal", "cpu-thermal"
+        "k10temp", "zenpower", "coretemp", "cpu_thermal", "cpu-thermal", "cpu"
     };
-    static const char *base = "/sys/class/hwmon/";
+    const char *base = env_str("OSR_HWMON", "/sys/class/hwmon/");
     DIR *d;
     struct dirent *e;
     Str path, name;
@@ -48,13 +128,10 @@ static int find_cpu_temp(char *out, size_t cap) {
     str_init(&name);
 
     while (!found && (e = readdir(d)) != NULL) {
-        long probe;
+        int idx;
         if (e->d_name[0] == '.') continue;
         str_reset(&name);
-        str_reset(&path);
-        str_addz(&path, base);
-        str_addz(&path, e->d_name);
-        str_addz(&path, "/name");
+        bench_join3(&path, base, e->d_name, "/name");
         if (!bench_read_trim(&name, str_text(&path))) continue;
 
         for (i = 0; i < sizeof(drivers) / sizeof(drivers[0]); i++) {
@@ -62,18 +139,72 @@ static int find_cpu_temp(char *out, size_t cap) {
         }
         if (i == sizeof(drivers) / sizeof(drivers[0])) continue;
 
-        str_reset(&path);
-        str_addz(&path, base);
-        str_addz(&path, e->d_name);
-        str_addz(&path, "/temp1_input");
-        if (!bench_read_long(str_text(&path), &probe)) continue;
-        bench_set_str(out, cap, str_text(&path));
-        found = 1;
+        for (idx = 1; !found && idx <= 4; idx++) {
+            Str leaf;
+            long probe;
+            str_init(&leaf);
+            str_addz(&leaf, "/temp");
+            str_addl(&leaf, idx);
+            str_addz(&leaf, "_input");
+            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_free(&leaf);
+            if (!bench_read_long(str_text(&path), &probe)) continue;
+            bench_set_str(out, cap, str_text(&path));
+            found = 1;
+        }
     }
     closedir(d);
     str_free(&path);
     str_free(&name);
     return found;
+}
+
+/* by_thermal_zone -- route 3. x86_pkg_temp is the package sensor exposed
+ * through the thermal framework rather than hwmon; acpitz is the firmware's
+ * own zone and is the last thing worth reading. */
+static int temp_by_thermal_zone(char *out, size_t cap) {
+    static const char *const types[] = { "x86_pkg_temp", "cpu_thermal", "cpu-thermal", "acpitz" };
+    const char *base = env_str("OSR_THERMAL", "/sys/class/thermal/");
+    Str path, type;
+    size_t i;
+    int zone;
+    int found = 0;
+
+    str_init(&path);
+    str_init(&type);
+    /* Preference is by TYPE, not by zone number, so the outer loop is the
+     * type: zone 0 being acpitz must not win over zone 3 being x86_pkg_temp. */
+    for (i = 0; !found && i < sizeof(types) / sizeof(types[0]); i++) {
+        for (zone = 0; zone < 32; zone++) {
+            Str dir;
+            long probe;
+
+            str_init(&dir);
+            str_addz(&dir, "thermal_zone");
+            str_addl(&dir, zone);
+            str_reset(&type);
+            bench_join3(&path, base, str_text(&dir), "/type");
+            if (!bench_read_trim(&type, str_text(&path))) { str_free(&dir); continue; }
+            if (strcmp(str_text(&type), types[i]) != 0) { str_free(&dir); continue; }
+
+            bench_join3(&path, base, str_text(&dir), "/temp");
+            str_free(&dir);
+            if (!bench_read_long(str_text(&path), &probe)) continue;
+            bench_set_str(out, cap, str_text(&path));
+            found = 1;
+            break;
+        }
+    }
+    str_free(&path);
+    str_free(&type);
+    return found;
+}
+
+static int find_cpu_temp(char *out, size_t cap) {
+    if (temp_by_label(out, cap)) return 1;
+    if (temp_by_driver(out, cap)) return 1;
+    if (temp_by_thermal_zone(out, cap)) return 1;
+    return 0;
 }
 
 /* sample_freq -- the highest scaling_cur_freq across all CPUs, in kHz. Absent
@@ -115,15 +246,21 @@ typedef struct {
     const char *temp_path;   /* "" when there is no sensor */
 } Poller;
 
+/* note_temp -- keep the peak. Every source feeds through here so the "highest
+ * seen across both load phases" rule is stated once. */
+static void note_temp(Poller *p, double c) {
+    if (!p->r->have_temp || c > p->r->peak_temp_c) {
+        p->r->peak_temp_c = c;
+        p->r->have_temp = 1;
+    }
+}
+
 static void poll_once(Poller *p) {
     long v;
+
     pwr_sample(p->meter);
     if (p->temp_path[0] != '\0' && bench_read_long(p->temp_path, &v)) {
-        double c = (double)v / 1000.0;   /* hwmon reports millidegrees */
-        if (!p->r->have_temp || c > p->r->peak_temp_c) {
-            p->r->peak_temp_c = c;
-            p->r->have_temp = 1;
-        }
+        note_temp(p, (double)v / 1000.0);   /* hwmon reports millidegrees */
     }
     if (sample_freq(&v)) {
         if (!p->r->have_freq || v > p->r->peak_freq_khz) {
@@ -341,6 +478,147 @@ static void phase(int on, int n, int total, const char *what,
     str_addz(&m, detail);
     osr_info(str_text(&m));
     str_free(&m);
+}
+
+/* --- the diagnostic ------------------------------------------------------- */
+
+static void row(Str *out, const char *label, const char *value);
+
+
+/* `osr benchmark sensors` -- why is there no power reading on THIS machine?
+ *
+ * The benchmark's one-line explanation is the conclusion; this is the working.
+ * It exists because "no power sensor" has half a dozen causes that need
+ * completely different fixes -- a driver that is not loaded, a counter that is
+ * root-only, a kernel built without powercap, a part that genuinely has no
+ * sensor -- and no way to tell them apart from the report. Being able to ask
+ * the machine and paste the answer is the difference between diagnosing this
+ * remotely and guessing.
+ */
+
+/* census -- "4 entries: intel-rapl:0, intel-rapl:1, ..." for a sysfs class
+ * directory, or why it could not be listed. `leaf` names an attribute to read
+ * from each entry instead of printing the entry's own name (hwmon's "name",
+ * thermal's "type"), which is what makes the listing legible. */
+static void census(Str *out, const char *base, const char *leaf, const char *prefix) {
+    DIR *d;
+    struct dirent *e;
+    Str path, val;
+    size_t plen = prefix != NULL ? strlen(prefix) : 0;
+    int n = 0;
+    int skipped = 0;
+
+    d = opendir(base);
+    if (d == NULL) {
+        str_addz(out, "absent (this kernel has no such class)");
+        return;
+    }
+    str_init(&path);
+    str_init(&val);
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.') continue;
+        /* /sys/class/thermal holds cooling devices (fans, cpufreq throttles)
+         * alongside the zones. Listing sixteen of them buries the one line
+         * that matters, which is whether there is a zone at all. */
+        if (plen > 0 && strncmp(e->d_name, prefix, plen) != 0) { skipped++; continue; }
+        if (n > 0) str_addz(out, ", ");
+        if (leaf != NULL) {
+            str_reset(&val);
+            bench_join3(&path, base, e->d_name, leaf);
+            if (bench_read_trim(&val, str_text(&path)) && val.len > 0) {
+                str_addz(out, e->d_name);
+                str_addz(out, "=");
+                str_addz(out, str_text(&val));
+            } else {
+                str_addz(out, e->d_name);
+            }
+        } else {
+            str_addz(out, e->d_name);
+        }
+        n++;
+    }
+    closedir(d);
+    str_free(&path);
+    str_free(&val);
+    if (n == 0) {
+        if (skipped > 0) {
+            str_addz(out, "no ");
+            str_addz(out, prefix);
+            str_addz(out, "* (");
+            str_addl(out, skipped);
+            str_addz(out, " other entries)");
+        } else {
+            str_addz(out, "present but EMPTY (no driver has registered)");
+        }
+    }
+}
+
+static void census_row(Str *out, const char *label, const char *base,
+                       const char *leaf, const char *prefix) {
+    Str v;
+    str_init(&v);
+    census(&v, base, leaf, prefix);
+    row(out, label, str_text(&v));
+    str_free(&v);
+}
+
+void bench_sensors_report(Str *out) {
+    PwrMeter m;
+    char temp_path[BENCH_PATH_MAX];
+    int have_power;
+
+    have_power = pwr_detect(&m);
+    temp_path[0] = '\0';
+
+    str_addc(out, '\n');
+    row(out, "power source", have_power ? pwr_source_name(m.source) : "none");
+    row(out, "why", m.detail);
+    if (have_power) row(out, "reading from", m.path);
+
+    if (find_cpu_temp(temp_path, sizeof(temp_path))) {
+        row(out, "temperature", temp_path);
+    } else {
+        row(out, "temperature", "none found (no labelled hwmon input, no CPU driver, no thermal zone)");
+    }
+    /* The CVE note is only worth printing when it is a possible cause: on a
+     * machine that is already reporting power it is trivia. */
+    if (geteuid() == 0) {
+        row(out, "privileges", "root");
+    } else {
+        row(out, "privileges", have_power ? "not root"
+                : "not root - RAPL counters are 0400 since CVE-2020-8694");
+    }
+
+    str_addc(out, '\n');
+    /* The leaf carries its own separator, the way every other bench_join3
+     * caller passes it. */
+    census_row(out, "powercap", env_str("OSR_POWERCAP", "/sys/class/powercap/"), "/name", NULL);
+    census_row(out, "hwmon", env_str("OSR_HWMON", "/sys/class/hwmon/"), "/name", NULL);
+    census_row(out, "thermal", env_str("OSR_THERMAL", "/sys/class/thermal/"), "/type", "thermal_zone");
+
+    /* The actionable half. Each line is the fix for one of the causes above,
+     * printed only when that cause is the one in play -- a list of everything
+     * that could be wrong is what the user already had. */
+    str_addc(out, '\n');
+    if (!have_power) {
+        if (bench_is_wsl()) {
+            /* Named explicitly, because every other branch's advice is wrong
+             * here: the powercap tree is empty for a reason no modprobe can
+             * fix, and sending someone to load intel_rapl_msr on a Hyper-V
+             * guest costs them an afternoon. */
+            row(out, "next", "WSL guest: no power or temperature sensor is reachable.");
+            row(out, "", "Hyper-V does not pass the RAPL MSRs through. Throughput still works.");
+        } else if (strstr(m.detail, "not loaded") != NULL) {
+            row(out, "next", "load the powercap RAPL driver:");
+            row(out, "", "sudo modprobe intel_rapl_msr  (or: osr module benchmark)");
+        } else if (strstr(m.detail, "root-only") != NULL) {
+            row(out, "next", "sudo osr benchmark cpu");
+        } else {
+            row(out, "next", "no readable sensor on this machine - throughput still works");
+        }
+    } else {
+        row(out, "next", "nothing - power measurement is working");
+    }
 }
 
 int bench_cpu(const BenchOpts *o, BenchResult *r) {
