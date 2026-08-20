@@ -145,6 +145,15 @@ static const char *posix_srcs[] = {
     "lib/theme.c",
     "lib/install.c",
     "lib/testrun.c",
+    "lib/undervolt.c",
+    /* lib/uv/ -- the undervolting backends. backend.c and generic_opp.c are
+     * unconditional: the probe has to work everywhere, including on an arch
+     * with no voltage control at all, because "what does this machine expose"
+     * is the first question and the one most likely to be answered "nothing".
+     * The vendor mailboxes are added under arch guards as they land. */
+    "lib/uv/backend.c",
+    "lib/uv/generic_opp.c",
+    "lib/uv/journal.c",
     "lib/render.c",
     "lib/module.c",
     "lib/modules.c",
@@ -164,6 +173,22 @@ static const char *test_names[] = {
     "config_copy_test", "wintweak_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
+
+/* posix_test_names -- tests of the POSIX-only units, which cannot be linked
+ * the way the ones above are.
+ *
+ * The tests in test_names link against every lib_srcs object, and lib/winui.c
+ * is one of them -- it defines osr_info/osr_warn, and so does lib/common.c on
+ * the POSIX side. The two are alternative implementations of the same five log
+ * lines for the two cores, so they can never appear in one binary. A test of
+ * lib/uv/* therefore includes the .c files it needs directly (a unity build)
+ * and links nothing else at all, which is also why these tests can reach
+ * static helpers the header does not export.
+ */
+static const char *posix_test_names[] = {
+    "uv_journal_test"
+};
+#define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 
 /* --- picking the compiler --------------------------------------------
  *
@@ -607,6 +632,23 @@ static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     return nob_cmd_run(&cmd, .async = procs);
 }
 
+/* link_standalone -- one object, no lib objects, no Windows link libraries:
+ * the unity-built POSIX tests described at posix_test_names. */
+static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *procs) {
+    Nob_Cmd cmd = {0};
+    const char *obj = obj_of(main_src);
+    if (nob_needs_rebuild(bin, &obj, 1) == 0) return true;
+    actions++;
+    append_common_flags(&cmd);
+    if (is_msvc()) {
+        nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
+    } else {
+        nob_cmd_append(&cmd, "-o", bin);
+    }
+    nob_cmd_append(&cmd, obj);
+    return nob_cmd_run(&cmd, .async = procs);
+}
+
 /* run_test -- tests read fixtures via a path relative to test/unit_c/, so
  * that is still the working directory they run in; only the binary itself
  * moved out to build/test/, hence the climb back up in its path.
@@ -624,6 +666,7 @@ static bool run_test(const char *name) {
 
 static bool build_tests(void) {
     const char *srcs[TEST_COUNT];
+    const char *psrcs[POSIX_TEST_COUNT];
     Nob_Procs procs = {0};
     size_t i;
     for (i = 0; i < TEST_COUNT; i++) srcs[i] = nob_temp_sprintf("test/unit_c/%s.c", test_names[i]);
@@ -633,6 +676,20 @@ static bool build_tests(void) {
         const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]);
         if (!link_exe(bin, srcs[i], &procs)) return false;
     }
+    if (!nob_procs_flush(&procs)) return false;
+
+#ifndef _WIN32
+    for (i = 0; i < POSIX_TEST_COUNT; i++) {
+        psrcs[i] = nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]);
+    }
+    if (!compile_objs(psrcs, POSIX_TEST_COUNT)) return false;
+    for (i = 0; i < POSIX_TEST_COUNT; i++) {
+        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]);
+        if (!link_standalone(bin, psrcs[i], &procs)) return false;
+    }
+#else
+    NOB_UNUSED(psrcs);
+#endif
     return nob_procs_flush(&procs);
 }
 
@@ -643,6 +700,11 @@ static bool run_all_tests(void) {
     for (i = 0; i < TEST_COUNT; i++) {
         if (!run_test(test_names[i])) ok = false;
     }
+#ifndef _WIN32
+    for (i = 0; i < POSIX_TEST_COUNT; i++) {
+        if (!run_test(posix_test_names[i])) ok = false;
+    }
+#endif
     return ok;
 }
 
@@ -663,6 +725,10 @@ static bool clean(void) {
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
         delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", test_names[i])));
+    }
+    for (i = 0; i < POSIX_TEST_COUNT; i++) {
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]));
+        delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i])));
     }
     /* the compiler bookkeeping goes too: with no objects left there is no
      * toolchain to record, and dropping the detection cache is what makes

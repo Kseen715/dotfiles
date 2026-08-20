@@ -27,6 +27,11 @@
 #   osr list                                         list available rices
 #   osr themes                                       list available themes
 #   osr modules                                      list available modules
+#   osr undervolt cpu <verb>                         CPU voltage offsets. Start
+#                                                    with `probe`: it never
+#                                                    writes and tells you
+#                                                    whether this machine can
+#                                                    be undervolted at all.
 #   osr test                                         run the test suite
 #
 # switch and install share one idempotent engine (install.sh): because installs
@@ -59,6 +64,13 @@ case "$_cmd" in
         exec "$OSR_SELF_DIR/install.sh" --theme-only --theme "$_theme" "$@"
         ;;
     wallpaper) exec "$OSR_SELF_DIR/wallpaper.sh" "$@" ;;
+    undervolt)
+        # Straight through to the core: unlike install/switch/theme there is no
+        # sh tier here at all, so ui.sh is sourced only to resolve $OSR_BIN
+        # (and build it if this is a fresh checkout).
+        . "$OSR_SELF_DIR/lib/ui.sh"
+        "$OSR_BIN" undervolt "$@"
+        ;;
     list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
     themes)  exec "$OSR_SELF_DIR/install.sh" --list-themes ;;
     modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
@@ -71,10 +83,10 @@ case "$_cmd" in
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")
-        sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, list, themes, modules, test)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, undervolt, list, themes, modules, test)" >&2
         exit 1
         ;;
 esac

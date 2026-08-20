@@ -13,6 +13,7 @@
  *   osr detect …    the distro/hardware facts, as shell assignments
  *   osr theme …     themes as objects: discovery, manifest, palette
  *   osr install …   install.sh's help, listings, option loop, manifest, report
+ *   osr undervolt … CPU voltage offsets (no .sh ancestor: new here)
  *   osr test-run …  the test suite runner
  *
  * The remaining .sh files (lib/ui.sh, lib/log.sh, lib/state.sh, lib/user.sh,
@@ -44,6 +45,7 @@ static const Command commands[] = {
     { "theme",    osr_theme_main,   "theme discovery, manifest, palette" },
     { "install",  osr_install_main, "install.sh's text, option loop and manifest" },
     { "module",   osr_module_main,  "the Linux modules written in C" },
+    { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
