@@ -128,7 +128,7 @@ stub dpkg 1            # nothing is installed
 stub apt-get 0
 run_sh flameshot; run_c flameshot
 compare "flameshot: installs the four packages the same way"
-assert_contains "$TMP/c.log" "apt-get install -y flameshot maim slop xclip" \
+assert_contains "$TMP/c.log" "apt-get install -y -q -o Dpkg::Use-Pty=0 flameshot maim slop xclip" \
     "flameshot: one batched apt-get, not four"
 
 # --- 2. flameshot: already installed (the §2 rerun) --------------------------

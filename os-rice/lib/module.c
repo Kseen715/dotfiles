@@ -478,7 +478,8 @@ static void pkg_refresh(void) {
     if (strcmp(mgr, "apt") == 0) {
         argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
         argv[2] = (char *)"apt-get"; argv[3] = (char *)"update"; argv[4] = (char *)"-q";
-        argv[5] = NULL;
+        argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Use-Pty=0";
+        argv[7] = NULL;
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[0] = (char *)"dnf"; argv[1] = (char *)"-q"; argv[2] = (char *)"makecache"; argv[3] = NULL;
     } else if (strcmp(mgr, "pacman") == 0) {
@@ -584,6 +585,11 @@ int osr_pkg_install(const char *const names[]) {
         argv[argc++] = (char *)"apt-get";
         argv[argc++] = (char *)"install";
         argv[argc++] = (char *)"-y";
+        /* -q and no dpkg pty: the step log is a file, and apt/dpkg's
+         * in-place progress redraws only make the tail window churn. */
+        argv[argc++] = (char *)"-q";
+        argv[argc++] = (char *)"-o";
+        argv[argc++] = (char *)"Dpkg::Use-Pty=0";
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[argc++] = (char *)"dnf"; argv[argc++] = (char *)"install"; argv[argc++] = (char *)"-y";
     } else if (strcmp(mgr, "pacman") == 0) {

@@ -116,15 +116,27 @@ static char *read_tail(const char *path, long n, size_t *out_len) {
     }
 }
 
-/* filter_line_bytes -- `tr -d '\r' | sed 's/ESC\[[0-9;?]*[A-Za-z]//g'`
- * over the whole buffer. The CSI scan cannot run past a newline (neither
- * the parameter class nor the final byte class contains one), so doing it
- * stream-wide is the same as sed's line-at-a-time pass.
+/* filter_line_bytes -- `sed 's/ESC\[[0-9;?]*[A-Za-z]//g'` over the whole
+ * buffer, with CR given the meaning a terminal gives it. The CSI scan cannot
+ * run past a newline (neither the parameter class nor the final byte class
+ * contains one), so doing it stream-wide is the same as sed's line-at-a-time
+ * pass.
+ *
+ * CR is a carriage return, not a byte to delete. dpkg writes its progress as
+ * one line rewritten in place (`(Reading database ... 5%\r(Reading database
+ * ... 10%\r...`), so ui.sh's `tr -d '\r'` glued every frame of it into a
+ * single enormous line, which then wrapped and desynced the repaint -- the
+ * cause of the shredded `apt install` window. Here CR rewinds the write
+ * position to the start of the current line and the bytes after it OVERWRITE
+ * what was there, exactly as on a terminal: progress collapses to its last
+ * state, while a CRLF log still keeps the text before the CR.
  */
 static void filter_line_bytes(Str *out, const char *b, size_t len) {
+    size_t line_start = out->len;   /* first byte of the line being built */
+    size_t w = out->len;            /* write position: <= out->len after a CR */
     size_t i = 0;
     while (i < len) {
-        if (b[i] == '\r') { i++; continue; }
+        if (b[i] == '\r') { w = line_start; i++; continue; }
         if (b[i] == '\033' && i + 1 < len && b[i + 1] == '[') {
             size_t j = i + 2;
             while (j < len && ((b[j] >= '0' && b[j] <= '9') || b[j] == ';' || b[j] == '?')) j++;
@@ -135,7 +147,18 @@ static void filter_line_bytes(Str *out, const char *b, size_t len) {
             /* Unterminated: sed leaves it alone, so we emit the ESC and
              * carry on scanning from the next byte. */
         }
-        str_addc(out, b[i]);
+        if (b[i] == '\n') {
+            /* The line ends with whatever it holds -- an overwrite shorter
+             * than what it replaced leaves the old tail visible, as on a
+             * terminal -- so append past it, never at w. */
+            str_addc(out, '\n');
+            line_start = w = out->len;
+        } else if (w < out->len) {
+            out->p[w++] = b[i];     /* overwriting after a CR */
+        } else {
+            str_addc(out, b[i]);
+            w = out->len;
+        }
         i++;
     }
 }
@@ -153,10 +176,15 @@ static void lines_free(Lines *l) {
     l->count = 0;
 }
 
-/* tail_window -- the finished `$(tail | tr | sed | cut)` value, split the
- * way ui.sh's `while IFS= read -r` loop saw it: every line cut to cols
- * bytes, and the trailing blank lines gone with the command
+/* tail_window -- the finished `$(tail | sed | cut)` value, split the way
+ * ui.sh's `while IFS= read -r` loop saw it: every line cut to fit one
+ * terminal row, and the trailing blank lines gone with the command
  * substitution's trailing newlines (so an all-blank tail paints nothing).
+ *
+ * cols - 1, not cols: paint_block rewinds by the number of lines it printed,
+ * so a line that fills the last column -- and wraps onto a second row on a
+ * terminal that wraps eagerly -- would make every later rewind one row short
+ * and walk the block down the screen, leaving the old frames behind.
  */
 static void tail_window(Lines *out, const char *path, long tail_lines, long cols) {
     char *raw;
@@ -193,7 +221,8 @@ static void tail_window(Lines *out, const char *path, long tail_lines, long cols
     for (i = 0; i <= filtered.len; i++) {
         if (i == filtered.len || filtered.p[i] == '\n') {
             size_t len = i - start;
-            if (len > (size_t)cols) len = (size_t)cols; /* cut -c 1-COLS, bytes */
+            /* cut -c 1-(COLS-1), bytes: one row per line, never a wrap */
+            if (cols > 1 && len > (size_t)(cols - 1)) len = (size_t)(cols - 1);
             str_init(&items[count]);
             str_add(&items[count], filtered.p + start, len);
             count++;
@@ -209,21 +238,24 @@ static void tail_window(Lines *out, const char *path, long tail_lines, long cols
  * the block: paint / erase / final line
  * ------------------------------------------------------------------ */
 
-/* emit_tail_line -- printf '\033[2K%b%s%b\n' "$OSR_DIM" "$line" "$OSR_NC".
+/* emit_tail_line -- printf '\r\033[2K%b%s%b\n' "$OSR_DIM" "$line" "$OSR_NC".
  * The line itself is a `%s`: log output must never have its backslashes
- * re-interpreted. */
+ * re-interpreted. The leading CR is not decoration: ESC[2K erases the row but
+ * leaves the cursor where it is, so without it a desynced column would print
+ * the whole block staircased to the right. */
 static void emit_tail_line(Str *o, const char *line) {
-    str_addz(o, "\033[2K");
+    str_addz(o, "\r\033[2K");
     if (expand_b(o, color("OSR_DIM"))) return;
     str_addz(o, line);
     if (expand_b(o, color("OSR_NC"))) return;
     str_addc(o, '\n');
 }
 
-/* emit_status_line -- printf '\033[2K%b\n' "$1". `%b` on purpose: that is
- * what the sh original did to its already-colored status string. */
+/* emit_status_line -- printf '\r\033[2K%b\n' "$1". `%b` on purpose: that is
+ * what the sh original did to its already-colored status string; the CR is
+ * emit_tail_line's, for the same reason. */
 static void emit_status_line(Str *o, const char *line) {
-    str_addz(o, "\033[2K");
+    str_addz(o, "\r\033[2K");
     if (expand_b(o, line)) return;
     str_addc(o, '\n');
 }
@@ -268,7 +300,7 @@ static void done_block(Str *o, int painted, const char *line) {
     if (painted > 0) {
         int i;
         emit_cursor_up(o, painted);
-        for (i = 0; i < painted; i++) str_addz(o, "\033[2K\n");
+        for (i = 0; i < painted; i++) str_addz(o, "\r\033[2K\n");
         emit_cursor_up(o, painted);
     }
     emit_status_line(o, line);

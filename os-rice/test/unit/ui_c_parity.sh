@@ -32,7 +32,33 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 # side, and OSR_* would be inherited from this test's own shell.
 BASE_ENV='TERM=dumb OSR_STEP_N= OSR_STEP_TOTAL= OSR_TAIL_LINES= COLUMNS= NO_COLOR='
 
-hex() { od -An -tx1 | tr -d ' \n'; }
+# -v: without it od folds repeated 16-byte rows to '*', and two streams that
+# differ only in where a row boundary falls fold differently -- refhex inserts
+# bytes, so the folding must not happen at all.
+hex() { od -An -v -tx1 | tr -d ' \n'; }
+
+# refhex -- the reference's bytes, hexed, with the ONE deliberate divergence
+# the C port has from the frozen sh applied to them: every '\033[2K' is now
+# printed as '\r\033[2K'. ESC[2K erases the row but leaves the cursor where it
+# is, so a block that ever desynced painted itself staircased across the screen
+# (`osr module tcc` on Debian, where apt's output made it desync every frame);
+# the CR pins every row to column 0. The frozen file must not be "fixed", so
+# the delta is applied here instead, and only this one: any other changed byte
+# still fails.
+#
+# Substituting on the HEX is exact here, not lucky: 1b/5b/32/4b never appear
+# mid-fixture (all-ASCII logs), so no aligned-looking match can straddle two
+# bytes.
+#
+# The second divergence -- the tail is cut to OSR_COLS-1, so a full-width line
+# can never wrap onto a second row and cost the rewind a row -- is driven into
+# the reference itself, by handing its own `cut` the same width (see REF_COLS
+# below), which keeps the comparison byte-exact rather than normalized.
+refhex() { hex | sed 's/1b5b324b/0d1b5b324b/g'; }
+
+# REF_COLS -- run after sourcing the reference (whose own clamp to >= 20 has
+# to happen first) to give its cut the width the C uses.
+REF_COLS='OSR_COLS=$((OSR_COLS - 1))'
 
 # same <label> <ref-bytes> <c-bytes>
 same() {
@@ -107,9 +133,9 @@ for _pal in plain color; do
                     _paint_cases=$((_paint_cases + 1))
                     # shellcheck disable=SC2086
                     _r=$(env $BASE_ENV $_env sh -c \
-                        '. "$OSR_REF"; OSR_DIM=$1; OSR_NC=$2
+                        '. "$OSR_REF"; '"$REF_COLS"'; OSR_DIM=$1; OSR_NC=$2
                          _OSR_PAINTED=$3; _OSR_STEP_LOG=$4; _step_paint "$5"' \
-                        _ "$_dim" "$_nc" "$_p" "$FX/$_fx.log" "$_desc" | hex)
+                        _ "$_dim" "$_nc" "$_p" "$FX/$_fx.log" "$_desc" | refhex)
                     # shellcheck disable=SC2086
                     _c=$(env $BASE_ENV $_env OSR_DIM="$_dim" OSR_NC="$_nc" \
                         "$OSR_BIN" ui paint "$_p" "$FX/$_fx.log" "$_desc" | hex)
@@ -129,7 +155,7 @@ assert_eq 0 "$_paint_diffs" "_step_paint: $_paint_cases cases byte-identical"
 for _p in 0 1 5; do
     # shellcheck disable=SC2086
     _r=$(env $BASE_ENV NO_COLOR=1 sh -c '. "$OSR_REF"; _OSR_PAINTED=$1; _step_done "$2"' \
-        _ "$_p" '[ok] a step' | hex)
+        _ "$_p" '[ok] a step' | refhex)
     # shellcheck disable=SC2086
     _c=$(env $BASE_ENV NO_COLOR=1 "$OSR_BIN" ui "done" "$_p" '[ok] a step' | hex)
     same "_step_done: erase $_p painted rows" "$_r" "$_c"
@@ -155,7 +181,7 @@ for _status in ok fail; do
              else
                  _step_done "$(printf "%b[!!]%b %s" "$OSR_RED" "$OSR_NC" "$5")"
              fi' \
-            _ "$_green" "$_red" "$_nc" "$_status" 'Installing polybar' | hex)
+            _ "$_green" "$_red" "$_nc" "$_status" 'Installing polybar' | refhex)
         # shellcheck disable=SC2086
         _c=$(env $BASE_ENV OSR_GREEN="$_green" OSR_RED="$_red" OSR_NC="$_nc" \
             "$OSR_BIN" ui result "$TMP/paint.state" "$_status" 'Installing polybar' | hex)
@@ -176,7 +202,7 @@ _dead=999999
 while kill -0 "$_dead" 2>/dev/null; do _dead=$((_dead - 1)); done
 # shellcheck disable=SC2086
 _r=$(env $BASE_ENV NO_COLOR=1 sh -c '. "$OSR_REF"; _OSR_STEP_LOG=$2; _spin "$1" "a step"' \
-    _ "$_dead" "$FX/plain.log" | hex)
+    _ "$_dead" "$FX/plain.log" | refhex)
 # shellcheck disable=SC2086
 _c=$(env $BASE_ENV NO_COLOR=1 "$OSR_BIN" ui spin "$_dead" "a step" "$FX/plain.log" "$TMP/spin.state" | hex)
 same "_spin: dead pid paints nothing" "$_r" "$_c"
@@ -191,13 +217,13 @@ assert_eq "0" "$(cat "$TMP/spin.state")" "spin: records 0 painted rows"
 # the sh `kill -0` loop as much as of the C one.
 # shellcheck disable=SC2086
 env $BASE_ENV NO_COLOR=1 sh -c \
-    'sleep 1 & . "$OSR_REF"; _OSR_STEP_LOG=$1; _spin $! "a step"' \
+    'sleep 1 & . "$OSR_REF"; '"$REF_COLS"'; _OSR_STEP_LOG=$1; _spin $! "a step"' \
     _ "$FX/plain.log" >"$TMP/spin.ref" 2>/dev/null
 # shellcheck disable=SC2086
 env $BASE_ENV NO_COLOR=1 sh -c \
     'sleep 1 & "$OSR_BIN" ui spin $! "a step" "$1" "$2"' \
     _ "$FX/plain.log" "$TMP/spin.state" >"$TMP/spin.c" 2>/dev/null
-_r=$(head -n 6 "$TMP/spin.ref" | hex)
+_r=$(head -n 6 "$TMP/spin.ref" | refhex)
 _c=$(head -n 6 "$TMP/spin.c" | hex)
 same "_spin: live pid, frame 1 byte-identical" "$_r" "$_c"
 if [ "$(wc -l <"$TMP/spin.c")" -ge 12 ]; then

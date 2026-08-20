@@ -97,7 +97,10 @@ _via_native() {
     fi
     # shellcheck disable=SC2086  # intentional word-split into a package list
     case "$OSR_PKG" in
-        apt)     as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y $_todo ;;
+        # -q and Dpkg::Use-Pty=0: the step window tails a LOG FILE, and apt's
+        # and dpkg's in-place progress redraws only churn it (see lib/ui.c).
+        apt)     as_root env DEBIAN_FRONTEND=noninteractive \
+                     apt-get install -y -q -o Dpkg::Use-Pty=0 $_todo ;;
         dnf)     as_root dnf install -y $_todo ;;
         pacman)  as_root pacman -S --needed --noconfirm $_todo ;;
         apk)     as_root apk add $_todo ;;
@@ -304,7 +307,8 @@ _apt_prune_bootstrap_lists() {
 pkg_refresh() {
     case "$OSR_PKG" in
         apt)     _apt_prune_bootstrap_lists
-                 as_root env DEBIAN_FRONTEND=noninteractive apt-get update -q ;;
+                 as_root env DEBIAN_FRONTEND=noninteractive \
+                     apt-get update -q -o Dpkg::Use-Pty=0 ;;
         dnf)     as_root dnf -q makecache ;;
         pacman)  as_root pacman -Sy --noconfirm ;;
         apk)     as_root apk update ;;

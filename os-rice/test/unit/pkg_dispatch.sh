@@ -37,7 +37,7 @@ pkg_install zsh curl vim build starship paru >/dev/null 2>&1
 
 assert_contains "$OUT" 'USER sh -s -- --yes' "starship dispatched via script provider"
 assert_contains "$OUT" 'BUILD-PARU' "paru dispatched via source builder"
-assert_contains "$OUT" 'NATIVE env DEBIAN_FRONTEND=noninteractive apt-get install -y zsh build-essential' "zsh+build-essential batched into one native call"
+assert_contains "$OUT" 'NATIVE env DEBIAN_FRONTEND=noninteractive apt-get install -y -q -o Dpkg::Use-Pty=0 zsh build-essential' "zsh+build-essential batched into one native call"
 refute_contains "$OUT" 'curl' "installed native pkg (curl) not reinstalled"
 refute_contains "$OUT" 'vim' "held pkg (vim) skipped (G2)"
 
