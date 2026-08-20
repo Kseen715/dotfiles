@@ -54,6 +54,15 @@ const char *str_text(const Str *s);
 /* str_trim_trailing -- drop trailing bytes of the given class, which is what
  * a `$(...)` did to newlines. */
 void str_trim_trailing(Str *s, char c);
+/* str_add_squeezed -- append `len` bytes with every run of whitespace collapsed
+ * to one space and the ends trimmed.
+ *
+ * This is a display rule, not a parsing one, and it exists for one field: the
+ * CPU model. Intel pads its brand string inside the name -- "Intel(R) Core(TM)
+ * i7-8550U  CPU @ 1.80GHz" reaches userspace with the runs intact, and lscpu
+ * and /proc/cpuinfo both hand it over verbatim -- so trimming only the ends
+ * leaves a ragged gap in the middle of every line the name appears on. */
+void str_add_squeezed(Str *s, const char *p, size_t len);
 
 /* out_flush -- write everything composed so far in one go, then flush. */
 void out_flush(Str *s);

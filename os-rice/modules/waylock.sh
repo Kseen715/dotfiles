@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/waylock.sh — waylock minimal screen locker + rice-owned config. ONE
 # copy, POSIX (was .../modules/waylock.sh). Alternative locker; available module.
 run_step "Installing waylock" pkg_install waylock

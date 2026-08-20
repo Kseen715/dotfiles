@@ -14,3 +14,6 @@ glib2 = dev-libs/glib
 # the bare name still resolves and needs no method row. Build deps only, for the
 # provide_chafa repair path in modules/yazi.sh.
 chafa-build-deps = dev-libs/glib media-libs/freetype media-libs/libjpeg-turbo media-libs/libwebp media-libs/tiff dev-util/pkgconf
+
+# turbostat/perf on Gentoo.
+kernel-tools = sys-power/cpupower dev-util/perf

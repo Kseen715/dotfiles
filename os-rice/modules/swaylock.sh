@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/swaylock.sh — swaylock screen locker + rice-owned config. ONE copy,
 # POSIX (was .../modules/swaylock.sh). Alternative locker (gtklock is default);
 # kept as an available module.

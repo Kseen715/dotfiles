@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/rofi.sh — rofi launcher, the X11 replacement for wofi (i3-sugg §2).
 # Also the app switcher, the emoji picker and the logout menu, so it replaces
 # wleave/wlogout too — a rofi-modi script, not another package.

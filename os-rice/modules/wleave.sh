@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/wleave.sh — wleave logout menu (AUR) + rice-owned config dir. ONE copy,
 # POSIX (was .../modules/wleave.sh). scdoc is a native build/man dep. The config
 # dir (layout, style.css, icons) is rice-owned (§6), copied whole.

@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/picom.sh — X11 compositor (i3-sugg §1.3). Mandatory, not cosmetic:
 # without a compositor you get tearing, no transparency, Electron/Chromium
 # flicker and broken shadows.

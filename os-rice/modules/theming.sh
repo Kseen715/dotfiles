@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/theming.sh — toolkit theming for a WM that has no settings daemon
 # (i3-sugg §4). Under GNOME/KDE something applies your theme; under i3 nothing
 # does, which is why "the theme only works in some apps" is the single most

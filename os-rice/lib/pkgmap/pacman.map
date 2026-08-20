@@ -96,3 +96,6 @@ rofimoji = aur:rofimoji
 ncpamixer = aur:ncpamixer
 batsignal = aur:batsignal
 poweralertd = aur:poweralertd
+
+# turbostat lives in Arch's linux-tools group alongside perf.
+kernel-tools = linux-tools

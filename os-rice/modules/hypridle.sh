@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/hypridle.sh — hypridle idle daemon + config. ONE copy, POSIX
 # (was .../modules/hypridle.sh).
 run_step "Installing hypridle" pkg_install hypridle

@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/hyprpaper.sh — hyprpaper wallpaper daemon + config. ONE copy, POSIX
 # (was .../modules/hyprpaper.sh). Setting the live wallpaper is apply_wallpaper's
 # job (§6); this module installs the daemon and its rice-owned config.

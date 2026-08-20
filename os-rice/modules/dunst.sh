@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/dunst.sh — dunst notification daemon, the X11 replacement for mako
 # (i3-sugg §2). Config split (§5) uses dunst's own drop-in dir: the base dunstrc
 # is dotfiles-owned (geometry, behaviour, mouse actions) and the rice drops

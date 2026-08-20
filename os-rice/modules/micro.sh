@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/micro.sh — micro terminal editor + layered config. ONE copy, POSIX,
 # distro-agnostic (native everywhere).
 #

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/serie.sh — serie, a rich git-commit-graph TUI. ONE copy, POSIX,
 # distro-agnostic (was linux-debian/modules/serie.sh). Native on arch/alpine;
 # everywhere else it is installed from crates.io via the cargo: provider, so the

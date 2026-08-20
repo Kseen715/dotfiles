@@ -217,3 +217,7 @@ gpaste = source:provide_gpaste
 # girepository pair builds the GIR the shell extension imports GPaste through;
 # libx11/libxi back the X keybinder that X11 sessions fall back to.
 gpaste-build-deps = meson ninja-build pkg-config gettext libgcr-4-dev libglib2.0-dev libgtk-4-dev libadwaita-1-dev libpango1.0-dev libgirepository-2.0-dev gobject-introspection libx11-dev libxi-dev
+
+# turbostat/perf. Debian splits these: linux-cpupower carries turbostat,
+# linux-perf the profiler. Neither is required by osr (see modules/benchmark.sh).
+kernel-tools = linux-cpupower linux-perf

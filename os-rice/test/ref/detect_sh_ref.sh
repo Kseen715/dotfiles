@@ -144,7 +144,11 @@ osr_detect_cpu() {
     if command -v lscpu >/dev/null 2>&1; then
         _cpu=$(lscpu 2>/dev/null)
         OSR_CPU_VENDOR=$(printf '%s\n' "$_cpu" | awk -F: '/^Vendor ID:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
-        OSR_CPU_MODEL=$(printf '%s\n' "$_cpu"  | awk -F: '/^Model name:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
+        # Squeezed, not just left-trimmed: Intel pads its brand string INSIDE
+        # the name ("i7-8550U  CPU @ 1.80GHz"), and every consumer prints the
+        # gap. A deliberate amendment to the reference output, matched by
+        # lib/detect.c -- not a fix chasing the C.
+        OSR_CPU_MODEL=$(printf '%s\n' "$_cpu"  | awk -F: '/^Model name:/{gsub(/[ \t]+/," ",$2);sub(/^ /,"",$2);sub(/ $/,"",$2);print $2;exit}')
         _ca=$(printf '%s\n' "$_cpu"            | awk -F: '/^Architecture:/{gsub(/^[ \t]+/,"",$2);print $2;exit}')
         [ -n "$_ca" ] && OSR_CPU_ARCH="$_ca"
         # `CPU(s)` is the logical count (threads). Physical cores = sockets ×

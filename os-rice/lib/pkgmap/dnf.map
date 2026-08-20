@@ -48,3 +48,6 @@ ghostty = source:provide_ghostty_copr   # Fedora COPR community binary (scottame
 thunderbird@38 = source:provide_thunderbird_tarball
 thunderbird@39 = source:provide_thunderbird_tarball
 thunderbird@40 = source:provide_thunderbird_tarball
+
+# turbostat/perf, Fedora's single package.
+kernel-tools = kernel-tools

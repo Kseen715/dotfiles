@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/i3.sh — i3 window manager (X11) + layered config. ONE copy, POSIX.
 # pacman ships it as i3-wm (pacman.map); Void and Debian call it i3.
 #

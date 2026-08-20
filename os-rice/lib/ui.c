@@ -539,14 +539,21 @@ static int read_painted(const char *state_path) {
 /* cmd_result -- run_step's ending: compose the `[ok]`/`[!!] <desc>` line
  * the sh version built with printf, then collapse the block onto it. */
 static int cmd_result(const char *state_path, const char *status, const char *desc) {
+    /* Three outcomes, not two: try_step's step is one whose failure is a
+     * degraded result rather than a broken run (an optional cross-check tool
+     * that this distro does not package). Painting that `[!!]` in red taught
+     * people to ignore red, so it gets its own tag. */
+    int warn = strcmp(status, "warn") == 0;
     int ok = strcmp(status, "ok") == 0;
+    const char *tag = warn ? "[--]" : ok ? "[ok]" : "[!!]";
+    const char *col = warn ? "OSR_YELLOW" : ok ? "OSR_GREEN" : "OSR_RED";
     Str line;
     Str out;
     int painted = read_painted(state_path);
 
     str_init(&line);
-    if (!expand_b(&line, color(ok ? "OSR_GREEN" : "OSR_RED"))) {
-        str_addz(&line, ok ? "[ok]" : "[!!]");
+    if (!expand_b(&line, color(col))) {
+        str_addz(&line, tag);
         if (!expand_b(&line, color("OSR_NC"))) {
             str_addc(&line, ' ');
             str_addz(&line, desc);
@@ -586,7 +593,7 @@ static int usage(void) {
     fputs("  paint <painted> <log> <status>   repaint the block; exit = rows painted\n", stderr);
     fputs("  done <painted> <line>         erase the block, print one result line\n", stderr);
     fputs("  spin <pid> <desc> <log> <state>  repaint until pid exits; rows -> <state>\n", stderr);
-    fputs("  result <state> ok|fail <desc>    compose the [ok]/[!!] line and collapse\n", stderr);
+    fputs("  result <state> ok|warn|fail <desc>  compose the result line and collapse\n", stderr);
     fputs("  fail-tail <n> <log>           last n lines of <log> to stderr\n", stderr);
     return 2;
 }

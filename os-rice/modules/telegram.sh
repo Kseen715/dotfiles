@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/telegram.sh — Telegram Desktop from the vendor tarball
 # (telegram.org/desktop), plus the theme palette.
 #

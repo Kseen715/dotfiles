@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/lightdm.sh — LightDM display manager + GTK greeter (i3-sugg §1.4).
 # The lighter alternative to modules/sddm.sh for an X11 rice: no Qt, one config
 # file, and it runs the PAM stack that unlocks the keyring at login (which

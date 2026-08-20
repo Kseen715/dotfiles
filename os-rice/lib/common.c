@@ -73,6 +73,20 @@ void str_trim_trailing(Str *s, char c) {
     while (s->len > 0 && s->p[s->len - 1] == c) s->p[--s->len] = '\0';
 }
 
+void str_add_squeezed(Str *s, const char *p, size_t len) {
+    size_t i = 0;
+    int pending = 0;   /* whitespace seen but not yet emitted */
+
+    while (i < len && is_space(p[i])) i++;
+    for (; i < len; i++) {
+        if (is_space(p[i])) { pending = 1; continue; }
+        /* Emitted lazily, so a trailing run adds nothing: `pending` only
+         * becomes a space once another non-space byte follows it. */
+        if (pending) { str_addc(s, ' '); pending = 0; }
+        str_addc(s, p[i]);
+    }
+}
+
 void out_flush(Str *s) {
     if (s->len > 0) fwrite(str_text(s), 1, s->len, stdout);
     fflush(stdout);

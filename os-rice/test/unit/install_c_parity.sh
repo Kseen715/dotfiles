@@ -140,6 +140,7 @@ osr_resolve_theme() {
     OSR_THEME=${1:-nord}
     export OSR_THEME
 }
+osr_unset_theme() { OSR_THEME=""; OSR_THEME_DIR=""; export OSR_THEME OSR_THEME_DIR; }
 osr_rice_default_theme() { printf 'nord'; }
 osr_themes() { printf 'nord xin\n'; }
 osr_theme_meta() { printf 'a stub theme'; }
@@ -170,8 +171,13 @@ EOF
     printf '# the demo rice\ntheme: nord\nthemes: nord xin\n\nzsh   \n\t foot\t\nrequire: gpu:amd\nbar # trailing comment\n#full comment\nrequire: ram:8G\nlast-no-newline' \
         >"$_t/rices/demo/rice.list"
     printf 'zsh\n' >"$_t/rices/broken/nothing-here"
+    # `# themable: yes` on every fixture module so both trees take the same
+    # branch: the frozen reference predates the marker and always resolves a
+    # theme, and this file compares bytes, not intentions. The branch the marker
+    # added -- a module set that reads no theme resolves none, and asks nothing
+    # -- is the subject of test/unit/module_themable.sh instead.
     for _m in zsh foot bar last-no-newline other; do
-        printf '# session: x11\nprintf "STUB module %s ran\\n" %s\n' "$_m" "$_m" >"$_t/modules/$_m.sh"
+        printf '# session: x11\n# themable: yes\nprintf "STUB module %s ran\\n" %s\n' "$_m" "$_m" >"$_t/modules/$_m.sh"
     done
 }
 

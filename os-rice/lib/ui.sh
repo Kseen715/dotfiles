@@ -120,3 +120,37 @@ run_step() {
         "$@" || error "$_rs_desc failed"
     fi
 }
+
+# try_step <desc> <cmd...> — run_step for a step that is allowed to fail.
+#
+# Same live window, same greyed tail, same collapse to one line — the whole
+# point is that an OPTIONAL package install looks like every other step instead
+# of dumping several hundred lines of the package manager's own chatter into
+# the middle of a run. It differs from run_step in exactly one place: a non-zero
+# exit ends as `[--] <desc>` and is returned to the caller, rather than as a red
+# failure that `error` turns into the end of the run.
+#
+# Returns the command's exit status, so a caller can still say what it lost.
+try_step() {
+    _ts_desc=$1
+    shift
+    if "$OSR_BIN" ui tty-mode; then
+        _OSR_STEP_LOG="$OSR_LOG.step"
+        : >"$_OSR_STEP_LOG"
+        ( "$@" ) >>"$_OSR_STEP_LOG" 2>&1 &
+        _ts_pid=$!
+        "$OSR_BIN" ui spin "$_ts_pid" "$_ts_desc" "$_OSR_STEP_LOG" "$OSR_LOG.paint"
+        if wait "$_ts_pid"; then _ts_rc=0; else _ts_rc=$?; fi
+        cat "$_OSR_STEP_LOG" >>"$OSR_LOG"
+        if [ "$_ts_rc" -eq 0 ]; then
+            "$OSR_BIN" ui result "$OSR_LOG.paint" ok "$_ts_desc"
+        else
+            # No fail-tail: the step is optional, so the log is where the
+            # detail belongs. The caller's warn() says what was skipped.
+            "$OSR_BIN" ui result "$OSR_LOG.paint" warn "$_ts_desc"
+        fi
+        return $_ts_rc
+    fi
+    info "$_ts_desc"
+    "$@"
+}

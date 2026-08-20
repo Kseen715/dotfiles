@@ -27,6 +27,12 @@
 #   osr list                                         list available rices
 #   osr themes                                       list available themes
 #   osr modules                                      list available modules
+#   osr benchmark cpu [--seconds N] [--json]         measure the CPU: single- and
+#                     [--save NAME] [--compare NAME]  all-core throughput, package
+#                                                    power under load and idle,
+#                                                    peak temp and clock. Short
+#                                                    output by default; installs
+#                                                    its workload if missing.
 #   osr undervolt cpu <verb>                         CPU voltage offsets. Start
 #                                                    with `probe`: it never
 #                                                    writes and tells you
@@ -64,6 +70,45 @@ case "$_cmd" in
         exec "$OSR_SELF_DIR/install.sh" --theme-only --theme "$_theme" "$@"
         ;;
     wallpaper) exec "$OSR_SELF_DIR/wallpaper.sh" "$@" ;;
+    benchmark)
+        # Dependency installs happen here rather than in the binary: pulling
+        # packages is install.sh's job and needs the module machinery (and the
+        # privilege escalation) that only the sh tier has. The binary decides
+        # WHAT is required -- it exits 3 when the workload is missing -- and
+        # this arm gets it, then runs the benchmark again.
+        . "$OSR_SELF_DIR/lib/ui.sh"
+        _forced=0
+        for _a in "$@"; do
+            if [ "$_a" = "--install-deps" ]; then _forced=1; break; fi
+        done
+        # Written as an `if`, not `[ ... ] && cmd`: under `set -e` a failing
+        # AND-OR list is itself a failing command, so the short form would exit
+        # the script whenever --install-deps was absent.
+        if [ "$_forced" = 1 ]; then
+            "$OSR_SELF_DIR/install.sh" --module benchmark
+        fi
+
+        _rc=0
+        "$OSR_BIN" benchmark "$@" || _rc=$?
+        # Exactly one retry: if the install did not actually supply the tool,
+        # a second failure must surface rather than loop.
+        if [ "$_rc" = 3 ] && [ "$_forced" = 0 ]; then
+            "$OSR_SELF_DIR/install.sh" --module benchmark
+            _rc=0
+            "$OSR_BIN" benchmark "$@" || _rc=$?
+        fi
+        # Still missing after an install that reported success means the package
+        # exists under another name here, or installed something that is not on
+        # PATH. Say that, rather than leaving two identical info lines as the
+        # only explanation.
+        if [ "$_rc" = 3 ]; then
+            # `$OSR_BIN log error` rather than log.sh's error(): that one is not
+            # sourced here, and it exits 1, which would throw away the exit
+            # status that says specifically "the tool is missing".
+            "$OSR_BIN" log error "benchmark workload still missing after running modules/benchmark.sh - check that stress-ng is packaged on this distro" || :
+        fi
+        exit $_rc
+        ;;
     undervolt)
         # Straight through to the core: unlike install/switch/theme there is no
         # sh tier here at all, so ui.sh is sourced only to resolve $OSR_BIN
@@ -83,10 +128,10 @@ case "$_cmd" in
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")
-        sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, undervolt, list, themes, modules, test)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, benchmark, undervolt, list, themes, modules, test)" >&2
         exit 1
         ;;
 esac

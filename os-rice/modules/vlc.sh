@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/vlc.sh — VLC. The "plays anything, including the broken file" player;
 # modules/celluloid.sh (mpv front-end) is the lighter one and they coexist fine.
 #

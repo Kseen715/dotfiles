@@ -13,6 +13,7 @@
  *   osr detect …    the distro/hardware facts, as shell assignments
  *   osr theme …     themes as objects: discovery, manifest, palette
  *   osr install …   install.sh's help, listings, option loop, manifest, report
+ *   osr benchmark … CPU throughput/power measurement (no .sh ancestor)
  *   osr undervolt … CPU voltage offsets (no .sh ancestor: new here)
  *   osr test-run …  the test suite runner
  *
@@ -45,6 +46,7 @@ static const Command commands[] = {
     { "theme",    osr_theme_main,   "theme discovery, manifest, palette" },
     { "install",  osr_install_main, "install.sh's text, option loop and manifest" },
     { "module",   osr_module_main,  "the Linux modules written in C" },
+    { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }
 };

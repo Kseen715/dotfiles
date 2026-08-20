@@ -29,3 +29,6 @@ ueberzugpp-build-deps = vips-dev libsixel-dev openssl-dev onetbb-dev libxcb-dev 
 # at provide_thunderbird_tarball would install a binary that cannot start. 3.22+
 # ships 140+ natively, which is the actual fix; modules/thunderbird.sh's version
 # guard is what tells a 3.21 user why Exchange is missing.
+
+# Alpine ships perf only; no turbostat package exists.
+kernel-tools = perf

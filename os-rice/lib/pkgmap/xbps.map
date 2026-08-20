@@ -109,3 +109,6 @@ glib2 = glib
 # pulled in as dependencies has to be installed by name here.
 yandex-browser = source:provide_yandex_browser_deb
 yandex-browser-deps = bash gtk+3 nss alsa-lib libcups libXScrnSaver libXtst at-spi2-atk libxkbcommon mesa-dri libnotify desktop-file-utils hicolor-icon-theme xdg-utils libarchive
+
+# turbostat/perf on Void.
+kernel-tools = linux-tools

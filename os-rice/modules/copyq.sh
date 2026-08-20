@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/copyq.sh — clipboard manager, the X11 replacement for cliphist
 # (i3-sugg §2.1). Not optional on X11: a selection is owned by the process that
 # made it, so closing the source app destroys what you copied. CopyQ owns the

@@ -145,6 +145,13 @@ static const char *posix_srcs[] = {
     "lib/theme.c",
     "lib/install.c",
     "lib/testrun.c",
+    "lib/benchmark.c",
+    /* lib/bench/ -- CPU measurement. Unconditional: every architecture has a
+     * throughput number worth taking, and the power layer degrades to "no
+     * sensor" rather than to a wrong reading. */
+    "lib/bench/cpu.c",
+    "lib/bench/power.c",
+    "lib/bench/util.c",
     "lib/undervolt.c",
     /* lib/uv/ -- the undervolting backends. backend.c and generic_opp.c are
      * unconditional: the probe has to work everywhere, including on an arch
@@ -186,7 +193,7 @@ static const char *test_names[] = {
  * static helpers the header does not export.
  */
 static const char *posix_test_names[] = {
-    "uv_journal_test"
+    "uv_journal_test", "bench_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 

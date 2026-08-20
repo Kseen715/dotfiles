@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/xorg.sh — the X11 session core, the X sibling of modules/wayland.sh
 # (i3-sugg §1, §13). ONE copy, POSIX, distro-agnostic: logical names carry Arch's
 # `xorg-*` spelling and pkgmap translates (Void drops the prefix, Debian bundles

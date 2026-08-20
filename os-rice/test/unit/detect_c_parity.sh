@@ -200,6 +200,26 @@ OUT
 EOF
 compare "fixture: DMI only via sudo -n" $FIX_ENV_BASE
 
+# (f) an Intel brand string with its padding intact. Intel's is a fixed-width
+# field, so the runs of spaces inside the name are what lscpu really prints on
+# those parts -- and the model is the one field where both implementations
+# squeeze rather than merely trim. Nothing else here is interesting, which is
+# the point: this fixture exists for OSR_CPU_MODEL.
+reset_stubs
+stub lscpu <<'EOF'
+cat <<'OUT'
+Architecture:                       x86_64
+CPU(s):                             8
+Vendor ID:                          GenuineIntel
+Model name:                         Intel(R) Core(TM) i7-8550U  CPU @ 1.80GHz
+Core(s) per socket:                 4
+Socket(s):                          1
+OUT
+EOF
+compare "fixture: Intel brand string with interior padding" $FIX_ENV_BASE
+_m=$(env $FIX_ENV_BASE sh -c '. "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/detect.sh"; osr_detect >/dev/null 2>&1; printf "%s" "$OSR_CPU_MODEL"')
+assert_eq "Intel(R) Core(TM) i7-8550U CPU @ 1.80GHz" "$_m" "the padding is squeezed, not just trimmed"
+
 # --- 3. osr_gpu_chip ---------------------------------------------------------
 # modules/gpu-drivers.sh reads this to pick a driver branch.
 DEVICES='NVIDIA|GA104

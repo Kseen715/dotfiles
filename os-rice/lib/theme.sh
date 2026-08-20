@@ -113,3 +113,15 @@ osr_resolve_theme() {
     export OSR_THEME OSR_THEME_DIR
     info "theme: $OSR_THEME"
 }
+
+# osr_unset_theme — "this run paints nothing", explicitly.
+#
+# The counterpart to osr_resolve_theme for a module set where no module reads
+# the theme (osr module themable says no for all of them): every theme guard is
+# `[ -n "$OSR_THEME_DIR" ]`, so empty-and-exported is the value that makes them
+# all decline, and nothing is asked of the user for an answer nothing consumes.
+osr_unset_theme() {
+    OSR_THEME=""
+    OSR_THEME_DIR=""
+    export OSR_THEME OSR_THEME_DIR
+}

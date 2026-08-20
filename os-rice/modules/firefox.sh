@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/firefox.sh — Firefox + a low-RAM prefs layer + the rice's colors.
 #
 # Config split (§5), realized through Mozilla's two profile-level hooks:

@@ -123,7 +123,22 @@ if [ -n "$OSR_MODULE_MODE" ]; then
         [ -f "$OSR_ROOT/modules/$_m.sh" ] || "$OSR_BIN" module has "$_m" \
             || error "module not found: $_m (try --list-modules)"
     done
-    osr_resolve_theme "$OSR_ARG_THEME"
+    # ...but only where a theme has anywhere to land. `osr module benchmark`
+    # installs stress-ng and reads no theme file at any point, so putting the
+    # picker in front of it asked a question whose answer was then discarded.
+    # Modules declare this (`# themable: yes`, or the flag in lib/modules.c's
+    # row) and `osr module themable` answers for both kinds.
+    _any_themable=0
+    for _m in $OSR_MODULES; do
+        if "$OSR_BIN" module themable "$_m"; then _any_themable=1; break; fi
+    done
+    # An explicit --theme is still honoured whatever the module set: naming a
+    # theme is not a question, so there is nothing to suppress.
+    if [ -n "$OSR_ARG_THEME" ] || [ "$_any_themable" = 1 ]; then
+        osr_resolve_theme "$OSR_ARG_THEME"
+    else
+        osr_unset_theme
+    fi
 else
     # Rice install: exactly one positional names a rices/<rice>/ directory.
     OSR_RICE=""

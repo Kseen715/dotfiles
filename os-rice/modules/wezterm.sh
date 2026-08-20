@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/wezterm.sh — WezTerm terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic. WezTerm is BUILT FROM SOURCE on every
 # target (any.map -> source:provide_wezterm, upstream's documented route); there

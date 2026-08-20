@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/btop.sh — btop resource monitor + dotfiles config. ONE copy, POSIX,
 # distro-agnostic (was linux-debian/modules/btop.sh). Native on every target
 # except Debian 11 (bullseye), which gets the upstream static binary via a facet

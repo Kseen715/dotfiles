@@ -316,7 +316,16 @@ static void detect_cpu(Facts *f) {
     cpu = run_capture("lscpu");
     str_init(&tmp);
     field_after(&f->cpu_vendor, cpu, "Vendor ID:");
-    field_after(&f->cpu_model, cpu, "Model name:");
+    /* The model name is the one lscpu field whose INTERIOR whitespace matters:
+     * Intel's brand string is a fixed-width field padded with spaces, so
+     * "Core(TM) i7-8550U  CPU @ 1.80GHz" arrives with the padding in it and
+     * every consumer of OSR_CPU_MODEL prints the gap. Squeezed once, here,
+     * rather than at each of the places that print it. */
+    str_reset(&tmp);
+    if (field_after(&tmp, cpu, "Model name:")) {
+        str_reset(&f->cpu_model);
+        str_add_squeezed(&f->cpu_model, str_text(&tmp), tmp.len);
+    }
     str_reset(&tmp);
     if (field_after(&tmp, cpu, "Architecture:") && tmp.len > 0) {
         str_reset(&f->cpu_arch);

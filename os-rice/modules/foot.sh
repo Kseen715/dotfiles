@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/foot.sh — foot terminal + JetBrains Mono Nerd Font + layered config.
 # ONE copy, POSIX, distro-agnostic (was linux-rhel/modules/foot.sh, bash). The
 # package goes through pkg_install/pkgmap; the font is a best-effort cosmetic

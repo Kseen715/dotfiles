@@ -1,4 +1,5 @@
 # session: wayland
+# themable: yes
 # modules/wofi.sh — wofi application launcher + theme-owned config. ONE copy,
 # POSIX. Wayland-only by construction (wofi is a layer-shell client); the X11
 # half of the same job is modules/rofi.sh.

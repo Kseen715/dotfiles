@@ -1,4 +1,5 @@
 # session: x11+wayland
+# themable: yes
 # modules/starship.sh — Starship prompt + Nerd Font glyphs + rice-owned theme.
 # ONE copy, POSIX, distro-agnostic. Split out of zsh.sh so `osr module starship`
 # installs the prompt, the icons it renders, AND a rice's starship.toml theme in

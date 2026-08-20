@@ -1,4 +1,5 @@
 # session: x11
+# themable: yes
 # modules/i3lock.sh — screen lock + idle, the X11 replacement for hyprlock and
 # hypridle (i3-sugg §2).
 #
