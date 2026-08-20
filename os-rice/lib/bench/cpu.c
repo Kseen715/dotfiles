@@ -482,8 +482,6 @@ static void phase(int on, int n, int total, const char *what,
 
 /* --- the diagnostic ------------------------------------------------------- */
 
-static void row(Str *out, const char *label, const char *value);
-
 
 /* `osr benchmark sensors` -- why is there no power reading on THIS machine?
  *
@@ -558,7 +556,7 @@ static void census_row(Str *out, const char *label, const char *base,
     Str v;
     str_init(&v);
     census(&v, base, leaf, prefix);
-    row(out, label, str_text(&v));
+    bench_row(out, label, str_text(&v));
     str_free(&v);
 }
 
@@ -571,21 +569,26 @@ void bench_sensors_report(Str *out) {
     temp_path[0] = '\0';
 
     str_addc(out, '\n');
-    row(out, "power source", have_power ? pwr_source_name(m.source) : "none");
-    row(out, "why", m.detail);
-    if (have_power) row(out, "reading from", m.path);
+    bench_row(out, "power source", have_power ? pwr_source_name(m.source) : "none");
+    if (have_power) bench_row(out, "reading from", m.path);
+
+    /* Every source, not just the one that won: on a machine with no power at
+     * all these three lines are the entire diagnosis. */
+    str_addc(out, '\n');
+    pwr_probe_report(out);
+    str_addc(out, '\n');
 
     if (find_cpu_temp(temp_path, sizeof(temp_path))) {
-        row(out, "temperature", temp_path);
+        bench_row(out, "temperature", temp_path);
     } else {
-        row(out, "temperature", "none found (no labelled hwmon input, no CPU driver, no thermal zone)");
+        bench_row(out, "temperature", "none found (no labelled hwmon input, no CPU driver, no thermal zone)");
     }
     /* The CVE note is only worth printing when it is a possible cause: on a
      * machine that is already reporting power it is trivia. */
     if (geteuid() == 0) {
-        row(out, "privileges", "root");
+        bench_row(out, "privileges", "root");
     } else {
-        row(out, "privileges", have_power ? "not root"
+        bench_row(out, "privileges", have_power ? "not root"
                 : "not root - RAPL counters are 0400 since CVE-2020-8694");
     }
 
@@ -606,18 +609,25 @@ void bench_sensors_report(Str *out) {
              * here: the powercap tree is empty for a reason no modprobe can
              * fix, and sending someone to load intel_rapl_msr on a Hyper-V
              * guest costs them an afternoon. */
-            row(out, "next", "WSL guest: no power or temperature sensor is reachable.");
-            row(out, "", "Hyper-V does not pass the RAPL MSRs through. Throughput still works.");
+            bench_row(out, "next", "WSL guest: no power or temperature sensor is reachable.");
+            bench_row(out, "", "Hyper-V does not pass the RAPL MSRs through. Throughput still works.");
         } else if (strstr(m.detail, "not loaded") != NULL) {
-            row(out, "next", "load the powercap RAPL driver:");
-            row(out, "", "sudo modprobe intel_rapl_msr  (or: osr module benchmark)");
+            bench_row(out, "next", "load the powercap RAPL driver:");
+            bench_row(out, "", "sudo modprobe intel_rapl_msr  (or: osr module benchmark)");
         } else if (strstr(m.detail, "root-only") != NULL) {
-            row(out, "next", "sudo osr benchmark cpu");
+            bench_row(out, "next", "sudo osr benchmark cpu");
+        } else if (strstr(m.detail, "unplug AC") != NULL) {
+            /* No RAPL, no hwmon rail, and a battery sitting on the charger:
+             * the discharge rate is the only power figure this machine can
+             * produce, and it costs nothing to go and get it. */
+            bench_row(out, "next", "unplug the charger and re-run - the battery's discharge");
+            bench_row(out, "", "rate is the only power reading this machine can give");
+            bench_row(out, "", "(whole system, not just the CPU).");
         } else {
-            row(out, "next", "no readable sensor on this machine - throughput still works");
+            bench_row(out, "next", "no readable sensor on this machine - throughput still works");
         }
     } else {
-        row(out, "next", "nothing - power measurement is working");
+        bench_row(out, "next", "nothing - power measurement is working");
     }
 }
 
@@ -695,18 +705,6 @@ int bench_cpu(const BenchOpts *o, BenchResult *r) {
 
 /* --- output --------------------------------------------------------------- */
 
-/* row -- the aligned two-column shape the whole report uses. */
-#define BENCH_LABEL 16
-
-static void row(Str *out, const char *label, const char *value) {
-    size_t n = strlen(label);
-    str_addz(out, "  ");
-    str_addz(out, label);
-    while (n < BENCH_LABEL) { str_addc(out, ' '); n++; }
-    str_addz(out, value);
-    str_addc(out, '\n');
-}
-
 /* fmt1 -- a double with one decimal, C89-safely (no snprintf). */
 static void fmt1(Str *out, double v, const char *unit) {
     char buf[64];
@@ -726,55 +724,55 @@ void bench_report(const BenchResult *r, Str *out) {
     Str v;
     str_init(&v);
 
-    row(out, "cpu", r->cpu_model);
+    bench_row(out, "cpu", r->cpu_model);
 
     str_reset(&v);
     str_addl(&v, r->ncpu);
-    row(out, "threads", str_text(&v));
+    bench_row(out, "threads", str_text(&v));
 
     if (r->have_single) {
         str_reset(&v);
         fmt0(&v, r->single_ops, "ops/s");
-        row(out, "single-core", str_text(&v));
+        bench_row(out, "single-core", str_text(&v));
     }
     if (r->have_all) {
         str_reset(&v);
         fmt0(&v, r->all_ops, "ops/s");
-        row(out, "all-core", str_text(&v));
+        bench_row(out, "all-core", str_text(&v));
     }
 
     if (r->have_power && r->load_w > 0.0) {
         str_reset(&v);
         fmt1(&v, r->load_w, "W under load, ");
         fmt1(&v, r->idle_w, "W idle");
-        row(out, "package power", str_text(&v));
+        bench_row(out, "package power", str_text(&v));
 
         /* ops per watt: the number that actually improves when an undervolt
          * works, which is why it is here and not behind a flag. */
         if (r->have_all) {
             str_reset(&v);
             fmt0(&v, r->all_ops / r->load_w, "ops/s per watt");
-            row(out, "efficiency", str_text(&v));
+            bench_row(out, "efficiency", str_text(&v));
         }
     } else {
-        row(out, "package power", r->power_detail);
+        bench_row(out, "package power", r->power_detail);
     }
 
     if (r->have_temp) {
         str_reset(&v);
         fmt0(&v, r->peak_temp_c, "C");
-        row(out, "peak temp", str_text(&v));
+        bench_row(out, "peak temp", str_text(&v));
     }
     if (r->have_freq) {
         str_reset(&v);
         str_addl(&v, r->peak_freq_khz / 1000);
         str_addz(&v, " MHz");
-        row(out, "peak freq", str_text(&v));
+        bench_row(out, "peak freq", str_text(&v));
     }
 
     str_reset(&v);
     fmt0(&v, r->seconds, "s");
-    row(out, "duration", str_text(&v));
+    bench_row(out, "duration", str_text(&v));
 
     str_free(&v);
 }

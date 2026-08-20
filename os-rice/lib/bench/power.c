@@ -50,6 +50,30 @@ unsigned long pwr_energy_delta(unsigned long a, unsigned long b, unsigned long m
  *              package. Reporting one as the package power would understate
  *              the machine several-fold, so they are skipped entirely.
  */
+/* rapl_driver_loaded -- is the powercap RAPL driver actually in the kernel?
+ *
+ * /sys/module holds built-ins as well as loaded modules, so this answers "is
+ * the code there", which is the question. Either name counts: intel_rapl_msr
+ * is the MSR front end and intel_rapl_common is what registers the powercap
+ * domains, and a kernel may have either built in. */
+static int rapl_driver_loaded(void) {
+    static const char *const names[] = { "intel_rapl_msr", "intel_rapl_common", "intel_rapl" };
+    const char *base = env_str("OSR_SYSMODULE", "/sys/module/");
+    Str path;
+    size_t i;
+    int found = 0;
+
+    str_init(&path);
+    for (i = 0; !found && i < sizeof(names) / sizeof(names[0]); i++) {
+        str_reset(&path);
+        str_addz(&path, base);
+        str_addz(&path, names[i]);
+        found = dir_exists(str_text(&path));
+    }
+    str_free(&path);
+    return found;
+}
+
 static int rapl_rank(const char *name) {
     if (strncmp(name, "package", 7) == 0) return 3;
     if (strcmp(name, "psys") == 0) return 2;
@@ -127,18 +151,31 @@ static int detect_rapl(PwrMeter *m) {
                 geteuid() == 0 ? "RAPL present but energy_uj unreadable"
                                : "RAPL present but root-only - re-run as root for power numbers");
     } else if (entries == 0) {
-        /* The tree exists and is empty. On bare metal that is nearly always
-         * the one fixable cause of "no power": the powercap RAPL driver is a
-         * module and nothing has loaded it. `osr module benchmark` does.
+        /* An empty tree has three different causes, and telling them apart is
+         * the difference between a fix and a wild goose chase:
          *
-         * In a Hyper-V guest the tree is empty for a reason no modprobe can
-         * fix -- the RAPL MSRs are not passed through -- so the same symptom
-         * gets the opposite advice. Same check the diagnostic makes. */
-        bench_set_str(m->detail, sizeof(m->detail),
-                bench_is_wsl()
-                    ? "no sensor in a WSL guest - Hyper-V does not pass the RAPL MSRs through"
-                    : "powercap tree is empty - the intel_rapl_msr driver is not loaded "
-                      "(run: osr module benchmark)");
+         *   the driver is not loaded    loading it works. The common case.
+         *   the driver IS loaded        it probed and registered nothing, so
+         *                               this CPU has no RAPL at all. Intel
+         *                               introduced it with Sandy Bridge, so
+         *                               anything older -- Westmere, Nehalem,
+         *                               Core 2 -- lands here permanently, and
+         *                               being told to load a module that is
+         *                               already loaded is maddening.
+         *   a Hyper-V guest             the MSRs are not passed through.
+         */
+        if (bench_is_wsl()) {
+            bench_set_str(m->detail, sizeof(m->detail),
+                    "no sensor in a WSL guest - Hyper-V does not pass the RAPL MSRs through");
+        } else if (rapl_driver_loaded()) {
+            bench_set_str(m->detail, sizeof(m->detail),
+                    "no RAPL on this CPU - the driver is loaded and found nothing "
+                    "(Intel RAPL needs Sandy Bridge or newer)");
+        } else {
+            bench_set_str(m->detail, sizeof(m->detail),
+                    "powercap tree is empty - the intel_rapl_msr driver is not loaded "
+                    "(run: osr module benchmark)");
+        }
     } else {
         bench_set_str(m->detail, sizeof(m->detail),
                 "powercap has no package or psys domain - only per-domain children");
@@ -229,13 +266,21 @@ static int detect_hwmon(PwrMeter *m) {
 
 /* Battery discharge. Only meaningful while actually discharging -- on AC the
  * reading is 0 or absent, which would silently report a 0 W CPU, so the
- * status is checked rather than assumed. */
+ * status is checked rather than assumed.
+ *
+ * Two shapes of battery. Most publish `power_now` in microwatts and there is
+ * nothing to do. Older ACPI batteries -- and most laptops from before about
+ * 2012 -- publish `current_now` and `voltage_now` instead, and the power is
+ * their product. Reading only the first shape means a machine whose ONLY
+ * possible power source is its battery reports nothing at all.
+ */
 static int detect_battery(PwrMeter *m) {
-    static const char *base = "/sys/class/power_supply/";
+    const char *base = env_str("OSR_POWER_SUPPLY", "/sys/class/power_supply/");
     DIR *d;
     struct dirent *e;
     Str path, status;
     int found = 0;
+    int on_ac = 0;
 
     d = opendir(base);
     if (d == NULL) return 0;
@@ -243,29 +288,50 @@ static int detect_battery(PwrMeter *m) {
     str_init(&status);
 
     while (!found && (e = readdir(d)) != NULL) {
-        unsigned long probe;
+        unsigned long probe, volts;
         if (strncmp(e->d_name, "BAT", 3) != 0) continue;
 
         str_reset(&status);
         bench_join3(&path, base, e->d_name, "/status");
         if (!bench_read_trim(&status, str_text(&path))) continue;
         if (strcmp(str_text(&status), "Discharging") != 0) {
-            bench_set_str(m->detail, sizeof(m->detail),
-                    "battery present but not discharging - no power reading on AC");
+            on_ac = 1;
             continue;
         }
-        bench_join3(&path, base, e->d_name, "/power_now");
-        if (!bench_read_ulong(str_text(&path), &probe)) continue;
 
+        bench_join3(&path, base, e->d_name, "/power_now");
+        if (bench_read_ulong(str_text(&path), &probe) && probe > 0) {
+            bench_set_str(m->path, sizeof(m->path), str_text(&path));
+            m->path_v[0] = '\0';
+            m->source = PWR_BATTERY;
+            bench_set_str(m->detail, sizeof(m->detail),
+                    "battery discharge rate - whole system, not just the CPU");
+            found = 1;
+            continue;
+        }
+
+        bench_join3(&path, base, e->d_name, "/current_now");
+        if (!bench_read_ulong(str_text(&path), &probe) || probe == 0) continue;
         bench_set_str(m->path, sizeof(m->path), str_text(&path));
+        bench_join3(&path, base, e->d_name, "/voltage_now");
+        if (!bench_read_ulong(str_text(&path), &volts) || volts == 0) continue;
+        bench_set_str(m->path_v, sizeof(m->path_v), str_text(&path));
         m->source = PWR_BATTERY;
         bench_set_str(m->detail, sizeof(m->detail),
-                "battery discharge rate - whole system, not just the CPU");
+                "battery current x voltage - whole system, not just the CPU");
         found = 1;
     }
     closedir(d);
     str_free(&path);
     str_free(&status);
+
+    if (!found && on_ac) {
+        /* Named as an INSTRUCTION, not just a state. On a laptop with no RAPL
+         * and no hwmon rail this is the only power figure the machine can
+         * ever produce, and "unplug it" is the whole fix. */
+        bench_set_str(m->detail, sizeof(m->detail),
+                "battery is charging - unplug AC and re-run to measure discharge power");
+    }
     return found;
 }
 
@@ -283,6 +349,39 @@ int pwr_detect(PwrMeter *m) {
     return 0;
 }
 
+/* pwr_probe_report -- ask every source separately and print what each said.
+ *
+ * pwr_detect stops at the first source that answers and leaves one explanation
+ * behind, which on a machine where nothing answers is simply whichever probe
+ * ran last. A laptop on AC therefore reported "battery not discharging" and
+ * never mentioned that it also has no RAPL and no hwmon rail -- three
+ * different facts, one of which was actionable, and the wrong one shown. */
+void pwr_probe_report(Str *out) {
+    PwrMeter m;
+    struct { const char *label; int (*probe)(PwrMeter *); } sources[3];
+    size_t i;
+
+    sources[0].label = "rapl";    sources[0].probe = detect_rapl;
+    sources[1].label = "hwmon";   sources[1].probe = detect_hwmon;
+    sources[2].label = "battery"; sources[2].probe = detect_battery;
+
+    for (i = 0; i < sizeof(sources) / sizeof(sources[0]); i++) {
+        memset(&m, 0, sizeof(m));
+        m.source = PWR_NONE;
+        if (sources[i].probe(&m)) {
+            Str v;
+            str_init(&v);
+            str_addz(&v, "FOUND - ");
+            str_addz(&v, m.detail);
+            bench_row(out, sources[i].label, str_text(&v));
+            str_free(&v);
+        } else {
+            bench_row(out, sources[i].label,
+                      m.detail[0] != '\0' ? m.detail : "no such sensor");
+        }
+    }
+}
+
 /* --- measuring ------------------------------------------------------------ */
 
 void pwr_begin(PwrMeter *m) {
@@ -297,7 +396,16 @@ void pwr_sample(PwrMeter *m) {
     unsigned long uw;
     if (m->source != PWR_HWMON && m->source != PWR_BATTERY) return;
     if (!bench_read_ulong(m->path, &uw)) return;
-    m->sum_w += (double)uw / 1e6;
+    if (m->path_v[0] != '\0') {
+        /* microamps x microvolts, so the product is picowatts. Done in double
+         * because 3_000_000 uA x 12_000_000 uV overflows 32-bit long by four
+         * orders of magnitude. */
+        unsigned long uv;
+        if (!bench_read_ulong(m->path_v, &uv)) return;
+        m->sum_w += ((double)uw * (double)uv) / 1e12;
+    } else {
+        m->sum_w += (double)uw / 1e6;
+    }
     m->samples++;
 }
 

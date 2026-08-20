@@ -331,8 +331,8 @@ static void fx_write(const char *rel, const char *value, int mode) {
 
 static void fx_reset(void) {
     char cmd[700];
-    sprintf(cmd, "rm -rf %s && mkdir -p %s/powercap %s/hwmon %s/thermal",
-            fx_root, fx_root, fx_root, fx_root);
+    sprintf(cmd, "rm -rf %s && mkdir -p %s/powercap %s/hwmon %s/thermal %s/module %s/ps",
+            fx_root, fx_root, fx_root, fx_root, fx_root, fx_root);
     if (system(cmd) != 0) return;
 }
 
@@ -347,6 +347,12 @@ static int fx_rapl(PwrMeter *m) {
     return detect_rapl(m);
 }
 
+static int fx_battery(PwrMeter *m) {
+    memset(m, 0, sizeof(*m));
+    m->source = PWR_NONE;
+    return detect_battery(m);
+}
+
 static void fx_use(void) {
     char p[640];
     sprintf(p, "%s/powercap/", fx_root); setenv("OSR_POWERCAP", p, 1);
@@ -357,6 +363,8 @@ static void fx_use(void) {
      * about a fixture that has nothing to do with WSL. */
     sprintf(p, "%s/osrelease", fx_root); setenv("OSR_OSRELEASE", p, 1);
     fx_write("osrelease", "6.12.0-generic", 0644);
+    sprintf(p, "%s/module/", fx_root); setenv("OSR_SYSMODULE", p, 1);
+    sprintf(p, "%s/ps/", fx_root);     setenv("OSR_POWER_SUPPLY", p, 1);
 }
 
 /* fx_be_wsl -- the same fixture, on a Hyper-V guest. */
@@ -403,6 +411,88 @@ static void test_absent_powercap_is_distinct(void) {
                strstr(m.detail, "no powercap support") != NULL);
     osr_t_true("...without suggesting a modprobe",
                strstr(m.detail, "intel_rapl_msr") == NULL);
+}
+
+/* The M390 case: a 2010 Westmere laptop. Intel introduced RAPL with Sandy
+ * Bridge, so the driver loads, probes, registers nothing, and leaves an empty
+ * tree that looks exactly like a driver that was never loaded. Telling someone
+ * to load a module they have already loaded is the worst possible answer. */
+static void test_loaded_driver_and_empty_tree_means_no_rapl(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_mkdir("module/intel_rapl_msr");
+
+    osr_t_true("an empty tree with the driver loaded finds no source", !fx_rapl(&m));
+    osr_t_true("...and does not repeat the modprobe advice",
+               strstr(m.detail, "not loaded") == NULL);
+    osr_t_true("...saying the CPU has no RAPL instead",
+               strstr(m.detail, "no RAPL on this CPU") != NULL);
+    osr_t_true("...and naming the generation that gained it",
+               strstr(m.detail, "Sandy Bridge") != NULL);
+}
+
+/* A laptop with no RAPL and no hwmon rail can still measure power -- on
+ * battery. That makes "you are on AC" an instruction, not a dead end. */
+static void test_battery_on_ac_says_to_unplug(void) {
+    PwrMeter m;
+    fx_reset();
+    fx_use();
+    fx_mkdir("ps/BAT0");
+    fx_write("ps/BAT0/status", "Full", 0644);
+    fx_write("ps/BAT0/voltage_now", "11100000", 0644);
+
+    osr_t_true("a charging battery is not a power source", !fx_battery(&m));
+    osr_t_true("...and the fix is to unplug it",
+               strstr(m.detail, "unplug AC") != NULL);
+}
+
+/* Batteries from before roughly 2012 -- which is every machine that also has
+ * no RAPL -- publish current and voltage, not power. Reading only power_now
+ * meant the one machine that needs this fallback never got a number. */
+static void test_battery_current_times_voltage(void) {
+    PwrMeter m;
+    double w = 0.0;
+    fx_reset();
+    fx_use();
+    fx_mkdir("ps/BAT0");
+    fx_write("ps/BAT0/status", "Discharging", 0644);
+    fx_write("ps/BAT0/current_now", "1850000", 0644);   /* 1.85 A */
+    fx_write("ps/BAT0/voltage_now", "11100000", 0644);  /* 11.1 V */
+
+    osr_t_true("a discharging battery with no power_now is still a source",
+               fx_battery(&m));
+    osr_t_eq_int("...as battery", (long)m.source, (long)PWR_BATTERY);
+    osr_t_true("...flagged as whole-system", strstr(m.detail, "whole system") != NULL);
+
+    pwr_begin(&m);
+    pwr_sample(&m);
+    osr_t_true("...and it reads back", pwr_end(&m, &w));
+    /* 1.85 A x 11.1 V = 20.535 W. The product of two microunits is picowatts,
+     * which overflows a 32-bit long by four orders of magnitude -- the reason
+     * the arithmetic is in double. */
+    osr_t_eq_int("...at current x voltage", (long)(w * 100.0 + 0.5), 2054L);
+}
+
+/* Where both shapes exist, power_now is the battery's own figure and needs no
+ * arithmetic, so it wins. */
+static void test_battery_prefers_power_now(void) {
+    PwrMeter m;
+    double w = 0.0;
+    fx_reset();
+    fx_use();
+    fx_mkdir("ps/BAT0");
+    fx_write("ps/BAT0/status", "Discharging", 0644);
+    fx_write("ps/BAT0/power_now", "15000000", 0644);    /* 15 W */
+    fx_write("ps/BAT0/current_now", "1850000", 0644);
+    fx_write("ps/BAT0/voltage_now", "11100000", 0644);
+
+    osr_t_true("power_now is a source", fx_battery(&m));
+    osr_t_true("...and is the one read", strstr(m.path, "power_now") != NULL);
+    pwr_begin(&m);
+    pwr_sample(&m);
+    osr_t_true("...reading back", pwr_end(&m, &w));
+    osr_t_eq_int("...as watts, not a product", (long)(w + 0.5), 15L);
 }
 
 static void test_package_beats_its_children(void) {
@@ -539,6 +629,10 @@ static void run_detection_tests(void) {
 
     test_empty_powercap_names_the_driver();
     test_empty_powercap_under_wsl_does_not();
+    test_loaded_driver_and_empty_tree_means_no_rapl();
+    test_battery_on_ac_says_to_unplug();
+    test_battery_current_times_voltage();
+    test_battery_prefers_power_now();
     test_absent_powercap_is_distinct();
     test_package_beats_its_children();
     test_psys_is_used_and_labelled();
@@ -557,6 +651,8 @@ static void run_detection_tests(void) {
     unsetenv("OSR_HWMON");
     unsetenv("OSR_THERMAL");
     unsetenv("OSR_OSRELEASE");
+    unsetenv("OSR_SYSMODULE");
+    unsetenv("OSR_POWER_SUPPLY");
 }
 
 int main(void) {

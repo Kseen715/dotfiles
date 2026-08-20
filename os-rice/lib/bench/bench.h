@@ -42,6 +42,7 @@
 #include "../common.h"
 
 #define BENCH_PATH_MAX 256
+#define BENCH_LABEL 16
 #define BENCH_TEXT_MAX 160
 
 /* --- shared helpers (lib/bench/util.c) ------------------------------------
@@ -57,6 +58,8 @@ int bench_read_ulong(const char *path, unsigned long *out);
 void bench_join3(Str *out, const char *a, const char *b, const char *c);
 void bench_set_str(char *dst, size_t cap, const char *src);
 double bench_now_sec(void);
+/* bench_row -- "  label           value", the shape of every report here. */
+void bench_row(Str *out, const char *label, const char *value);
 /* bench_is_wsl -- a Hyper-V guest, where no local sensor exists and no driver
  * load can create one. Both the detector and the diagnostic ask, so that
  * neither offers a fix that cannot work there. */
@@ -87,11 +90,23 @@ typedef struct {
     long samples;
     unsigned long e_start;
     double t_start;
+
+    /* Set when the battery reports current and voltage instead of power, in
+     * which case the reading is their product. Empty otherwise. */
+    char path_v[BENCH_PATH_MAX];
 } PwrMeter;
 
 /* pwr_detect -- pick a source. Returns 1 when one was found; on 0 the meter's
  * `detail` explains what was tried, which is what the report prints. */
 int pwr_detect(PwrMeter *m);
+/* pwr_probe_report -- one row per source with ITS OWN verdict.
+ *
+ * pwr_detect returns a single explanation, and on a machine where several
+ * sources are absent for different reasons that one line is whichever probe
+ * wrote last -- a laptop on AC ends up saying "battery not discharging" and
+ * never mentions that it has no RAPL either. The diagnostic shows all of
+ * them, because which source is missing and why is the whole question. */
+void pwr_probe_report(Str *out);
 /* pwr_begin / pwr_sample / pwr_end -- bracket a measurement. pwr_sample is a
  * no-op for energy counters and the whole measurement for instantaneous ones,
  * so callers can poll unconditionally. */

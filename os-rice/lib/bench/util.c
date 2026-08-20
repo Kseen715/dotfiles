@@ -43,6 +43,18 @@ int bench_is_wsl(void) {
     return yes;
 }
 
+/* bench_row -- the aligned two-column shape every report here uses. Shared
+ * rather than duplicated because the diagnostic prints rows from power.c and
+ * cpu.c alike, and two copies would drift apart by a space. */
+void bench_row(Str *out, const char *label, const char *value) {
+    size_t n = strlen(label);
+    str_addz(out, "  ");
+    str_addz(out, label);
+    while (n < BENCH_LABEL) { str_addc(out, ' '); n++; }
+    str_addz(out, value);
+    str_addc(out, '\n');
+}
+
 int bench_read_trim(Str *out, const char *path) {
     char *buf;
     size_t len, start, end;
