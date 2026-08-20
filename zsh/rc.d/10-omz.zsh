@@ -62,7 +62,44 @@ zstyle ':autocomplete:history-search-backward:*' list-lines 300
 # self-heals on boxes that won't re-run modules/zsh.sh.
 _osr_zdatadir=${XDG_DATA_HOME:-$HOME/.local/share}/zsh
 [ -d "$_osr_zdatadir" ] || mkdir -p "$_osr_zdatadir"
-unset _osr_zdatadir
+# --- volatile completion symlinks (WSL) --------------------------------------
+# Docker Desktop symlinks /usr/share/zsh/vendor-completions/_docker into
+# /mnt/wsl/docker-desktop, a mount that only exists while Docker Desktop is
+# running. Open a shell with it stopped and compinit reads a dangling link:
+#
+#   compinit:527: no such file or directory: .../vendor-completions/_docker
+#
+# printed twice, because omz and zsh-autocomplete each run their own compinit.
+# The link is root-owned and Docker Desktop recreates it on every start, so
+# repairing it in place does not hold. Instead keep a snapshot in a user-owned
+# dir placed FIRST in $fpath: compinit's scan loop indexes by basename and skips
+# every later file of a name it has already seen ($_i_test), so the dangling
+# link is never read - and docker completion keeps working while Docker Desktop
+# is down, rather than merely failing quietly.
+#
+# Only links resolving under /mnt are copied. Everything else in $fpath is on a
+# real filesystem and cannot vanish mid-session, and each copy is a permanent
+# shadow, so this stays as narrow as the problem. Cost is one glob over $fpath,
+# ~1 ms: a readdir per dir, then an lstat only on the handful of matches.
+_osr_compdir=$_osr_zdatadir/completions
+[ -d "$_osr_compdir" ] || mkdir -p "$_osr_compdir"
+() {
+    local link target snap
+    for link in ${^fpath}/_*(N@); do
+        # A broken link :A-resolves to itself, so this drops it: the snapshot
+        # taken while the mount was up is what covers that case.
+        target=${link:A}
+        [[ $target == /mnt/* && -r $target ]] || continue
+        snap=$_osr_compdir/${link:t}
+        # No `-e $snap ||` shortcut: unlike POSIX test, zsh's -nt is FALSE when
+        # the older file does not exist at all, which is exactly the first run.
+        [[ -e $snap && ! $target -nt $snap ]] && continue
+        cp -f -- "$target" "$snap" 2>/dev/null
+    done
+}
+# Guarded, not unconditional: 10-omz.zsh is re-sourceable and fpath is not -U.
+(( $fpath[(I)$_osr_compdir] )) || fpath=("$_osr_compdir" $fpath)
+unset _osr_compdir _osr_zdatadir
 
 # ZSH_THEME is a no-op visually — the 90-theme layer drives the prompt (starship)
 # — but oh-my-zsh still expects it set before sourcing.
