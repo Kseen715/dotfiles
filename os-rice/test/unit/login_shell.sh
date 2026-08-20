@@ -153,8 +153,14 @@ fi
 
 # --- 7. modules/zsh.sh wiring: guard, call, and the non-fatal failure --------
 run_step() { shift; "$@"; }
+# Every helper zsh.sh calls that is not the login-shell path under test. It
+# sources lib/user.sh only, so anything from config.sh/migrate.sh is a stub:
+# without one the source dies at 127 and the login-shell assertions below never
+# run (which is how install_theme_layer/install_zsh_zshenv/migrate_* got here -
+# each was a call the module grew after this list was written).
 for _f in pkg_install install_omz install_zsh_plugin seed_once install_layer \
-          seed_empty install_zsh_loader; do
+          seed_empty install_zsh_loader install_theme_layer install_zsh_zshenv \
+          migrate_replace migrate_append migrate_stale; do
     eval "$_f() { :; }"
 done
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES

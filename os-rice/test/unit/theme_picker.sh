@@ -29,12 +29,22 @@ assert_eq 1 "$_saw_xin" "osr_themes includes xin"
 assert_eq 1 "$_saw_rosemary" "osr_themes includes rosemary (split out of the i3 rice)"
 [ "$_n" -ge 6 ] && ok "osr_themes found $_n themes" || fail "expected >= 6 themes, found $_n"
 
-# Every theme must carry the layers it is made of - a theme.list with no config/
-# is a rice manifest that lost its files, and it would silently apply nothing.
+# Every theme must carry the layers it is made of. Since the §6b migration that
+# is the PALETTE, not a config/ tree: an app's theme layer is one template beside
+# that app's dotfiles, rendered against these colors, so catppuccin/nord/xin
+# ship a theme.list and nothing else and still paint every app. config/ is now
+# the escape hatch (a literal file that wins over the template, theme_template.sh)
+# and only the themes that need one have it - but an EMPTY config/ is still the
+# "lost its files" bug this check was written for, so that stays a failure.
 for t in $LIST; do
-    [ -d "$OSR_ROOT/themes/$t/config" ] || fail "theme '$t' ships no config/ dir"
+    _pal=$(grep -c '^color:' "$OSR_ROOT/themes/$t/theme.list" 2>/dev/null || echo 0)
+    [ "$_pal" -gt 0 ] || fail "theme '$t' defines no colors"
+    if [ -d "$OSR_ROOT/themes/$t/config" ] \
+        && [ -z "$(ls -A "$OSR_ROOT/themes/$t/config" 2>/dev/null)" ]; then
+        fail "theme '$t' ships an empty config/ dir"
+    fi
 done
-ok "every theme ships a config/ dir"
+ok "every theme carries a palette (and no empty config/ override tree)"
 
 # --- theme.list metadata + palette --------------------------------------------
 assert_eq "Nord" "$(osr_theme_meta nord display)" "display: is read"

@@ -21,6 +21,27 @@ description: Windows-native palette (matches WezTerm's dotfiles default)
 polarity: dark
 session: any
 
+# Toolkit and font names. Not colors, but the same kind of thing: what a theme
+# picks, that a per-app template drops into a settings file. This theme is
+# Windows-native in origin but lives in the shared themes/ tree, so it carries
+# the same block every other theme does - otherwise the Linux layers (gtkrc,
+# settings.ini, xsettingsd, qt5ct/qt6ct) render with the placeholder visible.
+# Values are the tree's defaults; the mono font is the one ../../wezterm's
+# .wezterm.lua already assumes (JetBrainsMono Nerd Font).
+gtk_theme: Adwaita-dark
+icon_theme: Papirus-Dark
+cursor_theme: Adwaita
+cursor_size: 24
+ui_font: Noto Sans 10
+ui_font_family: Noto Sans
+ui_font_size: 10
+mono_font: JetBrainsMono Nerd Font
+# GNOME 47+ takes a NAMED accent, not a hex: blue teal green yellow orange
+# red pink purple slate. Nearest name to this theme's accent (#3292dc).
+gnome_accent: blue
+gtk_decoration_layout: menu:minimize,maximize,close
+gtk_animations: 1
+
 # --- the window -----------------------------------------------------------
 color: background            #181818
 color: foreground            #ffffff
@@ -29,6 +50,14 @@ color: selection_background  #303030
 color: selection_foreground  #ffffff
 color: background_opacity     0.9
 color: background_blur        0
+
+# Three shades off the background, for toolkits that ask for a full ramp (Qt's
+# Dark/Mid/Shadow roles). Derived from the background when the theme was
+# written, not at render time - a theme may retune any of them by hand. This
+# background is #181818, the same as glass/xin, so the ramp off it is too.
+color: background_sunken     #111111
+color: surface_mid           #272727
+color: shadow                #0d0d0d
 
 # --- the 16 ANSI slots ------------------------------------------------------
 color: ansi_black            #1e1e1e

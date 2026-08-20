@@ -7,8 +7,14 @@ HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 NO_COLOR=1
 TMPLIB=$(mktemp -d); mkdir -p "$TMPLIB/pkgmap"
-OSR_LIB="$TMPLIB"; export OSR_LIB OSR_PKG=apt
-. "$OSR_ROOT/lib/log.sh"; . "$OSR_ROOT/lib/pkg.sh"
+# Source the libs against the REAL lib/ first: log.sh pulls in ui.sh through
+# $OSR_LIB when $OSR_BIN is not already set, so pointing OSR_LIB at the temp
+# tree before that made the test pass only when it inherited an OSR_BIN from
+# the runner, and die on `sh test/unit/facet_qualifier.sh`. _pkgmap_one reads
+# $OSR_LIB/pkgmap/ at CALL time, so the swap below still gives it the temp map.
+OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB OSR_PKG=apt
+. "$OSR_ROOT/lib/ui.sh"; . "$OSR_ROOT/lib/log.sh"; . "$OSR_ROOT/lib/pkg.sh"
+OSR_LIB="$TMPLIB"; export OSR_LIB
 . "$HERE/../lib.sh"
 
 cat >"$TMPLIB/pkgmap/apt.map" <<'EOF'
