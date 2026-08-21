@@ -41,10 +41,21 @@ zstyle ':autocomplete:*' min-input 1  # nothing on an empty line, like ListView
 # being used to recall a single command. The style is only ever read via
 # `zstyle -T` at completion time and never set at init, so it sticks from here.
 zstyle ':autocomplete:*' add-semicolon no
-zstyle -e ':autocomplete:*:*' list-lines 'reply=( $(( LINES / 3 )) )'
-# How far ↑ can reach back, NOT how many rows are drawn. The menu only ever
-# renders what fits on screen (~$LINES-3) and scrolls, so this is the depth limit:
-# at 16 the menu simply stops after 16 entries no matter how long you hold ↑.
+# Live list height, and the height of the Ctrl-R list with it. A third of the
+# screen was fine at 24 rows and is a wall of text at 60, so it is also capped at
+# a flat $_osr_list_rows; small screens keep the old behavior, since LINES/3 is
+# the smaller of the two there. -e defers the eval to completion time, so the
+# parameter only has to exist by then.
+typeset -gi _osr_list_rows=10
+zstyle -e ':autocomplete:*:*' list-lines \
+    'reply=( $(( LINES / 3 < _osr_list_rows ? LINES / 3 : _osr_list_rows )) )'
+# How far ↑ can reach back, and — unavoidably — how tall the menu gets, since
+# complist draws every entry it is given until the screen runs out and only then
+# scrolls. Capping the drawn rows without capping the reach needs zsh to be lied
+# to about the terminal height ($LINES is the only lever complist reads); that
+# was tried, and it is not survivable — see the note at the end of this file.
+# So this one number is both knobs at once: at 16 the menu stops after 16 entries
+# no matter how long you hold ↑, and never draws more than 16 rows.
 #
 # Cost is flat until it is not — measured, keypress to rendered, on a 2461-line
 # history: 16->19ms  100->16ms  200->21ms  300->29ms  500->56ms  1000->199ms
@@ -128,6 +139,106 @@ setopt hist_reduce_blanks     # "ls   -la" and "ls -la" are one command
 # autocomplete's wrapper.
 bindkey -M menuselect '^M' .accept-line
 
+# ...and the cursor keys move the cursor instead of walking the menu. Two
+# separate failures are being fixed here, both verified by binding one side at a
+# time and watching which combination actually works.
+#
+# 1. ←/→ ARE bound in menuselect, to menuselect's own backward-char/forward-char,
+#    which move the highlight — so after recalling a line there is no way to edit
+#    it in place. A key bound to a widget menuselect does not implement instead
+#    accepts the selection, leaves the menu and runs that widget, so the leading
+#    dot (builtin widget, not autocomplete's wrapper) is what does the work.
+#
+# 2. Home/End/Delete are NOT bound in menuselect at all, and each starts with a
+#    sequence that IS a live prefix there (^[[ and ^[O both lead to the arrows).
+#    Zsh reads the prefix, finds no complete match and DISCARDS the lot, so the
+#    key does nothing at all — it never even reaches the fallthrough Backspace
+#    gets (^? is a prefix of nothing, which is why that one already works). The
+#    menuselect binding below exists only to make each sequence a COMPLETE match
+#    and stop the swallowing.
+#
+# The widget that RUNS, in both cases, comes from the MAIN keymap: complist hands
+# an unhandled widget back to it. Hence every key goes into both keymaps — and
+# hence the main-keymap side can be a wrapper (see below) while menuselect keeps
+# the plain builtin.
+#
+# omz's lib/key-bindings.zsh binds Home/End from terminfo khome/kend, which under
+# TERM=xterm-256color is the application-mode pair (^[OH/^[OF) and nothing else. A
+# terminal sending the CSI or vt220 form — foot, alacritty and wezterm all can, and
+# so does xterm outside application mode — lands on an unbound key. Bind the lot;
+# they are unambiguous and unused otherwise.
+
+# Nothing wraps these widgets. An earlier attempt routed them through a wrapper
+# that called the BUILTIN widget, and that silently broke a zsh-autosuggestions
+# feature: it makes end-of-line and forward-char *accept* widgets, so End and →
+# complete the ghost suggestion — and going around them via the leading dot killed
+# that. Caught by diffing against a stock shell, which accepted where the patched
+# one did not. The plain widget names below keep stock behavior; the stale-ghost
+# problem they were added for is handled in the hook patch further down instead.
+
+() {
+    local -A osr_keys=(
+        '^[[D'  backward-char      '^[OD'  backward-char
+        '^[[C'  forward-char       '^[OC'  forward-char
+        '^[[H'  beginning-of-line  '^[OH'  beginning-of-line
+        '^[[1~' beginning-of-line  '^[[7~' beginning-of-line
+        '^[[F'  end-of-line        '^[OF'  end-of-line
+        '^[[4~' end-of-line        '^[[8~' end-of-line
+        '^[[3~' delete-char
+    )
+    local osr_k osr_w
+    for osr_k in ${(k)osr_keys}; do
+        osr_w=$osr_keys[$osr_k]
+        bindkey               "$osr_k"  "$osr_w"
+        bindkey -M menuselect "$osr_k" ".$osr_w"
+    done
+}
+
+# Backspace is deliberately NOT in that list. It already works (see above), and
+# leaving it unbound in menuselect keeps complist's own handling of it while the
+# in-menu text search (^R/^S) is active, where it edits the search string.
+
+# --- leaving the menu must not re-open the live completion list ---------------
+# The keys above hand control back to the main keymap, and autocomplete's
+# line-pre-redraw hook then re-runs its live list at the new cursor position. On a
+# recalled history line the cursor lands on a word, so what you get is a COMMAND
+# completion — and under WSL, where $PATH carries the /mnt/c interop dirs, that is
+# a screenful of Windows .exe/.dll names dumped under a line you only meant to
+# edit.
+#
+# Not a new problem: Backspace has always left the menu and done exactly this. But
+# it was rare when Backspace was the only key that could leave, and ←/→/Home/End
+# make it happen on every single edit, so it gets fixed here rather than lived
+# with.
+#
+# The rule below is: CURSOR MOVEMENT alone never re-lists, while anything that
+# edits the buffer still does — so the live list keeps working as you type.
+# Verified both ways: Home/←/End on a recalled line leave a clean prompt, and
+# Backspace on that same line still lists.
+#
+# `zstyle ':autocomplete:<widget>:' ignore yes` is upstream's own knob for exactly
+# this and it is NOT enough on its own — measured, not assumed. By the time the
+# movement widget runs, the list has already been drawn by an earlier asynchronous
+# pass, and `ignore` only suppresses a *new* one, leaving the stale list on screen.
+# The pending job has to be cancelled and the display cleared as well, which no
+# style exposes; hence a body rewrite, like the one at the end of this file.
+# Degrades safely: if upstream renames the function, $functions comes back empty
+# and the whole block is skipped.
+() {
+    local body=$functions[.autocomplete:async:complete]
+    [[ -n $body ]] || return 0
+    functions[.autocomplete:async:complete]='if [[ ${LASTWIDGET##.} == (up-line-or-search|down-line-or-select|menu-select|history-search-backward|(|reverse-)menu-complete) ]]; then
+    unset POSTDISPLAY
+  fi
+  if [[ ${LASTWIDGET##.} == (beginning-of-line|end-of-line|backward-char|forward-char|backward-word|forward-word) ]]; then
+    z-async cancel complete
+    z-async cancel wait
+    builtin zle -Rc
+    return 0
+  fi
+'$body
+}
+
 # --- dropdown styling: PSReadLine ListView look ------------------------------
 # AFTER the omz source on purpose, unlike the behavior styles above. omz's
 # lib/completion.zsh runs `zstyle ':completion:*' list-colors ''` and autocomplete
@@ -146,6 +257,18 @@ bindkey -M menuselect '^M' .accept-line
 # a fixed 256-color grey (PSReadLine's own 48;5;238) would not.
 zstyle ':completion:*' menu select
 zstyle ':completion:*' list-colors 'ma=48;5;8;38;5;15;1'
+
+# No scroll indicator. autocomplete's own config sets
+#   ':completion:*:default' select-prompt '%F{black}%K{12}line %l %p%f%k'
+# which draws a `line 293/293 Bottom` bar under a list that is taller than the
+# screen — except each scroll step paints a NEW one without erasing the last, so
+# scrolling a long history menu leaves a stack of them at different positions.
+# The drawing is complist's own C code, not a shell function, so there is nothing
+# to patch the way the functions above are patched; dropping the style is the only
+# lever rc.d has. `-d` deletes rather than sets it to empty, which would still
+# reserve the line. Safe to place here: autocomplete sets it once at plugin load,
+# and unlike `menu` and `list-prompt` it is not re-applied by its precmd hook.
+zstyle -d ':completion:*:default' select-prompt
 
 # The matched portion, emphasized in place. Autocomplete's stock format prefixes a
 # literal "common substring:" label; ListView has no such label, so print just the
@@ -247,3 +370,31 @@ if autoload +X _autocomplete__history_lines 2>/dev/null; then
         functions[_autocomplete__history_lines]=$body
     }
 fi
+
+# --- rejected: capping the ↑ menu's height with a fake $LINES -----------------
+# Recorded so it is not tried a third time. The ask is a ten-row history menu
+# that still scrolls back through all 300 entries. complist exposes no style for
+# it — not `menu`, `list-prompt`, `select-prompt` or `select-scroll`, and
+# autocomplete's `list-lines` reaches the live list and the depth limit only. The
+# single lever is the height complist reads, $LINES, so a wrapper around
+# up-line-or-search set it to 12 for the duration of the menu and put it back on
+# the way out.
+#
+# It works, in the narrow sense: ten rows, scrolling intact, $LINES honest again
+# by the time anything else looks at it, and the tty itself never touched. It was
+# also wrong, in two ways that only a real terminal shows:
+#
+#  - Leftovers. zsh fills its screen and expects the terminal to scroll at the
+#    bottom of it. Below a fake bottom that scroll never happens, so the rows the
+#    menu drew over — most visibly the tall ones, a recalled multi-line function
+#    — stay on screen after the menu is gone.
+#  - Ghostty closed the window outright while scrolling. Never reproduced under
+#    the pty harness this was developed against, which is the point: the failure
+#    mode of lying to zsh about the screen depends on the terminal, so passing
+#    everything here proves nothing about the terminal actually being used.
+#
+# A shell that can lose its window to a held-down arrow key is not worth ten rows
+# of screen. If this gets picked up again, the honest options are the depth limit
+# above (the menu is short because it is shallow) or handing ↑ to a pager that
+# does its own windowing, e.g. fzf --height, which owns the whole drawing problem
+# instead of fooling the shell into it.
