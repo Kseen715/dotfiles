@@ -7,7 +7,13 @@
 # starship (prompt) + its Nerd Font + starship.toml theme live in modules/starship.sh
 # so manifest order lists starship before zsh. zsh only wires the prompt in via
 # its rice-owned 90-theme.zsh (`eval "$(starship init zsh)"`).
-run_step "Installing zsh and tools" pkg_install zsh git curl lsd
+# fzf backs the ↑ history picker in zsh/rc.d/10-omz.zsh (ten rows on screen, the
+# whole history behind them — complist cannot window a list, fzf can). The rc
+# side is guarded on the binary being present, so a machine without it falls
+# back to the plain completion menu rather than breaking ↑; it is listed here so
+# that machine does not exist. No pkgmap row: `fzf` is the package name on apt,
+# pacman, dnf, apk and xbps, and resolves to a unique atom on portage.
+run_step "Installing zsh and tools" pkg_install zsh git curl lsd fzf
 
 run_step "Installing oh-my-zsh" install_omz
 run_step "Installing zsh-autosuggestions" \

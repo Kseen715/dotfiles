@@ -51,11 +51,12 @@ zstyle -e ':autocomplete:*:*' list-lines \
     'reply=( $(( LINES / 3 < _osr_list_rows ? LINES / 3 : _osr_list_rows )) )'
 # How far ↑ can reach back, and — unavoidably — how tall the menu gets, since
 # complist draws every entry it is given until the screen runs out and only then
-# scrolls. Capping the drawn rows without capping the reach needs zsh to be lied
-# to about the terminal height ($LINES is the only lever complist reads); that
-# was tried, and it is not survivable — see the note at the end of this file.
-# So this one number is both knobs at once: at 16 the menu stops after 16 entries
-# no matter how long you hold ↑, and never draws more than 16 rows.
+# scrolls. That is the whole reason ↑ is handed to fzf at the end of this file:
+# fzf windows its own list, so it can be ten rows deep in the screen and a
+# thousand entries long at the same time, which complist cannot. This number
+# still governs the fallback menu on a machine without fzf, and the Ctrl-R list
+# below, so it stays: at 16 the menu stops after 16 entries no matter how long
+# you hold ↑, and never draws more than 16 rows.
 #
 # Cost is flat until it is not — measured, keypress to rendered, on a 2461-line
 # history: 16->19ms  100->16ms  200->21ms  300->29ms  500->56ms  1000->199ms
@@ -371,30 +372,154 @@ if autoload +X _autocomplete__history_lines 2>/dev/null; then
     }
 fi
 
+# --- ↑ history styling: the same ListView the dropdown above draws ------------
+# ANSI slot numbers only, never hexes, for the reason in the dropdown block: the
+# rice themes those 16 slots, so this tracks the active rice for free.
+#
+#   fg+/bg+  the selected row  -> slot 15 on slot 8, bold: `list-colors ma=...`
+#   hl/hl+   the matched part  -> slot 4 bold: the `unambiguous` format above
+#   prompt   the search line   -> slot 8, like `descriptions`
+#
+# Everything fzf would otherwise draw is off — info line, separator, scrollbar,
+# gutter, pointer, marker — because the menu has none of them either. The '> '
+# on each row is put there by the feed, not by fzf's pointer, so it is on EVERY
+# row exactly like the marker the history-lines patch above adds; the only thing
+# marking the selection is the highlight bar.
+typeset -g _osr_fzf_colors='fg:-1,bg:-1,gutter:-1,query:-1,pointer:-1'
+_osr_fzf_colors+=',fg+:15,bg+:8:bold,hl:4:bold,hl+:4:bold,prompt:8'
+
+# --- ↑ history: an fzf window, ten rows deep, the whole history long ----------
+# complist has no way to be a *window*: it draws every match it is given until
+# the screen runs out, so the ↑ menu is only ever as short as it is shallow. The
+# depth limit above trades one for the other, and the way around it — lying to
+# zsh about $LINES so complist thinks the screen is twelve rows — was built,
+# measured, and thrown away; see the note at the end of this file, and do not
+# rebuild it.
+#
+# fzf does its own windowing against the real terminal, which is the entire
+# point: --height reserves ten rows and scrolls the rest inside them, so the
+# list is short on screen and still reaches back through every command ever run.
+#
+# NO KEY CHANGES ANYWHERE. ↑ still opens it (the widget NAME up-line-or-search is
+# taken over, so ↑, ^P and vi `k` all keep working, and autosuggestions' rebind
+# at first precmd wraps this rather than replacing it — verified by reading back
+# $widgets afterwards). Inside, every key does what it did in the menuselect
+# block above: Enter runs the highlighted command outright, ←/→/Home/End accept
+# it onto the command line and leave the cursor where that key would have put it,
+# Backspace edits the search, ↑/↓ walk the list, Esc and ^C leave the line
+# exactly as it was.
+#
+# Layout is fzf's default (bottom-up) on purpose: the newest command sits against
+# the search line and ↑ walks backwards in time, which is the direction the key
+# already means. --layout=reverse would invert that and silently redefine ↑.
+if (( $+commands[fzf] )) &&
+        [[ ${widgets[up-line-or-search]} == user:* && -z ${widgets[_osr_up-line-or-search]} ]]; then
+
+    # One row per entry, newest first, duplicates dropped, and multi-line
+    # commands folded onto a single row with their newlines shown as \n — the
+    # same shape the ListView menu gives them. The real command is never carried
+    # in the display: the row is <history number>\t<display>, --with-nth hides
+    # the number, and accepting looks the number back up in $history, so a
+    # recalled function body comes back with its real newlines intact.
+    #
+    # $1 is the prefix to keep, and it is filtered HERE rather than handed to fzf
+    # as an anchored `^prefix` query. Anchoring cannot work: fzf matches against
+    # what it displays, every row displays the leading '> ' marker, so `^cargo`
+    # anchors against "> cargo …" and matches nothing at all — which is exactly
+    # how typing a word and pressing ↑ came to return an empty window. Filtering
+    # the feed also keeps the semantics ↑ has always had here: entries that BEGIN
+    # with what was typed, not entries that fuzzily contain it. The fzf query is
+    # left empty so typing narrows within that set.
+    #
+    # Blank entries are dropped. A line that was only whitespace is still a
+    # history entry, and it renders as a bare marker with nothing after it.
+    #
+    # (kOn) is keys, numeric, descending. Streamed, not buffered: fzf is up and
+    # drawing while this is still walking $history, so the ~6 ms this takes over
+    # 1100 entries (measured) is never waited on.
+    _osr_fzf_history_feed() {
+        local -A seen
+        local k cmd
+        local prefix=$1
+        for k in ${(kOn)history}; do
+            cmd=$history[$k]
+            [[ -z ${cmd//[[:space:]]/} ]] && continue
+            # Substring compare, not $cmd != $prefix*, so that a prefix with a
+            # glob character in it (`ls *.c` and friends) is matched literally.
+            [[ -n $prefix && ${cmd[1,$#prefix]} != "$prefix" ]] && continue
+            [[ -n ${seen[$cmd]-} ]] && continue
+            seen[$cmd]=1
+            print -r -- "$k"$'\t'"> ${cmd//$'\n'/\\n}"
+        done
+    }
+
+    zle -A up-line-or-search _osr_up-line-or-search
+    _osr_fzf_history() {
+        # ↑ inside a multi-line buffer moves up a line and always has. That is
+        # autocomplete's own first branch, so hand those straight back to it.
+        if [[ $LBUFFER == *$'\n'* ]]; then
+            zle _osr_up-line-or-search
+            return
+        fi
+        setopt localoptions pipefail no_aliases noglobsubst
+        local out key idx
+        # --no-sort keeps the feed's order — newest first — even while the query
+        # narrows, so this stays a history list rather than turning into a
+        # relevance ranking that moves rows around under the cursor as you type.
+        #
+        # FZF_DEFAULT_OPTS is cleared for this one call: it is a user-level knob
+        # for interactive fzf, and a --layout or --bind left in it would rewrite
+        # the keys this widget promises not to change.
+        out=$( _osr_fzf_history_feed "$LBUFFER" |
+            FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+            --height="~$(( _osr_list_rows + 1 ))" --min-height=3 \
+            --delimiter=$'\t' --with-nth='2..' \
+            --no-multi --no-sort \
+            --no-info --no-separator --no-scrollbar \
+            --pointer=' ' --marker=' ' --gutter=' ' --prompt='> ' \
+            --color="$_osr_fzf_colors" \
+            --expect=left,right,home,end ) || { zle reset-prompt; return 0 }
+
+        # --expect puts the key that ended it on the first line, empty for Enter.
+        key=${out%%$'\n'*}
+        idx=${${out#*$'\n'}%%$'\t'*}
+        [[ -n $idx ]] && BUFFER=$history[$idx]
+        case $key in
+        ( home ) CURSOR=0 ;;
+        ( left ) (( CURSOR = $#BUFFER - 1 > 0 ? $#BUFFER - 1 : 0 )) ;;
+        ( * )    CURSOR=$#BUFFER ;;
+        esac
+        # fzf scrolled the terminal out from under zle, so the prompt has to be
+        # redrawn before anything else happens — including before accept-line,
+        # which would otherwise run the command over a stale line.
+        zle reset-prompt
+        [[ -z $key ]] && zle accept-line   # Enter: run it, as it does in the menu
+        return 0
+    }
+    zle -N _osr_fzf_history
+    zle -N up-line-or-search _osr_fzf_history
+fi
+
 # --- rejected: capping the ↑ menu's height with a fake $LINES -----------------
-# Recorded so it is not tried a third time. The ask is a ten-row history menu
-# that still scrolls back through all 300 entries. complist exposes no style for
-# it — not `menu`, `list-prompt`, `select-prompt` or `select-scroll`, and
-# autocomplete's `list-lines` reaches the live list and the depth limit only. The
-# single lever is the height complist reads, $LINES, so a wrapper around
-# up-line-or-search set it to 12 for the duration of the menu and put it back on
-# the way out.
+# Recorded so it is not tried again, now that the block above solves it properly.
+# complist exposes no style for the menu's height — not `menu`, `list-prompt`,
+# `select-prompt` or `select-scroll` — and autocomplete's `list-lines` reaches
+# the live list and the depth limit only. The single lever is the height complist
+# reads, $LINES, so a wrapper around up-line-or-search set it to 12 for the
+# duration of the menu and put it back on the way out.
 #
-# It works, in the narrow sense: ten rows, scrolling intact, $LINES honest again
-# by the time anything else looks at it, and the tty itself never touched. It was
-# also wrong, in two ways that only a real terminal shows:
+# It worked in the narrow sense — ten rows, scrolling intact, $LINES honest again
+# by the time anything else looked at it, the tty itself never touched — and it
+# was still wrong, in two ways only a real terminal shows:
 #
-#  - Leftovers. zsh fills its screen and expects the terminal to scroll at the
-#    bottom of it. Below a fake bottom that scroll never happens, so the rows the
-#    menu drew over — most visibly the tall ones, a recalled multi-line function
-#    — stay on screen after the menu is gone.
+#  - Leftovers. zsh fills the screen it believes it has and expects the terminal
+#    to scroll at the bottom of it. Below a fake bottom that scroll never
+#    happens, so the rows the menu drew over — most visibly a recalled multi-line
+#    function — stayed on screen after the menu was gone.
 #  - Ghostty closed the window outright while scrolling. Never reproduced under
-#    the pty harness this was developed against, which is the point: the failure
+#    the pty harness it was developed against, which is the point: the failure
 #    mode of lying to zsh about the screen depends on the terminal, so passing
-#    everything here proves nothing about the terminal actually being used.
+#    every test here proves nothing about the terminal actually in use.
 #
 # A shell that can lose its window to a held-down arrow key is not worth ten rows
-# of screen. If this gets picked up again, the honest options are the depth limit
-# above (the menu is short because it is shallow) or handing ↑ to a pager that
-# does its own windowing, e.g. fzf --height, which owns the whole drawing problem
-# instead of fooling the shell into it.
+# of screen.
