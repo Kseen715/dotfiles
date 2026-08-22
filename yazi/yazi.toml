@@ -9,7 +9,7 @@
 # `[manager]`->`[mgr]` renames). Add a key here only to change a real default.
 
 [mgr]
-show_hidden = true      # default false — show dotfiles
+show_hidden = false      # default false — show dotfiles
 
 [preview]
 wrap = "yes"            # default "no" — wrap long lines in text previews
