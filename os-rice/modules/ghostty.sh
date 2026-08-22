@@ -39,3 +39,36 @@ if install_theme_layer ghostty ghostty-theme "$OSR_HOME/.config/ghostty/ghostty-
 elif [ -f "$OSR_DOTFILES/ghostty/ghostty-theme" ]; then
     install_layer "$OSR_DOTFILES/ghostty/ghostty-theme" "$OSR_HOME/.config/ghostty/ghostty-theme"
 fi
+
+# --- WSLg: force the software GSK renderer ------------------------------------
+# GTK draws Ghostty's window chrome through GSK, and under WSLg both accelerated
+# GSK backends damage-track the titlebar wrongly: shrinking the centered title
+# ("Ghostty" -> "~" at the first prompt) repaints only the new, narrower rect and
+# leaves a sliver of the old glyph stranded to its left. Reproduced on
+# GSK_RENDERER=gl and =vulkan; clean on =cairo, the software path.
+#
+# /etc/environment, because it is the only file BOTH launch paths read:
+#
+#   Windows Start  the WSLDVCPlugin shortcut is `wslg.exe -d <distro> --cd "~"
+#                  -- /usr/bin/ghostty` — an absolute path with no shell and no
+#                  desktop file in the loop. It also keeps only the first token
+#                  of the entry's Exec=, so an `Exec=env VAR=x ghostty` override
+#                  regenerates as a shortcut that launches /usr/bin/env.
+#   linux cli      `ghostty`, which no desktop entry sees at all.
+#
+#   ruled out: ~/.config/environment.d (systemd user session, which a wslg launch
+#   does not go through), a .desktop override (see above), a ~/.local/bin wrapper
+#   (PATH is not consulted for the shortcut's absolute path).
+#
+# Distro-global rather than per-app, and that is the honest tradeoff: it puts
+# every GTK4 app in the guest on the software renderer. Defensible here because
+# what is broken is WSLg's GL stack, not Ghostty — the other GTK4 apps are
+# drawing through the same one. Guarded by OSR_VIRT so a real desktop, where
+# `gl` is both correct and cheaper, never sees it.
+if [ "${OSR_VIRT:-none}" = wsl ]; then
+    run_step "Ghostty: software GSK renderer (WSLg titlebar artifact)" \
+        as_root sh -c '
+            sed -i "/^GSK_RENDERER=/d" /etc/environment
+            printf "GSK_RENDERER=cairo\n" >>/etc/environment
+        '
+fi

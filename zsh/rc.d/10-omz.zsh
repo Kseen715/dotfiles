@@ -4,6 +4,31 @@
 
 zstyle ':omz:update' mode disabled   # os-rice manages updates, not omz
 
+# Under Ghostty the terminal title has exactly one writer, and it is not omz.
+# lib/termsupport.zsh is loaded unconditionally by oh-my-zsh.sh and matches
+# TERM=xterm-ghostty against its `xterm*` case, so without this it writes OSC 1/2
+# on every precmd AND preexec — duplicating what Ghostty's own shell integration
+# already writes (ghostty/config keeps `title` on: that features list is additive).
+# Two writers per prompt means the titlebar label changes twice, and on a GTK/GSK
+# backend with sloppy damage tracking (WSLg's `gl` renderer) the shrinking centered
+# label leaves a sliver of the previous title painted behind the new one.
+#
+# Ghostty's writer wins because it is shell-independent — the same integration
+# ships for bash and fish, so the title format does not change with $SHELL. It is
+# also the better string: `%(4~|…/%3~|%~)` against omz's `%15<..<%~%<<`, which
+# truncates from the LEFT and leaves titles reading `..iles/zsh/rc.d`.
+#
+# NOT set unconditionally: foot, alacritty and wezterm are all in these dotfiles
+# and none of them sets its own title, so disabling omz everywhere would leave
+# those three with no title at all. The guard tests GHOSTTY_SHELL_FEATURES rather
+# than merely "is this Ghostty", because that exported var is the exact thing
+# ghostty-integration itself branches on to install its title hook — so omz stands
+# down only when something else is definitely writing, including when the features
+# list in ghostty/config later grows a `no-title`. Read at hook time (termsupport
+# checks it inside the precmd/preexec body), so this is a guard, not an ordering
+# dependency; `|| true` keeps a false test off the sourced file's exit status.
+[[ "$GHOSTTY_SHELL_FEATURES" == *title* ]] && DISABLE_AUTO_TITLE=true || true
+
 # zsh-autocomplete MUST stay last in this array. Its upstream README says to
 # source it before compinit, which is impossible under omz (oh-my-zsh.sh runs
 # compinit unconditionally, no opt-out) — but loading it *first* is worse: omz

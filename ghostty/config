@@ -52,6 +52,12 @@ scrollback-limit = 100000000
 #                the same breakage one privilege level down
 # The value is a toggle list, not a replacement: features named here are turned
 # on and everything unnamed (cursor, title, path) keeps its default.
+#
+# `title` is therefore ON, and it is the ONLY title writer: zsh/rc.d/10-omz.zsh
+# sets DISABLE_AUTO_TITLE whenever GHOSTTY_SHELL_FEATURES contains `title`, so
+# oh-my-zsh's termsupport stands down here and keeps writing titles under foot /
+# alacritty / wezterm. Adding `no-title` below hands the title back to omz
+# automatically — the guard reads this list, it does not assume an answer.
 shell-integration = detect
 shell-integration-features = ssh-env,ssh-terminfo,sudo
 
