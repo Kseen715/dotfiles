@@ -29,6 +29,42 @@ zstyle ':omz:update' mode disabled   # os-rice manages updates, not omz
 # dependency; `|| true` keeps a false test off the sourced file's exit status.
 [[ "$GHOSTTY_SHELL_FEATURES" == *title* ]] && DISABLE_AUTO_TITLE=true || true
 
+# --- which oh-my-zsh, and where its plugins live -----------------------------
+# 00-env.zsh points ZSH at ~/.oh-my-zsh because that is where os-rice installs
+# it. A distro that packages omz system-wide breaks both halves of that
+# assumption — Armbian ships /etc/oh-my-zsh and its stock ~/.zshrc exports
+# ZSH=/etc/oh-my-zsh:
+#
+#  - ~/.oh-my-zsh can exist while holding no omz core at all. os-rice's plugin
+#    clones create custom/plugins/ inside it, so the directory is there and
+#    `source $ZSH/oh-my-zsh.sh` below reads nothing.
+#  - $ZSH_CUSTOM defaults to $ZSH/custom, so a system-wide core hunts for
+#    plugins in /etc/oh-my-zsh/custom and reports `plugin '...' not found` for
+#    every one of ours.
+#
+# Either one is silent in effect and wide in blast radius: no syntax
+# highlighting, no autosuggestions, and — because autocomplete is what takes over
+# up-line-or-search — ↑ never reaches the fzf history widget at the bottom of
+# this file either, since its guard needs a user: widget to wrap.
+#
+# So the plugin dir is pinned to $HOME (the one os-rice writes) and the CORE is
+# whichever install actually exists, $HOME first.
+if [[ ! -r ${ZSH:-}/oh-my-zsh.sh ]]; then
+    for _osr_omz in $HOME/.oh-my-zsh /etc/oh-my-zsh /usr/share/oh-my-zsh \
+                    /usr/local/share/oh-my-zsh; do
+        [[ -r $_osr_omz/oh-my-zsh.sh ]] && { ZSH=$_osr_omz; break }
+    done
+    unset _osr_omz
+fi
+# Left alone when ZSH_CUSTOM is genuinely the user's. "Some omz's default custom
+# dir" is not: it is a directory named custom sitting next to an oh-my-zsh.sh,
+# which is exactly what the first source of a system-wide omz leaves behind.
+if [[ -d $HOME/.oh-my-zsh/custom/plugins ]] &&
+   [[ -z ${ZSH_CUSTOM:-} ||
+      ( ${ZSH_CUSTOM:t} == custom && -r ${ZSH_CUSTOM:h}/oh-my-zsh.sh ) ]]; then
+    ZSH_CUSTOM=$HOME/.oh-my-zsh/custom
+fi
+
 # zsh-autocomplete MUST stay last in this array. Its upstream README says to
 # source it before compinit, which is impossible under omz (oh-my-zsh.sh runs
 # compinit unconditionally, no opt-out) — but loading it *first* is worse: omz
