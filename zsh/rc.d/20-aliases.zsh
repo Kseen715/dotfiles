@@ -14,25 +14,25 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor root)
 
 # The `root` highlighter above paints the WHOLE buffer whenever EUID is 0, and
 # its default style is `standout` — reverse video, which turns the line into one
-# solid block and swaps every syntax color into a background. Keep the warning,
-# drop the block: a wash of the theme's own red behind the line says "root" just
-# as loudly and leaves the colors on top readable.
+# solid block. Toned down to a plain underline, which is the only kind of change
+# that keeps the syntax colors.
 #
-# Slot names, not hexes, for the reason the fzf colors in 10-omz.zsh spell out:
-# the rice themes the 16 ANSI slots, so `red` here is whatever red the active
-# rice defines and tracks a rice switch for free.
+# Why not a red wash, which is what this obviously wants to be: zsh merges
+# region_highlight entries by ATTRIBUTE (underline/bold/standout stack), but a
+# spec carrying a COLOR replaces the whole fg/bg pair for the characters it
+# covers. `root` is painted last over the entire buffer, so `bg=red` there resets
+# every token's foreground and the line comes out white-on-red. Measured on a
+# real zle through zsh/zpty, TERM=xterm-256color:
 #
-# ZSH_HIGHLIGHT_STYLES is declared by the plugin, which omz loads before this
-# file; the typeset is here so an out-of-order source cannot turn the assignment
-# into an arithmetic subscript on an undeclared name.
+#   bg=red     -> ^[[41ml ^[[41ms ^[[39m...      41 = red bg, 39 = fg reset
+#   underline  -> ^[[4m^[[32ml ^[[4m^[[32ms...   4 = underline, 32 = main's green
+#
+# Ordering `root` before `main` instead does not rescue it: main then overrides
+# the wash on every token it colors and leaves it on the ones it does not, so the
+# background comes out striped (also measured).
 if (( EUID == 0 )); then
     typeset -gA ZSH_HIGHLIGHT_STYLES
-    ZSH_HIGHLIGHT_STYLES[root]='bg=red'
-    # One color has to move out of the way: main paints an unknown command
-    # `fg=red,bold`, the same slot as the wash, so a mistyped command would be
-    # red on red — invisible, which is exactly when you least want it. Bright red
-    # (slot 9) stays inside the rice palette and reads on top of slot 1.
-    ZSH_HIGHLIGHT_STYLES[unknown-token]='fg=9,bold'
+    ZSH_HIGHLIGHT_STYLES[root]='underline'
 fi
 
 # cargo() — route `cargo install` and `cargo install-update` through
