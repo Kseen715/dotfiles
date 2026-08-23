@@ -22,7 +22,11 @@ OSR_APPLY_MUTATING_LIBS="pkg build net git service fonts"
 # Read-only exceptions - queries with no side effect that modules branch on.
 # Removing a query from this list is safe (the branch just takes its unknown
 # path); adding a mutating verb to it is not.
-OSR_APPLY_QUERY_OK="pkg_installed _pkgmap_one _spec_method _native_installed _native_held service_resolve osr_downloader _chafa_version _chafa_ok _osr_pkgconfig_path _yb_deb_url"
+# _pkgmap_one is a query, and so is everything it calls: the helpers behind the
+# facet ladder (_pkgmap_exact/_pkgmap_range/_pkgmap_rhs/_pkgmap_re and the
+# _ver_* arithmetic) read map files and compare strings, nothing else. Stubbing
+# one of them leaves _pkgmap_one resolving every name to the empty string.
+OSR_APPLY_QUERY_OK="pkg_installed _pkgmap_one _pkgmap_exact _pkgmap_range _pkgmap_rhs _pkgmap_re _ver_cmp _ver_match _ver_prefixes _spec_method _native_installed _native_held service_resolve osr_downloader _chafa_version _chafa_ok _fzf_version _fzf_ok _osr_pkgconfig_path _yb_deb_url"
 
 # _osr_apply_verbs — echo every function name defined by the mutating libs.
 # Read out of the sources rather than a hand-kept list so it cannot drift.

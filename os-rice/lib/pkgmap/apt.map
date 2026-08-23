@@ -59,6 +59,20 @@ chafa-build-deps = libglib2.0-dev libfreetype-dev libjpeg-dev libwebp-dev libtif
 ueberzugpp = source:provide_ueberzugpp
 ueberzugpp-build-deps = libvips-dev libsixel-dev libssl-dev libtbb-dev libxcb1-dev libxcb-image0-dev libxcb-res0-dev libwayland-dev wayland-protocols extra-cmake-modules nlohmann-json3-dev libcli11-dev libfmt-dev libspdlog-dev librange-v3-dev pkg-config
 
+# fzf: the zsh ↑ history picker passes --gutter, added in fzf 0.66.0, and an
+# older fzf exits with `unknown option` instead of opening - see FZF_MIN in
+# lib/build.sh. Packaged versions per release (repology):
+#
+#   bullseye 0.24.3   bookworm 0.38.0   trixie   0.60.3
+#   jammy    0.29.0   noble    0.44.1   resolute 0.67.0  <- the only native row
+#
+# Upstream ships a static Go binary per arch, so this is a download, not a build.
+fzf@bullseye = source:provide_fzf
+fzf@bookworm = source:provide_fzf
+fzf@trixie   = source:provide_fzf
+fzf@jammy    = source:provide_fzf
+fzf@noble    = source:provide_fzf
+
 # Native name differences (Debian/Ubuntu).
 go = golang
 docker = docker.io

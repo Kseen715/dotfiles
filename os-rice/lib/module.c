@@ -314,9 +314,22 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
 
 /* --- packages ------------------------------------------------------------- */
 
+/* row_rhs -- the value half of a pkgmap row, given the text just past the '=':
+ * a trailing ` # comment` dropped (the space before # is required, so `a#b`
+ * survives) and both ends trimmed. _pkgmap_rhs in lib/pkg.sh. */
+static void row_rhs(Str *out, const char *p, size_t remain) {
+    size_t i;
+    size_t end = remain;
+    for (i = 0; i + 1 < remain; i++) {
+        if (is_space(p[i]) && p[i + 1] == '#') { end = i; break; }
+    }
+    while (end > 0 && is_space(p[end - 1])) end--;
+    for (i = 0; i < end && is_space(p[i]); i++) { /* ltrim */ }
+    str_add(out, p + i, end - i);
+}
+
 /* map_lookup -- one pkgmap row: `^[[:space:]]*<key>[[:space:]]*=`, then the
- * right-hand side with a trailing ` # comment` dropped and both ends trimmed.
- * Same two files, same order, as _pkgmap_one. */
+ * right-hand side per row_rhs. Same two files, same order, as _pkgmap_exact. */
 static int map_lookup(Str *out, const char *map_path, const char *key) {
     char *buf;
     size_t len;
@@ -338,68 +351,196 @@ static int map_lookup(Str *out, const char *map_path, const char *key) {
         if (remain == 0 || *p != '=') continue;
         p++;
         remain--;
-        {
-            size_t i;
-            size_t end = remain;
-            for (i = 0; i + 1 < remain; i++) {
-                if (is_space(p[i]) && p[i + 1] == '#') { end = i; break; }
-            }
-            while (end > 0 && is_space(p[end - 1])) end--;
-            for (i = 0; i < end && is_space(p[i]); i++) { /* ltrim */ }
-            str_add(out, p + i, end - i);
-        }
+        row_rhs(out, p, remain);
         found = 1;
     }
     free(buf);
     return found;
 }
 
-/* pkgmap_one -- the logical name resolved to real package name(s), trying the
- * facet-qualified keys first (`name@codename`, `name@version_id`,
- * `name@arch`), then the plain name, in <manager>.map then any.map. An
- * unlisted name passes through unchanged (§1). */
+/* ver_cmp -- _ver_cmp in lib/pkg.sh: component-wise numeric compare, -1/0/1.
+ * Missing components count as 0 (3 == 3.0.0, and 3.21 < 3.21.3), and each
+ * component keeps its leading digits only, which is what makes 15-SP5,
+ * 3.24_alpha and Ubuntu's 24.04 comparable at all. */
+static int ver_cmp(const char *a, const char *b) {
+    while (*a != '\0' || *b != '\0') {
+        long x = 0;
+        long y = 0;
+        while (*a >= '0' && *a <= '9') x = x * 10 + (*a++ - '0');
+        while (*b >= '0' && *b <= '9') y = y * 10 + (*b++ - '0');
+        if (x != y) return x > y ? 1 : -1;
+        while (*a != '\0' && *a != '.') a++;
+        while (*b != '\0' && *b != '.') b++;
+        if (*a == '.') a++;
+        if (*b == '.') b++;
+    }
+    return 0;
+}
+
+/* ver_match -- _ver_match: does <ver> satisfy a comparison facet (`<=3.20`,
+ * `<3.22`, `>=0.66`, `>13`)? Anything not starting with an operator is not a
+ * range, so a plain `name@3.20` key is never mistaken for one. */
+static int ver_match(const char *ver, const char *expr) {
+    int op;          /* 0 '<'   1 "<="   2 '>'   3 ">=" */
+    int c;
+
+    if (expr[0] == '<') {
+        op = expr[1] == '=' ? 1 : 0;
+        expr += op == 1 ? 2 : 1;
+    } else if (expr[0] == '>') {
+        op = expr[1] == '=' ? 3 : 2;
+        expr += op == 3 ? 2 : 1;
+    } else {
+        return 0;
+    }
+    if (*expr == '\0') return 0;
+    c = ver_cmp(ver, expr);
+    switch (op) {
+        case 0:  return c < 0;
+        case 1:  return c <= 0;
+        case 2:  return c > 0;
+        default: return c >= 0;
+    }
+}
+
+/* map_lookup_range -- the first `name@<op><ver>` row in this file whose
+ * comparison holds for <ver>. Ranges cannot be ordered by specificity the way
+ * exact keys can, so file order is the tie-break, exactly as in _pkgmap_range. */
+static int map_lookup_range(Str *out, const char *map_path, const char *name,
+                            const char *ver) {
+    char *buf;
+    size_t len;
+    size_t pos = 0;
+    Line line;
+    int found = 0;
+    size_t nlen = strlen(name);
+
+    buf = slurp(map_path, &len);
+    if (buf == NULL) return 0;
+    while (!found && next_line(buf, len, &pos, &line)) {
+        const char *p = line.start;
+        size_t remain = line.len;
+        Str expr;
+
+        while (remain > 0 && is_space(*p)) { p++; remain--; }
+        if (remain <= nlen + 1 || strncmp(p, name, nlen) != 0 || p[nlen] != '@') continue;
+        p += nlen + 1;
+        remain -= nlen + 1;
+        if (remain == 0 || (*p != '<' && *p != '>')) continue;
+        /* The comparison facet: the operator, then the version. Stopping at the
+         * first '=' the way the row separator is normally found would cut
+         * `<=3.22` down to `<`, so the operator is consumed first and only
+         * digits and dots after it (_pkgmap_range reads it with a sed for the
+         * same reason). */
+        str_init(&expr);
+        str_addc(&expr, *p);
+        p++;
+        remain--;
+        if (remain > 0 && *p == '=') { str_addc(&expr, *p); p++; remain--; }
+        while (remain > 0 && ((*p >= '0' && *p <= '9') || *p == '.')) {
+            str_addc(&expr, *p);
+            p++;
+            remain--;
+        }
+        while (remain > 0 && is_space(*p)) { p++; remain--; }
+        if (remain > 0 && *p == '=' && ver_match(ver, str_text(&expr))) {
+            row_rhs(out, p + 1, remain - 1);
+            found = 1;
+        }
+        str_free(&expr);
+    }
+    free(buf);
+    return found;
+}
+
+/* pkgmap_one -- the logical name resolved to real package name(s), most
+ * specific facet first, in <manager>.map then any.map (§1a, _pkgmap_one):
+ *
+ *   name@trixie    codename      exact
+ *   name@3.21.3    version_id    exact
+ *   name@3.21      version_id    dotted prefix, longest first (then name@3)
+ *   name@<=3.21    version_id    comparison, first matching row wins
+ *   name@x86_64    arch          exact
+ *   name           -             the bare row
+ *
+ * An unlisted name passes through unchanged (§1). */
 void osr_pkgmap_resolve(Str *out, const char *name) {
-    const char *facets[4];
+    const char *codename = env_str("OSR_CODENAME", NULL);
+    const char *version  = env_str("OSR_VERSION_ID", NULL);
+    const char *arch     = env_str("OSR_ARCH", NULL);
     Str key;
     Str map;
-    int i;
+    int stage;
     int j;
-
-    facets[0] = env_str("OSR_CODENAME", NULL);
-    facets[1] = env_str("OSR_VERSION_ID", NULL);
-    facets[2] = env_str("OSR_ARCH", NULL);
-    facets[3] = NULL;
+    int done = 0;
 
     str_init(&key);
     str_init(&map);
-    for (i = 0; i < 4; i++) {
-        if (i < 3 && facets[i] == NULL) continue;
+
+    /* The two map paths, rebuilt per probe: <manager>.map then any.map. */
+    #define OSR_MAP_PATH(which) do {                                  \
+        str_reset(&map);                                              \
+        str_addz(&map, env_str("OSR_LIB", "lib"));                    \
+        str_addz(&map, "/pkgmap/");                                   \
+        if ((which) == 0) {                                           \
+            str_addz(&map, osr_mod_pkg());                            \
+            str_addz(&map, ".map");                                   \
+        } else {                                                      \
+            str_addz(&map, "any.map");                                \
+        }                                                             \
+    } while (0)
+
+    /* stage 0 codename, 1 version_id, 2 version prefixes, 3 ranges, 4 arch,
+     * 5 the bare name. */
+    for (stage = 0; !done && stage <= 5; stage++) {
+        if (stage == 0 && codename == NULL) continue;
+        if ((stage == 1 || stage == 2 || stage == 3) && version == NULL) continue;
+        if (stage == 4 && arch == NULL) continue;
+
+        if (stage == 2) {
+            /* dotted prefixes, longest first: 3.21.3 -> 3.21 -> 3 */
+            size_t plen = strlen(version);
+            for (;;) {
+                size_t i = plen;
+                while (i > 0 && version[i - 1] != '.') i--;
+                if (i == 0) break;                   /* no dot left to drop */
+                plen = i - 1;
+                str_reset(&key);
+                str_addz(&key, name);
+                str_addc(&key, '@');
+                str_add(&key, version, plen);
+                for (j = 0; j < 2; j++) {
+                    OSR_MAP_PATH(j);
+                    if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
+                }
+                if (done) break;
+            }
+            continue;
+        }
+
+        if (stage == 3) {
+            for (j = 0; j < 2; j++) {
+                OSR_MAP_PATH(j);
+                if (map_lookup_range(out, str_text(&map), name, version)) { done = 1; break; }
+            }
+            continue;
+        }
+
         str_reset(&key);
         str_addz(&key, name);
-        if (i < 3) {
-            str_addc(&key, '@');
-            str_addz(&key, facets[i]);
-        }
+        if (stage == 0) { str_addc(&key, '@'); str_addz(&key, codename); }
+        if (stage == 1) { str_addc(&key, '@'); str_addz(&key, version); }
+        if (stage == 4) { str_addc(&key, '@'); str_addz(&key, arch); }
         for (j = 0; j < 2; j++) {
-            str_reset(&map);
-            str_addz(&map, env_str("OSR_LIB", "lib"));
-            str_addz(&map, "/pkgmap/");
-            if (j == 0) {
-                str_addz(&map, osr_mod_pkg());
-                str_addz(&map, ".map");
-            } else {
-                str_addz(&map, "any.map");
-            }
-            if (map_lookup(out, str_text(&map), str_text(&key))) {
-                str_free(&key);
-                str_free(&map);
-                return;
-            }
+            OSR_MAP_PATH(j);
+            if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
         }
     }
+    #undef OSR_MAP_PATH
+
     str_free(&key);
     str_free(&map);
-    str_addz(out, name);                     /* not listed -> unchanged */
+    if (!done) str_addz(out, name);          /* not listed -> unchanged */
 }
 
 /* native_installed -- the per-manager probe _native_installed used. */

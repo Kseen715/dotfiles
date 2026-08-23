@@ -10,37 +10,166 @@
 # MVP providers: native, script, source. cargo/aur/repo/tarball/brew/flatpak are
 # recognized tags but error until implemented (see DESIGN "Out of MVP").
 
+# --- facet version arithmetic (§1a) ------------------------------------------
+# Distro releases are numbered, and the interesting question about one is almost
+# never "is it exactly 3.21.3" but "is it old enough to need the fallback". These
+# three give the map file that vocabulary; see _pkgmap_one for the ordering.
+
+# _ver_cmp <a> <b> — component-wise numeric compare, `test`-style exit status:
+# 0 when a == b, 1 when a > b, 2 when a < b. Missing components count as 0, so
+# 3 == 3.0 == 3.0.0 and 3.21 < 3.21.3. Each component keeps its leading digits
+# only, which is what makes 15-SP5, 3.24_alpha and 2024.1-rc2 comparable at all;
+# a component with no digits at the front is a 0.
+_ver_cmp() {
+    _vc_a=$1; _vc_b=$2
+    while [ -n "$_vc_a" ] || [ -n "$_vc_b" ]; do
+        _vc_x=${_vc_a%%.*}; _vc_y=${_vc_b%%.*}
+        case "$_vc_a" in *.*) _vc_a=${_vc_a#*.} ;; *) _vc_a='' ;; esac
+        case "$_vc_b" in *.*) _vc_b=${_vc_b#*.} ;; *) _vc_b='' ;; esac
+        _vc_x=${_vc_x%%[!0-9]*}; _vc_y=${_vc_y%%[!0-9]*}
+        [ -n "$_vc_x" ] || _vc_x=0
+        [ -n "$_vc_y" ] || _vc_y=0
+        # Leading zeros are decimal here, not octal: `[ 04 -gt 4 ]` is false,
+        # which is what Ubuntu's 24.04 needs.
+        [ "$_vc_x" -gt "$_vc_y" ] && return 1
+        [ "$_vc_x" -lt "$_vc_y" ] && return 2
+    done
+    return 0
+}
+
+# _ver_match <version> <expr> — true when <version> satisfies a comparison facet
+# (`<=3.20`, `<3.22`, `>=0.66`, `>13`). Anything that does not start with an
+# operator is not a range and returns false, so an ordinary `name@3.20` key is
+# never mistaken for one.
+_ver_match() {
+    _vm_v=$1
+    case "$2" in
+        '<='*) _vm_op=le; _vm_w=${2#'<='} ;;
+        '>='*) _vm_op=ge; _vm_w=${2#'>='} ;;
+        '<'*)  _vm_op=lt; _vm_w=${2#'<'} ;;
+        '>'*)  _vm_op=gt; _vm_w=${2#'>'} ;;
+        *)     return 1 ;;
+    esac
+    [ -n "$_vm_w" ] || return 1
+    _ver_cmp "$_vm_v" "$_vm_w"; _vm_r=$?
+    case "$_vm_op" in
+        lt) [ "$_vm_r" -eq 2 ] ;;
+        le) [ "$_vm_r" -ne 1 ] ;;
+        gt) [ "$_vm_r" -eq 1 ] ;;
+        ge) [ "$_vm_r" -ne 2 ] ;;
+    esac
+}
+
+# _ver_prefixes <version> — the dotted prefixes of a version, longest first and
+# excluding the version itself: 3.21.3 -> `3.21 3`. This is what lets one
+# `name@3.21` row cover every 3.21.x point release, which matters because a
+# distro that reports a patch level (Alpine's VERSION_ID=3.21.3) would otherwise
+# need a key per point release.
+_ver_prefixes() {
+    _vp_v=$1
+    while [ "${_vp_v%.*}" != "$_vp_v" ]; do
+        _vp_v=${_vp_v%.*}
+        printf '%s ' "$_vp_v"
+    done
+}
+
+# --- pkgmap ------------------------------------------------------------------
+
+# _pkgmap_re <text> — <text> escaped for use inside a BRE. Keys carry dots
+# (`fzf@3.21`) and the occasional `+`; unescaped, `foo@3.21` would also match a
+# row for `foo@3x21`.
+_pkgmap_re() {
+    printf '%s' "$1" | sed 's/[].[^$*\\+?()|{}]/\\&/g'
+}
+
+# _pkgmap_rhs <line> — the value half of a map row: everything past the first
+# '=', with a trailing ` # comment` dropped (the space before # is required, so
+# `a#b` survives) and both ends trimmed.
+_pkgmap_rhs() {
+    printf '%s' "${1#*=}" | sed 's/[[:space:]]#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# _pkgmap_exact <key> — the RHS of the row whose key is exactly <key>, in
+# <manager>.map then any.map. Non-zero when no such row exists.
+_pkgmap_exact() {
+    _pe_re=$(_pkgmap_re "$1")
+    for _pe_map in "$OSR_LIB/pkgmap/$OSR_PKG.map" "$OSR_LIB/pkgmap/any.map"; do
+        [ -f "$_pe_map" ] || continue
+        _pe_line=$(grep "^[[:space:]]*${_pe_re}[[:space:]]*=" "$_pe_map" 2>/dev/null | head -n 1)
+        [ -n "$_pe_line" ] || continue
+        _pkgmap_rhs "$_pe_line"
+        return 0
+    done
+    return 1
+}
+
+# _pkgmap_range <name> <version> — the RHS of the first `name@<op><ver>` row
+# whose comparison holds for <version>, in <manager>.map then any.map and, within
+# a file, in the order the rows are written. Ranges cannot be ordered by
+# specificity the way exact keys can (`<=3.21` and `<4` are both "one row"), so
+# the file order IS the tie-break: put the tightest bound first.
+_pkgmap_range() {
+    _pr_name=$1; _pr_ver=$2
+    _pr_re=$(_pkgmap_re "$_pr_name")
+    for _pr_map in "$OSR_LIB/pkgmap/$OSR_PKG.map" "$OSR_LIB/pkgmap/any.map"; do
+        [ -f "$_pr_map" ] || continue
+        while IFS= read -r _pr_line; do
+            [ -n "$_pr_line" ] || continue
+            # The facet is read with sed, not `${_pr_line%%=*}`: the '=' in `<=`
+            # is not the row's separator, and cutting there would leave `<`.
+            _pr_expr=$(printf '%s' "$_pr_line" \
+                | sed -n "s/^[[:space:]]*${_pr_re}@\([<>]=\{0,1\}[0-9][0-9.]*\).*/\1/p")
+            [ -n "$_pr_expr" ] || continue
+            _ver_match "$_pr_ver" "$_pr_expr" || continue
+            # Same reason: hand _pkgmap_rhs the line with the key removed, so its
+            # `up to the first =` is the separator and nothing else.
+            _pkgmap_rhs "${_pr_line#*"$_pr_name@$_pr_expr"}"
+            return 0
+        done <<RANGEROWS
+$(grep "^[[:space:]]*${_pr_re}@[<>]" "$_pr_map" 2>/dev/null)
+RANGEROWS
+    done
+    return 1
+}
+
 # _pkgmap_one <name> — echo the RHS mapped for <name>, or <name> unchanged when
 # no row exists (the common case stays zero-effort, §1). Distro map wins over
 # the shared any.map.
 #
 # Facet qualifiers (§1a): a map key may carry an optional @facet, and the most
-# specific match wins — codename > version_id > arch > bare name. This is how a
-# package's install *method* can differ by distro release (`lsd@jammy`) or CPU
-# arch, not just by package manager (G6/G8). A qualified row exists only where
-# that facet actually diverges, so the common case is still zero-effort.
+# specific match wins:
+#
+#   name@trixie    codename          exact
+#   name@3.21.3    version_id        exact
+#   name@3.21      version_id        dotted prefix, longest first (then name@3)
+#   name@<=3.21    version_id        comparison, first matching row wins
+#   name@x86_64    arch              exact
+#   name           -                 the bare row
+#
+# This is how a package's install *method* can differ by distro release
+# (`lsd@jammy`, `fzf@<=3.22`) or CPU arch, not just by package manager (G6/G8).
+# A qualified row exists only where that facet actually diverges, so the common
+# case is still zero-effort.
 _pkgmap_one() {
     _pm_name=$1
-    # Candidate keys, most specific first. Facet values are empty on distros
-    # that don't report them (${VAR:+...} drops the key entirely then); package
-    # names + facet values carry no spaces, so an unquoted expansion is safe.
+    # Facet values are empty on distros that don't report them (${VAR:+...}
+    # drops the key entirely then); names + facet values carry no spaces, so the
+    # unquoted expansion is safe.
     for _pm_key in \
         ${OSR_CODENAME:+"$_pm_name@$OSR_CODENAME"} \
-        ${OSR_VERSION_ID:+"$_pm_name@$OSR_VERSION_ID"} \
-        ${OSR_ARCH:+"$_pm_name@$OSR_ARCH"} \
-        "$_pm_name"; do
-        for _pm_map in "$OSR_LIB/pkgmap/$OSR_PKG.map" "$OSR_LIB/pkgmap/any.map"; do
-            [ -f "$_pm_map" ] || continue
-            _pm_line=$(grep "^[[:space:]]*${_pm_key}[[:space:]]*=" "$_pm_map" 2>/dev/null | head -n 1)
-            if [ -n "$_pm_line" ]; then
-                # strip up to and including the first '='; drop a trailing inline
-                # ` # comment` (whitespace before # required, so `a#b` survives);
-                # then trim surrounding space.
-                _pm_rhs=$(printf '%s' "${_pm_line#*=}" | sed 's/[[:space:]]#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//')
-                printf '%s' "$_pm_rhs"
-                return 0
-            fi
+        ${OSR_VERSION_ID:+"$_pm_name@$OSR_VERSION_ID"}; do
+        if _pm_hit=$(_pkgmap_exact "$_pm_key"); then printf '%s' "$_pm_hit"; return 0; fi
+    done
+    if [ -n "${OSR_VERSION_ID:-}" ]; then
+        for _pm_pfx in $(_ver_prefixes "$OSR_VERSION_ID"); do
+            if _pm_hit=$(_pkgmap_exact "$_pm_name@$_pm_pfx"); then printf '%s' "$_pm_hit"; return 0; fi
         done
+        if _pm_hit=$(_pkgmap_range "$_pm_name" "$OSR_VERSION_ID"); then
+            printf '%s' "$_pm_hit"; return 0
+        fi
+    fi
+    for _pm_key in ${OSR_ARCH:+"$_pm_name@$OSR_ARCH"} "$_pm_name"; do
+        if _pm_hit=$(_pkgmap_exact "$_pm_key"); then printf '%s' "$_pm_hit"; return 0; fi
     done
     printf '%s' "$_pm_name"
 }

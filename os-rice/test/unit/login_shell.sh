@@ -15,6 +15,12 @@ OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
 OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB
 NO_COLOR=1
 . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"
+# build.sh for _fzf_ok/FZF_MIN, which modules/zsh.sh calls before it ever
+# reaches the login-shell block below.
+. "$OSR_LIB/net.sh"; . "$OSR_LIB/pkg.sh"; . "$OSR_LIB/build.sh"
+# ...and pinned true, so the login-shell path under test never reaches provide_fzf:
+# a CI host with an old (or no) fzf would otherwise download one.
+_fzf_ok() { return 0; }
 . "$HERE/../lib.sh"
 
 TMP=$(mktemp -d)

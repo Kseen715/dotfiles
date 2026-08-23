@@ -413,6 +413,65 @@ provide_lsd_tarball() {
         "https://github.com/lsd-rs/lsd/releases/download/${_lt_tag}/lsd-${_lt_tag}-${_lt_a}.tar.gz" lsd
 }
 
+# --- fzf ---------------------------------------------------------------------
+# The ↑ history picker in zsh/rc.d/10-omz.zsh draws itself with --gutter, which
+# landed in fzf 0.66.0 (CHANGELOG). An older fzf does not ignore the flag - it
+# prints `unknown option: --gutter` and exits - so ↑ answers with an error line
+# instead of a history window. Version, not presence, is the thing to test.
+FZF_MIN=0.66
+
+# _fzf_version — MAJOR.MINOR of the fzf on PATH, empty when there is none.
+# `fzf --version` prints "0.60 (devel)" on a distro build, "0.74.3 (15f64c49)"
+# on an upstream one; both open with the number.
+_fzf_version() {
+    command -v fzf >/dev/null 2>&1 || return 0
+    fzf --version 2>/dev/null | head -n 1 \
+        | sed -n 's/^[^0-9]*\([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p'
+}
+
+# _fzf_ok — true when the fzf on PATH is >= FZF_MIN. fzf is still 0.x, so the
+# MINOR is the whole comparison in practice; MAJOR is compared anyway for the
+# day 1.0 ships.
+_fzf_ok() {
+    _fok_have=$(_fzf_version)
+    [ -n "$_fok_have" ] || return 1
+    _fok_hmaj=${_fok_have%%.*}; _fok_hmin=${_fok_have#*.}
+    _fok_wmaj=${FZF_MIN%%.*};   _fok_wmin=${FZF_MIN#*.}
+    if [ "$_fok_hmaj" -ne "$_fok_wmaj" ]; then
+        [ "$_fok_hmaj" -gt "$_fok_wmaj" ]
+    else
+        [ "$_fok_hmin" -ge "$_fok_wmin" ]
+    fi
+}
+
+# provide_fzf — fzf from its upstream release tarball, for the releases whose
+# archive is older than FZF_MIN (the tables in apt.map/dnf.map). One static Go
+# binary per target, so unlike the glibc tarballs above this is also the right
+# route on musl (Alpine <= 3.22 is behind, and apk cannot be faceted - see the
+# note in apk.map - so there the module's guard is what calls this).
+#
+# Idempotency goes BEYOND _via_source's `command -v fzf` probe (§2), for the
+# same reason provide_chafa does: an old distro fzf satisfies that probe and
+# would never be replaced. The version re-check here makes the builder safe to
+# call directly, which modules/zsh.sh does. /usr/local/bin precedes /usr/bin, so
+# the downloaded fzf wins even where the old package stays installed.
+provide_fzf() {
+    if _fzf_ok; then
+        info "fzf $(_fzf_version) is already >= $FZF_MIN - skipping the release binary"
+        return 0
+    fi
+    _fz_tag=$(github_latest junegunn/fzf); _fz_ver=${_fz_tag#v}   # v0.74.3 -> 0.74.3
+    # fzf's asset arch is Go's (amd64/arm64/armv7), not uname's.
+    case "$OSR_ARCH" in
+        x86_64)  _fz_a=amd64 ;;
+        aarch64) _fz_a=arm64 ;;
+        armv7l)  _fz_a=armv7 ;;
+        *)       error "no fzf release binary for arch $OSR_ARCH" ;;
+    esac
+    _osr_install_tarball_bin \
+        "https://github.com/junegunn/fzf/releases/download/${_fz_tag}/fzf-${_fz_ver}-linux_${_fz_a}.tar.gz" fzf
+}
+
 # provide_fastfetch_tarball — fastfetch binary from the release .tar.gz (old dpkg).
 provide_fastfetch_tarball() {
     _ft_tag=$(github_latest fastfetch-cli/fastfetch)    # 2.66.0

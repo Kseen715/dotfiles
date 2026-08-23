@@ -478,6 +478,37 @@ if (( $+commands[fzf] )) &&
         done
     }
 
+    # --- what THIS fzf understands ------------------------------------------
+    # The cosmetic flags below are not all the same age: --no-info arrived in
+    # 0.28, --no-separator/--no-scrollbar in 0.30-0.35, the `~` (auto-shrink)
+    # form of --height in 0.34, and --gutter only in 0.66. An fzf that does not
+    # know one of them does not ignore it — it prints `unknown option: --gutter`
+    # and exits, which is exactly what ↑ does on a box whose distro ships an
+    # older fzf than this laptop. So none of them may be hard-coded into the
+    # call: probe once, on first use, and pass on only what this build accepts.
+    #
+    # `fzf <opt> --version` is a full parse of the option line — an unknown flag
+    # is reported before the version is printed — so it is a complete check and
+    # it needs no terminal. Probing lazily rather than at load keeps these few
+    # fzf spawns off every shell's startup path.
+    #
+    # Dropping a flag is safe in every case: gutter/separator/scrollbar are
+    # already blanked by the -1 colors above, and a plain --height=N just fixes
+    # the window at ten rows instead of shrinking it around a short list.
+    typeset -ga _osr_fzf_opts=()
+    _osr_fzf_build_opts() {
+        local o
+        for o in --no-info --no-separator --no-scrollbar \
+                 '--pointer= ' '--marker= ' '--gutter= ' --min-height=3; do
+            fzf "$o" --version &>/dev/null && _osr_fzf_opts+=( "$o" )
+        done
+        if fzf --height='~10' --version &>/dev/null; then
+            _osr_fzf_opts+=( "--height=~$(( _osr_list_rows + 1 ))" )
+        else
+            _osr_fzf_opts+=( "--height=$(( _osr_list_rows + 1 ))" )
+        fi
+    }
+
     zle -A up-line-or-search _osr_up-line-or-search
     _osr_fzf_history() {
         # ↑ inside a multi-line buffer moves up a line and always has. That is
@@ -495,13 +526,12 @@ if (( $+commands[fzf] )) &&
         # FZF_DEFAULT_OPTS is cleared for this one call: it is a user-level knob
         # for interactive fzf, and a --layout or --bind left in it would rewrite
         # the keys this widget promises not to change.
+        (( $#_osr_fzf_opts )) || _osr_fzf_build_opts
         out=$( _osr_fzf_history_feed "$LBUFFER" |
             FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
-            --height="~$(( _osr_list_rows + 1 ))" --min-height=3 \
+            "$_osr_fzf_opts[@]" \
             --delimiter=$'\t' --with-nth='2..' \
-            --no-multi --no-sort \
-            --no-info --no-separator --no-scrollbar \
-            --pointer=' ' --marker=' ' --gutter=' ' --prompt='> ' \
+            --no-multi --no-sort --prompt='> ' \
             --color="$_osr_fzf_colors" \
             --expect=left,right,home,end ) || { zle reset-prompt; return 0 }
 

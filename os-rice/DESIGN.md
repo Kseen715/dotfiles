@@ -323,7 +323,7 @@ zig@aarch64        = source:build-zig                     # no prebuilt for arm6
 ```
 
 ```sh
-_pkgmap() {                          # facet order: codename > version > arch > bare
+_pkgmap() {          # facet order: codename > version (exact, prefix, range) > arch > bare
   for name; do
     line=""
     for key in "$name@$OSR_CODENAME" "$name@$OSR_VERSION_ID" "$name@$OSR_ARCH" "$name"; do
@@ -349,11 +349,38 @@ _pkgmap() {                          # facet order: codename > version > arch > 
   prerequisite (`pkg_install zig` at its top), so the qualifier never forces a
   conditional into the manifest.
 
-> Ceiling: explicit per-release rows, not version *ranges* (`foo <24.04`).
-> Ranges need a POSIX version-compare — add `sort -V` only if hand-listing 1–2
-> old releases per package ever becomes unmaintainable. Likewise arch: two
-> naming schemes (`OSR_ARCH`, `OSR_ARCH_DEB`); add a third alias var only when a
-> third upstream convention (`x64`, …) forces it — no general arch-name mapper.
+**Version facets** (the ceiling this section used to draw, since crossed). Two
+things pushed past hand-listing one row per release: a distro whose
+`VERSION_ID` carries a patch level (Alpine reports `3.21.3`, so an exact key
+would have to name every point release), and the shape of the question a row
+usually asks — "is this release old enough to need the fallback", which no
+exact key can express. So `OSR_VERSION_ID` gets two extra rungs, and the full
+ladder is:
+
+```
+name@trixie    codename        exact
+name@3.21.3    version_id      exact
+name@3.21      version_id      dotted prefix, longest first (then name@3)
+name@<=3.21    version_id      comparison: < <= > >=, first matching row wins
+name@x86_64    arch            exact
+name           -               the bare row
+```
+
+Prefixes are *components*, not string prefixes: `name@3.21` covers 3.21.x and
+never 3.210. Comparisons are component-wise and numeric, missing components
+count as 0 (`3` == `3.0.0`), and each component keeps its leading digits only,
+which is what makes `24.04`, `15-SP5` and `3.24_alpha` comparable at all — a
+hand-rolled compare in `_ver_cmp`, not `sort -V`, because it must run identically
+in `lib/module.c` (§C tier). Mind the boundary that follows from that: `3.22.1` is *greater* than `3.22`, so
+a bound meant to cover a whole series is `<3.23`, not `<=3.22`. Ranges have no
+specificity order between them
+(`<=3.21` and `<4` are both "one row"), so **file order is the tie-break: write
+the tightest bound first**.
+
+> Remaining ceiling: no ranges on codename (unordered by nature) and none on
+> arch. Likewise arch keeps two naming schemes (`OSR_ARCH`, `OSR_ARCH_DEB`); add
+> a third alias var only when a third upstream convention (`x64`, …) forces it —
+> no general arch-name mapper.
 
 ---
 

@@ -11,9 +11,25 @@
 # whole history behind them — complist cannot window a list, fzf can). The rc
 # side is guarded on the binary being present, so a machine without it falls
 # back to the plain completion menu rather than breaking ↑; it is listed here so
-# that machine does not exist. No pkgmap row: `fzf` is the package name on apt,
-# pacman, dnf, apk and xbps, and resolves to a unique atom on portage.
+# that machine does not exist. The NAME needs no pkgmap row — `fzf` is the
+# package on apt, pacman, dnf, apk and xbps, and a unique atom on portage — but
+# the VERSION does on the releases frozen below FZF_MIN; see the tables in
+# apt.map/dnf.map/apk.map and the guard below.
 run_step "Installing zsh and tools" pkg_install zsh git curl lsd fzf
+
+# ...but presence is not sufficiency: the ↑ widget draws itself with --gutter,
+# which only exists in fzf 0.66+ (FZF_MIN, lib/build.sh), and an older fzf exits
+# with `unknown option: --gutter` the moment ↑ is pressed - so the key answers
+# with an error line instead of a history window. The pkgmap rows route the
+# releases known to be behind straight to provide_fzf, and this catches the rest:
+# a box that ALREADY had an old distro fzf (which satisfies pkg_install's
+# presence probe and would never be replaced - the case this was found on, Debian
+# 13 with 0.60), an EOL release, or an admin-pinned package. provide_fzf is a
+# no-op when the fzf on PATH is already new enough, so the guard costs one
+# `fzf --version`.
+if ! _fzf_ok; then
+    run_step "Installing fzf >= $FZF_MIN (zsh up-arrow history picker)" provide_fzf
+fi
 
 run_step "Installing oh-my-zsh" install_omz
 run_step "Installing zsh-autosuggestions" \

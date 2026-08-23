@@ -30,6 +30,21 @@ ueberzugpp-build-deps = vips-dev libsixel-dev openssl-dev onetbb-dev libxcb-dev 
 # ships 140+ natively, which is the actual fix; modules/thunderbird.sh's version
 # guard is what tells a 3.21 user why Exchange is missing.
 
+# fzf: the zsh ↑ history picker passes --gutter, added in fzf 0.66.0, and an
+# older fzf exits with `unknown option` instead of opening - see FZF_MIN in
+# lib/build.sh. Alpine crossed that floor at 3.23:
+#
+#   3.20 0.52.0   3.22 0.62.0   3.24 0.73.1
+#   3.21 0.56.3   3.23 0.67.0   edge 0.74.3
+#
+# and this is the row the version facets (§1a) were added for: Alpine's
+# VERSION_ID carries the patch level (3.21.3), so an exact key would have to name
+# every point release. The bound is `<3.23` and not `<=3.22`, because the compare
+# is component-wise: 3.22.1 is GREATER than 3.22, so `<=3.22` would let a 3.22
+# point release through. provide_fzf downloads a static Go binary, so unlike the
+# thunderbird note above it runs on musl.
+fzf@<3.23 = source:provide_fzf
+
 # Alpine ships perf only; no turbostat package exists.
 kernel-tools = perf
 

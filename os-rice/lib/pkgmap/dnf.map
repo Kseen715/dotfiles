@@ -21,6 +21,18 @@ ueberzugpp-build-deps = vips-devel libsixel-devel openssl-devel tbb-devel libxcb
 # IS native on Fedora, so it passes through).
 starship = script:https://starship.rs/install.sh --yes
 
+# fzf: needs >= 0.66 for --gutter (FZF_MIN, lib/build.sh). Fedora rebuilds fzf
+# on every SUPPORTED branch, so the current ones are fine; the EOL branches keep
+# whatever they had when updates stopped, and f41 stopped just under the floor:
+#
+#   f39 0.56.3 (EOL)   f41 0.65.2 (EOL)   f43 0.74.2
+#   f40 0.61.3 (EOL)   f42 0.70.0         f44 0.74.2
+#
+# Fedora has no VERSION_CODENAME, so the facet is the version_id.
+fzf@39 = source:provide_fzf
+fzf@40 = source:provide_fzf
+fzf@41 = source:provide_fzf
+
 # Native name differences + provider fallbacks (native-first, checked per distro).
 go = golang
 docker = moby-engine

@@ -18,6 +18,13 @@ OSR_LIB="$OSR_ROOT/lib"; export OSR_LIB OSR_DOTFILES OSR_PKG=apt
 NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
 . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/user.sh"
 . "$OSR_LIB/config.sh"; . "$OSR_LIB/migrate.sh"
+# build.sh for _fzf_ok/FZF_MIN: modules/zsh.sh gates the fzf version with it
+# (an old distro fzf breaks the up-arrow history picker), and install.sh has
+# every lib sourced by the time a module runs.
+. "$OSR_LIB/net.sh"; . "$OSR_LIB/pkg.sh"; . "$OSR_LIB/build.sh"
+# ...and pinned true, so the migration path under test never reaches provide_fzf:
+# a CI host with an old (or no) fzf would otherwise download one.
+_fzf_ok() { return 0; }
 . "$HERE/../lib.sh"
 
 run_step() { shift; "$@"; }
