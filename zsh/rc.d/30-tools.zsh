@@ -81,5 +81,10 @@ _osr_ssh_agent_start() {
 # 3. Only if both fail, start one — and record it, which is what was missing.
 if [[ ! -S ${SSH_AUTH_SOCK:-} ]]; then
     [[ -r $SSH_ENV ]] && . "$SSH_ENV" >/dev/null 2>&1
-    kill -0 "${SSH_AGENT_PID:-0}" 2>/dev/null || _osr_ssh_agent_start
+    # Not `kill -0 ${SSH_AGENT_PID:-0}`: with the var unset that expands to
+    # `kill -0 0`, which signals the *current process group* and always succeeds,
+    # so the agent was never started. Check the var is set before probing it.
+    if [[ -z ${SSH_AGENT_PID:-} ]] || ! kill -0 "$SSH_AGENT_PID" 2>/dev/null; then
+        _osr_ssh_agent_start
+    fi
 fi
