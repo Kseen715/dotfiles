@@ -1,0 +1,137 @@
+/* gtk-greeter.css — theme-owned, rendered per theme (§6b), installed by
+ * modules/lightdm.sh into the GREETER USER's GTK config
+ * (/var/lib/lightdm/.config/gtk-3.0/gtk.css), not into ~/.config.
+ *
+ * lightdm-gtk-greeter has no `css =` key: the only way to paint it beyond the
+ * `theme-name` it inherits is the user CSS GTK3 loads out of $HOME/.config for
+ * whatever user the greeter runs as. That is why this file exists as a second
+ * layer beside lightdm-gtk-greeter.conf instead of being folded into it.
+ *
+ * Widget names below are the greeter's own (lightdm-gtk-greeter.ui): #panel_window
+ * is the top bar, #login_window the centred prompt, and both are plain GTK
+ * widgets — anything unstyled here falls back to {{gtk_theme}}.
+ */
+
+@define-color osr_bg           {{background}};
+@define-color osr_bg_sunken    {{background_sunken}};
+@define-color osr_panel        {{panel_background}};
+@define-color osr_surface      {{surface_mid}};
+@define-color osr_border       {{border}};
+@define-color osr_fg           {{foreground}};
+@define-color osr_fg_dim       {{text_muted}};
+@define-color osr_accent       {{accent}};
+@define-color osr_error        {{error}};
+
+* {
+    font-family: "{{ui_font_family}}";
+    font-size: {{ui_font_size}}pt;
+}
+
+/* --- the top panel (host, clock, session + power indicators) --------------- */
+#panel_window {
+    background-color: alpha(@osr_panel, 0.85);
+    color: @osr_fg;
+    border-bottom: 1px solid @osr_border;
+    font-weight: 500;
+}
+
+#panel_window menubar,
+#panel_window menubar > menuitem {
+    background-color: transparent;
+    color: @osr_fg;
+}
+
+#panel_window menubar > menuitem:hover {
+    background-color: @osr_accent;
+    color: @osr_bg;
+}
+
+#panel_window menu {
+    background-color: @osr_panel;
+    color: @osr_fg;
+    border: 1px solid @osr_border;
+}
+
+#panel_window menu menuitem:hover {
+    background-color: @osr_accent;
+    color: @osr_bg;
+}
+
+#clock_label {
+    color: @osr_fg;
+    font-weight: 600;
+}
+
+/* --- the login prompt ------------------------------------------------------ */
+#login_window,
+#shutdown_dialog,
+#restart_dialog {
+    background-color: alpha(@osr_bg, 0.92);
+    border: 1px solid @osr_border;
+    border-radius: 12px;
+    color: @osr_fg;
+    padding: 18px;
+}
+
+#content_frame {
+    padding-bottom: 14px;
+}
+
+#login_window entry {
+    background-color: @osr_bg_sunken;
+    color: @osr_fg;
+    caret-color: @osr_accent;
+    border: 1px solid @osr_border;
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-height: 30px;
+}
+
+#login_window entry:focus {
+    border-color: @osr_accent;
+    box-shadow: none;
+}
+
+#login_window button,
+#buttonbox_frame button {
+    background-image: none;
+    background-color: @osr_surface;
+    color: @osr_fg;
+    border: 1px solid @osr_border;
+    border-radius: 8px;
+    padding: 6px 16px;
+}
+
+#login_window button:hover,
+#buttonbox_frame button:hover {
+    background-color: @osr_accent;
+    color: @osr_bg;
+    border-color: @osr_accent;
+}
+
+#login_window button:active,
+#buttonbox_frame button:active {
+    background-color: shade(@osr_accent, 0.85);
+    color: @osr_bg;
+}
+
+/* The greeter reuses one label for "Incorrect password" and the session hint. */
+#login_window label {
+    color: @osr_fg_dim;
+}
+
+#login_window #user_combo {
+    color: @osr_fg;
+}
+
+#user_image {
+    border: 2px solid @osr_accent;
+    border-radius: 50%;
+    padding: 2px;
+}
+
+/* Wrong password / PAM failure. */
+#login_window .lightdm-gtk-greeter-error,
+#login_window label.error {
+    color: @osr_error;
+}

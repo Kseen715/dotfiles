@@ -58,7 +58,8 @@ desaturated neutral. Keep it that way when adding modules.
 | `config/Xresources/colors` | appended to `~/.Xresources` |
 | `config/gtk-{2,3,4}.0/*`, `xsettingsd/*`, `qt{5,6}ct/*` | `~/.config/...` |
 | `config/betterlockscreen/*` | `~/.config/betterlockscreen/` |
-| `config/lightdm/*` | `/etc/lightdm/` (root — the greeter has no home) |
+| `lightdm/lightdm-gtk-greeter.conf.tmpl` | `/etc/lightdm/` (root — the greeter has no home) |
+| `lightdm/gtk-greeter.css.tmpl` | `/var/lib/lightdm/.config/gtk-3.0/gtk.css` (the greeter's own GTK user sheet) |
 | `config/{ghostty,wezterm,btop,serie}/*`, `starship.palette.toml`, `zsh/90-theme.zsh` | terminal + shell |
 | `config/micro/{settings.json,rosemary.micro}` | merged over the dotfiles micro base |
 | `config/evolution/gsettings.conf` | applied with `gsettings` (key-by-key) |
