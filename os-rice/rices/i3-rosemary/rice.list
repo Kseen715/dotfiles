@@ -104,11 +104,12 @@ yazi
 # --- files + terminal ----------------------------------------------------------
 # helpers (a C module) is what makes "Open Terminal Here" and every other
 # exo-resolved role point at a program that exists, and installs xterm as the
-# guaranteed fallback terminal. It has to follow ghostty: the role it seeds names
-# ghostty, and seeding a role before its terminal exists is how you get a menu
-# entry that silently does nothing.
+# guaranteed fallback terminal. It has to follow the terminal module: the role
+# it seeds names osr-term, which picks alacritty first, and seeding a role
+# before its terminal exists is how you get a menu entry that silently does
+# nothing.
 thunar
-ghostty
+alacritty
 helpers
 
 # --- applications --------------------------------------------------------------

@@ -15,11 +15,16 @@
  *
  *   1. exo            the resolver itself (Debian splits the tools out as
  *                     exo-utils; apt.map carries the row)
- *   2. a helper entry the rice's terminal is ghostty, which ships no upstream
- *      for ghostty   .desktop under /usr/share/xfce4/helpers/, so the role
- *                     would resolve to a name exo cannot expand
- *   3. xterm          the escape hatch. ghostty is GPU-accelerated and wezterm
- *                     is built from source, so either can fail on a machine
+ *   2. a helper entry osr-term (i3/scripts/term.sh) is the session's one
+ *      for osr-term   terminal launcher, and nothing ships an X-XFCE-Helper
+ *                     .desktop for it, so the role would resolve to a name exo
+ *                     cannot expand. Pointing the role at osr-term rather than
+ *                     at alacritty directly is deliberate: exo gets the same
+ *                     degrade-to-something-that-runs behaviour as $mod+Return,
+ *                     instead of its own second opinion about which terminal
+ *                     this machine has.
+ *   3. xterm          the escape hatch. Every terminal a rice would pick is
+ *                     GPU-accelerated, so any of them can fail on a machine
  *                     where the rest of the session is fine. One package is the
  *                     difference between "my terminal is broken" and "I cannot
  *                     open a terminal to find out why".
@@ -45,22 +50,22 @@ static const char helpers_rc[] =
     "# Seeded once by os-rice (modules/helpers.c) - yours to edit, never rewritten.\n"
     "# Role -> helper id. exo-open --launch <role> resolves through this file;\n"
     "# the ids expand via /usr/share/xfce4/helpers/<id>.desktop.\n"
-    "TerminalEmulator=ghostty\n"
+    "TerminalEmulator=osr-term\n"
     "FileManager=Thunar\n";
 
 /* The helper entry upstream does not ship. X-XFCE-CommandsWithParameter is the
  * form used when a caller passes a command to run in the new terminal ("Open
  * Terminal Here" passes none, and falls back to X-XFCE-Commands). */
-static const char ghostty_helper[] =
+static const char osrterm_helper[] =
     "[Desktop Entry]\n"
     "Version=1.0\n"
     "Encoding=UTF-8\n"
     "Type=X-XFCE-Helper\n"
     "X-XFCE-Category=TerminalEmulator\n"
-    "X-XFCE-CommandsWithParameter=ghostty -e \"%s\";\n"
-    "X-XFCE-Commands=ghostty;\n"
+    "X-XFCE-CommandsWithParameter=osr-term -e \"%s\";\n"
+    "X-XFCE-Commands=osr-term;\n"
     "Icon=utilities-terminal\n"
-    "Name=Ghostty\n";
+    "Name=Terminal\n";
 
 int osrm_helpers(void) {
     static const char *const pkgs[] = { "exo", "xterm", NULL };
@@ -81,10 +86,10 @@ int osrm_helpers(void) {
 
     /* Root-owned on purpose: a helper id is resolved from the system dir, and
      * the per-user ~/.local/share/xfce4/helpers path is not read by every exo
-     * build. A packaged ghostty that starts shipping this file wins - the seed
-     * only writes when nothing is there. */
-    if (!osr_seed_file_root("/usr/share/xfce4/helpers/ghostty.desktop", ghostty_helper)) {
-        osr_warnf("could not write the ghostty helper entry - "
+     * build. The seed only writes when nothing is there, so a distro that ever
+     * starts shipping this id wins. */
+    if (!osr_seed_file_root("/usr/share/xfce4/helpers/osr-term.desktop", osrterm_helper)) {
+        osr_warnf("could not write the osr-term helper entry - "
                   "set TerminalEmulator in ~/.config/xfce4/helpers.rc to a packaged terminal");
         ok = 0;
     }

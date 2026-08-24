@@ -58,8 +58,15 @@ scrollback-limit = 100000000
 # oh-my-zsh's termsupport stands down here and keeps writing titles under foot /
 # alacritty / wezterm. Adding `no-title` below hands the title back to omz
 # automatically — the guard reads this list, it does not assume an answer.
+#
+# The feature list itself is NOT here: ssh-env/ssh-terminfo landed in 1.2, and
+# Ghostty rejects the WHOLE key when it does not recognise one value — so on an
+# older build this line loses `sudo` and `title` too, and puts a config-error
+# banner across the top of every window. modules/ghostty.sh reads the installed
+# version and writes the list this build actually understands into
+# `ghostty-features`, included just below (§9: degrade, never break).
 shell-integration = detect
-shell-integration-features = ssh-env,ssh-terminfo,sudo
+config-file = ?ghostty-features
 
 # Manual fallback for a host ssh-terminfo cannot write to (no tic, read-only
 # /usr/share/terminfo, jump host), run once per host:

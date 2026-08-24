@@ -17,7 +17,9 @@ configuration {
     disable-history:     false;
     sort:                true;
     matching:            "fuzzy";
-    terminal:            "ghostty";
+    /* Same launcher i3's $term resolves to, so a rofi-opened terminal
+     * degrades the same way a $mod+Return one does. Passes -e through. */
+    terminal:            "osr-term";
     kb-cancel:           "Escape,Super+d";
 }
 

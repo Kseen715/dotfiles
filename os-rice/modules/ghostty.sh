@@ -32,6 +32,45 @@ if [ -f "$OSR_DOTFILES/ghostty/config" ]; then
     install_layer "$OSR_DOTFILES/ghostty/config" "$OSR_HOME/.config/ghostty/config"
 fi
 
+# --- shell-integration features, gated on the installed version --------------
+# `shell-integration-features` is all-or-nothing: one unrecognised value and
+# Ghostty discards the entire key and shows a config error at the top of every
+# window ("invalid value \"ssh-env,ssh-terminfo,sudo\""). ssh-env and
+# ssh-terminfo are 1.2+, so on an older build asking for them costs `sudo` and
+# `title` as well as the ssh comfort — a strictly worse terminal than saying
+# nothing. Hence: probe, then write only what this build knows.
+_gh_ver=$(ghostty +version 2>/dev/null | sed -n 's/^[Vv]ersion: *//p' | head -n1)
+: "${_gh_ver:=0}"
+_gh_major=${_gh_ver%%.*}
+_gh_rest=${_gh_ver#*.}
+_gh_minor=${_gh_rest%%.*}
+case "$_gh_major$_gh_minor" in *[!0-9]*|"") _gh_major=0; _gh_minor=0 ;; esac
+
+if [ "$_gh_major" -gt 1 ] || { [ "$_gh_major" -eq 1 ] && [ "$_gh_minor" -ge 2 ]; }; then
+    _gh_features=ssh-env,ssh-terminfo,sudo
+else
+    # `sudo` is 1.1+. Below that there is nothing safe to name, and an empty
+    # file leaves every feature on its default — which is the correct answer,
+    # not a degraded one.
+    if [ "$_gh_major" -eq 1 ] && [ "$_gh_minor" -ge 1 ]; then
+        _gh_features=sudo
+    else
+        _gh_features=
+    fi
+    warn "ghostty $_gh_ver predates ssh-env/ssh-terminfo (1.2+): remote TERM fixes are off"
+fi
+
+as_user mkdir -p "$OSR_HOME/.config/ghostty"
+if [ -n "$_gh_features" ]; then
+    # Rewritten, not appended: a Ghostty upgrade has to be able to turn the ssh
+    # features ON, and ensure_line could only ever add a second, later-winning
+    # copy of the key.
+    as_user sh -c 'printf "shell-integration-features = %s\n" "$1" >"$2"' \
+        sh "$_gh_features" "$OSR_HOME/.config/ghostty/ghostty-features"
+else
+    as_user sh -c ':>"$1"' sh "$OSR_HOME/.config/ghostty/ghostty-features"
+fi
+
 # Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
 # dotfiles default covers a rice that ships no palette. In --module mode
 # OSR_THEME_DIR is whatever rice the theme picker resolved (§6).

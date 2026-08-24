@@ -41,12 +41,22 @@ if [ -f "$OSR_DOTFILES/i3/.config/i3/config" ]; then
 fi
 
 # Helper scripts the bindings call (power menu, volume/brightness OSD).
-for _s in rofi-powermenu.sh osd.sh; do
+for _s in rofi-powermenu.sh osd.sh layout.sh; do
     if [ -f "$OSR_DOTFILES/i3/.config/i3/scripts/$_s" ]; then
         install_layer "$OSR_DOTFILES/i3/.config/i3/scripts/$_s" "$OSR_HOME/.config/i3/scripts/$_s"
         as_user chmod +x "$OSR_HOME/.config/i3/scripts/$_s"
     fi
 done
+
+# The terminal launcher goes on PATH as `osr-term`, not into ~/.config/i3, for
+# one reason: rofi's `terminal:` value is TOKENIZED, not run through a shell, so
+# a "~/.config/..." path there resolves to nothing and every "open in terminal"
+# in rofi dies silently. One name that every consumer can spell — i3's $term,
+# rofi, and the xfce4 helpers.rc that helpers.c seeds — beats three paths.
+if [ -f "$OSR_DOTFILES/i3/.config/i3/scripts/term.sh" ]; then
+    run_step "Installing the terminal launcher (osr-term)" \
+        as_root install -m 0755 "$OSR_DOTFILES/i3/.config/i3/scripts/term.sh" /usr/local/bin/osr-term
+fi
 
 # Theme layer (rice-owned, swapped on switch §6).
 # Two substitutions, in order: the palette (§6b), then the wallpaper path -

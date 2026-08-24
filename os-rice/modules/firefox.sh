@@ -29,15 +29,54 @@ run_step "Installing Firefox" pkg_install firefox
 # is no de-snap route worth taking here (packages.mozilla.org/apt publishes
 # firefox but the archive stub wins, and the snap is Mozilla's own current
 # build), so follow the profile instead of fighting the package.
+# A sandboxed Firefox keeps its profile inside the sandbox, so the classic root
+# stays empty forever and the layer would land nowhere. Follow the profile.
 _ff_root="$OSR_HOME/.mozilla/firefox"
-if [ ! -d "$_ff_root" ] && [ -d "$OSR_HOME/snap/firefox/common/.mozilla/firefox" ]; then
-    _ff_root="$OSR_HOME/snap/firefox/common/.mozilla/firefox"
+if [ ! -d "$_ff_root" ]; then
+    for _ff_alt in \
+        "$OSR_HOME/snap/firefox/common/.mozilla/firefox" \
+        "$OSR_HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"
+    do
+        [ -d "$_ff_alt" ] || continue
+        _ff_root="$_ff_alt"
+        info "using the sandboxed profile root $_ff_root"
+        break
+    done
 fi
 _ff_js=""
 _ff_css=""
 [ -f "$OSR_DOTFILES/firefox/user.js" ] && _ff_js="$OSR_DOTFILES/firefox/user.js"
 _ff_css=$(osr_theme_source firefox userChrome.css) || _ff_css=""
 
+# Say so when the theme half resolved to nothing. Without this the module still
+# reports success, installs user.js, and leaves a Firefox that is half-themed -
+# the prefs applied, the colors not - with no line anywhere naming the reason.
+[ -n "$_ff_css" ] || warn "no Firefox theme layer: neither themes/${OSR_THEME:-?}/config/firefox/userChrome.css nor a rendered firefox/userChrome.css.tmpl - Firefox keeps its default chrome"
+
+# A machine that has never launched Firefox has no profile directory, and
+# install_mozilla_layer can only warn and return — which is why a fresh rice
+# install ends with an unstyled, default-light Firefox and no obvious reason
+# why. Create the profile instead of waiting for the user to: -CreateProfile is
+# headless, takes under a second, and writes the profiles.ini that the browser
+# then adopts on its first real start. Do it BEFORE resolving the layer paths so
+# the same run installs into it.
+if [ -z "$(osr_mozilla_profiles "$_ff_root")" ] && command -v firefox >/dev/null 2>&1; then
+    run_step "Firefox: creating the initial profile (none exists yet)" \
+        as_user sh -c 'firefox -CreateProfile default-release >/dev/null 2>&1 || true'
+fi
+
 if [ -n "$_ff_js" ] || [ -n "$_ff_css" ]; then
     install_mozilla_layer "$_ff_root" "$_ff_js" "$_ff_css"
+fi
+
+# Verify rather than assume. userChrome.css is the one layer in this module with
+# no visible failure mode of its own: Firefox reads it silently or ignores it
+# silently, so the only place the truth can be told is here, right after writing
+# it. Checked per profile, because a machine with two profiles and one styled is
+# exactly the case that reads as "the theme is broken".
+if [ -n "$_ff_css" ]; then
+    for _ff_p in $(osr_mozilla_profiles "$_ff_root"); do
+        [ -s "$_ff_p/chrome/userChrome.css" ] && continue
+        warn "userChrome.css did not land in $_ff_p - Firefox there stays unstyled"
+    done
 fi

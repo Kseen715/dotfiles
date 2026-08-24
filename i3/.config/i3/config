@@ -7,7 +7,7 @@
 
 set $mod Mod4
 set $alt Mod1
-set $term ghostty
+set $term osr-term
 set $filemanager thunar
 set $browser firefox
 
@@ -41,7 +41,7 @@ exec --no-startup-id dex --autostart --environment i3
 exec --no-startup-id xrdb -merge ~/.Xresources
 exec_always --no-startup-id xsettingsd
 exec_always --no-startup-id autorandr --change
-exec_always --no-startup-id picom --daemon
+exec_always --no-startup-id ~/.config/picom/launch.sh
 # dwindle-style splits: no more manually toggling split h/v before every window.
 exec_always --no-startup-id autotiling
 exec_always --no-startup-id ~/.config/polybar/launch.sh
@@ -146,9 +146,15 @@ bindsym $mod+Shift+Down move down
 bindsym $mod+Shift+Up move up
 bindsym $mod+Shift+Right move right
 
-# Layout
-bindsym $mod+s layout toggle split
-bindsym $mod+w layout tabbed
+# Layout. Through layout.sh rather than `layout tabbed` directly: autotiling
+# wraps the focused window in a single-child split container on every focus
+# event, and a bare layout command lands on THAT wrapper - it looks like the
+# binding did nothing, and then new windows open as tabs inside the invisible
+# container. layout.sh climbs to the container you actually meant. See its
+# header for the tree.
+bindsym $mod+s exec --no-startup-id ~/.config/i3/scripts/layout.sh toggle-split
+bindsym $mod+w exec --no-startup-id ~/.config/i3/scripts/layout.sh tabbed
+bindsym $mod+Shift+s exec --no-startup-id ~/.config/i3/scripts/layout.sh stacking
 bindsym $mod+f fullscreen toggle
 bindsym $mod+space floating toggle
 bindsym $mod+Shift+space focus mode_toggle

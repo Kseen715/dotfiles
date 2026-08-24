@@ -16,6 +16,16 @@ if [ -f "$OSR_DOTFILES/picom/picom.conf" ]; then
     install_layer "$OSR_DOTFILES/picom/picom.conf" "$OSR_HOME/.config/picom/picom.conf"
 fi
 
+# launch.sh, not `picom --daemon` in the i3 config: the glx backend picom.conf
+# asks for is not available on every GPU, and picom EXITS when it cannot get it.
+# The launcher retries on xrender so the session is never left uncomposited —
+# which under i3 is not a cosmetic loss (opaque rofi corners, dead terminal
+# transparency, no shadows). See picom/launch.sh.
+if [ -f "$OSR_DOTFILES/picom/launch.sh" ]; then
+    install_layer "$OSR_DOTFILES/picom/launch.sh" "$OSR_HOME/.config/picom/launch.sh"
+    as_user chmod +x "$OSR_HOME/.config/picom/launch.sh"
+fi
+
 if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/picom/90-theme.conf" ]; then
     install_layer "$OSR_THEME_DIR/config/picom/90-theme.conf" "$OSR_HOME/.config/picom/90-theme.conf"
 else
