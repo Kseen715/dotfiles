@@ -28,6 +28,16 @@
 #ifndef OSR_WINUI_H
 #define OSR_WINUI_H
 
+/* OSR_TAG_WIDTH -- columns reserved for the bracketed tag, so every line
+ * this installer prints starts its message in the same column: the log
+ * tags ([INFO], [WARN], ...), run_step's [ok]/[!!] and the spinner frame
+ * all pad out to it. Duplicated from lib/common.h on purpose -- the
+ * Windows core shares no header with the POSIX one -- so the two must be
+ * changed together. */
+#ifndef OSR_TAG_WIDTH
+#define OSR_TAG_WIDTH 8
+#endif
+
 void osr_info(const char *fmt, ...);
 void osr_warn(const char *fmt, ...);
 void osr_success(const char *fmt, ...);

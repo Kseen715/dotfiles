@@ -44,7 +44,7 @@ static void emit(FILE *stream, HANDLE h, osr_tag tag, const char *label, const c
     original = use_color ? csbi.wAttributes : 0;
 
     if (use_color) SetConsoleTextAttribute(h, tag_color(tag));
-    fprintf(stream, "%-8s", label);
+    fprintf(stream, "%-*s", OSR_TAG_WIDTH, label);
     if (use_color) SetConsoleTextAttribute(h, original);
 
     if (prefix != NULL) fprintf(stream, "%s", prefix);
@@ -344,7 +344,7 @@ static int run_step_tty(HANDLE h, const char *desc, const char *cmd, char *log_p
     frame = 0;
     for (;;) {
         DWORD wait_result = WaitForSingleObject(pi.hProcess, 200);
-        sprintf(status, "%c %s", frames[frame % 4], desc);
+        sprintf(status, "%-*c%s", OSR_TAG_WIDTH, frames[frame % 4], desc);
         step_paint(h, log_path, &painted, status);
         frame++;
         if (wait_result == WAIT_OBJECT_0) break;
@@ -357,8 +357,8 @@ static int run_step_tty(HANDLE h, const char *desc, const char *cmd, char *log_p
     step_erase(h, painted);
     {
         char result[OSR_STEP_LINE_LEN];
-        if (exit_code == 0) sprintf(result, "[ok] %s", desc);
-        else sprintf(result, "[!!] %s", desc);
+        if (exit_code == 0) sprintf(result, "%-*s%s", OSR_TAG_WIDTH, "[ok]", desc);
+        else sprintf(result, "%-*s%s", OSR_TAG_WIDTH, "[!!]", desc);
         step_write_line(h, result, exit_code == 0
             ? (FOREGROUND_GREEN | FOREGROUND_INTENSITY)
             : (FOREGROUND_RED | FOREGROUND_INTENSITY));
@@ -404,7 +404,7 @@ int osr_run_step(const char *desc, const char *cmd) {
  */
 
 static void emit(FILE *stream, const char *label, const char *prefix, const char *fmt, va_list ap) {
-    fprintf(stream, "%-8s", label);
+    fprintf(stream, "%-*s", OSR_TAG_WIDTH, label);
     if (prefix != NULL) fprintf(stream, "%s", prefix);
     vfprintf(stream, fmt, ap);
     fprintf(stream, "\n");

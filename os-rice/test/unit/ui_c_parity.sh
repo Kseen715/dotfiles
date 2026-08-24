@@ -37,24 +37,51 @@ BASE_ENV='TERM=dumb OSR_STEP_N= OSR_STEP_TOTAL= OSR_TAIL_LINES= COLUMNS= NO_COLO
 # bytes, so the folding must not happen at all.
 hex() { od -An -v -tx1 | tr -d ' \n'; }
 
-# refhex -- the reference's bytes, hexed, with the ONE deliberate divergence
-# the C port has from the frozen sh applied to them: every '\033[2K' is now
-# printed as '\r\033[2K'. ESC[2K erases the row but leaves the cursor where it
-# is, so a block that ever desynced painted itself staircased across the screen
-# (`osr module tcc` on Debian, where apt's output made it desync every frame);
-# the CR pins every row to column 0. The frozen file must not be "fixed", so
-# the delta is applied here instead, and only this one: any other changed byte
-# still fails.
+# refhex -- the reference's bytes, hexed, with the FIRST of the C port's
+# deliberate divergences from the frozen sh applied to them: every '\033[2K' is
+# now printed as '\r\033[2K'. ESC[2K erases the row but leaves the cursor where
+# it is, so a block that ever desynced painted itself staircased across the
+# screen (`osr module tcc` on Debian, where apt's output made it desync every
+# frame); the CR pins every row to column 0. The frozen file must not be
+# "fixed", so the delta is applied here instead -- and only the deltas listed
+# in this section: any other changed byte still fails.
 #
 # Substituting on the HEX is exact here, not lucky: 1b/5b/32/4b never appear
 # mid-fixture (all-ASCII logs), so no aligned-looking match can straddle two
 # bytes.
 #
-# The second divergence -- the tail is cut to OSR_COLS-1, so a full-width line
+# The SECOND divergence -- the tail is cut to OSR_COLS-1, so a full-width line
 # can never wrap onto a second row and cost the rewind a row -- is driven into
 # the reference itself, by handing its own `cut` the same width (see REF_COLS
 # below), which keeps the comparison byte-exact rather than normalized.
+#
+# The THIRD is padhex's, just below.
 refhex() { hex | sed 's/1b5b324b/0d1b5b324b/g'; }
+
+# padhex -- refhex plus the THIRD deliberate divergence: every tag now pads out
+# to OSR_TAG_WIDTH (8) columns instead of being followed by a single space, so
+# a run_step line's text starts in the same column as the [INFO]/[WARN] lines
+# printed around it (lib/log.sh's `%-8s` was always the odd one out). Applied
+# to the reference's bytes, tag by tag, so any OTHER changed byte still fails:
+#
+#   spinner  '|' + ' '   ->  '|' + 7 spaces      (all four frames)
+#   result   '[ok] '     ->  '[ok]' + 4 spaces   (and [!!], [--])
+#
+# Anchoring the spinner rules on the row prefix '\r\033[2K' (0d1b5b324b, after
+# refhex) keeps them off the dimmed tail rows below it; the fixtures those rows
+# come from are all-ASCII and hold no frame character anyway.
+_PAD7=20202020202020
+_PAD4=20202020
+padhex() {
+    refhex | sed \
+        -e "s/0d1b5b324b7c20/0d1b5b324b7c$_PAD7/g" \
+        -e "s/0d1b5b324b2f20/0d1b5b324b2f$_PAD7/g" \
+        -e "s/0d1b5b324b2d20/0d1b5b324b2d$_PAD7/g" \
+        -e "s/0d1b5b324b5c20/0d1b5b324b5c$_PAD7/g" \
+        -e "s/5b6f6b5d20/5b6f6b5d$_PAD4/g" \
+        -e "s/5b21215d20/5b21215d$_PAD4/g" \
+        -e "s/5b2d2d5d20/5b2d2d5d$_PAD4/g"
+}
 
 # REF_COLS -- run after sourcing the reference (whose own clamp to >= 20 has
 # to happen first) to give its cut the width the C uses.
@@ -177,9 +204,9 @@ for _status in ok fail; do
         _r=$(env $BASE_ENV sh -c \
             '. "$OSR_REF"; OSR_GREEN=$1; OSR_RED=$2; OSR_NC=$3; _OSR_PAINTED=3
              if [ "$4" = ok ]; then
-                 _step_done "$(printf "%b[ok]%b %s" "$OSR_GREEN" "$OSR_NC" "$5")"
+                 _step_done "$(printf "%b[ok]%b    %s" "$OSR_GREEN" "$OSR_NC" "$5")"
              else
-                 _step_done "$(printf "%b[!!]%b %s" "$OSR_RED" "$OSR_NC" "$5")"
+                 _step_done "$(printf "%b[!!]%b    %s" "$OSR_RED" "$OSR_NC" "$5")"
              fi' \
             _ "$_green" "$_red" "$_nc" "$_status" 'Installing polybar' | refhex)
         # shellcheck disable=SC2086
@@ -223,7 +250,7 @@ env $BASE_ENV NO_COLOR=1 sh -c \
 env $BASE_ENV NO_COLOR=1 sh -c \
     'sleep 1 & "$OSR_BIN" ui spin $! "a step" "$1" "$2"' \
     _ "$FX/plain.log" "$TMP/spin.state" >"$TMP/spin.c" 2>/dev/null
-_r=$(head -n 6 "$TMP/spin.ref" | refhex)
+_r=$(head -n 6 "$TMP/spin.ref" | padhex)
 _c=$(head -n 6 "$TMP/spin.c" | hex)
 same "_spin: live pid, frame 1 byte-identical" "$_r" "$_c"
 if [ "$(wc -l <"$TMP/spin.c")" -ge 12 ]; then
@@ -276,7 +303,7 @@ if command -v script >/dev/null 2>&1; then
     # by the time the window would paint: the collapsed [ok] line is all that
     # is left, and it must match to the byte.
     _rs='run_step "Installing thing" true'
-    _r=$(pty "env $BASE_ENV NO_COLOR=1 OSR_LOG=$TMP/ref.log sh -c '. \"\$OSR_REF\"; . \"\$OSR_LIB/log.sh\"; $_rs'" | tail -n 1 | hex)
+    _r=$(pty "env $BASE_ENV NO_COLOR=1 OSR_LOG=$TMP/ref.log sh -c '. \"\$OSR_REF\"; . \"\$OSR_LIB/log.sh\"; $_rs'" | tail -n 1 | padhex)
     _c=$(pty "env $BASE_ENV NO_COLOR=1 OSR_LOG=$TMP/c.log sh -c '. \"\$OSR_LIB/ui.sh\"; . \"\$OSR_LIB/log.sh\"; $_rs'" | tail -n 1 | hex)
     same "pty: run_step collapses to the same [ok] line" "$_r" "$_c"
 else

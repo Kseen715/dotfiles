@@ -223,12 +223,23 @@ long term_cols(void) {
 
 /* --- lib/log.sh's line shape ----------------------------------------- */
 
+void tag_pad(Str *out, size_t tag_len) {
+    size_t pad = tag_len;
+    do {
+        str_addc(out, ' ');
+        pad++;
+    } while (pad < OSR_TAG_WIDTH);
+}
+
 void log_line(Str *out, const char *color_env, const char *tag,
               const char *prefix, const char *msg) {
     size_t pad;
     if (expand_b(out, color(color_env))) return;
     str_addz(out, tag);
-    for (pad = strlen(tag); pad < 8; pad++) str_addc(out, ' '); /* %-8s */
+    /* %-8s: the padding sits INSIDE the colored run here, where lib/log.sh
+     * put it. Trailing spaces carry no color, so it is only the byte order
+     * that differs from tag_pad's. */
+    for (pad = strlen(tag); pad < OSR_TAG_WIDTH; pad++) str_addc(out, ' ');
     if (expand_b(out, color("OSR_NC"))) return;
     if (prefix != NULL) str_addz(out, prefix);
     str_addz(out, msg);

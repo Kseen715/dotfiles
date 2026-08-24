@@ -18,6 +18,13 @@
  *   - `[ -t 1 ]` gates colors, the cursor hide/show and the whole live
  *     window (§3 auto-degrade): piped or --verbose output stays plain.
  *
+ * The deliberate exceptions are named where they are made -- see
+ * filter_line_bytes for CR, tail_window for the cut width, and tag_pad for
+ * the tag column, which this file pads out to OSR_TAG_WIDTH so a spinner or
+ * [ok] line starts its text where the [INFO] lines around it do. All three
+ * are applied to the reference's bytes by ui_c_parity.sh rather than
+ * "fixed" in the frozen file.
+ *
  * Why a helper binary rather than one program that owns the whole run:
  * run_step's arguments are shell FUNCTIONS (pkg_install, as_root, ...), so
  * only the shell can fork them. lib/ui.sh keeps exactly that fork and the
@@ -378,7 +385,7 @@ static int paint_one(int painted, int frame, const char *desc, const char *log_p
     if (!expand_b(&status, color("OSR_CYAN"))) {
         str_addc(&status, frames[frame % 4]);
         if (!expand_b(&status, color("OSR_NC"))) {
-            str_addc(&status, ' ');
+            tag_pad(&status, 1);
             str_addz(&status, desc);
         }
     }
@@ -441,7 +448,7 @@ int osr_ui_spin_pid(pid_t pid, const char *desc, const char *log_path) {
         if (!expand_b(&status, color("OSR_CYAN"))) {
             str_addc(&status, frames[frame % 4]);
             if (!expand_b(&status, color("OSR_NC"))) {
-                str_addc(&status, ' ');
+                tag_pad(&status, 1);
                 str_addz(&status, desc);
             }
         }
@@ -467,7 +474,7 @@ void osr_ui_result(int painted, int ok, const char *desc) {
     if (!expand_b(&line, color(ok ? "OSR_GREEN" : "OSR_RED"))) {
         str_addz(&line, ok ? "[ok]" : "[!!]");
         if (!expand_b(&line, color("OSR_NC"))) {
-            str_addc(&line, ' ');
+            tag_pad(&line, 4);
             str_addz(&line, desc);
         }
     }
@@ -526,7 +533,7 @@ static int cmd_spin(const char *pid_s, const char *desc, const char *log, const 
         if (!expand_b(&status, color("OSR_CYAN"))) {
             str_addc(&status, frames[frame % 4]);
             if (!expand_b(&status, color("OSR_NC"))) {
-                str_addc(&status, ' ');
+                tag_pad(&status, 1);
                 str_addz(&status, desc);
             }
         }
@@ -587,7 +594,7 @@ static int cmd_result(const char *state_path, const char *status, const char *de
     if (!expand_b(&line, color(col))) {
         str_addz(&line, tag);
         if (!expand_b(&line, color("OSR_NC"))) {
-            str_addc(&line, ' ');
+            tag_pad(&line, strlen(tag));
             str_addz(&line, desc);
         }
     }

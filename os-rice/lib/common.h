@@ -123,6 +123,20 @@ long term_cols(void);
  * lib/log.sh's line shape
  * ------------------------------------------------------------------ */
 
+/* OSR_TAG_WIDTH -- every line this installer prints reserves this many
+ * columns for its bracketed tag, so the messages all start in the same
+ * column. It is lib/log.sh's `%-8s`, now shared with the run_step tags
+ * ([ok]/[!!]/[--]) and the spinner frame, which used to print a single
+ * space after the tag and so began their text three columns to the left
+ * of every [INFO] line around them. */
+#define OSR_TAG_WIDTH 8
+
+/* tag_pad -- append the spaces that carry a tag of `tag_len` visible
+ * columns out to OSR_TAG_WIDTH (at least one, so a tag at or past the
+ * width still separates from its message). Call it AFTER the $OSR_NC
+ * reset: the padding is not part of the colored run. */
+void tag_pad(Str *out, size_t tag_len);
+
 /* log_line -- printf '%b%-8s%b%s\n' "$color" "$tag" "$OSR_NC" "$msg",
  * appended to out. color_env names the palette variable ("OSR_CYAN"), tag
  * is the bracketed label ("[INFO]"), prefix is install.sh's "[03/12] "

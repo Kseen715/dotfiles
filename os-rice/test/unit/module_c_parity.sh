@@ -352,7 +352,9 @@ exec "$@"
     else
         ok "live window: the step finished"
     fi
-    assert_contains "$TMP/live.out" '\[ok\] Installing screenshot tools' \
+    # Four spaces, not one: the tag pads out to OSR_TAG_WIDTH so the text
+    # lands in the same column as the [INFO] lines around it.
+    assert_contains "$TMP/live.out" '\[ok\]    Installing screenshot tools' \
         "live window: collapses to one [ok] line"
     assert_contains "$TMP/live.out" 'installing chunk' \
         "live window: showed the command's output while it ran"
