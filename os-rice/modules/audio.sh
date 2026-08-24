@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/audio.sh — PipeWire + the controls a desktop actually touches
 # (i3-sugg §6). The distro-agnostic sibling of modules/pipewire.sh, which is
 # Arch-only (it performs the PulseAudio->PipeWire package swap that only pacman

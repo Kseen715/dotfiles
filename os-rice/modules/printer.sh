@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/printer.sh — CUPS + Samba/SMB client + Canon captdriver (AUR). POSIX
 # port of .../modules/printer.sh. Services enabled via enable_service (§8). The
 # empty /etc/samba/smb.conf is seeded so smbd starts. Real-hardware concern (§9).

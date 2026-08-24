@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/pacman-multilib.sh — enable Arch's [multilib] repo (needed for 32-bit
 # packages: steam, lib32-*). ONE copy, POSIX (was .../modules/pacman-multilib.sh).
 # Arch-specific by nature; idempotent — the repo is added only once, then the

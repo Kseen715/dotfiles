@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/pulseaudio.sh — PulseAudio + JACK audio stack, replacing PipeWire.
 # ONE copy, POSIX. Mirror image of modules/pipewire.sh: the two are mutually
 # exclusive, listing one removes the other. Arch package names, pacman-only.

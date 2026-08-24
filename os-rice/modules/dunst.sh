@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/dunst.sh — dunst notification daemon, the X11 replacement for mako
 # (i3-sugg §2). Config split (§5) uses dunst's own drop-in dir: the base dunstrc
 # is dotfiles-owned (geometry, behaviour, mouse actions) and the rice drops

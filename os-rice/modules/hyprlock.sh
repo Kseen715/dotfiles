@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/hyprlock.sh — hyprlock screen locker + config. ONE copy, POSIX
 # (was .../modules/hyprlock.sh).
 run_step "Installing hyprlock" pkg_install hyprlock

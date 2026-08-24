@@ -165,6 +165,7 @@ static const char *posix_srcs[] = {
     "lib/module.c",
     "lib/modules.c",
     "modules/flameshot.c",
+    "modules/helpers.c",
     "modules/docker.c",
     "modules/tcc.c",
 #ifndef _WIN32

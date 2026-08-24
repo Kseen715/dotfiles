@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/vscode.sh — VS Code, the distro-packaged build (Void ships `vscode`,
 # Arch `code`; the MS-branded Insiders channel is the Arch-only sibling module
 # `vscode-insiders`). Never list both in one rice.

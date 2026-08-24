@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/zen-browser.sh — Zen Browser (AUR). ONE copy, POSIX
 # (was .../apps/zen-browser.sh). Available module.
 run_step "Installing Zen Browser (AUR)" pkg_install zen-browser

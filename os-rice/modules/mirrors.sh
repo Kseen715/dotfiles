@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/mirrors.sh — rank the distro's package mirrors by speed. POSIX port of
 # the legacy standalone .../setup-mirrors.sh, the last un-ported helper of the
 # hyprland-glass bundle. It was a script you ran by hand before the installer;

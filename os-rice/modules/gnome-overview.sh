@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gnome-overview.sh — free the bare Super key in a GNOME session.
 #
 # Tapping Super alone opens the Activities overview, and that overview is the

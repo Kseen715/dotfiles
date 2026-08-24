@@ -237,6 +237,44 @@ assert_contains "$TMP/c.out" "building fastfetch from source" \
     "provider row: so does the C tier, through the same builder"
 compare "provider row: identical command sequence either way"
 
+# --- 3c. helpers: a C module with no sh predecessor -------------------------
+# `helpers` is the first module written in C from scratch rather than ported, so
+# there is nothing at test/ref to diff it against. What is checked instead is the
+# behaviour that made it a module at all: the two seeded files, the identity each
+# is written under, and that a rerun touches neither (§5 - seeded, then yours).
+#
+# The system file cannot be asserted directly: it lands under /usr/share, which
+# this sandbox has no business writing. So the assertion is on the sudo stub's
+# log - what the module DECIDED to run, which is the same thing every other
+# scenario in this file compares.
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+stub dpkg 1; stub apt-get 0
+run_c helpers
+assert_contains "$TMP/c.log" "apt-get install -y -q -o Dpkg::Use-Pty=0 exo-utils xterm" \
+    "helpers: exo maps to exo-utils on apt, and xterm is the fallback terminal"
+_hrc="$TMP/home/.config/xfce4/helpers.rc"
+[ -f "$_hrc" ] && ok "helpers: helpers.rc seeded" || fail "helpers: helpers.rc seeded"
+assert_contains "$_hrc" "TerminalEmulator=ghostty" \
+    "helpers: the terminal role resolves to the rice's terminal"
+assert_contains "$_hrc" "FileManager=Thunar" "helpers: the file-manager role too"
+# The system helper entry is written as ROOT (it lands under /usr/share): the
+# sudo stub is what proves the escalation happened, since the sandbox cannot own
+# a real /usr/share write.
+assert_contains "$TMP/c.log" "tee /usr/share/xfce4/helpers/ghostty.desktop" \
+    "helpers: the ghostty helper entry is written under /usr/share"
+assert_contains "$TMP/c.log" "sudo .*tee /usr/share/xfce4/helpers/ghostty.desktop" \
+    "helpers: and it escalates to do it, unlike the file in \$HOME"
+refute_contains "$TMP/c.log" "sudo -u tester tee /usr/share" \
+    "helpers: the system file is not written as the riced user"
+
+# A rerun must install nothing and rewrite nothing - the whole point of seeding.
+printf 'TerminalEmulator=xterm\n' > "$_hrc"
+stub dpkg 0
+run_c helpers
+refute_contains "$TMP/c.log" "apt-get install" "helpers: a rerun installs nothing"
+assert_eq "TerminalEmulator=xterm" "$(cat "$_hrc")" \
+    "helpers: a rerun leaves an edited helpers.rc alone"
+
 # --- 4. docker: the full path (package, group, membership, service) ----------
 stub dpkg 1
 stub getent 1          # no docker group yet

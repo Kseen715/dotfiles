@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/polkit-agent.sh — the polkit authentication agent (i3-sugg §3.1).
 # Mandatory and silent when missing: with no agent running, every GUI action
 # that needs root — mounting an internal disk, printer setup, virt-manager,

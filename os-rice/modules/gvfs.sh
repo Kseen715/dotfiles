@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gvfs.sh — mounting, removable media and trash (i3-sugg §3.3).
 # Without gvfs, "Move to Trash" errors out in every GTK app and the file-picker
 # sidebar shows no devices — the picker looks broken, and nothing points at the

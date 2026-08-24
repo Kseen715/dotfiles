@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/xdg.sh — the XDG layer: portals, user dirs, MIME, desktop entries
 # (i3-sugg §3.2 + §3.4). This is the module that decides whether "apps just
 # work" or fail in ways nobody connects back to the WM:

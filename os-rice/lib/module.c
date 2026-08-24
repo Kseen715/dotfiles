@@ -937,21 +937,29 @@ int osr_install_file(const char *src, const char *dst) {
     return ok;
 }
 
-/* append_as_user -- `printf '%s\n' "$line" | as_user tee -a "$file"`: the
- * append has to happen as the riced user, and a plain fopen here would create
- * a root-owned file in their home. */
-static int append_as_user(const char *file, const char *line) {
+/* tee_write -- `printf '%s' "$text" | as_<who> tee [-a] "$file"`, which is the
+ * C form of every heredoc a .sh module piped into tee. It has to be tee and not
+ * fopen for the same reason the shell used tee: the write must happen AS the
+ * target identity, or a module run under sudo leaves a root-owned file in the
+ * riced user's home (and a user-owned one under /usr, which is worse).
+ *
+ * `as_root` selects the identity, `append` selects tee -a. A NULL trailer means
+ * "text is already exactly what should be on disk"; otherwise trailer is written
+ * after it, which is how the one-line append keeps its newline. */
+static int tee_write(const char *file, const char *text, const char *trailer,
+                     int as_root, int append) {
     char *argv[5];
     char **v;
     int fds[2];
     pid_t pid;
     int status;
+    int i = 0;
 
-    argv[0] = (char *)"tee";
-    argv[1] = (char *)"-a";
-    argv[2] = (char *)file;
-    argv[3] = NULL;
-    v = escalate(argv, osr_mod_user());
+    argv[i++] = (char *)"tee";
+    if (append) argv[i++] = (char *)"-a";
+    argv[i++] = (char *)file;
+    argv[i] = NULL;
+    v = escalate(argv, as_root ? NULL : osr_mod_user());
 
     if (pipe(fds) != 0) { free(v); return 0; }
     fflush(stdout);
@@ -968,14 +976,53 @@ static int append_as_user(const char *file, const char *line) {
     }
     close(fds[0]);
     {
-        size_t len = strlen(line);
-        if (len > 0) { if (write(fds[1], line, len) < 0) { /* reported below */ } }
-        if (write(fds[1], "\n", 1) < 0) { /* reported below */ }
+        size_t len = strlen(text);
+        if (len > 0) { if (write(fds[1], text, len) < 0) { /* reported below */ } }
+        if (trailer != NULL && *trailer != '\0') {
+            if (write(fds[1], trailer, strlen(trailer)) < 0) { /* reported below */ }
+        }
     }
     close(fds[1]);
     free(v);
     if (waitpid(pid, &status, 0) < 0) return 0;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+/* append_as_user -- one line into a file owned by the riced user. */
+static int append_as_user(const char *file, const char *line) {
+    return tee_write(file, line, "\n", 0, 1);
+}
+
+/* seed -- the `[ -f x ] || as_<who> tee x <<EOF` shape, shared by the two
+ * public entry points below. Already-there is success, not a no-op to report:
+ * §5 says a seeded file becomes the machine's the moment it exists, so a rerun
+ * must not overwrite what the user edited. */
+static int seed(const char *dst, const char *content, int as_root) {
+    Str dir;
+
+    if (file_exists(dst)) return 1;
+
+    str_init(&dir);
+    dir_of(&dir, dst);
+    if (as_root) {
+        char *argv[4];
+        argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = dir.p; argv[3] = NULL;
+        osr_run_root(argv);
+    } else {
+        osr_mkdir_p(str_text(&dir));
+    }
+    str_free(&dir);
+
+    osr_infof("seeding %s", dst);
+    return tee_write(dst, content, NULL, as_root, 0);
+}
+
+int osr_seed_file(const char *dst, const char *content) {
+    return seed(dst, content, 0);
+}
+
+int osr_seed_file_root(const char *dst, const char *content) {
+    return seed(dst, content, 1);
 }
 
 int osr_install_layer(const char *src, const char *dst) {

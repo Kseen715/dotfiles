@@ -1,4 +1,5 @@
 # session: x11
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/arandr.sh — display layout, the X11 replacement for nwg-displays
 # (i3-sugg §2). Two halves that belong together: arandr is the GUI you drag
 # monitors around in, autorandr is what remembers the result and re-applies it

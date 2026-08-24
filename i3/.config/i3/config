@@ -70,8 +70,19 @@ exec --no-startup-id wireplumber
 
 # Idle + lock. xss-lock also carries the suspend inhibitor, which is what makes
 # the screen actually locked when the lid opens again.
+#
+# The idle timer is xidlehook when it is installed and xautolock otherwise
+# (modules/i3lock.sh installs whichever the host can have). They are not
+# interchangeable: xautolock locks on a wall clock and will happily blank the
+# screen 10 minutes into a film, while xidlehook's --not-when-audio and
+# --not-when-fullscreen are exactly the inhibits a desktop is expected to honour.
 exec --no-startup-id xss-lock --transfer-sleep-lock -- betterlockscreen -l dimblur
-exec --no-startup-id xautolock -time 10 -locker 'betterlockscreen -l dimblur' -detectsleep
+exec --no-startup-id sh -c 'if command -v xidlehook >/dev/null 2>&1; then \
+        exec xidlehook --not-when-audio --not-when-fullscreen \
+             --timer 600 "betterlockscreen -l dimblur" ""; \
+    else \
+        exec xautolock -time 10 -locker "betterlockscreen -l dimblur" -detectsleep; \
+    fi'
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Keys
@@ -102,16 +113,20 @@ bindsym Print            exec --no-startup-id maim -su | xclip -selection clipbo
 bindsym Shift+Print      exec --no-startup-id sh -c 'mkdir -p ~/Pictures/Screenshots && maim ~/Pictures/Screenshots/$(date +%F-%H%M%S).png'
 bindsym $mod+Print       exec --no-startup-id flameshot gui
 
-# Media / volume / backlight
-bindsym XF86AudioRaiseVolume  exec --no-startup-id pamixer -i 5
-bindsym XF86AudioLowerVolume  exec --no-startup-id pamixer -d 5
-bindsym XF86AudioMute         exec --no-startup-id pamixer -t
-bindsym XF86AudioMicMute      exec --no-startup-id pamixer --default-source -t
+# Media / volume / backlight. These go through osd.sh rather than calling the
+# mixer directly, for two reasons: it draws the progress popup every other
+# desktop draws (i3 has no OSD of its own), and it picks the mixer that is
+# actually installed — pamixer is absent on Debian 11 and Ubuntu 22.04, where
+# pactl takes over and the keys keep working.
+bindsym XF86AudioRaiseVolume  exec --no-startup-id ~/.config/i3/scripts/osd.sh volume-up
+bindsym XF86AudioLowerVolume  exec --no-startup-id ~/.config/i3/scripts/osd.sh volume-down
+bindsym XF86AudioMute         exec --no-startup-id ~/.config/i3/scripts/osd.sh mute
+bindsym XF86AudioMicMute      exec --no-startup-id ~/.config/i3/scripts/osd.sh mic-mute
 bindsym XF86AudioPlay         exec --no-startup-id playerctl play-pause
 bindsym XF86AudioNext         exec --no-startup-id playerctl next
 bindsym XF86AudioPrev         exec --no-startup-id playerctl previous
-bindsym XF86MonBrightnessUp   exec --no-startup-id brightnessctl set +5%
-bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
+bindsym XF86MonBrightnessUp   exec --no-startup-id ~/.config/i3/scripts/osd.sh light-up
+bindsym XF86MonBrightnessDown exec --no-startup-id ~/.config/i3/scripts/osd.sh light-down
 
 # Focus / move
 bindsym $mod+h focus left

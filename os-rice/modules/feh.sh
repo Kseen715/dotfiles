@@ -1,4 +1,5 @@
 # session: x11
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/feh.sh — wallpaper setter, the X11 replacement for hyprpaper
 # (i3-sugg §2). feh has no daemon: it paints the root window once and exits, so
 # the i3 config re-runs it on every start. xcolor is the X11 hyprpicker.

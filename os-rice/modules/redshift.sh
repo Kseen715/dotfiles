@@ -1,4 +1,5 @@
 # session: x11
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/redshift.sh — color temperature, the X11 replacement for luminance /
 # gammastep (i3-sugg §2). Config is dotfiles-owned: it is a personal preference
 # (latitude, day/night temperature), not a rice theme, so a rice switch leaves

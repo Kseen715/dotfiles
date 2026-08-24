@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/swaylock.sh — swaylock screen locker + rice-owned config. ONE copy,
 # POSIX (was .../modules/swaylock.sh). Alternative locker (gtklock is default);
 # kept as an available module.

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/benchmark.sh — everything `osr benchmark cpu` needs to produce a
 # number, including a power and temperature reading.
 #

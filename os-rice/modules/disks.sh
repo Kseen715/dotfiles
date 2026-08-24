@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/disks.sh — filesystems, partitioning and disk health (i3-sugg §7.6).
 # The mount/automount side is modules/gvfs.sh; this is what you need for the
 # disks themselves: the drivers that let a foreign filesystem mount at all, and

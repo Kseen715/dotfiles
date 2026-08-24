@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/codecs.sh — GStreamer stack, ffmpeg and hardware video decode
 # (i3-sugg §3.7). GStreamer is what GTK apps, browsers-via-portal and most
 # desktop media players decode through; ffmpeg is what everything else shells

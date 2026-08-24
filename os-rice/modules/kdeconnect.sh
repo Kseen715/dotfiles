@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/kdeconnect.sh — phone integration: clipboard sync, notifications,
 # file send, remote input (i3-sugg §7.1).
 #

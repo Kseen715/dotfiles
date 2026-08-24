@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/viewers.sh — the small openers ~/.config/mimeapps.list points at
 # (modules/xdg.sh seeds that file). Without them "Open With" names applications
 # that are not installed, which is worse than an empty menu: the double-click

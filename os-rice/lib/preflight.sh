@@ -13,11 +13,35 @@
 #   release:<c>    OSR_CODENAME or OSR_VERSION_ID matches
 #   cmd:<bin>      command -v <bin> succeeds
 #   gpu:present    a GPU exists ($OSR_DRI:-/dev/dri/renderD* or OSR_GPU_COUNT > 0)
+#
+# The value half may list alternatives with `|`, and the predicate holds when ANY
+# of them does: `require: distro:void|debian|ubuntu`. That is the shape a rice
+# actually needs — "this manifest resolves on these package managers" is a set,
+# not a single value, and the alternative (one require: line per distro) would
+# read as a conjunction and never be satisfiable. `|` is the only combinator:
+# AND is what writing two require: lines already means.
 
 # osr_preflight_check <predicate> — true if the host satisfies it. Detection
 # vars (OSR_*) are set by osr_detect; run preflight after it.
 osr_preflight_check() {
     _pf_pred=$1
+    # Alternation: split on '|' and recurse per branch, re-attaching the tag so
+    # each branch is checked as a whole predicate (`distro:void`), not a bare
+    # value. `gpu:present` has no alternatives and falls straight through.
+    case "${_pf_pred#*:}" in
+        *'|'*)
+            _pf_tag=${_pf_pred%%:*}
+            _pf_alts=${_pf_pred#*:}
+            while [ -n "$_pf_alts" ]; do
+                case "$_pf_alts" in
+                    *'|'*) _pf_one=${_pf_alts%%|*}; _pf_alts=${_pf_alts#*|} ;;
+                    *)     _pf_one=$_pf_alts;       _pf_alts='' ;;
+                esac
+                [ -n "$_pf_one" ] || continue
+                osr_preflight_check "$_pf_tag:$_pf_one" && return 0
+            done
+            return 1 ;;
+    esac
     _pf_val=${_pf_pred#*:}                # right of the first colon
     case "$_pf_pred" in
         arch:*)

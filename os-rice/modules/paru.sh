@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/paru.sh — bootstrap the paru AUR helper. Listed first in an Arch rice
 # so every later aur: package can dispatch through it (manifest order is the
 # dependency graph, §4). paru resolves via pacman.map to source:provide_paru, so

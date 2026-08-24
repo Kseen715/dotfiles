@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/hypridle.sh — hypridle idle daemon + config. ONE copy, POSIX
 # (was .../modules/hypridle.sh).
 run_step "Installing hypridle" pkg_install hypridle

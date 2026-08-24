@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/vlc.sh — VLC. The "plays anything, including the broken file" player;
 # modules/celluloid.sh (mpv front-end) is the lighter one and they coexist fine.
 #

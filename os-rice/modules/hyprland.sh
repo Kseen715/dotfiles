@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/hyprland.sh — Hyprland compositor + session wiring. ONE copy, POSIX
 # (was .../modules/hyprland.sh, ~66 lines of bash+chown boilerplate). Package
 # install goes through pkg_install; config is rice-owned (§5/§6) and copied via

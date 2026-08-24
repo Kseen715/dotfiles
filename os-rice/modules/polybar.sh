@@ -1,5 +1,6 @@
 # session: x11
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/polybar.sh — polybar status bar, the X11 replacement for waybar
 # (i3-sugg §2). Config split (§5): config.ini + modules.ini are dotfiles-owned
 # (bar geometry, module definitions, the `include-file` lines) and colors.ini is

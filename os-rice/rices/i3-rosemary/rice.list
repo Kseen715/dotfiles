@@ -7,10 +7,18 @@
 # The glue block (§3 of i3-sugg) is the difference between "i3 starts" and
 # "every app behaves" — do not reorder it below the applications.
 #
-# Validated against the Void (xbps) package index; see ../../i3-void-packages.md
-# for the component -> package writeup and for what Void does not ship.
-# Dropping the two require: lines and filling pacman.map/apt.map is all it takes
-# to run this manifest elsewhere — nothing in the modules is Void-specific.
+# Validated against the real package indexes of both targets: the Void (xbps)
+# repodata — see ../../i3-void-packages.md for the component -> package writeup —
+# and the Debian/Ubuntu binary indexes for bullseye, bookworm, trixie, jammy and
+# noble. Nothing in the modules is distro-specific; every difference between the
+# two lives in lib/pkgmap/{xbps,apt}.map, which is the whole point of §1.
+#
+# Where apt cannot give a component at all, the map says so rather than guessing:
+# betterlockscreen and autotiling are built by lib/build.sh, xcolor/ouch/xidlehook
+# come through cargo: (which is why `rust` is listed before them), and the handful
+# that have no route anywhere — rofimoji, libinput-gestures, keyd before trixie —
+# are skipped with an empty RHS and a comment naming what is lost. Adding a third
+# manager is filling in pacman.map/dnf.map, not touching a module.
 
 # --- themes (§6a) -------------------------------------------------------------
 # `theme:` is the theme installed with this rice; `themes:` is the set the rice
@@ -20,7 +28,8 @@
 theme: rosemary
 themes: rosemary catppuccin nord gruvbox xin
 
-require: distro:void
+# One line, not three: alternatives are ORed, separate require: lines are ANDed.
+require: distro:void|debian|ubuntu
 require: arch:x86_64
 
 # --- base ---------------------------------------------------------------------
@@ -30,8 +39,9 @@ zip
 networkmanager
 
 # --- X session core -----------------------------------------------------------
-# xorg installs the server, the X utils, dbus + elogind, and lays down the
-# layered ~/.xprofile every GUI app inherits its env from.
+# xorg installs the server, the X utils, dbus, a seat manager (elogind only where
+# systemd is not the init - on Debian/Ubuntu it would uninstall systemd-sysv) and
+# the layered ~/.xprofile every GUI app inherits its env from.
 xorg
 i3
 picom
@@ -92,8 +102,14 @@ fastfetch
 yazi
 
 # --- files + terminal ----------------------------------------------------------
+# helpers (a C module) is what makes "Open Terminal Here" and every other
+# exo-resolved role point at a program that exists, and installs xterm as the
+# guaranteed fallback terminal. It has to follow ghostty: the role it seeds names
+# ghostty, and seeding a role before its terminal exists is how you get a menu
+# entry that silently does nothing.
 thunar
 ghostty
+helpers
 
 # --- applications --------------------------------------------------------------
 # firefox carries a low-RAM user.js layer; viewers backs the mimeapps.list that
@@ -118,12 +134,16 @@ flatpak
 
 # Not listed on purpose:
 #   pipewire, pacman-multilib, dkms, cpu-microcodes, gpu-drivers  Arch-only
-#   discord, gradia, localsend, onlyoffice                       Flatpak on Void
+#   discord, gradia, localsend, onlyoffice                       Flatpak on both
+#     targets (Void packages none of them; Debian only onlyoffice, via a vendor
+#     repo the `flatpak` module makes unnecessary)
 #   vscode-insiders                                              AUR-only; the
 #     portable `vscode` module installs Void's Code - OSS build instead
 #   dnscrypt                                                     available, but
 #     swapping the resolver is a per-machine decision (see the module header)
 #   thunderbird                                                  available; the
 #     rice ships evolution as its one mail client
-#   xidlehook                                                    needs `rust`
-#     first (xbps.map maps it to cargo:); i3lock uses xautolock instead
+#   xidlehook                                                    not a manifest
+#     entry: modules/i3lock.sh picks it over xautolock whenever `rust` (listed
+#     above it) left a cargo behind, because only xidlehook can decline to lock
+#     the screen while audio plays or a video is fullscreen

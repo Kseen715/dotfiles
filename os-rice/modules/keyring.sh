@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/keyring.sh — Secret Service on D-Bus (i3-sugg §3.5). VS Code, Chrome,
 # the git credential helper, Nextcloud and Element all expect one; without it
 # they either nag on every start or silently store nothing.

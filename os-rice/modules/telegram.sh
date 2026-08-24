@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/telegram.sh — Telegram Desktop from the vendor tarball
 # (telegram.org/desktop), plus the theme palette.
 #

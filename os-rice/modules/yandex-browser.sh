@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/yandex-browser.sh — Yandex Browser + a low-RAM flags layer. ONE copy,
 # POSIX (was .../apps/yandex-browser.sh). Available module.
 #

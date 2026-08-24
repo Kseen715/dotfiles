@@ -1,4 +1,5 @@
 # session: wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gnome-focus.sh — make notification clicks raise the window (DRAFT).
 #
 # GNOME Shell's focus-stealing prevention: when an app asks for focus without a

@@ -1,5 +1,6 @@
 # session: x11
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/i3.sh — i3 window manager (X11) + layered config. ONE copy, POSIX.
 # pacman ships it as i3-wm (pacman.map); Void and Debian call it i3.
 #
@@ -19,10 +20,17 @@
 #
 # Companions installed here are the ones the shipped config actually invokes:
 # i3status (fallback bar if polybar dies), dex (XDG autostart — i3 runs none of
-# it by itself, §3.8), numlockx, autotiling (dwindle-style splits), unclutter
-# (hide the pointer while typing), xclip (every screenshot/clipboard binding).
+# it by itself, §3.8), numlockx, autotiling (dwindle-style splits), xclip (every
+# screenshot/clipboard binding).
+#
+# unclutter-xfixes, not unclutter: they are different programs with incompatible
+# flags, and BOTH are packaged on Void and on Debian/Ubuntu. The config runs
+# `unclutter --timeout 3`, which is the xfixes fork's syntax; the original wants
+# `-idle 3` and would exit with a usage error nobody sees, leaving the pointer
+# sitting in the middle of the text you are reading.
 
-run_step "Installing i3" pkg_install i3 i3status dex numlockx autotiling unclutter xclip
+run_step "Installing i3" pkg_install \
+    i3 i3status dex numlockx autotiling unclutter-xfixes xclip
 
 _i3d="$OSR_HOME/.config/i3/config.d"
 as_user mkdir -p "$_i3d"
@@ -32,8 +40,8 @@ if [ -f "$OSR_DOTFILES/i3/.config/i3/config" ]; then
     install_layer "$OSR_DOTFILES/i3/.config/i3/config" "$OSR_HOME/.config/i3/config"
 fi
 
-# Helper scripts the bindings call (power menu, layout toggle).
-for _s in rofi-powermenu.sh; do
+# Helper scripts the bindings call (power menu, volume/brightness OSD).
+for _s in rofi-powermenu.sh osd.sh; do
     if [ -f "$OSR_DOTFILES/i3/.config/i3/scripts/$_s" ]; then
         install_layer "$OSR_DOTFILES/i3/.config/i3/scripts/$_s" "$OSR_HOME/.config/i3/scripts/$_s"
         as_user chmod +x "$OSR_HOME/.config/i3/scripts/$_s"

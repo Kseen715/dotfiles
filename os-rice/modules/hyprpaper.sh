@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/hyprpaper.sh — hyprpaper wallpaper daemon + config. ONE copy, POSIX
 # (was .../modules/hyprpaper.sh). Setting the live wallpaper is apply_wallpaper's
 # job (§6); this module installs the daemon and its rice-owned config.

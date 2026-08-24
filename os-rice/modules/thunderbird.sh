@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/thunderbird.sh — mail/calendar. Same Mozilla profile machinery as
 # modules/firefox.sh: a dotfiles-owned user.js and a rice-owned userChrome.css,
 # installed into every profile under ~/.thunderbird (§5/§6).

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gpaste.sh — GPaste, the clipboard manager for GNOME sessions.
 #
 # GNOME-only by nature, not by preference: GPaste's daemon has no clipboard of

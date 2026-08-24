@@ -1,4 +1,5 @@
 # session: wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/waydroid.sh — Waydroid (Android in a container) + GApps image + the
 # ARM translation layer for the detected CPU. POSIX port of .../modules/waydroid.sh.
 # Needs a real kernel (binder), systemd, and network -> validated on hardware,

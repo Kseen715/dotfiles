@@ -95,6 +95,44 @@ else
     p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') modules declare a session)"
 fi
 
+# Every shell module is legacy: the C tier (modules/<name>.c + lib/modules.c) is
+# where a module belongs, and the marker is what makes the remaining work
+# countable - `grep -c '^# legacy:' modules/*.sh` only ever goes down. Enforced
+# for the same reason `# session:` is: a marker that is only usually there
+# answers no question. See DESIGN §11a.
+sec "module legacy markers (# legacy: sh, every .sh module):"
+_legacy_bad=""
+for f in "$OSR_ROOT"/modules/*.sh; do
+    [ -f "$f" ] || continue
+    # Header block only (the leading run of comment lines), so a `# legacy:`
+    # mentioned in prose further down is not mistaken for the marker.
+    sed -n '/^#/!q;p' "$f" | grep -q '^# legacy: sh' \
+        || _legacy_bad="$_legacy_bad ${f#"$REPO"/}"
+done
+if [ -n "$_legacy_bad" ]; then
+    for f in $_legacy_bad; do p_fail "$f: missing '# legacy: sh' marker (DESIGN §11a)"; done
+    FAILED=1
+else
+    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') shell modules marked legacy)"
+fi
+
+# The converse: a module that HAS been ported must not leave the .sh behind, or
+# `osr module has` silently prefers the C one and the stale script rots unread.
+# The frozen reference lives at test/ref/<name>_sh_ref.sh instead.
+sec "no .sh shadowing a C module:"
+_shadow=""
+for _m in $("$OSR_BIN" module list 2>/dev/null); do
+    [ -f "$OSR_ROOT/modules/$_m.sh" ] && _shadow="$_shadow $_m"
+done
+if [ -n "$_shadow" ]; then
+    for _m in $_shadow; do
+        p_fail "modules/$_m.sh shadows the C module - freeze it at test/ref/${_m}_sh_ref.sh and delete it"
+    done
+    FAILED=1
+else
+    p_ok "(every C module owns its name alone)"
+fi
+
 if command -v zsh >/dev/null 2>&1; then
     sec "zsh -n (rc.d + theme layers):"
     # Templates too: a placeholder always sits inside a quoted value, so a

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/brightnessctl.sh — backlight + sensors (i3-sugg §7.3/§7.4).
 # brightnessctl is the one that still works on modern kernels (xbacklight talks
 # to a randr property most drivers no longer expose); ddcutil does the same over

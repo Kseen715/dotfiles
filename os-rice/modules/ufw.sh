@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/ufw.sh — host firewall (i3-sugg §7.1). ufw over raw nftables rules
 # because the rules a desktop needs are three lines, and gufw gives you a GUI
 # for the fourth.

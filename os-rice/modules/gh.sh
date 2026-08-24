@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gh.sh — GitHub CLI. ONE copy, POSIX, distro-agnostic (was
 # linux-debian/modules/gh.sh). Native-first: the package is `github-cli` on
 # arch/alpine/void and `gh` on fedora/Debian/Ubuntu (resolved by pkgmap). Only

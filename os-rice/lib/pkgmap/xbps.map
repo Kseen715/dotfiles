@@ -81,8 +81,10 @@ gtk-dark-theme = gnome-themes-extra gtk-engine-murrine
 # --- not packaged: provider rows ---------------------------------------------
 # xidlehook (the --not-when-audio idle daemon) has no Void package. This row
 # makes `xidlehook` installable, but it needs a Rust toolchain, so list `rust`
-# BEFORE it in a rice (§4). The default i3lock module uses the packaged
-# xautolock + xss-lock instead and never triggers this row.
+# BEFORE it in a rice (§4) — which the i3 rices do. modules/i3lock.sh takes this
+# route when cargo is present and falls back to the packaged xautolock when it
+# is not; xautolock cannot honour audio/fullscreen inhibits, so this is the
+# preferred one, not the exotic one.
 xidlehook = cargo:xidlehook
 
 # --- existing modules that assumed Arch names --------------------------------
@@ -116,3 +118,8 @@ yandex-browser-deps = bash gtk+3 nss alsa-lib libcups libXScrnSaver libXtst at-s
 
 # turbostat/perf on Void.
 kernel-tools = linux-tools
+
+# Build deps for the cargo:xidlehook row above. Void keeps the XCB screensaver
+# extension inside libxcb (no separate package, unlike Debian) and splits the
+# PulseAudio headers into pulseaudio-devel, which is what the audio inhibit links.
+xidlehook-build-deps = libxcb-devel xcb-util-devel pulseaudio-devel pkg-config

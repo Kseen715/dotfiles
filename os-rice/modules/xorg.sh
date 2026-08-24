@@ -1,5 +1,6 @@
 # session: x11
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/xorg.sh — the X11 session core, the X sibling of modules/wayland.sh
 # (i3-sugg §1, §13). ONE copy, POSIX, distro-agnostic: logical names carry Arch's
 # `xorg-*` spelling and pkgmap translates (Void drops the prefix, Debian bundles
@@ -24,13 +25,23 @@ run_step "Installing X server + session core" pkg_install \
     xkeyboard-config setxkbmap \
     xf86-input-libinput mesa-dri \
     xorg-fonts-misc fontconfig \
-    dbus dbus-x11 elogind polkit libnotify
+    dbus dbus-x11 polkit libnotify
 
-# D-Bus and elogind must be up before any graphical session: without them polkit
-# has no authority to talk to, udisks never auto-mounts, and xss-lock gets no
-# suspend/lid signal to hook (§8 — enable_service dispatches per init).
+# D-Bus and a seat/login manager must be up before any graphical session: without
+# them polkit has no authority to talk to, udisks never auto-mounts, and xss-lock
+# gets no suspend/lid signal to hook (§8 — enable_service dispatches per init).
 enable_service dbus || warn "could not enable dbus (needs a real init)"
-enable_service elogind || warn "could not enable elogind (needs a real init)"
+
+# elogind is systemd-logind carved out for the inits that have no systemd. On a
+# systemd host it is not merely redundant: apt resolves `elogind` by REMOVING
+# systemd-sysv (they both own /run/systemd/seats and Provides: logind), which
+# takes the running init with it. So the package is chosen by init, not by distro.
+if [ "${OSR_INIT:-}" = systemd ]; then
+    info "systemd provides logind - skipping elogind"
+else
+    run_step "Installing elogind (seat/login manager)" pkg_install elogind
+    enable_service elogind || warn "could not enable elogind (needs a real init)"
+fi
 
 # --- ~/.xprofile: loader block + layered drop-ins (§5) ------------------------
 _xp_dir="$OSR_HOME/.config/xprofile.d"

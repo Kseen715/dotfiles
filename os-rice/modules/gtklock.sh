@@ -1,5 +1,6 @@
 # session: wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gtklock.sh — gtklock GTK screen locker + rice-owned config. ONE copy,
 # POSIX (was .../modules/gtklock.sh). style.css carries a {{WALLPAPER_PATH}}
 # placeholder the legacy sed-substituted at install; we resolve it to the rice's

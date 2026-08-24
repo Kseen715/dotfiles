@@ -41,4 +41,33 @@ OSR_GPU_COUNT=0
 OUT=$( OSR_DRI=/nonexistent osr_preflight gpu:present 2>&1 ) && RC=0 || RC=$?
 assert_eq 1 "$RC" "gpu:present errors when no GPU detected"
 
+# --- alternation: `a|b|c` holds when ANY branch does -------------------------
+# This is what lets rices/i3-rosemary say `require: distro:void|debian|ubuntu`
+# in one line. The host above is arch/x86_64/systemd.
+OSR_GPU_COUNT=1
+if osr_preflight distro:void\|debian\|arch >/dev/null 2>&1; then
+    ok "alternation matches on a later branch"
+else fail "distro:void|debian|arch should match distro=arch"; fi
+
+if osr_preflight distro:arch\|debian >/dev/null 2>&1; then
+    ok "alternation matches on the first branch"
+else fail "distro:arch|debian should match distro=arch"; fi
+
+# No branch matches -> still an error, and the message keeps the whole predicate
+# so the log says what the rice actually asked for, not one arbitrary branch.
+OUT=$( osr_preflight distro:void\|debian\|ubuntu 2>&1 ) && RC=0 || RC=$?
+assert_eq 1 "$RC" "alternation with no matching branch exits non-zero"
+case "$OUT" in *"rice needs 'distro:void|debian|ubuntu'"*)
+                   ok "unmet alternation reports the whole predicate" ;;
+               *) fail "unmet alternation message (got: $OUT)" ;; esac
+
+# Alternation is per-tag, not a free-for-all: a branch is checked as
+# `<tag>:<branch>`, so an arch alternation cannot be satisfied by a distro name.
+OUT=$( osr_preflight arch:aarch64\|arch 2>&1 ) && RC=0 || RC=$?
+assert_eq 1 "$RC" "an arch alternation is not satisfied by a distro value"
+
+# A single value still works unchanged (no '|' -> no recursion).
+if osr_preflight distro:arch >/dev/null 2>&1; then ok "a plain predicate is unaffected"
+else fail "distro:arch should still match"; fi
+
 finish

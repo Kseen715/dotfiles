@@ -61,14 +61,15 @@ PATH="$TMP/bin:$PATH"; export PATH
 #      file is gone and install.sh calls `osr state set`, which writes a real
 #      file (checked after the full run)
 #   3. the C modules in `--list-modules`, which the frozen install.sh could
-#      not know about
+#      not know about. Read from the registry rather than hardcoded: this list
+#      grows every time a module is ported to C (DESIGN §11a), and a hardcoded
+#      copy makes the NEXT port fail a parity test that has nothing to do with
+#      it - which is exactly what happened when `helpers` landed.
+_CMOD_STRIP=$(for _m in $("$OSR_BIN" module list); do printf '/^  %s$/d\n' "$_m"; done)
 hex() {
     sed "s|$TMP/ref|TREE|g; s|$TMP/c|TREE|g
          /^STUB state_set /d
-         /^  docker$/d
-         /^  fastfetch$/d
-         /^  flameshot$/d
-         /^  tcc$/d" | od -An -tx1 | tr -d ' \n'
+         $_CMOD_STRIP" | od -An -tx1 | tr -d ' \n'
 }
 
 same() {
@@ -301,9 +302,11 @@ fi
 # --list-modules now merges the modules the core implements in C with the
 # shell ones, in one alphabetical list. The frozen runner listed only *.sh.
 _mods=$(env $FACTS sh "$TMP/c/install.sh" --list-modules </dev/null | sed 1d)
-printf '%s\n' "$_mods" | grep -q '^  docker$' \
-    && ok "--list-modules: lists the C modules too" \
-    || fail "--list-modules: C modules missing"
+_cmod_missing=""
+for _m in $("$OSR_BIN" module list); do
+    printf '%s\n' "$_mods" | grep -q "^  $_m\$" || _cmod_missing="$_cmod_missing $_m"
+done
+assert_eq "" "$_cmod_missing" "--list-modules: lists every C module too"
 printf '%s\n' "$_mods" | sort -c 2>/dev/null \
     && ok "--list-modules: still one alphabetical list" \
     || fail "--list-modules: not sorted"

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/datagrip.sh — DataGrip, JetBrains' database IDE, from the vendor
 # tarball (jetbrains.com/datagrip/download, "Linux" tab). There is no repo and
 # no deb/rpm: the .tar.gz is the only route JetBrains publishes for Linux, so

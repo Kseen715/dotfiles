@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/avahi.sh — mDNS/zeroconf (i3-sugg §7.1). This is what makes
 # `.local` hostnames resolve, driverless network printers appear in CUPS, and
 # KDE Connect / LocalSend find peers at all.

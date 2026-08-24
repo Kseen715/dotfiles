@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/proteus.sh — Proteus, the theme/wallpaper picker (§6a).
 #
 # The GUI half of `osr theme`: a rofi-style overlay that lists the themes with

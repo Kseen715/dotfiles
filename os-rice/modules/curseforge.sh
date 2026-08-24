@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/curseforge.sh — CurseForge (AUR). POSIX port of .../apps/curseforge.sh.
 # CurseForge's PKGBUILD ships broken checksums, so it needs helper flags the
 # generic aur: provider doesn't carry (--nosign + makepkg --skipchecksums) —

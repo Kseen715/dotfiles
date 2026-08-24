@@ -1310,3 +1310,78 @@ provide_gpaste() {
     command -v gpaste-client >/dev/null 2>&1 \
         || error "GPaste installed but gpaste-client is not on PATH"
 }
+
+# --- betterlockscreen (GitHub, shell script) ----------------------------------
+# Void packages it; no Debian/Ubuntu release does, and it is not a nice-to-have
+# here: modules/i3.sh's config uses `betterlockscreen -l dimblur` as BOTH the
+# xss-lock target (the suspend/lid inhibitor) and the $mod+Escape binding. Absent,
+# the screen never locks and nothing says why.
+#
+# Upstream is one POSIX shell script plus a wrapper; it shells out to i3lock, to
+# ImageMagick (which pre-renders the dim/blur, so a plain Debian i3lock without
+# the -color patches is enough), and to xrandr for the per-monitor geometry.
+# The install is therefore a copy, not a build - which is also why there is no
+# version probe: `osr module i3lock` re-runs this and takes the newest tag.
+provide_betterlockscreen() {
+    # The runtime closure. i3lock-color maps to plain i3lock on apt (apt.map);
+    # feh is already in the rice but is listed because a --module run is not a
+    # full rice run.
+    pkg_install i3lock-color imagemagick xorg-xrandr feh
+
+    _bls_tag=$(github_latest betterlockscreen/betterlockscreen)   # e.g. v4.3.2
+    _bls_tmp=$(mktemp -d)
+    osr_download "https://github.com/betterlockscreen/betterlockscreen/archive/refs/tags/${_bls_tag}.tar.gz" \
+        "$_bls_tmp/bls.tar.gz" \
+        || { rm -rf "$_bls_tmp"; error "failed to download betterlockscreen ${_bls_tag}"; }
+    tar -xf "$_bls_tmp/bls.tar.gz" -C "$_bls_tmp" \
+        || { rm -rf "$_bls_tmp"; error "failed to extract the betterlockscreen tarball"; }
+    _bls_src=$(find "$_bls_tmp" -maxdepth 2 -type f -name betterlockscreen | head -n 1)
+    [ -n "$_bls_src" ] || { rm -rf "$_bls_tmp"; error "no betterlockscreen script in ${_bls_tag}"; }
+    as_root install -m 0755 "$_bls_src" /usr/local/bin/betterlockscreen \
+        || { rm -rf "$_bls_tmp"; error "failed to install betterlockscreen"; }
+
+    # The systemd user unit that locks on suspend. Installed only where systemd
+    # is the init AND the unit dir exists; on runit/OpenRC the i3 config's
+    # `xss-lock --transfer-sleep-lock` is what carries the inhibitor instead.
+    _bls_unit=$(find "$_bls_tmp" -type f -name 'betterlockscreen@.service' | head -n 1)
+    if [ -n "$_bls_unit" ] && [ "${OSR_INIT:-}" = systemd ] && [ -d /usr/lib/systemd/system ]; then
+        as_root install -m 0644 "$_bls_unit" /usr/lib/systemd/system/betterlockscreen@.service || :
+    fi
+    rm -rf "$_bls_tmp"
+
+    command -v betterlockscreen >/dev/null 2>&1 \
+        || error "betterlockscreen installed but is not on PATH"
+}
+
+# --- autotiling (GitHub, one Python module) -----------------------------------
+# Dwindle-style split direction for i3 - the thing that makes a stock i3 stop
+# feeling like it needs `split h` typed before every window. Packaged by Void and
+# by Debian trixie; everywhere else it is PyPI-only, and a `pip install` into the
+# system interpreter is exactly what PEP 668 marks externally-managed.
+#
+# So: take the script itself and lean on the packaged python3-i3ipc for the one
+# import it has. That keeps apt owning the dependency and leaves nothing for pip
+# to fight over.
+provide_autotiling() {
+    pkg_install python3-i3ipc
+
+    _at_tag=$(github_latest nwg-piotr/autotiling)     # e.g. v1.9.4
+    _at_tmp=$(mktemp -d)
+    osr_download "https://github.com/nwg-piotr/autotiling/archive/refs/tags/${_at_tag}.tar.gz" \
+        "$_at_tmp/at.tar.gz" \
+        || { rm -rf "$_at_tmp"; error "failed to download autotiling ${_at_tag}"; }
+    tar -xf "$_at_tmp/at.tar.gz" -C "$_at_tmp" \
+        || { rm -rf "$_at_tmp"; error "failed to extract the autotiling tarball"; }
+    _at_src=$(find "$_at_tmp" -type f -path '*/autotiling/main.py' | head -n 1)
+    [ -n "$_at_src" ] || { rm -rf "$_at_tmp"; error "no autotiling/main.py in ${_at_tag}"; }
+
+    # main.py carries its own `#!/usr/bin/env python3` and `if __name__ ==
+    # "__main__"` guard, and imports nothing outside the stdlib and i3ipc, so the
+    # console_script setuptools would generate adds nothing - install the file.
+    as_root install -m 0755 "$_at_src" /usr/local/bin/autotiling \
+        || { rm -rf "$_at_tmp"; error "failed to install autotiling"; }
+    rm -rf "$_at_tmp"
+
+    command -v autotiling >/dev/null 2>&1 \
+        || error "autotiling installed but is not on PATH"
+}

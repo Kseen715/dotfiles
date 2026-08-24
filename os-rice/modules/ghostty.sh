@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/ghostty.sh — Ghostty terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic (was linux-debian/modules/ghostty.sh,
 # a from-source Zig build). Native-first: native on arch/void and recent Ubuntu;

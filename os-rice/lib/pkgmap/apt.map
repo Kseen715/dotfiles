@@ -161,9 +161,11 @@ kvantum = qt5-style-kvantum qt6-style-kvantum
 # carries the same patched glyphs.
 nerd-fonts-symbols =
 
-# Soname-versioned Debian library packages (libpoppler-glib8, libheif1, libjxl0.11,
-# ...) are deliberately NOT mapped here: the name changes with every release and
-# the thumbnailers/pixbuf loaders pull them in as dependencies anyway.
+# Soname-versioned Debian library packages (libpoppler-glib8, libjxl0.11, ...) are
+# never mapped to a versioned name: it changes every release and the thumbnailers
+# / pixbuf loaders pull the right one in as a dependency anyway. They still need a
+# row, because an unmapped name passes through and fails the whole apt-get batch —
+# see the empty-RHS block in the third pass below.
 
 # --- i3 desktop, second pass (name mapping only) ------------------------------
 xorg-xmodmap = x11-xserver-utils
@@ -235,3 +237,154 @@ gpaste-build-deps = meson ninja-build pkg-config gettext libgcr-4-dev libglib2.0
 # turbostat/perf. Debian splits these: linux-cpupower carries turbostat,
 # linux-perf the profiler. Neither is required by osr (see modules/benchmark.sh).
 kernel-tools = linux-cpupower linux-perf
+
+# --- i3 desktop, third pass: what actually blocked the rice on apt ------------
+# Every row below was checked against the real binary index
+#   deb.debian.org/debian/dists/{bullseye,bookworm,trixie}/*/binary-amd64
+#   archive.ubuntu.com/ubuntu/dists/{jammy,noble}/*/binary-amd64
+# not from memory, the same discipline xbps.map documents for Void. Without
+# these the manifest does not merely lose a feature: _via_native batches the
+# whole step into ONE apt-get, so a single unknown name fails the module.
+
+# X session core (modules/xorg.sh, modules/input.sh). Debian names the server
+# and the input driver after the source packages, and ships xkb data as xkb-data.
+xorg-server = xserver-xorg
+mesa-dri = libgl1-mesa-dri
+xf86-input-libinput = xserver-xorg-input-libinput
+xkeyboard-config = xkb-data
+setxkbmap = x11-xkb-utils
+# libnotify4 is the library and arrives as a dependency; notify-send - which
+# every script in this rice calls - is in libnotify-bin, and only there.
+libnotify = libnotify-bin
+# polkit was renamed policykit-1 -> polkitd in bookworm; bullseye has only the
+# old name (bookworm/jammy/noble carry both, so the new name covers them).
+polkit = polkitd
+polkit@bullseye = policykit-1
+
+# Network, discovery, shares (modules/networkmanager.sh, avahi.sh, gvfs.sh).
+networkmanager = network-manager
+libnm = libnm0
+openssh = openssh-client openssh-server
+avahi = avahi-daemon avahi-utils
+nss-mdns = libnss-mdns
+nfs-utils = nfs-common
+
+# Bluetooth + audio (modules/blueman.sh, modules/audio.sh). The codec libraries
+# are what make a headset sound like more than SBC, and Debian soname-suffixes
+# all three. sof-firmware lives in non-free-firmware as firmware-sof-signed -
+# without it a modern Intel laptop has no sound at all and no log line saying so.
+bluez-obex = bluez-obexd
+sof-firmware = firmware-sof-signed
+alsa-firmware = alsa-firmware-loaders
+sbc = libsbc1
+libfreeaptx = libfreeaptx0
+libfreeaptx@bullseye =
+libldac = libldacbt-enc2 libldacbt-abr2
+# bullseye's PipeWire is 0.3.19 and predates WirePlumber (it used
+# pipewire-media-session); there is nothing to install, so skip rather than fail.
+wireplumber@bullseye =
+
+# Secrets + thumbnailers (modules/keyring.sh, modules/thumbnails.sh).
+# libsecret-tools carries secret-tool, which the CLI half of the stack uses.
+libsecret = libsecret-1-0 libsecret-tools
+# The pixbuf LOADER is the point of these two, not the codec library: without the
+# loader, HEIC/SVG icons are blank everywhere including the browser download panel.
+librsvg = librsvg2-common
+libheif = heif-gdk-pixbuf
+webp-pixbuf-loader@bullseye =
+webp-pixbuf-loader@jammy =
+gnome-epub-thumbnailer@bullseye =
+gnome-epub-thumbnailer@jammy =
+# Empty RHS = skip. These are soname-versioned in Debian (libpoppler-glib8,
+# libgsf-1-114, libavif16, libjxl0.11 - the number changes every release) and
+# tumbler/gdk-pixbuf pull the right one in as a dependency anyway, so naming a
+# version here would break on the next release for no gain. libopenraw and its
+# raw thumbnailer are in no Debian release at all; RAW previews are lost, which
+# is a missing preview, not a broken desktop.
+poppler-glib =
+libgsf =
+libavif =
+libjxl =
+libopenraw =
+raw-thumbnailer =
+
+# Apps whose Debian name differs (modules/telegram.sh, modules/viewers.sh).
+webkit2gtk-4.1 = libwebkit2gtk-4.1-0
+webkit2gtk-4.1@bullseye = libwebkit2gtk-4.0-37
+# Debian dropped the mupdf backend (licence); poppler is the packaged one and
+# zathura loads whichever backend is installed, so nothing else changes.
+zathura-pdf-mupdf = zathura-pdf-poppler
+# nsxiv reached Debian in bookworm. On bullseye/jammy `imv` (installed by the
+# same module) is the image viewer; mapping to `sxiv` instead would install a
+# binary and a .desktop id that mimeapps.list does not name.
+nsxiv@bullseye =
+nsxiv@jammy =
+
+# Input methods (modules/fcitx5.sh). Debian splits fcitx5-gtk/fcitx5-qt into one
+# binary package per toolkit version, and calls the config GUI fcitx5-config-qt.
+fcitx5-gtk = fcitx5-frontend-gtk3 fcitx5-frontend-gtk4
+fcitx5-qt = fcitx5-frontend-qt5 fcitx5-frontend-qt6
+fcitx5-qt@jammy = fcitx5-frontend-qt5
+fcitx5-configtool = fcitx5-config-qt
+
+# Firefox: Debian ships the ESR under its own name and no `firefox` at all.
+# Ubuntu's `firefox` IS a package - a snap stub - and modules/firefox.sh follows
+# the snap's profile root rather than fighting it, so Ubuntu needs no row here.
+firefox@bullseye = firefox-esr
+firefox@bookworm = firefox-esr
+firefox@trixie   = firefox-esr
+
+# Rust tools that Debian does not package. The rice lists `rust` before the
+# modules that need these (§4), so cargo: is a real route here, not a wish.
+xcolor = cargo:xcolor
+ouch = cargo:ouch
+# betterlockscreen is a shell script published on GitHub, packaged by Void and by
+# no Debian/Ubuntu release. It is not optional: the i3 config's xss-lock target
+# and the $mod+Escape binding are both betterlockscreen, so without it the screen
+# never locks - including on lid close.
+betterlockscreen = source:provide_betterlockscreen
+# autotiling is a ~100-line Python script on top of python3-i3ipc (which every
+# release has); Debian packages it from trixie on.
+autotiling = source:provide_autotiling
+autotiling@trixie = autotiling
+
+# Battery alerts: batsignal is in no Debian release. cbatticon is the packaged
+# equivalent (tray icon + low/critical notifications) and is in all of them.
+batsignal = cbatticon
+
+# Empty RHS = skip: not in any Debian/Ubuntu release, and the rice still works
+# without them. What is lost, in order: the rofi calc/emoji modes and the
+# $mod+period emoji picker (fcitx5's own picker still works), two extra mixers
+# on top of pavucontrol/pulsemixer, one of three MTP routes (gvfs-mtp and jmtpfs
+# remain), touchpad swipe gestures, and kernel-level key remapping (xcape, which
+# IS packaged, covers dual-role keys at the X level).
+rofi-calc =
+rofi-emoji =
+rofimoji =
+ncpamixer =
+pwvucontrol =
+simple-mtpfs =
+libinput-gestures =
+keyd =
+keyd@trixie = keyd
+# pamixer and qt6ct arrived in bookworm/noble. The volume keys go through
+# ~/.config/i3/scripts/osd.sh, which falls back to pactl (pulseaudio-utils, in
+# every release) when pamixer is absent, so the keys keep working on jammy.
+pamixer@bullseye =
+pamixer@jammy =
+qt6ct@bullseye =
+qt6ct@jammy =
+# xautolock was removed in trixie; the idle timer there is xidlehook (cargo:),
+# which modules/i3lock.sh prefers anyway when a Rust toolchain is present.
+xautolock@trixie =
+
+# xidlehook: the idle daemon that honours --not-when-audio / --not-when-fullscreen
+# (i3-sugg §12 gotcha 14 - "screensaver kicks in during video"). Rust-only on
+# every target; the xcb screensaver extension is a separate -dev package here,
+# and libpulse-dev backs the audio inhibit.
+xidlehook = cargo:xidlehook
+xidlehook-build-deps = libxcb1-dev libxcb-screensaver0-dev libpulse-dev pkg-config
+
+# exo-open is what Thunar's "Open Terminal Here" shells out to (modules/thunar.sh).
+# Debian splits the library from the tools; only the tools half is wanted here.
+exo = exo-utils

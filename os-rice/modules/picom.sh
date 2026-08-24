@@ -1,5 +1,6 @@
 # session: x11
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/picom.sh — X11 compositor (i3-sugg §1.3). Mandatory, not cosmetic:
 # without a compositor you get tearing, no transparency, Electron/Chromium
 # flicker and broken shadows.

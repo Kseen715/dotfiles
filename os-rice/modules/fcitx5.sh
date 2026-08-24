@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/fcitx5.sh — input method for CJK, Cyrillic and anything else that
 # needs composition (i3-sugg §5). fcitx5 over ibus: lighter, better Wayland
 # support, and its Qt/GTK bridges are separate packages you can pick.

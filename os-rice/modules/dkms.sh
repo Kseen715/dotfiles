@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/dkms.sh — DKMS + kernel headers for every installed kernel flavor. ONE
 # copy, POSIX (was .../modules/dkms.sh). Headers must match the *running* kernel,
 # so this is validated on hardware, not in CI (§9). Arch-only (kernel package

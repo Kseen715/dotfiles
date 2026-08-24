@@ -1,7 +1,7 @@
 #!/bin/sh
 # Covers the i3/X11 desktop slice:
 #   1. servicemap @init facets (bluetooth/cups differ on runit only)
-#   2. xbps.map rows for the Void names that actually differ
+#   2. xbps.map + apt.map rows for the names that actually differ per target
 #   3. modules/i3.sh config layering (§5): base, theme layer, machine-local
 #   4. the i3-rosemary rice manifest only names modules that exist
 set -eu
@@ -47,6 +47,82 @@ check_map picom picom
 check_map polybar polybar
 check_map i3 i3
 
+# --- 2b. apt.map rows: the same manifest on Debian/Ubuntu ---------------------
+# The i3 rice targets xbps AND apt (`require: distro:void|debian|ubuntu`). These
+# names are not cosmetic differences: _via_native batches a whole step into ONE
+# apt-get, so a single unmapped name fails the module, not just one package.
+OSR_PKG=apt; export OSR_PKG
+OSR_CODENAME=trixie; OSR_VERSION_ID=13; export OSR_CODENAME OSR_VERSION_ID
+
+check_apt() { assert_eq "$2" "$(_pkgmap_one "$1")" "apt: $1 -> ${2:-<skipped>}"; }
+check_apt xorg-server xserver-xorg                       # session would not start
+check_apt mesa-dri libgl1-mesa-dri
+check_apt xkeyboard-config xkb-data                      # Debian drops the upstream name
+check_apt setxkbmap x11-xkb-utils
+check_apt xf86-input-libinput xserver-xorg-input-libinput
+check_apt networkmanager network-manager
+check_apt openssh "openssh-client openssh-server"        # one-to-many (§1)
+check_apt avahi "avahi-daemon avahi-utils"
+check_apt nss-mdns libnss-mdns
+check_apt nfs-utils nfs-common
+check_apt libnotify libnotify-bin                        # notify-send lives only here
+check_apt sof-firmware firmware-sof-signed               # no sound at all without it
+check_apt bluez-obex bluez-obexd
+check_apt zathura-pdf-mupdf zathura-pdf-poppler          # Debian dropped the mupdf backend
+check_apt fcitx5-gtk "fcitx5-frontend-gtk3 fcitx5-frontend-gtk4"
+check_apt polkit polkitd                                 # renamed in bookworm
+check_apt exo exo-utils                                  # Thunar Open Terminal Here
+# Not packaged anywhere in the archive -> a provider, not a guessed name.
+check_apt betterlockscreen source:provide_betterlockscreen
+check_apt xcolor cargo:xcolor
+check_apt xidlehook cargo:xidlehook
+# Empty RHS = deliberately skipped. The point of the row is that pkg_install
+# does NOT try to install a soname-versioned name that changes every release.
+check_apt poppler-glib ""
+check_apt libinput-gestures ""
+# Names that are identical on Debian must NOT have a row (§1: no identity rows).
+check_apt i3 i3
+check_apt picom picom
+check_apt dunst dunst
+check_apt xterm xterm
+
+# Release facets: the same logical name resolves differently per release, which
+# is the whole reason `name@release` exists (§1a G6).
+OSR_CODENAME=bullseye; OSR_VERSION_ID=11; export OSR_CODENAME OSR_VERSION_ID
+check_apt polkit policykit-1                             # bullseye predates polkitd
+check_apt pamixer ""                                     # osd.sh falls back to pactl
+check_apt webkit2gtk-4.1 libwebkit2gtk-4.0-37
+check_apt firefox firefox-esr                            # Debian ships no `firefox`
+OSR_CODENAME=jammy; OSR_VERSION_ID=22.04; export OSR_CODENAME OSR_VERSION_ID
+check_apt fcitx5-qt fcitx5-frontend-qt5                  # jammy has no Qt6 frontend
+check_apt firefox firefox                                # Ubuntu's snap stub; see the module
+OSR_CODENAME=trixie; OSR_VERSION_ID=13; export OSR_CODENAME OSR_VERSION_ID
+check_apt autotiling autotiling                          # native from trixie on
+check_apt keyd keyd
+OSR_CODENAME=noble; OSR_VERSION_ID=24.04; export OSR_CODENAME OSR_VERSION_ID
+check_apt autotiling source:provide_autotiling           # built everywhere else
+check_apt keyd ""
+
+# Every logical name the rice's modules install must RESOLVE on apt - either to
+# a real package, to a provider, or to an explicit skip. An unmapped name that
+# merely looks plausible is the failure mode this whole map exists to prevent,
+# so the check is "does a row exist", not "is the string non-empty".
+_apt_unmapped=""
+for _n in xorg-server mesa-dri xkeyboard-config setxkbmap xf86-input-libinput \
+          networkmanager libnm openssh avahi nss-mdns nfs-utils libnotify polkit \
+          sof-firmware alsa-firmware sbc libfreeaptx libldac bluez-obex \
+          libsecret librsvg libheif libgsf libavif libjxl libopenraw poppler-glib \
+          raw-thumbnailer webkit2gtk-4.1 zathura-pdf-mupdf fcitx5-gtk fcitx5-qt \
+          fcitx5-configtool betterlockscreen autotiling xcolor ouch batsignal \
+          rofi-calc rofi-emoji rofimoji ncpamixer pwvucontrol simple-mtpfs \
+          libinput-gestures keyd exo xidlehook; do
+    [ "$(_pkgmap_one "$_n")" != "$_n" ] || _apt_unmapped="$_apt_unmapped $_n"
+done
+assert_eq "" "$_apt_unmapped" "every apt-divergent name in the rice has a row"
+
+OSR_PKG=xbps; OSR_CODENAME=''; OSR_VERSION_ID=''
+export OSR_PKG OSR_CODENAME OSR_VERSION_ID
+
 # --- 3. modules/i3.sh layering ------------------------------------------------
 T=$(mktemp -d)
 OSR_HOME="$T/home"; OSR_USER=$(id -un)
@@ -65,6 +141,35 @@ run_step()    { shift; "$@"; }
 . "$OSR_ROOT/modules/i3.sh"
 
 assert_contains "$CALLS" "i3 i3status dex" "i3 module installs i3 + the companions its config execs"
+# unclutter and unclutter-xfixes are different programs with incompatible flags,
+# and both are packaged on both targets - so the wrong one installs cleanly and
+# then does nothing. The config's `--timeout` is the xfixes syntax.
+assert_contains "$CALLS" "unclutter-xfixes" "i3 module installs the xfixes unclutter, not the original"
+refute_contains "$OSR_DOTFILES/i3/.config/i3/config" "unclutter -idle" \
+    "the config uses the xfixes invocation it installs"
+
+# The OSD: i3 has none of its own, so the volume/brightness keys go through a
+# script. Both halves have to be there - the script installed, and the bindings
+# pointing at it rather than at a mixer that may not exist on this release.
+[ -x "$OSR_HOME/.config/i3/scripts/osd.sh" ] && ok "osd.sh installed and executable" \
+    || fail "osd.sh installed and executable"
+assert_contains "$OSR_HOME/.config/i3/config" "osd.sh volume-up" \
+    "volume keys go through the OSD script"
+assert_contains "$OSR_HOME/.config/i3/config" "osd.sh light-up" \
+    "brightness keys go through the OSD script"
+refute_contains "$OSR_HOME/.config/i3/config" "^bindsym XF86AudioRaiseVolume  exec --no-startup-id pamixer" \
+    "no binding calls a mixer directly (pamixer is absent on bullseye/jammy)"
+# The script must work with whichever mixer the host has: pamixer reached Debian
+# only in bookworm, so a pamixer-only OSD is a silent dead key on two releases.
+assert_contains "$OSR_HOME/.config/i3/scripts/osd.sh" "pactl" \
+    "osd.sh falls back to pactl when pamixer is absent"
+
+# Idle: the config must PROBE for xidlehook rather than assume either daemon -
+# modules/i3lock.sh installs xidlehook only where a Rust toolchain exists.
+assert_contains "$OSR_HOME/.config/i3/config" "xidlehook --not-when-audio" \
+    "the idle timer declines to lock over audio/fullscreen when it can"
+assert_contains "$OSR_HOME/.config/i3/config" "xautolock -time 10" \
+    "and still falls back to xautolock when it cannot"
 [ -f "$OSR_HOME/.config/i3/config" ] && ok "base config installed (dotfiles layer)" \
     || fail "base config installed (dotfiles layer)"
 assert_contains "$OSR_HOME/.config/i3/config" 'include ~/.config/i3/config.d/\*.conf' \

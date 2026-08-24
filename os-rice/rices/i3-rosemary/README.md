@@ -1,6 +1,8 @@
 # i3-rosemary
 
-A full i3/X11 desktop on Void Linux in a muted rose dark palette.
+A full i3/X11 desktop in a muted rose dark palette, on **Void (xbps)** and on
+**Debian/Ubuntu (apt)**. Every difference between the two lives in
+`lib/pkgmap/{xbps,apt}.map`; no module branches on the distro.
 
 ```sh
 ./osr install i3-rosemary           # full install
@@ -72,11 +74,29 @@ Everything else in `~/.config` belongs to the dotfiles base layer or to you.
 ## Before first login
 
 1. Drop a wallpaper into `wallpapers/` (see the README there).
-2. `xbps-install -S void-repo-nonfree void-repo-multilib` if you want `steam`.
+2. On Void: `xbps-install -S void-repo-nonfree void-repo-multilib` if you want
+   `steam`. On Debian/Ubuntu: `dpkg --add-architecture i386` for the same reason.
 3. Run `sensors-detect` once so polybar's temperature module has a zone.
 4. Set your location in `redshift/redshift.conf` — the default is Moscow.
 5. Save a monitor layout with `autorandr --save <name>`; the i3 config runs
    `autorandr --change` at startup.
+
+## What makes it feel like a distro and not a bare WM
+
+These are the pieces a desktop environment provides that i3 has none of, and
+each one is a bug you would otherwise hit and not connect back to the WM:
+
+| you press / click | what makes it work |
+|---|---|
+| volume / brightness keys | `~/.config/i3/scripts/osd.sh` — changes the level *and* draws the progress popup, redrawn in place. It probes for pamixer, then pactl, then wpctl, so the keys work on releases that package none of the first choice. |
+| nothing, for ten minutes, mid-film | `xidlehook --not-when-audio --not-when-fullscreen`. `xautolock` (the fallback where there is no Rust toolchain) counts wall-clock idle and will blank the screen during a video. |
+| Thunar → "Open Terminal Here" | `modules/helpers.c` — Thunar shells out to `exo-open --launch TerminalEmulator`, which resolves through `~/.config/xfce4/helpers.rc`. Nothing outside XFCE ever writes that file, so without it the menu entry is present and does nothing. |
+| `$mod+Return` when ghostty is broken | `xterm`, installed by the same module purely as the escape hatch. |
+| a GUI app asking for root | `polkit-agent` — without it every such action fails silently. |
+| "Move to Trash" | `gvfs`. |
+| plugging in a USB stick | `udiskie --tray` over `udisks2`. |
+| a Flatpak's file dialog | `xdg-desktop-portal-gtk`, pinned in `i3-portals.conf` because i3 has no portal backend of its own. |
+| your theme, in every app | `xsettingsd` — i3 has no settings daemon, which is why "the theme only works in some apps" is the most common i3 complaint. |
 
 ## Two config shapes worth knowing
 
@@ -107,12 +127,35 @@ composition instead (`lib/config.sh`):
   on one file means the last writer wins and the other silently loses edits.
   Pick the theme inside VS Code.
 
-## Known gaps on Void
+## Debian/Ubuntu notes
 
-- No packaged rose GTK/Kvantum theme — the rice uses Adwaita-dark plus a
-  `gtk.css` accent override rather than vendoring a theme.
-- No Bibata/Capitaine cursors; `Vanilla-DMZ` is the packaged stand-in.
-- `discord` and `gradia` are Flatpak-only.
-- `xidlehook` needs a Rust toolchain; the rice uses `xautolock` + `xss-lock`.
+Nothing extra to do — the manifest is the same. Two things worth knowing:
 
-See `../../i3-void-packages.md` for the full component → package writeup.
+1. `firefox` on **Ubuntu** is a snap stub, and the snap keeps its profile under
+   `~/snap/firefox/`. `modules/firefox.sh` follows the profile rather than
+   fighting the package, so the theme lands either way. Debian gets
+   `firefox-esr`, which uses the classic profile root.
+2. `require: distro:void|debian|ubuntu` is checked before anything is written.
+   On any other distro the run exits having touched nothing, and says so.
+
+## Known gaps, per target
+
+| component | Void | Debian/Ubuntu |
+|---|---|---|
+| rose GTK/Kvantum theme | not packaged — Adwaita-dark + a `gtk.css` accent override | same |
+| Bibata/Capitaine cursors | not packaged — `Vanilla-DMZ` is the stand-in | packaged, but the rice stays on the same stand-in for one look on both |
+| `betterlockscreen` | packaged | built by `provide_betterlockscreen` (upstream script) |
+| `autotiling` | packaged | packaged from trixie; built from the upstream script elsewhere |
+| `xidlehook` (idle inhibits) | `cargo:` — `rust` is listed before `i3lock` | same |
+| `xcolor`, `ouch` | packaged | `cargo:` |
+| `rofimoji`, `rofi-calc`, `rofi-emoji` | packaged | not in the archive — skipped, fcitx5's own emoji picker remains |
+| `libinput-gestures` (swipes) | packaged | not in the archive — skipped |
+| `keyd` (kernel-level remap) | packaged | trixie only; `xcape` covers dual-role keys elsewhere |
+| RAW thumbnails | `libopenraw-pixbuf-loader` | no `libopenraw` at all — RAW previews are lost |
+| `discord`, `gradia` | Flatpak | Flatpak |
+| `elogind` | installed (runit has no logind) | **not** installed — systemd provides it, and apt would remove `systemd-sysv` to make room |
+
+See `../../i3-void-packages.md` for the Void component → package writeup, and
+the third-pass block in `lib/pkgmap/apt.map` for the apt one — every row there
+was checked against the real binary index for bullseye, bookworm, trixie, jammy
+and noble.

@@ -1,4 +1,5 @@
 # session: x11
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/input.sh — pointer, keyboard and remapping (i3-sugg §5). The X server
 # and xkb data come from modules/xorg.sh; this is the layer on top of them:
 # gestures, dual-role keys, numlock, per-window layout.

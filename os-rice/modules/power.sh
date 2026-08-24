@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/power.sh — battery, thermals and idle policy (i3-sugg §7.3).
 #
 # tlp is the pick; `power-profiles-daemon` and `auto-cpufreq` are the

@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/firefox.sh — Firefox + a low-RAM prefs layer + the rice's colors.
 #
 # Config split (§5), realized through Mozilla's two profile-level hooks:

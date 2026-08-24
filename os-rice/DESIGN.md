@@ -1000,6 +1000,11 @@ Predicates stay small, cheap, and **data-only** (no installs):
 | `cmd:<bin>`                  | `command -v`                               |
 | `gpu:present`                | `/dev/dri/renderD*` or a GPU in `lspci`    |
 
+The value half may list alternatives with `|` — `require: distro:void|debian|ubuntu`
+— and holds when any branch does. A rice's portability claim is a *set* of
+targets, and two `require:` lines already mean AND, so `|` is the only
+combinator needed.
+
 `lib/preflight.sh` dispatches each; unmet → `error "rice needs <pred>; detected …"`.
 Preflight runs on `osr switch <rice>` too — you can't switch into a rice the
 hardware can't run.
@@ -1025,6 +1030,62 @@ the ask. It stays honest: the probe installs only its **own** prerequisites
 (which a Vulkan rice needs anyway), never rice-specific packages. `require:
 gpu:vulkan` in a manifest is sugar meaning "ensure the `gpu-vulkan` probe module
 runs early and hard."
+
+---
+
+## 11. Two module tiers — and only one of them is the target
+
+A module is either a shell script at `modules/<name>.sh` or a C function at
+`modules/<name>.c` registered in `lib/modules.c`. `install.sh` asks
+`osr module has <name>` and runs whichever exists, so a `rice.list` never says
+which tier a module belongs to — and that is what makes the migration
+incremental rather than a rewrite.
+
+The C tier is the target. What it buys is not speed:
+
+- **`osr_step` can fork a function of this program.** The shell `run_step` could
+  only fork a *shell* function, which is the single reason `lib/ui.sh` still
+  exists at all. A step in C can be "install these packages" instead of "run
+  this one command".
+- **A module is a translation unit, not a sourced fragment.** A `.sh` module
+  runs inside the installer's shell and can therefore clobber any variable the
+  libs use; `_il_cargo` is one typo away from `_i3d`. The C module has scope.
+- **The contract is a header, not a convention.** `lib/module.h` is the whole
+  API a module may assume. In the shell tier the API is "whatever happens to be
+  defined by the time we source you".
+- **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and
+  the C module side by side under stubbed package tooling and diffs *what they
+  did to the box*, so a port is provably behaviour-preserving rather than
+  hopefully so.
+
+### 11a. Every `.sh` module is legacy
+
+The ~115 shell modules carry a marker beside `# session:` and `# themable:`:
+
+```sh
+# session: x11
+# themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
+```
+
+It is enforced by `test/lint.sh`, for the same reason `# session:` is: a marker
+that is only usually there answers no question. `grep -c '^# legacy:' modules/*.sh`
+is the remaining-work count, and it only ever goes down.
+
+The marker means "should be C", not "is broken". A legacy module is fully
+supported and a rice may depend on it; what it may not do is be the pattern a
+NEW module copies. Ports happen when a module is being touched anyway — that is
+how `flameshot`, `docker`, `fastfetch` and `tcc` moved — and one blocker is
+worth knowing up front: `osr_pkg_install` implements the **native** path only.
+A module whose packages resolve to a `cargo:`/`source:`/`script:`/`aur:` row
+must stay shell until those providers are ported, and it gets a clear failure
+rather than a wrong install if it tries. `modules/i3lock.sh` (cargo:xidlehook,
+source:provide_betterlockscreen) is the canonical example of one that cannot
+move yet.
+
+A brand-new module goes straight to C — `modules/helpers.c` is the first that
+never had a `.sh` form, and therefore has no `test/ref` twin to diff against;
+its scenario in `module_c_parity.sh` asserts behaviour directly instead.
 
 ---
 

@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/dnscrypt.sh — encrypted DNS (i3-sugg §7.1). Available module, NOT in
 # the default rice: swapping the resolver is a decision with real failure modes
 # (captive portals, split-horizon corporate DNS, VPN-pushed resolvers), so it

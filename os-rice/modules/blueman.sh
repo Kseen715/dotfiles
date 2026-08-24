@@ -1,4 +1,5 @@
 # session: x11+wayland
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/blueman.sh — Bluetooth stack + tray applet (i3-sugg §7.2).
 # blueman-applet is what the i3 config execs; without it there is no pairing UI
 # and no way to answer a pairing request.

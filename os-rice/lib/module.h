@@ -127,6 +127,22 @@ int osr_mkdir_p(const char *dir);
  * (backup once, then copy, skipping an identical write). */
 int osr_install_layer(const char *src, const char *dst);
 
+/* osr_seed_file / osr_seed_file_root -- the `[ -f x ] || tee x <<'EOF'` shape
+ * that nearly every .sh module uses for a file it must NOT own: a machine's
+ * input config, a helper wiring, an /etc drop-in. Write once when absent, then
+ * never again - §5's "seeded, then yours" contract - so a rerun cannot clobber
+ * an edit. Already present counts as success.
+ *
+ * The _root variant is for paths outside the user's home (/etc, /usr/share).
+ * Pick by who should OWN the result, not by who is running: a file written
+ * under the wrong identity is the one failure mode this pair exists to
+ * prevent (a root-owned dotfile the user's session cannot rewrite, or a
+ * user-owned file under /usr that a package upgrade fights over).
+ *
+ * content is written verbatim - include the trailing newline. */
+int osr_seed_file(const char *dst, const char *content);
+int osr_seed_file_root(const char *dst, const char *content);
+
 /* osr_install_theme_layer -- install_theme_layer: the current theme's version
  * of <app>/<name> into dst, whether the theme ships the file itself or the
  * dotfiles template has to be rendered for it. Returns 0 when this theme has

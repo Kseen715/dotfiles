@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/alacritty.sh — Alacritty terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic. Alacritty is native on every target
 # (Debian/Ubuntu, Fedora, Arch, Void, Alpine, Gentoo), so the logical name passes

@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/yazi.sh — Yazi file manager + layered config. ONE copy, POSIX,
 # distro-agnostic. Config split by ownership (§5):
 #

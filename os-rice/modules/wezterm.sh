@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/wezterm.sh — WezTerm terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic. WezTerm is BUILT FROM SOURCE on every
 # target (any.map -> source:provide_wezterm, upstream's documented route); there

@@ -1,5 +1,6 @@
 # session: x11+wayland
 # themable: yes
+# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/evolution.sh — Evolution mail/calendar/contacts, made to look like a
 # 2020s client instead of a 2009 one.
 #
