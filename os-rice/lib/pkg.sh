@@ -204,6 +204,63 @@ _native_held() {
     esac
 }
 
+# _xbps_clear_conflicts <realpkgs...> — remove installed packages that would
+# make the xbps transaction abort, so the batch can proceed.
+#
+# The case this exists for: two packages are alternative implementations of one
+# thing, and the one we want declares the other's name as a virtual it provides.
+# `unclutter-xfixes` provides `unclutter>=0`, so on a box that already has the
+# original `unclutter` xbps refuses the WHOLE transaction — the other six
+# packages in the same `xbps-install` call never land, the module fails, and the
+# run stops on a pointer-hiding daemon. Nothing else in the i3 rice's 238
+# packages conflicts; this is about not letting one of them abort everything.
+#
+# xbps itself is the authority on what conflicts, not a table here: a dry run
+# (-n) reports every conflict without touching the system, and its lines read
+#
+#   CONFLICT: unclutter-xfixes-1.6_1 with installed pkg unclutter-8_5 (matched by unclutter>=0)
+#
+# Only the `with installed pkg` form is actionable — the other form ("... in
+# transaction") is two NEW packages disagreeing, where there is nothing
+# installed to remove and no basis to pick a winner, so it falls through to the
+# real install and fails there with xbps's own message.
+#
+# This is the one place os-rice removes a package the user may have installed,
+# which G2 otherwise forbids, so it is fenced in tightly:
+#   - only what xbps names as blocking THIS transaction, never a guess;
+#   - never a package something else depends on (xbps-query -X): a conflict is
+#     one thing, dragging a reverse-dependency closure out is another, and that
+#     one is left to fail loudly with its own error;
+#   - never a held/pinned package (G2 proper — that is a stated user decision);
+#   - and it says both names out loud when it does it.
+_xbps_clear_conflicts() {
+    # A dry run needs the index, and a repo that will not sync is not this
+    # function's problem — the real install is about to report it properly.
+    _xc_out=$(as_root xbps-install -n "$@" 2>&1) || :
+    printf '%s\n' "$_xc_out" | grep '^CONFLICT:' | grep 'with installed pkg' \
+    | while read -r _xc_line; do
+        # CONFLICT: <new> with installed pkg <installed> (matched by <pattern>)
+        _xc_new=$(printf '%s' "$_xc_line" | awk '{print $2}')
+        _xc_old=$(printf '%s' "$_xc_line" | awk '{print $6}')
+        [ -n "$_xc_old" ] || continue
+        # <name>-<version>_<revision> -> <name>; xbps-uhelper is in xbps itself.
+        _xc_name=$(xbps-uhelper getpkgname "$_xc_old" 2>/dev/null) || _xc_name=""
+        [ -n "$_xc_name" ] || continue
+        if _native_held "$_xc_name"; then
+            warn "$_xc_old is held - leaving it, $_xc_new cannot install"
+            continue
+        fi
+        _xc_rev=$(xbps-query -X "$_xc_name" 2>/dev/null | grep -c .) || _xc_rev=0
+        if [ "$_xc_rev" -gt 0 ]; then
+            warn "$_xc_old conflicts with $_xc_new but $_xc_rev package(s) need it - leaving it"
+            continue
+        fi
+        warn "$_xc_old conflicts with $_xc_new (same program, different implementation) - replacing it"
+        as_root xbps-remove -y "$_xc_name" >/dev/null 2>&1 \
+            || warn "could not remove $_xc_name - $_xc_new will fail to install"
+    done
+}
+
 # _via_native <realpkgs...> — filter already-installed and held/pinned, then
 # batch-install the rest. Filtering is what makes a second run all-skips (§2).
 _via_native() {
@@ -223,6 +280,14 @@ _via_native() {
     if [ -z "${_OSR_REFRESHED:-}" ]; then
         pkg_refresh || warn "package index refresh failed - continuing"
         _OSR_REFRESHED=1
+    fi
+    # Clear anything that would abort the whole xbps transaction before running
+    # it, so one conflicting package cannot take the other N down with it. An
+    # `if`, not `[ ] && ...`: under `set -e` a trailing false AND-list is exactly
+    # the footgun that would make every non-Void install exit here.
+    if [ "$OSR_PKG" = xbps ]; then
+        # shellcheck disable=SC2086  # intentional word-split into a package list
+        _xbps_clear_conflicts $_todo
     fi
     # shellcheck disable=SC2086  # intentional word-split into a package list
     case "$OSR_PKG" in

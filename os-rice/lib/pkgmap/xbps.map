@@ -4,8 +4,15 @@
 # fontconfig, fd are all identical on xbps, so they need no row).
 #
 # Every row below was checked against the real repository index
-# (repo-default.voidlinux.org/current{,/nonfree,/multilib} x86_64-repodata), not
-# from memory. See i3-void-packages.md for the full component -> package writeup.
+# (repo-default.voidlinux.org x86_64-repodata), not from memory. See
+# i3-void-packages.md for the full component -> package writeup.
+#
+# Only `current` may be assumed: void-repo-nonfree and void-repo-multilib are
+# opt-in and off on a stock install, and os-rice does not turn them on. A name
+# that exists ONLY in nonfree/multilib is therefore missing as far as a rice is
+# concerned and needs a row pointing at a free equivalent in `current` (see
+# `unrar` at the bottom) or no row at all (lib32-libnm, in any.map). Validating
+# a row against the nonfree index is how `unrar` shipped broken.
 
 build = base-devel
 dev-headers = openssl-devel pkgconf
@@ -123,3 +130,12 @@ kernel-tools = linux-tools
 # extension inside libxcb (no separate package, unlike Debian) and splits the
 # PulseAudio headers into pulseaudio-devel, which is what the audio inhibit links.
 xidlehook-build-deps = libxcb-devel xcb-util-devel pulseaudio-devel pkg-config
+
+# Void's `unrar` is the nonfree upstream binary and lives in void-repo-nonfree,
+# which is opt-in and off on a stock install — the same reason lib32-libnm gets
+# no row above. `unar` (The Unarchiver) is in `current`, is what both archive
+# GUIs modules/archives.sh installs (xarchiver, file-roller) probe for as their
+# free RAR backend, and ships lsar alongside it. Same call apt.map makes with
+# unrar-free: take the free extractor rather than turn on a nonfree repo behind
+# the user's back.
+unrar = unar
