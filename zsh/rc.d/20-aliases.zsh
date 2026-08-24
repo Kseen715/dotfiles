@@ -65,3 +65,27 @@ y() {
     fi
     rm -f -- "$tmp"
 }
+
+# ssh() — terminfo safety net. Ghostty's own shell integration already wraps ssh
+# (ghostty/config: shell-integration-features = ssh-env,ssh-terminfo): it installs
+# xterm-ghostty into the remote's ~/.terminfo on first connect and otherwise sends
+# TERM=xterm-256color. But that wrapper only exists when the integration actually
+# loaded — a shell started outside Ghostty's ZDOTDIR injection (tmux, `sudo -i`,
+# a nested `zsh`, an attached session) keeps TERM=xterm-ghostty with no wrapper,
+# ships that name to the remote, and every curses program dies there with
+#   ncurses: cannot initialize terminal type ($TERM="xterm-ghostty")
+# — nano, less, htop, top, whiptail. One TERM the remote has always beats a nicer
+# one it has never heard of (§9: degrade, never break).
+#
+# The guard is deliberately narrow: it defines this function ONLY when Ghostty's
+# wrapper is absent, so where the integration works ssh-terminfo still runs and
+# the remote still gets the full xterm-ghostty entry (styled underlines, true
+# color). Defined here it would otherwise shadow Ghostty's — rc.d is sourced from
+# ~/.zshrc, which the integration sources FIRST, so last definition wins.
+# COLORTERM is what actually carries 24-bit color through to the remote, and it
+# survives the downgrade.
+if [[ "$TERM" == xterm-ghostty && "$GHOSTTY_SHELL_FEATURES" != *ssh-* ]]; then
+  ssh() {
+    TERM=xterm-256color command ssh -o "SetEnv COLORTERM=truecolor" "$@"
+  }
+fi
