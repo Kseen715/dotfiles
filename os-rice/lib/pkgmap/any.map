@@ -43,3 +43,10 @@ datagrip = source:provide_datagrip
 # Same presence-vs-version caveat as datagrip above: modules/telegram.sh calls
 # provide_telegram directly so `osr module telegram` can repair a stale tree.
 telegram-desktop = source:provide_telegram
+
+# 32-bit libnm is an Arch-ism: it exists to let 32-bit apps (Steam's runtime,
+# wine) talk to NetworkManager, and outside Arch it is either absent (Debian,
+# Fedora, Alpine) or gated behind an opt-in multilib repo (Void's libnm-32bit).
+# Empty RHS = skip, so modules/networkmanager.sh installs the 64-bit stack
+# everywhere; pacman.map carries the identity row that keeps it on Arch.
+lib32-libnm =

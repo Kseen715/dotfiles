@@ -86,9 +86,13 @@ gtk-dark-theme = gnome-themes-extra gtk-engine-murrine
 xidlehook = cargo:xidlehook
 
 # --- existing modules that assumed Arch names --------------------------------
-# modules/networkmanager.sh installs `networkmanager libnm lib32-libnm`.
+# modules/networkmanager.sh installs `networkmanager libnm lib32-libnm`. `libnm`
+# passes through (it is a real NetworkManager subpackage here). `lib32-libnm`
+# does NOT get a row: Void's libnm-32bit lives in the *multilib* repo, which is
+# opt-in (void-repo-multilib) and off on a stock install, so mapping it made
+# every NetworkManager install fail with "libnm-32bit not found". any.map skips
+# it instead - nothing in these rices is a 32-bit binary that links libnm.
 networkmanager = NetworkManager
-lib32-libnm = libnm-32bit
 # modules/telegram.sh pulls the WebKit runtime for its built-in browser view.
 webkit2gtk-4.1 = libwebkit2gtk41
 

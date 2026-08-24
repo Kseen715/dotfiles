@@ -99,3 +99,7 @@ poweralertd = aur:poweralertd
 
 # turbostat lives in Arch's linux-tools group alongside perf.
 kernel-tools = linux-tools
+
+# Identity row, not redundant: it overrides any.map's `lib32-libnm =` skip so
+# Arch still installs the multilib package (list pacman-multilib first, §4).
+lib32-libnm = lib32-libnm
