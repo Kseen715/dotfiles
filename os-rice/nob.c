@@ -11,11 +11,13 @@
  *   ./build/nob clean
  *   ./build/nob -v          (any of the above, with full command lines)
  *
- * Commands are echoed in a shortened form -- "tcc <flags> <src> -o
- * build/obj/lib_net.o" -- so a full build reads as one line per output
- * instead of one wrapped paragraph; -v/--verbose (or NOB_VERBOSE=1, for
- * the `make` wrapper, which forwards no arguments) prints them whole. See
- * "condensed command echo" near main().
+ * Commands are echoed the way an autoconf build with silent rules prints
+ * them -- "TCC      build/obj/lib_net.o", "LD       build/install" -- so a
+ * full build reads as one line per output instead of one wrapped
+ * paragraph, and the tag names the compiler that actually ran (GCC, TCC,
+ * ZIG CC, ...); -v/--verbose (or NOB_VERBOSE=1, for the `make` wrapper,
+ * which forwards no arguments) prints the full command lines instead. See
+ * "autoconf-style command echo" near main().
  *
  * Every binary this script produces -- nob itself included -- lands under
  * build/, never next to the sources: build/install, build/wallpaper, the
@@ -53,6 +55,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
+#include <ctype.h>
 #include <string.h>
 
 /* EXE -- the host's executable suffix. Windows needs ".exe"; on a Linux/CI
@@ -812,7 +815,7 @@ static bool build_all(void) {
     return true;
 }
 
-/* --- condensed command echo ------------------------------------------
+/* --- autoconf-style command echo -------------------------------------
  *
  * nob.h echoes every command it starts in full, and offers no knob for it
  * short of NOB_NO_ECHO, which silences its whole log. At this tree's size
@@ -820,12 +823,21 @@ static bool build_all(void) {
  * one filename each, then a link line naming twenty-three objects.
  *
  * The vendored header stays untouched -- its log handler hook is the
- * override point. Every command echo is rewritten to the part that differs
- * between commands, with the flag soup and the long input lists standing in
- * as <flags>/<src>/<obj>:
+ * override point. Every command echo is rewritten the way an autoconf
+ * build with silent rules prints: the tool that ran, then the file it
+ * produced, one line per output.
  *
- *   [INFO] CMD: tcc <flags> <src> -o build/obj/lib_net.o
- *   [INFO] CMD: tcc <flags> -o build/install <obj>
+ *   TCC      build/obj/lib_net.o
+ *   TCC      build/obj/install.o
+ *   LD       build/install
+ *   RUN      ../../build/test/test_ini
+ *
+ * The tool tag is the compiler's own name rather than a fixed "CC", so a
+ * run says which compiler the detection settled on without anyone having
+ * to read back to the "compiler: ..." line: GCC, TCC, ZIG CC, CLANG, CL.
+ * Linking says LD whatever drives it, since that is the step's name, and
+ * anything that is neither a compile nor a link -- a test binary being
+ * started -- says RUN.
  *
  * Little is actually dropped: the flags are identical for every command in
  * a run (append_common_flags is the only source of them), and an object's
@@ -844,49 +856,90 @@ static bool is_verbose_flag(const char *arg) {
     return strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0;
 }
 
-/* Tok_Class -- what one rendered argument is, for the purpose of deciding
- * whether it survives into the short line. FLAG/SRC/OBJ collapse into a
- * placeholder; KEEP (program names, output paths) is printed as it is. */
-typedef enum { TOK_KEEP, TOK_FLAG, TOK_SRC, TOK_OBJ, TOK_COUNT } Tok_Class;
+/* Cmd_Brief -- what one rendered command line boils down to: the tool that
+ * ran it and the file it acted on. `name` points into the line the handler
+ * was given, which outlives the printing of it. */
+#define TAG_CAP 24
+typedef struct {
+    char tag[TAG_CAP];
+    const char *name;
+    size_t name_len;
+} Cmd_Brief;
+
+static bool tok_eq(const char *tok, size_t n, const char *s) {
+    return n == strlen(s) && memcmp(tok, s, n) == 0;
+}
 
 static bool tok_ends_with(const char *tok, size_t n, const char *suffix) {
     size_t m = strlen(suffix);
     return n >= m && memcmp(tok + n - m, suffix, m) == 0;
 }
 
-/* tok_class -- .lib counts as a flag because that is how cl takes a link
- * library, the same role -lwininet plays for gcc: bulk, never the thing
- * that identifies the command. */
-static Tok_Class tok_class(const char *tok, size_t n) {
-    if (tok_ends_with(tok, n, ".c")) return TOK_SRC;
-    if (tok_ends_with(tok, n, ".o") || tok_ends_with(tok, n, ".obj")) return TOK_OBJ;
-    if (tok_ends_with(tok, n, ".lib")) return TOK_FLAG;
-    if (n > 1 && (tok[0] == '-' || tok[0] == '/')) return TOK_FLAG;
-    return TOK_KEEP;
+static bool tok_starts_with(const char *tok, size_t n, const char *prefix) {
+    size_t m = strlen(prefix);
+    return n >= m && memcmp(tok, prefix, m) == 0;
 }
 
-/* is_out_arg -- the flag naming where the output goes, the one part of a
- * compile/link line worth keeping in full. cl glues the path on
- * (/Fobuild/obj/x.o), everything else takes it as the next argument. */
-static bool is_out_arg(const char *tok, size_t n) {
-    if (n == 2 && memcmp(tok, "-o", 2) == 0) return true;
-    return n > 3 && (memcmp(tok, "/Fo", 3) == 0 || memcmp(tok, "/Fe", 3) == 0);
+/* tag_append -- one argument's basename, upper-cased, onto the tag being
+ * built: "/usr/bin/gcc" -> "GCC", "cl.exe" -> "CL". Truncates rather than
+ * overflowing; a cross-compiler with a triple in its name is long enough
+ * to make that reachable, and a clipped tag still reads fine. */
+static void tag_append(char *dst, size_t cap, const char *tok, size_t n) {
+    const char *base = tok;
+    size_t len = strlen(dst);
+    size_t i;
+    for (i = 0; i < n; i++) {
+        if (tok[i] == '/' || tok[i] == '\\') base = tok + i + 1;
+    }
+    n -= (size_t)(base - tok);
+    if (n > 4 && memcmp(base + n - 4, ".exe", 4) == 0) n -= 4;
+    for (i = 0; i < n && len + 1 < cap; i++) {
+        dst[len++] = (char)toupper((unsigned char)base[i]);
+    }
+    dst[len] = '\0';
 }
 
-/* brief_cmd -- rewrite one rendered command line into its short form. A
- * placeholder appears at most once, where the first argument of its kind
- * was: later arguments of an already-collapsed kind are dropped rather than
- * repeated, so a link line reads "<flags> -o build/install <obj>" instead
- * of trailing a second "<flags>" for the link libraries.
+/* tool_tag -- the compiler's name as it goes on the line. "zig cc" is two
+ * arguments and one compiler, so a second word that is not a flag joins
+ * the tag: ZIG CC. */
+static void tool_tag(char *dst, size_t cap, const char *prog, size_t prog_len,
+                     const char *sub, size_t sub_len) {
+    dst[0] = '\0';
+    tag_append(dst, cap, prog, prog_len);
+    if (sub != NULL && sub_len > 0 && sub[0] != '-' && sub[0] != '/') {
+        size_t len = strlen(dst);
+        if (len + 1 < cap) {
+            dst[len++] = ' ';
+            dst[len] = '\0';
+            tag_append(dst, cap, sub, sub_len);
+        }
+    }
+}
+
+/* brief_cmd -- reduce one rendered command line to a tag and a filename.
  *
  * The input is what nob_cmd_render() produced, so an argument containing a
  * space arrives wrapped in single quotes -- hence the quote handling in the
- * scanner; anything else splits on spaces. */
-static void brief_cmd(const char *line, Nob_String_Builder *out) {
-    static const char *placeholder[] = { NULL, "<flags>", "<src>", "<obj>" };
-    bool emitted[TOK_COUNT] = { false, false, false, false };
-    bool keep_next = false;
-    bool after_flag = false;
+ * scanner; anything else splits on spaces.
+ *
+ * What the scan is after: the program (argv[0], whatever it looks like --
+ * an absolute /usr/bin/gcc must not be mistaken for a flag), whether -c//c
+ * makes this a compile, and where the output goes. cl glues that path onto
+ * its flag (/Fobuild/obj/x.o), everything else takes it as the argument
+ * after a bare -o. */
+static void brief_cmd(const char *line, Cmd_Brief *out) {
+    const char *prog = NULL;
+    size_t prog_len = 0;
+    const char *sub = NULL;
+    size_t sub_len = 0;
+    const char *path = NULL;
+    size_t path_len = 0;
+    const char *first_in = NULL;
+    size_t first_in_len = 0;
+    bool compiling = false;
+    bool has_src = false;
+    bool has_obj = false;
+    bool want_path = false;
     size_t i = 0;
     size_t argi = 0;
 
@@ -894,7 +947,6 @@ static void brief_cmd(const char *line, Nob_String_Builder *out) {
         const char *tok;
         size_t n;
         char quote = '\0';
-        Tok_Class cls;
 
         while (line[i] == ' ') i++;
         if (line[i] == '\0') break;
@@ -904,51 +956,49 @@ static void brief_cmd(const char *line, Nob_String_Builder *out) {
         n = (size_t)(line + i - tok);
         if (quote != '\0' && line[i] == quote) i++;
 
-        /* argv[0] is the program, whatever it looks like: an absolute
-         * /usr/bin/gcc must not be mistaken for a flag. */
-        cls = (argi == 0 || keep_next) ? TOK_KEEP : tok_class(tok, n);
-        keep_next = false;
-        argi++;
+        if (argi++ == 0) { prog = tok; prog_len = n; continue; }
+        if (sub == NULL) { sub = tok; sub_len = n; }
 
-        if (cls == TOK_KEEP && after_flag && !is_out_arg(tok, n)) {
-            /* a flag's value, given as its own argument: "-x c" is how the
-             * self-rebuild command names its language. It belongs to the
-             * flag that just collapsed, so it goes the same way -- printing
-             * it alone would leave a bare "c" after <flags>. */
-            after_flag = false;
+        if (want_path) { path = tok; path_len = n; want_path = false; continue; }
+        if (tok_eq(tok, n, "-c") || tok_eq(tok, n, "/c")) { compiling = true; continue; }
+        if (tok_eq(tok, n, "-o")) { want_path = true; continue; }
+        if (tok_starts_with(tok, n, "/Fo") || tok_starts_with(tok, n, "/Fe")) {
+            path = tok + 3;
+            path_len = n - 3;
             continue;
         }
-        after_flag = false;
-
-        if (cls == TOK_KEEP || is_out_arg(tok, n)) {
-            if (out->count > 0) nob_sb_append_cstr(out, " ");
-            nob_da_append_many(out, tok, n);
-            /* the argument after a bare -o is the output path, which ends
-             * in .o for an object and must not collapse into <obj>. */
-            if (n == 2 && memcmp(tok, "-o", 2) == 0) keep_next = true;
-        } else {
-            if (cls == TOK_FLAG) after_flag = true;
-            if (!emitted[cls]) {
-                emitted[cls] = true;
-                if (out->count > 0) nob_sb_append_cstr(out, " ");
-                nob_sb_append_cstr(out, placeholder[cls]);
-            }
-        }
+        if (tok_ends_with(tok, n, ".c")) has_src = true;
+        else if (tok_ends_with(tok, n, ".o") || tok_ends_with(tok, n, ".obj")) has_obj = true;
+        else continue;
+        if (first_in == NULL) { first_in = tok; first_in_len = n; }
     }
+
+    if (path == NULL && !has_src && !has_obj) {
+        /* neither compile nor link: a test binary being started. */
+        strcpy(out->tag, "RUN");
+        out->name = prog;
+        out->name_len = prog_len;
+        return;
+    }
+    if (compiling || (has_src && !has_obj)) {
+        /* a plain compile, or the compile-and-link of the self-rebuild --
+         * either way the compiler is what the line is about. */
+        tool_tag(out->tag, TAG_CAP, prog, prog_len, sub, sub_len);
+    } else {
+        strcpy(out->tag, "LD");
+    }
+    out->name = path != NULL ? path : first_in;
+    out->name_len = path != NULL ? path_len : first_in_len;
 }
 
 static void brief_log_handler(Nob_Log_Level level, const char *fmt, va_list args) {
     if (level == NOB_INFO && strcmp(fmt, CMD_ECHO_FMT) == 0) {
-        Nob_String_Builder sb = {0};
-        brief_cmd(va_arg(args, const char *), &sb);
-        nob_sb_append_null(&sb);
-        /* nob_log() would come straight back in here, so hand this one line
-         * to the stock handler with the hook out of the way -- that keeps
-         * the prefix and the nob_minimal_log_level check in one place. */
-        nob_set_log_handler(&nob_default_log_handler);
-        nob_log(level, CMD_ECHO_FMT, sb.items);
-        nob_set_log_handler(&brief_log_handler);
-        nob_sb_free(sb);
+        Cmd_Brief brief;
+        if (level < nob_minimal_log_level) return;
+        brief_cmd(va_arg(args, const char *), &brief);
+        /* no "[INFO]" here: these lines are the build's output, not
+         * commentary on it, and the column they line up in is the point. */
+        fprintf(stderr, "  %-8s %.*s\n", brief.tag, (int)brief.name_len, brief.name);
         return;
     }
     nob_default_log_handler(level, fmt, args);
