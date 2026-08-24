@@ -131,6 +131,29 @@ case "$(_run plain painted)" in
     *RESOLVED*) ok "one themable module in the set is enough to resolve" ;;
     *) fail "a mixed module set skipped theme resolution" ;;
 esac
+# With nothing recorded yet there is no answer to reuse, so the picker path is
+# reached with an empty name - that is what makes it ask.
+case "$(_run painted)" in
+    *"RESOLVED[]"*) ok "no theme applied yet: resolution is left to the picker" ;;
+    *) fail "a box with no recorded theme did not reach the picker: $(_run painted)" ;;
+esac
+# ...but once a theme IS applied, it is the answer the picker would ask for, so
+# the module install takes it instead of stopping to ask again.
+mkdir -p "$TMP/home/.config/osr"
+printf 'rice=demo\ntheme=nord\n' >"$TMP/home/.config/osr/state"
+case "$(_run painted)" in
+    *"RESOLVED[nord]"*) ok "the theme already applied is used without asking" ;;
+    *) fail "the recorded theme was ignored: $(_run painted)" ;;
+esac
+# A recorded theme that has since been removed from themes/ is not an answer any
+# more: back to asking, rather than aborting the run over stale state.
+printf 'rice=demo\ntheme=deleted-theme\n' >"$TMP/home/.config/osr/state"
+case "$(_run painted)" in
+    *"RESOLVED[]"*) ok "a recorded theme that no longer exists falls back to asking" ;;
+    *) fail "a stale recorded theme was used: $(_run painted)" ;;
+esac
+rm -f "$TMP/home/.config/osr/state"
+
 # An explicit --theme is an instruction, not a question, so it is honoured even
 # where nothing will read it.
 case "$(env NO_COLOR=1 TERM=dumb OSR_HOME="$TMP/home" OSR_USER=nobody \

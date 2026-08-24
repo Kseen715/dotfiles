@@ -115,8 +115,9 @@ OSR_REQUIRES=""
 if [ -n "$OSR_MODULE_MODE" ]; then
     # Explicit module install: positionals are module names, there is no rice.
     # A standalone module still gets theme-owned 90-* layers: resolve which theme
-    # supplies them (--theme > interactive picker > default theme, §6a), then a
-    # module's `[ -f "$OSR_THEME_DIR/config/..." ]` theme guards fire normally.
+    # supplies them (--theme > the theme already applied > interactive picker >
+    # default theme, §6a), then a module's
+    # `[ -f "$OSR_THEME_DIR/config/..." ]` theme guards fire normally.
     OSR_MODULES=$OSR_POS
     [ -n "$OSR_MODULES" ] || { usage >&2; error "no module specified"; }
     for _m in $OSR_MODULES; do
@@ -134,8 +135,22 @@ if [ -n "$OSR_MODULE_MODE" ]; then
     done
     # An explicit --theme is still honoured whatever the module set: naming a
     # theme is not a question, so there is nothing to suppress.
+    #
+    # Neither is a theme this box has already been painted with: `osr state get
+    # theme` is the answer the picker would be asking for, so a machine with a
+    # theme applied installs a module in that theme instead of stopping to ask
+    # again. The picker is left for the case it exists for - a box with nothing
+    # recorded yet - and --theme still overrides both. A recorded theme that no
+    # longer exists in themes/ falls back to asking rather than aborting the
+    # run, which is why this is a directory test and not osr_theme_exists (that
+    # one is fatal on a miss, by design, for a name the user typed).
+    _mod_theme=$OSR_ARG_THEME
+    if [ -z "$_mod_theme" ]; then
+        _mod_theme=$("$OSR_BIN" state get theme 2>/dev/null || true)
+        [ -n "$_mod_theme" ] && [ -d "$OSR_ROOT/themes/$_mod_theme" ] || _mod_theme=""
+    fi
     if [ -n "$OSR_ARG_THEME" ] || [ "$_any_themable" = 1 ]; then
-        osr_resolve_theme "$OSR_ARG_THEME"
+        osr_resolve_theme "$_mod_theme"
     else
         osr_unset_theme
     fi

@@ -22,8 +22,9 @@
 #   osr module  <name>... [--theme <t>]              install module(s), no rice;
 #                                                    --theme picks which theme
 #                                                    supplies the 90-* layers
-#                                                    (interactive picker if
-#                                                    omitted, default if no TTY).
+#                                                    (omitted: the theme already
+#                                                    applied, else the picker,
+#                                                    else the default if no TTY).
 #   osr list                                         list available rices
 #   osr themes                                       list available themes
 #   osr modules                                      list available modules
