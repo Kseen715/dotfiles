@@ -102,11 +102,29 @@ fi
 _xq_conf=/etc/X11/xorg.conf.d/20-gpu-quirks.conf
 _xq_body=""
 
-if grep -qs 'glamor: Using OpenGL [012]\.' /var/log/Xorg.0.log /var/log/Xorg.0.log.old 2>/dev/null; then
-    warn "glamor got a pre-GL-3 context on this GPU - disabling X 2D accel (it aborts the server)"
-    _xq_body="$_xq_body"'Section "Device"
-    Identifier "gpu-quirk-noaccel"
-    Driver "modesetting"
+# Three signatures, any one of which condemns glamor on this machine, plus a
+# manual override. One signature was not enough: this fired on a laptop that
+# was demonstrably crashing, wrote only the AutoAddGPU half, and left glamor
+# enabled - the evidence lives in a log that rotates, so a single grep against a
+# single moment is a coin flip. Say WHICH one matched, so a run that does
+# nothing can be told apart from a run that found nothing.
+_xq_why=""
+if [ "${OSR_X_DISABLE_GLAMOR:-0}" = 1 ]; then
+    _xq_why="OSR_X_DISABLE_GLAMOR=1 was set"
+elif grep -qs 'glamor: Using OpenGL [012]\.' /var/log/Xorg.0.log /var/log/Xorg.0.log.old; then
+    _xq_why="glamor reported a pre-GL-3 context in the Xorg log"
+elif grep -qs 'libglamoregl' /var/log/Xorg.0.log.old /var/log/Xorg.0.log; then
+    # A recorded backtrace through glamor IS the crash this option prevents.
+    _xq_why="a previous X crash has glamor in its backtrace"
+elif grep -qs 'Caught signal 6' /var/log/Xorg.0.log.old; then
+    _xq_why="the X server aborted (signal 6) in a previous session"
+fi
+
+if [ -n "$_xq_why" ]; then
+    warn "disabling X 2D acceleration: $_xq_why (glamor aborts the whole server here)"
+    _xq_body="$_xq_body"'Section "OutputClass"
+    Identifier "osr-noaccel"
+    MatchDriver "modesetting"
     Option "AccelMethod" "none"
 EndSection
 

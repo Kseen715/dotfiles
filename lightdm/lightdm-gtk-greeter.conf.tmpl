@@ -18,8 +18,16 @@ font-name = {{ui_font}}
 xft-antialias = true
 xft-hintstyle = hintslight
 xft-rgba = rgb
-indicators = ~host;~spacer;~clock;~spacer;~session;~power
-clock-format = %H:%M
+# Clock first and alone on the left of the panel, so the CSS can blow it up
+# into the lock screen's headline clock. ~host is dropped: the lock screen shows
+# no hostname and this is meant to read as the same screen.
+indicators = ~spacer;~clock;~spacer;~session;~power
+# %H:%M big with the date underneath - the lock screen's shape. Two things make
+# this work and both are easy to get wrong: the value is Pango markup (the only
+# way to get two sizes out of one label), and the line break must be the escape
+# \n rather than a real newline, because this file is parsed by GKeyFile and a
+# wrapped value there is a syntax error, not a two-line string.
+clock-format = <span size="42000">%H:%M</span>\n<span size="11000">%A, %d %B</span>
 position = 50%,center 50%,center
 user-background = false
 default-user-image = #avatar-default

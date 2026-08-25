@@ -178,6 +178,34 @@ unset _osr_compdir _osr_zdatadir
 # — but oh-my-zsh still expects it set before sourcing.
 ZSH_THEME="robbyrussell"
 
+# --- completion cache: stop the rebuild-every-startup loop --------------------
+# Measured on a slow laptop: 1.15s to open an interactive shell, 88% of it
+# inside compinit, which ran TWICE and rebuilt the dump from scratch on EVERY
+# start. The cause is a fight over one file:
+#
+#   1. oh-my-zsh.sh runs compinit, then APPENDS two metadata lines to the dump
+#      ("#omz revision: <sha>" and "#omz fpath: <fpath>").
+#   2. zsh-autocomplete runs its own compinit afterwards - it has to, it adds a
+#      Completions dir to $fpath - and that rewrites the same dump file.
+#   3. Next startup omz greps its metadata back out, does not find it intact,
+#      `rm -f`s the dump and rebuilds everything. Then step 2 happens again.
+#
+# So the cache never survives a single shell. Two fixes, both needed:
+#
+# a) Give omz its own dump path. The two compinits then stop clobbering each
+#    other's file and omz's metadata survives to be found next time.
+ZSH_COMPDUMP="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/zcompdump-omz-${ZSH_VERSION}"
+[[ -d ${ZSH_COMPDUMP:h} ]] || mkdir -p ${ZSH_COMPDUMP:h}
+
+# b) Put autocomplete's Completions dir on $fpath BEFORE omz records it. omz
+#    compares the recorded fpath with `grep -Fx`, so the match is exact and
+#    order-sensitive: one directory that autocomplete adds later is enough to
+#    make every future startup look stale. Adding it up front makes the two
+#    readings agree. Harmless when the plugin is absent - the guard skips it.
+if [[ -d $ZSH_CUSTOM/plugins/zsh-autocomplete/Completions ]]; then
+    fpath=($ZSH_CUSTOM/plugins/zsh-autocomplete/Completions $fpath)
+fi
+
 [ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
 # --- history: no duplicate rows ----------------------------------------------

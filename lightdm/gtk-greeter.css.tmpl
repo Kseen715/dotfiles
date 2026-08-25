@@ -68,10 +68,16 @@
     color: @osr_bg;
 }
 
+/* The clock is the headline, exactly as on the lock screen (i3lock draws a
+ * 120px %H:%M with the date under it). The greeter has no way to place a label
+ * in the middle of the screen - the only text widget it owns is this panel
+ * indicator - so the size comes from the Pango markup in clock-format and this
+ * rule only removes the panel-item chrome around it. */
 #clock_label {
     color: @osr_fg;
-    font-weight: 600;
-    font-size: 1.05em;
+    font-weight: 400;
+    padding: 10px 0px;
+    text-shadow: 0 2px 8px alpha(#000000, 0.55);
 }
 
 /* --- the login prompt ------------------------------------------------------ */
