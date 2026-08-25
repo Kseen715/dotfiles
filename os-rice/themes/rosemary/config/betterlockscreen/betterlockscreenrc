@@ -20,9 +20,18 @@ wallpaper_cmd="feh --no-fehbg --bg-fill"
 quiet=false
 
 # theme
-loginbox=1c1f20cc
+# Fully transparent, and that is load-bearing rather than cosmetic:
+# betterlockscreen BAKES this rectangle into the cached lock image with
+# ImageMagick, at the position its own default layout puts the indicator
+# (bottom-left). custom-pre.sh moves the indicator to the centre, so a visible
+# loginbox is left stranded in the corner with nothing in it. Re-run
+# `betterlockscreen -u <image>` after changing this - it only takes effect when
+# the cache is rebuilt.
+loginbox=00000000
 loginshadow=00000000
-locktext="rosemary"
+# Blank: the greeter label is removed in custom-pre.sh. Kept as a key rather
+# than deleted because betterlockscreen references it unconditionally.
+locktext=""
 font="JetBrainsMono Nerd Font"
 ringcolor=d98caeff
 ringvercolor=8fb3b0ff

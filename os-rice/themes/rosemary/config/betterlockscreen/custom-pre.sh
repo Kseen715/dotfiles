@@ -35,34 +35,42 @@ lockargs+=(
     --date-color="$greetercolor"
     --date-font="$font"
 
-    # --- greeting, top-left ----------------------------------------------
-    --greeter-text="$locktext"
-    --greeter-size=26
-    --greeter-pos="60:70"
-    --greeter-align=1
-    --greeter-color="$greetercolor"
-    --greeter-font="$font"
+    # No greeter. betterlockscreen always passes --greeter-text (it defaults to
+    # the rice name), so the label has to be blanked here rather than simply not
+    # set - the lock screen shows the clock and nothing else.
+    --greeter-text=""
 
-    # --- the ring: low, thin, out of the way ------------------------------
-    # glass gives its input field no outline at all and lets the dots carry the
-    # feedback. A ring is i3lock's only affordance, so it stays - but thin, and
-    # far enough below the clock that the two do not read as one object.
-    --radius=46
-    --ring-width=4
-    --ind-pos="w/2:h/2+190"
+    # --- the indicator ----------------------------------------------------
+    # i3lock-color has no text field: there is no box and there are no dots,
+    # only this ring. glass gets away with a small, quiet input because hyprlock
+    # fills it with dots as you type; a thin 46px ring that never changes
+    # visibly reads as "there is nowhere to type" - which is exactly how it was
+    # reported. So the ring is big enough for the per-keypress highlight
+    # (--keyhl-color, set in the rc) to be unmissable, and thick enough that the
+    # colour change on verify/fail is a change in a SHAPE rather than in a line.
+    --radius=90
+    --ring-width=10
+    # +170, not +200: the three status lines hang off the bottom of the ring
+    # (+124/+150/+174), so the lowest one lands at h/2+174+170 = 728 on a 768px
+    # panel. At +200 it fell at 758 and the keyboard-layout line was clipped by
+    # the screen edge.
+    --ind-pos="w/2:h/2+170"
 
-    # Status text beside the ring rather than betterlockscreen's default offsets,
-    # which were computed for the bottom-left layout and land off-centre here.
-    --verif-pos="ix:iy+74"
+    # Status text, each on its own line. These are NOT mutually exclusive:
+    # caps-lock (modif) shows at the same time as "wrong", and the keyboard
+    # layout at the same time as either - so sharing one position stacks them on
+    # top of each other, which is the overlap that was reported. verif and wrong
+    # genuinely cannot both be on screen, so those two do share a line.
+    --verif-pos="ix:iy+124"
     --verif-align=0
     --verif-size=15
-    --wrong-pos="ix:iy+74"
+    --wrong-pos="ix:iy+124"
     --wrong-align=0
     --wrong-size=15
-    --modif-pos="ix:iy+74"
+    --modif-pos="ix:iy+150"
     --modif-align=0
-    --modif-size=15
-    --layout-pos="ix:iy+96"
+    --modif-size=14
+    --layout-pos="ix:iy+174"
     --layout-align=0
     --layout-size=13
 )

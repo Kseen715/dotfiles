@@ -42,14 +42,34 @@ _log="${XDG_RUNTIME_DIR:-/tmp}/picom.log"
 
 # Start picom backgrounded (NOT --daemon: a daemonizing picom forks away
 # immediately and the parent always exits 0, so there would be nothing left to
-# test) and report whether it survived its own startup. A backend picom cannot
-# initialize takes it down in well under a second, so one second of grace is
-# plenty and keeps a working session from waiting on a probe.
+# test) and report whether it actually came up.
+#
+# "Still running" is NOT sufficient, and assuming it was cost a real bug. On
+# this hardware glx sometimes dies outright ("Failed to get GLX context") and
+# sometimes comes up HALF-INITIALISED, logging
+#
+#   [ glx_init ERROR ] Failed to enable vsync.
+#
+# and then staying alive while compositing incorrectly. A liveness probe calls
+# that a success; what you get is a compositor that presents stale frames, so
+# an override-redirect window drawn after its initial map - i3lock's clock and
+# unlock ring, for instance - simply never reaches the screen. The lock screen
+# looked like a plain blurred image with nowhere to type.
+#
+# So the backend must be alive AND quiet. The pattern list is narrow: a backend
+# that could not initialise, not any warning picom happens to print.
+_backend_broken='glx_init ERROR|Failed to enable vsync|Failed to get GLX|GLX_BAD|Failed to initialize backend|egl_init ERROR'
+
 _try() {
     picom "$@" >"$_log" 2>&1 &
     _pid=$!
     sleep 2
-    kill -0 "$_pid" 2>/dev/null
+    kill -0 "$_pid" 2>/dev/null || return 1
+    if grep -qE "$_backend_broken" "$_log" 2>/dev/null; then
+        kill "$_pid" 2>/dev/null || true
+        return 1
+    fi
+    return 0
 }
 
 # 1. the configured path: glx + dual_kawase blur + rounded corners.

@@ -83,12 +83,18 @@ exec --no-startup-id wireplumber
 #   exec --no-startup-id xidlehook --not-when-audio --not-when-fullscreen \
 #        --timer 600 "betterlockscreen -l dimblur" ""
 #   exec --no-startup-id xautolock -time 10 -locker "betterlockscreen -l dimblur" -detectsleep
-# Removing the timer daemon is only half of it: xss-lock ALSO fires on the X
-# screensaver's own idle timeout (default 600s), so leaving that on would keep
-# auto-locking with no daemon anywhere to blame. `s off` disables the screensaver
-# idle event; DPMS is left alone on purpose, so the panel still powers down on a
-# laptop - it just does not lock when it does.
-exec_always --no-startup-id xset s off
+# Removing the timer daemon is only half of it, and `xset s off` is only two
+# thirds. xss-lock fires on the X screensaver AND on DPMS: with the screensaver
+# off but DPMS still counting down from 600s, the panel blanked after ten
+# minutes and xss-lock locked the session right along with it. Measured - `xset
+# q` reported `timeout: 0` next to `Standby/Suspend/Off: 600`, and the screen
+# kept locking itself with no timer daemon running at all.
+#
+# So both go. The cost is honest and worth stating: the panel no longer powers
+# down on idle, which on a laptop is battery. Blanking without locking is not
+# expressible here - xss-lock cannot tell the two events apart - so it would
+# take a separate idle daemon whose only action is `xset dpms force off`.
+exec_always --no-startup-id xset s off -dpms
 
 exec --no-startup-id xss-lock --transfer-sleep-lock -- betterlockscreen -l dimblur
 
