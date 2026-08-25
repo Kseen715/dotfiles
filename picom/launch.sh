@@ -60,15 +60,28 @@ _log="${XDG_RUNTIME_DIR:-/tmp}/picom.log"
 # that could not initialise, not any warning picom happens to print.
 _backend_broken='glx_init ERROR|Failed to enable vsync|Failed to get GLX|GLX_BAD|Failed to initialize backend|egl_init ERROR'
 
+# Polled, not checked once. The failure is ASYNCHRONOUS: picom starts, maps its
+# overlay, and only then fails to set up vsync - measured arriving a few seconds
+# in, well after a single 2-second look had already declared success. That is
+# how a broken compositor got adopted twice, and a broken compositor here does
+# not look like a broken compositor: windows map, their backdrop is blurred, and
+# the contents never arrive. rofi and alacritty both "froze" that way.
+#
+# Six seconds costs nothing on a healthy machine - picom is already compositing
+# throughout the poll, and this script is backgrounded by exec_always.
 _try() {
     picom "$@" >"$_log" 2>&1 &
     _pid=$!
-    sleep 2
-    kill -0 "$_pid" 2>/dev/null || return 1
-    if grep -qE "$_backend_broken" "$_log" 2>/dev/null; then
-        kill "$_pid" 2>/dev/null || true
-        return 1
-    fi
+    _n=0
+    while [ "$_n" -lt 6 ]; do
+        sleep 1
+        _n=$((_n + 1))
+        kill -0 "$_pid" 2>/dev/null || return 1
+        if grep -qE "$_backend_broken" "$_log" 2>/dev/null; then
+            kill "$_pid" 2>/dev/null || true
+            return 1
+        fi
+    done
     return 0
 }
 

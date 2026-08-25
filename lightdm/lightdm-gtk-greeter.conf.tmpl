@@ -22,12 +22,12 @@ xft-rgba = rgb
 # into the lock screen's headline clock. ~host is dropped: the lock screen shows
 # no hostname and this is meant to read as the same screen.
 indicators = ~spacer;~clock;~spacer;~session;~power
-# %H:%M big with the date underneath - the lock screen's shape. Two things make
-# this work and both are easy to get wrong: the value is Pango markup (the only
-# way to get two sizes out of one label), and the line break must be the escape
-# \n rather than a real newline, because this file is parsed by GKeyFile and a
-# wrapped value there is a syntax error, not a two-line string.
-clock-format = <span size="42000">%H:%M</span>\n<span size="11000">%A, %d %B</span>
+# Plain strftime, no Pango markup. The greeter does link gtk_label_set_markup,
+# but nothing proves it uses it for THIS label, and a greeter that does not will
+# render the tags literally - turning the clock into a line of angle brackets.
+# That is not a trade worth making on a screen you cannot see before you ship
+# it, so the size stays in the CSS and this stays a plain time string.
+clock-format = %H:%M
 position = 50%,center 50%,center
 user-background = false
 default-user-image = #avatar-default

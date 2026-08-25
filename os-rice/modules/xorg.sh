@@ -122,9 +122,15 @@ fi
 
 if [ -n "$_xq_why" ]; then
     warn "disabling X 2D acceleration: $_xq_why (glamor aborts the whole server here)"
-    _xq_body="$_xq_body"'Section "OutputClass"
-    Identifier "osr-noaccel"
-    MatchDriver "modesetting"
+    # A Device section, NOT an OutputClass. OutputClass forwards a small fixed
+    # set of keys (PrimaryGPU, Driver, ModulePath, ...); AccelMethod is a Device
+    # option and is simply dropped there. Measured: with the OutputClass form in
+    # place the server still logged "glamor X acceleration enabled on ILK".
+    # Without a BusID this matches the first device the driver claimed, which
+    # with AutoAddGPU off is the only one.
+    _xq_body="$_xq_body"'Section "Device"
+    Identifier "osr-gpu0"
+    Driver "modesetting"
     Option "AccelMethod" "none"
 EndSection
 
