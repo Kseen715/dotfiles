@@ -228,17 +228,47 @@ _swap_apply_sysctl() {
 _swap_make_file() {
     as_root sh -c "
         set -e
+
+        # A lock, because the fast path below was once the slow path: when this
+        # step appears to hang, the natural thing to do is run the module again,
+        # and two concurrent 4 GiB writes to the same file corrupt both.
+        exec 9>'$OSR_SWAPFILE.lock'
+        if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
+            echo 'swap: another run is already building $OSR_SWAPFILE - skipping' >&2
+            exit 0
+        fi
+
         swapoff '$OSR_SWAPFILE' 2>/dev/null || true
         rm -f '$OSR_SWAPFILE'
-        touch '$OSR_SWAPFILE'
-        chattr +C '$OSR_SWAPFILE' 2>/dev/null || true
-        chmod 600 '$OSR_SWAPFILE'
-        mkswap -U clear --size ${SWAP_FILE_WANT}M --file '$OSR_SWAPFILE' 2>/dev/null || {
-            dd if=/dev/zero of='$OSR_SWAPFILE' bs=1M count=$SWAP_FILE_WANT
+
+        # mkswap --file creates the file ITSELF, and that is the whole trick:
+        # it fallocates (instant, 0.04s for 4 GiB) and applies nocow on btrfs,
+        # both of which this module used to do by hand. Pre-creating the file
+        # with touch makes it fail - 'cannot set permissions on swap file:
+        # Success' - because it expects to own the creation. That failure used
+        # to be swallowed by 2>/dev/null and silently fell through to dd, which
+        # writes 4 GiB one megabyte at a time behind a spinner with no progress:
+        # indistinguishable from a hang, and the reason for the lock above.
+        #
+        # stderr is NOT redirected any more. If this fails the message is the
+        # only thing that explains the fallback, and it costs nothing to keep.
+        if mkswap -U clear --size ${SWAP_FILE_WANT}M --file '$OSR_SWAPFILE'; then
+            :
+        else
+            # util-linux older than 2.38 has no --file. Allocate by hand, and
+            # prefer fallocate over dd for the same reason mkswap does.
+            rm -f '$OSR_SWAPFILE'
+            touch '$OSR_SWAPFILE'
+            chattr +C '$OSR_SWAPFILE' 2>/dev/null || true
             chmod 600 '$OSR_SWAPFILE'
+            fallocate -l ${SWAP_FILE_WANT}M '$OSR_SWAPFILE' 2>/dev/null ||
+                dd if=/dev/zero of='$OSR_SWAPFILE' bs=1M count=$SWAP_FILE_WANT
             mkswap '$OSR_SWAPFILE'
-        }
+        fi
+
+        chmod 600 '$OSR_SWAPFILE'
         swapon --priority $_swap_file_prio '$OSR_SWAPFILE'
+        rm -f '$OSR_SWAPFILE.lock'
     "
 }
 
