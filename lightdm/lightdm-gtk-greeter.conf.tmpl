@@ -2,9 +2,11 @@
 # /etc/lightdm/ by modules/lightdm.sh (root: the greeter runs before your home
 # is available, so it cannot read ~/.config).
 #
-# {{WALLPAPER_PATH}} is substituted with the installed wallpaper. If the greeter
-# shows grey instead, the file is in a directory its user cannot read — put the
-# image somewhere world-readable such as /usr/share/backgrounds/.
+# {{WALLPAPER_PATH}} is substituted by modules/lightdm.sh with a copy of the
+# rice wallpaper under /usr/share/backgrounds/osr/, NOT with the one in
+# ~/Pictures: the greeter runs as `lightdm` and a 0700 home is unreadable to it.
+# GTK does not report that - it silently draws grey - so if this line is ever
+# empty or points into a home directory, that is the bug.
 
 [greeter]
 background = {{WALLPAPER_PATH}}
@@ -18,7 +20,7 @@ xft-hintstyle = hintslight
 xft-rgba = rgb
 indicators = ~host;~spacer;~clock;~spacer;~session;~power
 clock-format = %H:%M
-position = 50%,center 55%,center
+position = 50%,center 50%,center
 user-background = false
 default-user-image = #avatar-default
 hide-user-image = false

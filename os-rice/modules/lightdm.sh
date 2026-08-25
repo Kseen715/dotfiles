@@ -117,9 +117,27 @@ if [ -n "$_ld_src" ]; then
        && [ ! -f /etc/lightdm/lightdm-gtk-greeter.conf.bak ]; then
         as_root cp -f /etc/lightdm/lightdm-gtk-greeter.conf /etc/lightdm/lightdm-gtk-greeter.conf.bak
     fi
-    # The greeter background is the rice wallpaper, installed once by §6's
-    # helper into the user's Pictures dir and readable by the greeter user.
+    # The greeter background needs its own copy under /usr/share, and this is
+    # not tidiness. The greeter runs as `lightdm`, and a home directory is 0700
+    # on Void, Debian and most others - so `lightdm` cannot even traverse into
+    # ~/Pictures, let alone read the image. GTK does not report that: it draws
+    # the fallback grey and says nothing, which reads as "the theme is broken"
+    # rather than "one file is unreadable".
+    #
+    # So: install the wallpaper once for the user (§6, what the session uses),
+    # then place a world-readable copy for the greeter and point the conf at it.
     _ld_wp=$(osr_install_wallpaper)
+    if [ -n "$_ld_wp" ] && [ -f "$_ld_wp" ]; then
+        _ld_wpdir=/usr/share/backgrounds/osr
+        _ld_wpsys="$_ld_wpdir/$(basename "$_ld_wp")"
+        as_root mkdir -p "$_ld_wpdir"
+        as_root cp -f "$_ld_wp" "$_ld_wpsys"
+        as_root chmod 0644 "$_ld_wpsys"
+        info "greeter background: $_ld_wpsys"
+        _ld_wp=$_ld_wpsys
+    else
+        warn "this theme ships no wallpaper - the greeter keeps its plain background"
+    fi
     sed "s#{{WALLPAPER_PATH}}#${_ld_wp}#g" "$_ld_src" \
         | as_root tee /etc/lightdm/lightdm-gtk-greeter.conf >/dev/null
     case "$_ld_src" in "${TMPDIR:-/tmp}"/osr-theme-*) rm -f "$_ld_src" ;; esac

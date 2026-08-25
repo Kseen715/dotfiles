@@ -75,6 +75,69 @@ EOF
     as_user chmod +x "$OSR_HOME/.xinitrc"
 fi
 
+# --- GPU quirks (root-owned, /etc/X11/xorg.conf.d) ---------------------------
+# Two things that take the whole X SERVER down rather than just an app, both on
+# old laptops, both invisible until they happen.
+#
+# 1. glamor on a pre-GL-3 GPU. The modesetting driver accelerates 2D through
+#    glamor, which is OpenGL - and on gen4/gen5 Intel (Ironlake and older) Mesa
+#    can only offer it a GL 2.1 context. Recent Mesa aborts() out of gallium in
+#    that configuration, and because glamor runs inside the server, the abort IS
+#    an X crash: every window dies at once and you land back at the greeter.
+#    Observed as `Caught signal 6 (Aborted)` with libgallium/libglamoregl in the
+#    backtrace. Turning accel off costs software 2D and nothing else - client GL
+#    still goes direct to the kernel via DRI3, so this does not affect apps.
+#
+# 2. A second GPU screen on a hybrid-graphics laptop. Xorg auto-adds the
+#    discrete GPU as a secondary screen and starts a SECOND glamor stack on it
+#    (nouveau on the NVIDIA half), doubling the surface area for the same class
+#    of crash - for a GPU that is not driving the panel. AutoAddGPU off leaves
+#    the discrete card alone; it also stops it being woken for nothing, which on
+#    a laptop is heat and battery.
+#
+# The glamor half is gated on EVIDENCE, not on a table of PCI IDs: the Xorg log
+# states the context it got, so a machine that reported GL 1.x/2.x to glamor is
+# exactly the machine that must not use it. On a first-ever install there is no
+# log yet, nothing is written, and a later `osr module xorg` picks it up.
+_xq_conf=/etc/X11/xorg.conf.d/20-gpu-quirks.conf
+_xq_body=""
+
+if grep -qs 'glamor: Using OpenGL [012]\.' /var/log/Xorg.0.log /var/log/Xorg.0.log.old 2>/dev/null; then
+    warn "glamor got a pre-GL-3 context on this GPU - disabling X 2D accel (it aborts the server)"
+    _xq_body="$_xq_body"'Section "Device"
+    Identifier "gpu-quirk-noaccel"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+EndSection
+
+'
+fi
+
+if [ "${OSR_GPU_COUNT:-1}" -gt 1 ]; then
+    info "hybrid graphics (${OSR_GPU_COUNT} GPUs) - not auto-adding the discrete GPU as a second X screen"
+    _xq_body="$_xq_body"'Section "ServerFlags"
+    Option "AutoAddGPU" "off"
+EndSection
+
+'
+fi
+
+if [ -n "$_xq_body" ]; then
+    if [ -f "$_xq_conf" ] && [ "$(cat "$_xq_conf" 2>/dev/null)" = "# Managed by os-rice (modules/xorg.sh) - GPU stability quirks.
+$_xq_body" ]; then
+        info "$_xq_conf already current, skipping"
+    else
+        info "installing $_xq_conf"
+        as_root mkdir -p /etc/X11/xorg.conf.d
+        printf '# Managed by os-rice (modules/xorg.sh) - GPU stability quirks.\n%s' "$_xq_body" |
+            as_root tee "$_xq_conf" >/dev/null
+        warn "X must be restarted (log out) for $_xq_conf to take effect"
+    fi
+elif [ -f "$_xq_conf" ]; then
+    info "no GPU quirks needed on this machine - removing $_xq_conf"
+    as_root rm -f "$_xq_conf"
+fi
+
 # --- keyboard layout snippet (root-owned, /etc/X11/xorg.conf.d) --------------
 # us,ru with alt+shift toggle, plus tap-to-click and natural scroll on touchpads.
 # Written only if absent: a machine's input config is machine territory.

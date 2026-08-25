@@ -29,16 +29,27 @@
 
 /* --- the top panel (host, clock, session + power indicators) --------------- */
 #panel_window {
-    background-color: alpha(@osr_panel, 0.85);
+    /* Transparent, not a filled bar with a rule under it. The wallpaper is the
+     * background now, and a solid strip across the top of it is the single
+     * thing that makes a greeter look like a utility rather than a desktop.
+     * The text keeps a shadow so it stays legible over a light wallpaper. */
+    background-color: transparent;
     color: @osr_fg;
-    border-bottom: 1px solid @osr_border;
+    border-bottom: none;
     font-weight: 500;
+    text-shadow: 0 1px 3px alpha(#000000, 0.6);
+    padding: 6px 10px;
 }
 
 #panel_window menubar,
 #panel_window menubar > menuitem {
     background-color: transparent;
     color: @osr_fg;
+}
+
+#panel_window menubar > menuitem {
+    border-radius: 6px;
+    padding: 4px 10px;
 }
 
 #panel_window menubar > menuitem:hover {
@@ -60,46 +71,54 @@
 #clock_label {
     color: @osr_fg;
     font-weight: 600;
+    font-size: 1.05em;
 }
 
 /* --- the login prompt ------------------------------------------------------ */
+/* One floating card, sized generously and lifted off the wallpaper with a real
+ * shadow. The translucency is what ties it to the image behind it - fully
+ * opaque reads as a dialog sitting on a photo, rather than part of the scene. */
 #login_window,
 #shutdown_dialog,
 #restart_dialog {
-    background-color: alpha(@osr_bg, 0.92);
-    border: 1px solid @osr_border;
-    border-radius: 12px;
+    background-color: alpha(@osr_bg, 0.72);
+    border: 1px solid alpha(@osr_fg, 0.10);
+    border-radius: 18px;
     color: @osr_fg;
-    padding: 18px;
+    padding: 28px 32px;
+    box-shadow: 0 18px 48px alpha(#000000, 0.55);
 }
 
 #content_frame {
-    padding-bottom: 14px;
+    padding-bottom: 18px;
 }
 
 #login_window entry {
-    background-color: @osr_bg_sunken;
+    background-color: alpha(@osr_bg_sunken, 0.85);
     color: @osr_fg;
     caret-color: @osr_accent;
-    border: 1px solid @osr_border;
-    border-radius: 8px;
-    padding: 8px 10px;
-    min-height: 30px;
+    border: 1px solid alpha(@osr_fg, 0.12);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-height: 34px;
 }
 
+/* A ring rather than just a recoloured border: at this size a 1px colour change
+ * is not visible enough to answer "is the password field focused". */
 #login_window entry:focus {
     border-color: @osr_accent;
-    box-shadow: none;
+    box-shadow: 0 0 0 2px alpha(@osr_accent, 0.35);
 }
 
 #login_window button,
 #buttonbox_frame button {
     background-image: none;
-    background-color: @osr_surface;
+    background-color: alpha(@osr_surface, 0.85);
     color: @osr_fg;
-    border: 1px solid @osr_border;
-    border-radius: 8px;
-    padding: 6px 16px;
+    border: 1px solid alpha(@osr_fg, 0.12);
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-weight: 500;
 }
 
 #login_window button:hover,
@@ -127,7 +146,11 @@
 #user_image {
     border: 2px solid @osr_accent;
     border-radius: 50%;
-    padding: 2px;
+    padding: 3px;
+    min-width: 76px;
+    min-height: 76px;
+    margin-bottom: 10px;
+    box-shadow: 0 6px 18px alpha(#000000, 0.45);
 }
 
 /* Wrong password / PAM failure. */
