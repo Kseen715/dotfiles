@@ -217,6 +217,14 @@ _swap_sysctl_conf() {
 }
 
 _swap_apply_sysctl() {
+    # mkdir first: /etc/sysctl.d is NOT guaranteed to exist. Void ships none of
+    # it by default - only /etc/sysctl.conf - and `tee` into a missing directory
+    # fails with a bare "No such file or directory" that reads like a
+    # permissions problem. The directory is still the right target: Void's
+    # runit core-service 08-sysctl.sh globs /etc/sysctl.d/*.conf at boot, so a
+    # drop-in here is applied on every start, which /etc/sysctl.conf edits
+    # would not be (that file is the admin's, not ours).
+    as_root mkdir -p "$(dirname "$_swap_sysctl")"
     _swap_sysctl_conf | as_root tee "$_swap_sysctl" >/dev/null
     as_root sysctl -p "$_swap_sysctl"
 }
