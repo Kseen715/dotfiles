@@ -51,6 +51,7 @@ _swap_meminfo=${OSR_MEMINFO:-/proc/meminfo}
 _swap_swaps=${OSR_PROC_SWAPS:-/proc/swaps}
 _swap_fstab=${OSR_FSTAB:-/etc/fstab}
 _swap_zconf=${OSR_ZRAM_CONF:-/etc/systemd/zram-generator.conf}
+_swap_zramen_conf_path=${OSR_ZRAMEN_CONF:-/etc/sv/zramen/conf}
 _swap_sysctl=${OSR_SYSCTL_CONF:-/etc/sysctl.d/99-osr-swap.conf}
 
 # Policy knobs (MiB). Override in the environment to retune without editing.
@@ -93,8 +94,38 @@ swap_plan() {
         SWAP_DISK_WANT=$_swap_disk_cap         # overflow only, no hibernation
     fi
 
+    # Whether zram will actually EXIST, which is not the same as wanting it.
+    # zram is a kernel module and is init-agnostic; what is systemd-bound is
+    # zram-generator, which IS a systemd generator. So each init gets its own
+    # setter and only an init with neither falls back to no zram:
+    #   systemd -> zram-generator      runit -> zramen (Void's, /etc/sv/zramen)
+    # swappiness then follows what the machine ends up with rather than what it
+    # asked for - deriving it from the want is how a box whose init cannot
+    # provide zram still gets swappiness=100 and page-cluster=0 against a lone
+    # disk swapfile, which is the exact opposite of the intended policy.
+    case "${OSR_INIT:-}" in
+        systemd|runit) _sp_zram_reachable=1 ;;
+        *)             _sp_zram_reachable=0 ;;
+    esac
+    if [ "$SWAP_ZRAM_WANT" -gt 0 ] && [ "$_sp_zram_reachable" -eq 1 ]; then
+        SWAP_ZRAM_ACTIVE=1
+    else
+        SWAP_ZRAM_ACTIVE=0
+    fi
+
+    # zramen takes a PERCENTAGE of RAM plus an absolute MB ceiling, so the same
+    # policy has to be expressed both ways. The percentage carries the shape
+    # (cover RAM, or half of it) and ZRAM_MAX_SIZE pins the 8G ceiling exactly,
+    # because a percentage of the real MemTotal would drift off the tier.
+    if [ "$SWAP_RAM_TIER" -gt 0 ]; then
+        SWAP_ZRAM_PCT=$(( SWAP_ZRAM_WANT * 100 / SWAP_RAM_TIER ))
+    else
+        SWAP_ZRAM_PCT=0
+    fi
+    [ "$SWAP_ZRAM_PCT" -le 100 ] || SWAP_ZRAM_PCT=100
+
     # zram is cheap and page-at-a-time; disk swap under load is stutter.
-    if [ "$SWAP_ZRAM_WANT" -gt 0 ]; then SWAP_SWAPPINESS=100; else SWAP_SWAPPINESS=10; fi
+    if [ "$SWAP_ZRAM_ACTIVE" -eq 1 ]; then SWAP_SWAPPINESS=100; else SWAP_SWAPPINESS=10; fi
 
     # What is active now. /proc/swaps sizes are KiB; zram shows up as a
     # "partition" named /dev/zramN, so match the name before the type.
@@ -141,6 +172,26 @@ _swap_zram_conf() {
         "$SWAP_ZRAM_WANT"
 }
 
+# _swap_zramen_conf — Void's zramen reads /etc/sv/zramen/conf as plain shell.
+# Keys are the ones the packaged conf documents (ZRAM_SIZE is a percentage,
+# ZRAM_MAX_SIZE an MB cap); zstd and priority 100 keep it in step with the
+# zram-generator drop-in so both inits land on the same policy.
+_swap_zramen_conf() {
+    printf '# managed by os-rice (modules/swap.sh)\n'
+    printf 'export ZRAM_COMP_ALGORITHM=zstd\n'
+    printf 'export ZRAM_PRIORITY=100\n'
+    printf 'export ZRAM_SIZE=%s\n' "$SWAP_ZRAM_PCT"
+    printf 'export ZRAM_MAX_SIZE=%s\n' "$SWAP_ZRAM_WANT"
+}
+
+_swap_apply_zramen() {
+    _swap_zramen_conf | as_root tee "$_swap_zramen_conf_path" >/dev/null
+    enable_service zramen
+    # The service only reads conf at start, so a resize needs a restart. `sv` is
+    # a no-op-with-a-message when the service was only just linked.
+    as_root sv restart zramen >/dev/null 2>&1 || true
+}
+
 _swap_apply_zram() {
     _swap_zram_conf | as_root tee "$_swap_zconf" >/dev/null
     as_root systemctl daemon-reload
@@ -159,8 +210,9 @@ _swap_disable_zram() {
 _swap_sysctl_conf() {
     printf '# managed by os-rice (modules/swap.sh)\nvm.swappiness = %s\n' "$SWAP_SWAPPINESS"
     # zram is single-page and cheap: reading ahead 8 pages per fault only wastes
-    # decompression. Irrelevant (and unset) when swap is a disk.
-    [ "$SWAP_ZRAM_WANT" -gt 0 ] && printf 'vm.page-cluster = 0\n'
+    # decompression. Irrelevant (and unset) when swap is a disk - including the
+    # case where zram was WANTED but the init could not provide it.
+    [ "$SWAP_ZRAM_ACTIVE" -eq 1 ] && printf 'vm.page-cluster = 0\n'
     return 0
 }
 
@@ -212,8 +264,16 @@ elif [ "${OSR_INIT:-}" = systemd ]; then
     else
         run_step "Configuring zram (${SWAP_ZRAM_WANT}M)" _swap_apply_zram
     fi
+elif [ "${OSR_INIT:-}" = runit ]; then
+    run_step "Installing zramen" pkg_install zramen
+    if [ "$SWAP_HAVE_ZRAM" -gt 0 ] && [ "$(cat "$_swap_zramen_conf_path" 2>/dev/null)" = "$(_swap_zramen_conf)" ]; then
+        info "zram already active at ${SWAP_ZRAM_WANT}M, skipping"
+    else
+        run_step "Configuring zram via zramen (${SWAP_ZRAM_WANT}M, ${SWAP_ZRAM_PCT}% of RAM)" \
+            _swap_apply_zramen
+    fi
 else
-    warn "swap: zram-generator needs systemd (init=${OSR_INIT:-unknown}) - skipping zram"
+    warn "swap: no zram setter for init=${OSR_INIT:-unknown} (systemd uses zram-generator, runit uses zramen) - skipping zram"
 fi
 
 # --- disk swap ---------------------------------------------------------------

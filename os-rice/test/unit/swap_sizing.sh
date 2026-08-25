@@ -16,11 +16,13 @@ trap 'rm -rf "$TMP"' EXIT
 OUT="$TMP/out"
 export OSR_MEMINFO="$TMP/meminfo" OSR_PROC_SWAPS="$TMP/swaps" \
        OSR_FSTAB="$TMP/fstab" OSR_ZRAM_CONF="$TMP/zram.conf" \
-       OSR_SYSCTL_CONF="$TMP/sysctl.conf" OSR_SWAPFILE="$TMP/swapfile"
+       OSR_SYSCTL_CONF="$TMP/sysctl.conf" OSR_SWAPFILE="$TMP/swapfile" \
+       OSR_ZRAMEN_CONF="$TMP/zramen.conf"
 
 # --- mocks: nothing here may touch the real machine --------------------------
 run_step()    { _d=$1; shift; echo "STEP $_d" >>"$OUT"; "$@"; }
 pkg_install() { echo "INSTALL $*" >>"$OUT"; }
+enable_service() { echo "ENABLE $*" >>"$OUT"; }
 # as_root logs every escalation but executes nothing except `tee` - the real
 # mkswap/swapon/systemctl must never run against the machine running the tests.
 as_root() {
@@ -40,6 +42,10 @@ fixture() {
 }
 
 # plan_only sources the module for its functions, then re-plans without acting.
+# OSR_INIT=none on purpose: it keeps the sizing fixtures from touching a real
+# zram setter. It also means zram is UNREACHABLE in these cases, so swappiness
+# here is the no-zram value - the reachable-init cases are asserted separately
+# below, per init.
 plan() { OSR_INIT=none OSR_VIRT=none . "$OSR_ROOT/modules/swap.sh" >>"$OUT" 2>&1; }
 
 # --- RAM tiers ---------------------------------------------------------------
@@ -47,7 +53,8 @@ fixture 8192 200000
 plan
 assert_eq 8192 "$SWAP_ZRAM_WANT" "8G RAM: zram covers RAM in full"
 assert_eq 8192 "$SWAP_DISK_WANT" "8G RAM: disk target is RAM (hibernation fits)"
-assert_eq 100  "$SWAP_SWAPPINESS" "zram present: swappiness 100"
+assert_eq 0    "$SWAP_ZRAM_ACTIVE" "init with no zram setter: zram not active despite the want"
+assert_eq 10   "$SWAP_SWAPPINESS" "wanted zram but init cannot provide it: low swappiness"
 
 fixture 4096 200000
 plan
@@ -147,6 +154,32 @@ assert_contains "$OSR_SYSCTL_CONF" 'vm.swappiness = 100' "writes the zram swappi
 assert_contains "$OSR_SYSCTL_CONF" 'vm.page-cluster = 0' "zram gets page-cluster 0"
 assert_contains "$OUT" 'hibernation fits' "16G RAM + 16G disk swap: hibernation fits"
 assert_contains "$OSR_ZRAM_CONF" 'swap-priority = 100' "zram outranks the swapfile"
+
+# --- runit: zram via zramen, not zram-generator ------------------------------
+# zram is a kernel feature, so an init without systemd is not an init without
+# zram. Void ships zramen as a runit service; the policy must come out the same.
+fixture 8192 200000
+: >"$OUT"
+OSR_INIT=runit OSR_VIRT=none . "$OSR_ROOT/modules/swap.sh" >>"$OUT" 2>&1
+assert_eq 1 "$SWAP_ZRAM_ACTIVE" "runit: zram is reachable"
+assert_eq 100 "$SWAP_SWAPPINESS" "runit: zram swappiness, same as systemd"
+assert_contains "$OUT" 'INSTALL zramen' "runit: installs zramen, not zram-generator"
+assert_contains "$OSR_ZRAMEN_CONF" 'ZRAM_MAX_SIZE=8192' "runit: zramen carries the computed ceiling"
+assert_contains "$OSR_ZRAMEN_CONF" 'ZRAM_SIZE=100' "8G RAM: zramen covers RAM in full"
+assert_contains "$OSR_ZRAMEN_CONF" 'ZRAM_PRIORITY=100' "runit: zram outranks the swapfile"
+assert_contains "$OSR_SYSCTL_CONF" 'vm.page-cluster = 0' "runit: zram gets page-cluster 0"
+
+# The percentage has to track the tier, not just say 100.
+fixture 16384 200000
+: >"$OUT"
+OSR_INIT=runit OSR_VIRT=none . "$OSR_ROOT/modules/swap.sh" >>"$OUT" 2>&1
+assert_contains "$OSR_ZRAMEN_CONF" 'ZRAM_SIZE=50' "16G RAM: zramen asks for half of RAM"
+assert_contains "$OSR_ZRAMEN_CONF" 'ZRAM_MAX_SIZE=8192' "16G RAM: capped at the 8G ceiling"
+
+# --- back to systemd for the idempotence pass --------------------------------
+fixture 16384 200000
+: >"$OUT"
+OSR_INIT=systemd OSR_VIRT=none . "$OSR_ROOT/modules/swap.sh" >>"$OUT" 2>&1
 
 # second run: zram active + config unchanged, swapfile already the right size
 printf '%s\tfile\t16777216\t0\t-2\n' "$OSR_SWAPFILE" >>"$OSR_PROC_SWAPS"

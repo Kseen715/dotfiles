@@ -103,3 +103,7 @@ kernel-tools = linux-tools
 # Identity row, not redundant: it overrides any.map's `lib32-libnm =` skip so
 # Arch still installs the multilib package (list pacman-multilib first, §4).
 lib32-libnm = lib32-libnm
+
+# zramen is Void-only (a runit service). Arch is systemd, which takes the
+# zram-generator path in modules/swap.sh instead, so nothing is lost.
+zramen =

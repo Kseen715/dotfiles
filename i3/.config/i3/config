@@ -106,6 +106,9 @@ bindsym $mod+e exec $filemanager
 bindsym $mod+b exec $browser
 bindsym $mod+v exec --no-startup-id copyq toggle
 bindsym $mod+c exec --no-startup-id xcolor -s
+# Lock. $mod+l is the one everybody reaches for; $mod+Escape stays as the
+# alias that was here first, so existing muscle memory keeps working.
+bindsym $mod+l exec --no-startup-id betterlockscreen -l dimblur
 bindsym $mod+Escape exec --no-startup-id betterlockscreen -l dimblur
 bindsym $mod+Shift+e exec --no-startup-id ~/.config/i3/scripts/rofi-powermenu.sh
 # Proteus: the theme/wallpaper picker (os-rice §6a). Same overlay behaviour
@@ -136,19 +139,15 @@ bindsym XF86AudioPrev         exec --no-startup-id playerctl previous
 bindsym XF86MonBrightnessUp   exec --no-startup-id ~/.config/i3/scripts/osd.sh light-up
 bindsym XF86MonBrightnessDown exec --no-startup-id ~/.config/i3/scripts/osd.sh light-down
 
-# Focus / move
-bindsym $mod+h focus left
-bindsym $mod+j focus down
-bindsym $mod+k focus up
-bindsym $mod+l focus right
+# Focus / move. Arrows only: the vim hjkl cluster is deliberately NOT bound
+# here, because $mod+l is the lock (see Keys below) and a cluster with one key
+# missing is worse than no cluster - you reach for $mod+l out of habit and lock
+# the screen instead of moving focus. The resize mode below still takes hjkl,
+# which is unambiguous because it is modal.
 bindsym $mod+Left focus left
 bindsym $mod+Down focus down
 bindsym $mod+Up focus up
 bindsym $mod+Right focus right
-bindsym $mod+Shift+h move left
-bindsym $mod+Shift+j move down
-bindsym $mod+Shift+k move up
-bindsym $mod+Shift+l move right
 bindsym $mod+Shift+Left move left
 bindsym $mod+Shift+Down move down
 bindsym $mod+Shift+Up move up

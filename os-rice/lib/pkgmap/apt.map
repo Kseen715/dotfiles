@@ -388,3 +388,7 @@ xidlehook-build-deps = libxcb1-dev libxcb-screensaver0-dev libpulse-dev pkg-conf
 # exo-open is what Thunar's "Open Terminal Here" shells out to (modules/thunar.sh).
 # Debian splits the library from the tools; only the tools half is wanted here.
 exo = exo-utils
+
+# zramen is Void-only (a runit service). Debian/Ubuntu init is systemd, which
+# takes the zram-generator path in modules/swap.sh instead, so nothing is lost.
+zramen =
