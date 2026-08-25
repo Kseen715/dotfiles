@@ -22,4 +22,16 @@ for _f in config.ini modules.ini launch.sh; do
 done
 if [ -f "$_pb/launch.sh" ]; then as_user chmod +x "$_pb/launch.sh"; fi
 
+# Module helper scripts. The custom/script modules in modules.ini name these by
+# absolute path, so a bar whose scripts did not land shows empty modules rather
+# than an error - install them with the config, not separately.
+if [ -d "$OSR_DOTFILES/polybar/scripts" ]; then
+    as_user mkdir -p "$_pb/scripts"
+    for _s in "$OSR_DOTFILES/polybar/scripts"/*.sh; do
+        [ -f "$_s" ] || continue
+        install_layer "$_s" "$_pb/scripts/$(basename "$_s")"
+        as_user chmod +x "$_pb/scripts/$(basename "$_s")"
+    done
+fi
+
 install_theme_layer polybar colors.ini "$_pb/colors.ini" || :

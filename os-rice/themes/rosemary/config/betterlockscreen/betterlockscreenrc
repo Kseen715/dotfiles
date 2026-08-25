@@ -9,8 +9,11 @@ display_on=0
 span_image=false
 lock_timeout=300
 fx_list=(dim blur dimblur pixel dimpixel color)
+# Matched to the glass rice's hyprlock background (blur_passes 3, brightness
+# .6): a softer, deeper blur than the default, so the oversized clock has
+# something quiet to sit on rather than a legible desktop.
 dim_level=45
-blur_level=2
+blur_level=3
 pixel_scale=10,1000
 solid_color=1c1f20
 wallpaper_cmd="feh --no-fehbg --bg-fill"

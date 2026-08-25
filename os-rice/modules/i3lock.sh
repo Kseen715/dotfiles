@@ -61,6 +61,16 @@ if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/betterlockscreen/b
         "$OSR_HOME/.config/betterlockscreen/betterlockscreenrc"
 fi
 
+# custom-pre.sh is the LAYOUT half, and it is separate from the rc because
+# betterlockscreen keeps them separate: the rc carries colours, and positions
+# are not among the variables it reads at all. betterlockscreen sources this
+# from prelock() and appends its `lockargs` last, which is the only supported
+# way to override its built-in bottom-left placement.
+if [ -n "${OSR_THEME_DIR:-}" ] && [ -f "$OSR_THEME_DIR/config/betterlockscreen/custom-pre.sh" ]; then
+    install_layer "$OSR_THEME_DIR/config/betterlockscreen/custom-pre.sh" \
+        "$OSR_HOME/.config/betterlockscreen/custom-pre.sh"
+fi
+
 # Prime the blur cache from this rice's wallpaper. Needs X, so it degrades to a
 # note when headless (§9) — betterlockscreen re-caches on first use anyway.
 _bl_wp=$(osr_install_wallpaper)

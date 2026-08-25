@@ -285,21 +285,47 @@ fn choose_present(window: &Window, width: u32, height: u32, choice: RendererChoi
     let (display, handle) = window.raw_handles();
 
     if matches!(choice, RendererChoice::Auto | RendererChoice::Wgpu) {
-        // SAFETY: `window` outlives the presenter - both are dropped at the end
-        // of `run`, the window last.
-        let target = unsafe { crate::render::gpu::SurfaceTarget::new(display, handle) };
-        match crate::render::gpu::GpuPresenter::new(target, width, height) {
-            Ok(p) => {
+        // catch_unwind, because "this rung is unavailable" does not always come
+        // back as an Err. wgpu-hal asserts its way out rather than returning:
+        // on an X11 machine whose Vulkan ICD cannot be used, surface creation
+        // hits `.expect("Pointer to X-Server is not set")` inside
+        // wgpu-hal/src/vulkan/instance.rs and the process dies. The Err arm
+        // below never runs, so `auto` never reaches GL - which is precisely the
+        // machine the lower rungs exist for, and it takes the picker down
+        // instead of degrading. A panic here means the same thing an Err does.
+        //
+        // The hook is swapped out for the attempt so `auto` stays quiet: the
+        // default hook would print a panic message and a backtrace note for
+        // what is, at this rung, an expected outcome.
+        let prev_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // SAFETY: `window` outlives the presenter - both are dropped at the
+            // end of `run`, the window last.
+            let target = unsafe { crate::render::gpu::SurfaceTarget::new(display, handle) };
+            crate::render::gpu::GpuPresenter::new(target, width, height)
+        }));
+        std::panic::set_hook(prev_hook);
+
+        match attempt {
+            Ok(Ok(p)) => {
                 if debug {
                     eprintln!("proteus: wgpu {} via {}", p.adapter_name, p.backend);
                 }
                 return Present::Gpu(Box::new(p));
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 if choice == RendererChoice::Wgpu {
                     eprintln!("proteus: {e} - falling back");
                 } else if debug {
                     eprintln!("proteus: wgpu unavailable ({e}), trying GL");
+                }
+            }
+            Err(_) => {
+                if choice == RendererChoice::Wgpu {
+                    eprintln!("proteus: the wgpu backend panicked - falling back");
+                } else if debug {
+                    eprintln!("proteus: wgpu panicked during init, trying GL");
                 }
             }
         }
