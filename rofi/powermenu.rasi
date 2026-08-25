@@ -1,5 +1,20 @@
 /* rofi/powermenu.rasi — dotfiles-owned layout for scripts/rofi-powermenu.sh
  * (the wleave/wlogout replacement, i3-sugg §2). Colors come from the rice.
+ *
+ * Shaped after the glass rice's wleave: a row of rounded, bordered cards, one
+ * icon each, the focused one filled with the accent. Two differences, both
+ * deliberate:
+ *
+ *   - the icons are font glyphs, not glass's PNGs, so they take the palette's
+ *     color instead of being white bitmaps (see the script's header);
+ *   - the card carries a small label under the icon. wleave hides its `text`
+ *     via `all: unset` and leans on six icons being self-evident; "reboot" and
+ *     "shutdown" are the two you least want to guess between.
+ *
+ * The script feeds rows as Pango markup with a newline in them, so the width
+ * here and the script's `-eh` have to agree with the content: rofi CLIPS an
+ * element that is too small rather than growing it, in both axes. 560px is what
+ * five cards need before "shutdown" stops being truncated to "shutd".
  */
 
 @import "colors.rasi"
@@ -14,7 +29,7 @@ window {
     transparency:     "real";
     location:         center;
     anchor:           center;
-    width:            420px;
+    width:            560px;
     border:           2px;
     border-color:     @accent;
     border-radius:    14px;
@@ -41,25 +56,42 @@ prompt {
 }
 
 listview {
-    columns: 5;
-    lines:   1;
-    spacing: 8px;
+    columns:   5;
+    lines:     1;
+    spacing:   10px;
+    /* Without this the row is translated right by one `spacing` and overflows
+     * the listview's right edge by the same amount - rofi still allocates the
+     * scrollbar's slot even for a single fixed row that can never scroll.
+     * launcher.rasi has always carried this line; this file did not, which is
+     * the whole difference. Measured: content centers landed ~10px right of
+     * the column centers, so the cards sat visibly right of the prompt above. */
+    scrollbar: false;
 }
 
+/* The card. 1px border + 12px radius is glass's button, and the border is what
+ * keeps an unfocused card readable against @bg-alt on a low-contrast palette. */
 element {
-    padding:          14px 0px;
-    border-radius:    10px;
+    padding:          10px 2px;
+    border:           1px;
+    border-radius:    12px;
+    border-color:     @bg;
     background-color: @bg-alt;
+    text-color:       @fg;
     cursor:           pointer;
 }
 
 element-text {
     horizontal-align: 0.5;
     vertical-align:   0.5;
+    background-color: transparent;
     text-color:       inherit;
 }
 
+/* Focus fills the whole card with the accent, as wleave's button:focus does.
+ * text-color has to be restated: the glyph and the label both inherit from the
+ * element, and without this they stay @fg on an accent fill. */
 element selected {
     background-color: @accent;
+    border-color:     @accent;
     text-color:       @bg;
 }
