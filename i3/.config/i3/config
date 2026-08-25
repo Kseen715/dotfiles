@@ -71,18 +71,26 @@ exec --no-startup-id wireplumber
 # Idle + lock. xss-lock also carries the suspend inhibitor, which is what makes
 # the screen actually locked when the lid opens again.
 #
-# The idle timer is xidlehook when it is installed and xautolock otherwise
-# (modules/i3lock.sh installs whichever the host can have). They are not
-# interchangeable: xautolock locks on a wall clock and will happily blank the
-# screen 10 minutes into a film, while xidlehook's --not-when-audio and
-# --not-when-fullscreen are exactly the inhibits a desktop is expected to honour.
+# No IDLE timer. xss-lock stays because it is not a timer: it is what makes the
+# lock happen BEFORE suspend rather than after resume, so the screen is never
+# briefly readable on wake, and it is what $mod+Escape and `loginctl lock-session`
+# route through. What is deliberately absent is the automatic
+# lock-after-N-minutes daemon (xidlehook / xautolock, either of which
+# modules/i3lock.sh may have installed) - locking is a thing you ask for here.
+#
+# To put the timer back, uncomment ONE of these in ~/.config/i3/config.d/99-local.conf
+# (which this file never overwrites):
+#   exec --no-startup-id xidlehook --not-when-audio --not-when-fullscreen \
+#        --timer 600 "betterlockscreen -l dimblur" ""
+#   exec --no-startup-id xautolock -time 10 -locker "betterlockscreen -l dimblur" -detectsleep
+# Removing the timer daemon is only half of it: xss-lock ALSO fires on the X
+# screensaver's own idle timeout (default 600s), so leaving that on would keep
+# auto-locking with no daemon anywhere to blame. `s off` disables the screensaver
+# idle event; DPMS is left alone on purpose, so the panel still powers down on a
+# laptop - it just does not lock when it does.
+exec_always --no-startup-id xset s off
+
 exec --no-startup-id xss-lock --transfer-sleep-lock -- betterlockscreen -l dimblur
-exec --no-startup-id sh -c 'if command -v xidlehook >/dev/null 2>&1; then \
-        exec xidlehook --not-when-audio --not-when-fullscreen \
-             --timer 600 "betterlockscreen -l dimblur" ""; \
-    else \
-        exec xautolock -time 10 -locker "betterlockscreen -l dimblur" -detectsleep; \
-    fi'
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Keys

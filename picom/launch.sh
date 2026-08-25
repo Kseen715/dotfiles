@@ -18,16 +18,33 @@
 # shadows and no tearing, which is the part that matters.
 set -u
 
-pkill -x picom 2>/dev/null || true
-while pgrep -x picom >/dev/null 2>&1; do sleep 1; done
+# Stop any picom and wait until the X server has actually let go. This is not
+# the same as waiting for the process to exit: the _NET_WM_CM_S0 selection is
+# released when the server processes the client's DISCONNECT, which lands a
+# moment later. Skip the settle and the next attempt dies with "Another
+# composite manager is already running" — measured on a machine where the glx
+# attempt fails, which is the only machine that ever reaches attempt two.
+_stop() {
+    pkill -x picom 2>/dev/null || true
+    _n=0
+    while pgrep -x picom >/dev/null 2>&1 && [ "$_n" -lt 15 ]; do
+        sleep 1
+        _n=$((_n + 1))
+    done
+    sleep 1
+}
+
+_stop
 
 command -v picom >/dev/null 2>&1 || exit 0
 
 _log="${XDG_RUNTIME_DIR:-/tmp}/picom.log"
 
-# Start picom in the foreground-backgrounded (NOT --daemon: a daemonizing picom
-# forks away immediately and the parent always exits 0, so there would be
-# nothing left to test) and report whether it survived its own startup.
+# Start picom backgrounded (NOT --daemon: a daemonizing picom forks away
+# immediately and the parent always exits 0, so there would be nothing left to
+# test) and report whether it survived its own startup. A backend picom cannot
+# initialize takes it down in well under a second, so one second of grace is
+# plenty and keeps a working session from waiting on a probe.
 _try() {
     picom "$@" >"$_log" 2>&1 &
     _pid=$!
@@ -38,9 +55,11 @@ _try() {
 # 1. the configured path: glx + dual_kawase blur + rounded corners.
 _try && exit 0
 
-# 2. no usable GL. xrender cannot do dual_kawase, and picom treats an
+# 2. no usable GL — on this hardware glx_init fails with GLX_BAD_FB_CONFIG and
+#    picom aborts. xrender cannot do dual_kawase, and picom treats an
 #    unsupported blur method as a hard config error, so blur is turned off
 #    explicitly rather than left to fail a second time.
+_stop
 _try --backend xrender --blur-method none && exit 0
 
 # 3. neither backend came up. Leave the log where it can be read rather than

@@ -23,23 +23,37 @@
 
 run_step "Installing Firefox" pkg_install firefox
 
-# Ubuntu's `firefox` deb is a snap stub (Version: 1:1snapN), and the snap keeps
-# its profile under ~/snap/firefox/common/.mozilla/firefox — the classic root
-# stays empty forever, so the layer would land nowhere. Unlike Thunderbird there
-# is no de-snap route worth taking here (packages.mozilla.org/apt publishes
-# firefox but the archive stub wins, and the snap is Mozilla's own current
-# build), so follow the profile instead of fighting the package.
-# A sandboxed Firefox keeps its profile inside the sandbox, so the classic root
-# stays empty forever and the layer would land nowhere. Follow the profile.
+# Where the profile actually is. There is no single answer any more, and every
+# wrong guess has the same symptom: the module reports success and Firefox is
+# untouched, because the layer landed in a directory the browser never reads.
+#
+#   ~/.mozilla/firefox            the classic root. Firefox still prefers it
+#                                 when it exists, so it stays first.
+#   ~/.config/mozilla/firefox     XDG base directories, which Firefox honours by
+#                                 default as of 154. A machine that first ran
+#                                 Firefox on 154+ has ONLY this one - there is no
+#                                 ~/.mozilla at all. Spelled from OSR_HOME and
+#                                 not from $XDG_CONFIG_HOME on purpose: this
+#                                 module runs as root, where that variable
+#                                 points at /root.
+#   ~/snap/... and ~/.var/app/... a sandboxed build keeps its profile inside the
+#                                 sandbox and leaves every classic root empty.
+#                                 Ubuntu's `firefox` deb is a snap stub, and
+#                                 fighting the package is not worth it when
+#                                 following the profile costs one line.
+#
+# The order below is Firefox's own resolution order, so os-rice writes into the
+# profile the browser will read rather than into the one it would have made.
 _ff_root="$OSR_HOME/.mozilla/firefox"
 if [ ! -d "$_ff_root" ]; then
     for _ff_alt in \
+        "$OSR_HOME/.config/mozilla/firefox" \
         "$OSR_HOME/snap/firefox/common/.mozilla/firefox" \
         "$OSR_HOME/.var/app/org.mozilla.firefox/.mozilla/firefox"
     do
         [ -d "$_ff_alt" ] || continue
         _ff_root="$_ff_alt"
-        info "using the sandboxed profile root $_ff_root"
+        info "profile root is $_ff_root (not the classic ~/.mozilla/firefox)"
         break
     done
 fi

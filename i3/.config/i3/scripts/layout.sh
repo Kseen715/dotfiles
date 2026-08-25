@@ -27,6 +27,15 @@
 #
 # python3 rather than jq: autotiling is a Python program, so python3 is already
 # a hard dependency of this session and jq is not.
+#
+# The mechanism is `focus parent`, not `[con_id=N] layout`. Addressing a
+# container by id looks like the direct route and is not: a split container has
+# no window, i3's criteria do not reliably match it, and the command silently
+# lands on the workspace instead - measured, it wraps the tree in yet another
+# level rather than retitling the container you named. `layout` on a focused
+# LEAF, by contrast, is well defined: it applies to that leaf's parent. So climb
+# exactly as many levels as there are single-child wrappers, apply, and put focus
+# back on the window that had it.
 set -eu
 
 [ $# -ge 1 ] || { echo "usage: layout.sh <tabbed|stacking|toggle-split|splith|splitv>" >&2; exit 2; }
@@ -36,12 +45,12 @@ case $1 in
     *)            _cmd="layout $1" ;;
 esac
 
-_id=$(i3-msg -t get_tree | python3 -c '
+# "<levels to climb> <con_id of the focused window>"
+_plan=$(i3-msg -t get_tree | python3 -c '
 import json, sys
 
 tree = json.load(sys.stdin)
 
-# Parent links, and the focused leaf. get_tree gives no upward pointers.
 parent = {}
 focused = None
 stack = [tree]
@@ -56,21 +65,35 @@ while stack:
 if focused is None:
     sys.exit(1)
 
-# Start at the focused container and climb. Stop at the first ancestor with more
-# than one child (the real container) or at the workspace, which is as far up as
-# a layout command is allowed to reach anyway.
+# Count the single-child wrappers between the focused window and the container
+# that actually holds more than one thing. Zero of them (autotiling off, or a
+# lone window) means this behaves exactly like the plain layout command.
+levels = 0
 node = focused
 while True:
     up = parent.get(node["id"])
     if up is None or up["type"] in ("workspace", "output", "root"):
-        # Nothing above but the workspace: address it directly, so a single
-        # window on an empty workspace still becomes tabbed.
-        print(up["id"] if up is not None and up["type"] == "workspace" else node["id"])
         break
     if len(up.get("nodes", [])) > 1:
-        print(up["id"])
         break
+    levels += 1
     node = up
+
+print(levels, focused["id"])
 ') || exit 0
 
-[ -n "$_id" ] && exec i3-msg "[con_id=$_id] $_cmd" >/dev/null
+[ -n "$_plan" ] || exit 0
+_levels=${_plan%% *}
+_leaf=${_plan##* }
+
+# One i3-msg, so the whole thing is atomic from autotiling's point of view: it
+# reacts to focus events, and half-applied intermediate states are exactly what
+# put the stray wrappers there in the first place.
+_chain=""
+_i=0
+while [ "$_i" -lt "$_levels" ]; do
+    _chain="$_chain focus parent;"
+    _i=$((_i + 1))
+done
+
+exec i3-msg "$_chain $_cmd; [con_id=$_leaf] focus" >/dev/null
