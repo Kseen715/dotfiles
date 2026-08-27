@@ -275,6 +275,31 @@ bindkey -M menuselect '^M' .accept-line
         '^[[F'  end-of-line        '^[OF'  end-of-line
         '^[[4~' end-of-line        '^[[8~' end-of-line
         '^[[3~' delete-char
+
+        # Word-wise editing. Same swallowing problem as Home/End above — every
+        # one of these is a CSI sequence whose prefix is live in menuselect — so
+        # each needs its menuselect entry purely to become a complete match.
+        # Three encodings per key because the modifier form is terminal-dependent:
+        # CSI 1;5 is the xterm/ghostty/foot/alacritty modifyOtherKeys form, CSI 5
+        # the older short form urxvt-alikes still send, and ^[O{c,d} rxvt's own.
+        '^[[1;5D' backward-word  '^[[5D' backward-word  '^[Od' backward-word
+        '^[[1;5C' forward-word   '^[[5C' forward-word   '^[Oc' forward-word
+        # Alt+arrow is the same motion on macOS-style keymaps and on Ghostty's
+        # default config; bound here so the two habits agree.
+        '^[[1;3D' backward-word  '^[[1;3C' forward-word
+        # Ctrl/Alt+Delete and Alt+Backspace: kill a word forward/back.
+        '^[[3;5~' kill-word      '^[[3;3~' kill-word
+        '^[^?'    backward-kill-word
+        # Ctrl+Backspace. Ghostty (and xterm, foot, wezterm) send ^H for it,
+        # which stock zsh binds to backward-delete-CHAR - so the key appeared to
+        # do nothing special. Alacritty is already configured to send ^W instead
+        # (see alacritty/alacritty.toml), which zsh binds to backward-kill-word
+        # out of the box; this line makes the other terminals agree with it.
+        # Unlike the CSI sequences above, ^H is a single byte and no prefix of
+        # anything, so it is not swallowed by menuselect - it is here only to
+        # change the widget, and the menuselect half is what lets it leave the
+        # menu with the selection kept.
+        '^H'      backward-kill-word
     )
     local osr_k osr_w
     for osr_k in ${(k)osr_keys}; do
@@ -314,15 +339,17 @@ bindkey -M menuselect '^M' .accept-line
 # style exposes; hence a body rewrite, like the one at the end of this file.
 # Degrades safely: if upstream renames the function, $functions comes back empty
 # and the whole block is skipped.
-# `z-async` is autoload-registered by upstream's own `.autocomplete__async`
-# init, which puts z-async/ on $fpath. That init is lazy - it can run after this
-# file, and then the two calls below resolve to nothing and every arrow key
-# prints `command not found: z-async` on repeat. Registering it here too is
-# idempotent ($fpath is -U in that init) and makes the rewrite self-contained.
-if [[ -d $ZSH_CUSTOM/plugins/zsh-autocomplete/z-async ]]; then
-    fpath=($ZSH_CUSTOM/plugins/zsh-autocomplete/z-async $fpath)
-    autoload -Uz z-async
-fi
+# The two `zasync cancel` calls below are upstream's own API for killing a
+# pending completion job (`.autocomplete:async:complete` uses the identical
+# pair). It is autoloaded lazily by upstream's precmd, which git-clones it into
+# $XDG_CACHE_HOME/zsh/zasync on first run, so it is NOT guaranteed to exist the
+# first time a line-pre-redraw hook fires - and a missing command here would
+# print `command not found` under every cursor key. Hence the $functions guard
+# rather than a call; when it is not loaded yet there is also no pending job to
+# cancel, so skipping is correct, not merely safe.
+#
+# (Was `z-async` until upstream renamed it, at which point every arrow key
+# printed the not-found error. The guard makes the next rename silent.)
 () {
     local body=$functions[.autocomplete:async:complete]
     [[ -n $body ]] || return 0
@@ -330,8 +357,7 @@ fi
     unset POSTDISPLAY
   fi
   if [[ ${LASTWIDGET##.} == (beginning-of-line|end-of-line|backward-char|forward-char|backward-word|forward-word) ]]; then
-    z-async cancel complete
-    z-async cancel wait
+    (( $+functions[zasync] )) && { zasync cancel complete; zasync cancel wait; }
     builtin zle -Rc
     return 0
   fi
