@@ -314,6 +314,15 @@ bindkey -M menuselect '^M' .accept-line
 # style exposes; hence a body rewrite, like the one at the end of this file.
 # Degrades safely: if upstream renames the function, $functions comes back empty
 # and the whole block is skipped.
+# `z-async` is autoload-registered by upstream's own `.autocomplete__async`
+# init, which puts z-async/ on $fpath. That init is lazy - it can run after this
+# file, and then the two calls below resolve to nothing and every arrow key
+# prints `command not found: z-async` on repeat. Registering it here too is
+# idempotent ($fpath is -U in that init) and makes the rewrite self-contained.
+if [[ -d $ZSH_CUSTOM/plugins/zsh-autocomplete/z-async ]]; then
+    fpath=($ZSH_CUSTOM/plugins/zsh-autocomplete/z-async $fpath)
+    autoload -Uz z-async
+fi
 () {
     local body=$functions[.autocomplete:async:complete]
     [[ -n $body ]] || return 0
