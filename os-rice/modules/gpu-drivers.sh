@@ -26,6 +26,10 @@
 # shellcheck disable=SC2086  # $_gpu_vk intentionally word-splits into a pkg list
 [ "$OSR_PKG" = pacman ] || warn "gpu-drivers package names are Arch's - untested on $OSR_PKG, add pkgmap rows when it breaks"
 
+# mesa-utils (glxinfo/glxgears) rides along with every mesa branch below: after
+# a driver install the only question that matters is which renderer actually got
+# loaded, and glxinfo is the answer on every GL driver, amber included.
+#
 # Vulkan loader + tools: every branch that has a Vulkan driver at all wants these.
 _gpu_vk="vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools"
 
@@ -129,7 +133,7 @@ for _v in ${OSR_GPU_VENDOR:-}; do
                     # Curie and older: no proprietary branch survives, nouveau is it.
                     warn "$_fam ($_chip) has no maintained NVIDIA driver - using nouveau, no Vulkan/OpenCL"
                     run_step "Installing nouveau ($_fam)" pkg_install \
-                        mesa lib32-mesa xf86-video-nouveau libvdpau-va-gl libva-utils ;;
+                        mesa lib32-mesa mesa-utils xf86-video-nouveau libvdpau-va-gl libva-utils ;;
             esac ;;
         AMD)
             _fam=$(_gpu_family_amd "$_chip")
@@ -137,31 +141,31 @@ for _v in ${OSR_GPU_VENDOR:-}; do
             case "$_fam" in
                 Navi|Vega|Polaris|"Volcanic Islands"|Unknown)
                     run_step "Installing AMD drivers ($_fam)" pkg_install \
-                        mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon xf86-video-amdgpu \
+                        mesa lib32-mesa mesa-utils vulkan-radeon lib32-vulkan-radeon xf86-video-amdgpu \
                         opencl-mesa ocl-icd libva-utils vdpauinfo libvdpau-va-gl nvtop $_gpu_vk ;;
                 "Sea Islands"|"Southern Islands")
                     # GCN 1/2 boot on the radeon DDX by default (amdgpu needs
                     # amdgpu.si_support=1 / cik_support=1 + radeon.*_support=0);
                     # RADV works on either KMS driver, so ship both DDX paths.
                     run_step "Installing AMD GCN1/2 drivers ($_fam)" pkg_install \
-                        mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon \
+                        mesa lib32-mesa mesa-utils vulkan-radeon lib32-vulkan-radeon \
                         xf86-video-ati xf86-video-amdgpu opencl-mesa ocl-icd \
                         libva-utils vdpauinfo libvdpau-va-gl $_gpu_vk ;;
                 Evergreen|"Northern Islands"|R700|R600)
                     # TeraScale: r600 gallium, no Vulkan (RADV is GCN+).
                     warn "$_fam is pre-GCN - no Vulkan, OpenCL is unsupported"
                     run_step "Installing AMD TeraScale drivers ($_fam)" pkg_install \
-                        mesa lib32-mesa xf86-video-ati libvdpau lib32-libvdpau \
+                        mesa lib32-mesa mesa-utils xf86-video-ati libvdpau lib32-libvdpau \
                         libvdpau-va-gl libva-utils vdpauinfo ;;
                 R500|R400|R300)
                     warn "$_fam is pre-GCN - no Vulkan, OpenCL is unsupported"
                     run_step "Installing ATI r300 drivers ($_fam)" pkg_install \
-                        mesa lib32-mesa xf86-video-ati libvdpau-va-gl libva-utils ;;
+                        mesa lib32-mesa mesa-utils xf86-video-ati libvdpau-va-gl libva-utils ;;
                 R100)
                     # Fixed-function era: dropped from mainline mesa, amber only.
                     warn "$_fam predates programmable shaders - mesa-amber, no Vulkan/OpenCL"
                     run_step "Installing ATI amber drivers ($_fam)" pkg_install \
-                        mesa-amber lib32-mesa-amber xf86-video-ati ;;
+                        mesa-amber lib32-mesa-amber mesa-utils xf86-video-ati ;;
             esac ;;
         Intel)
             _fam=$(_gpu_family_intel "$_chip")
@@ -169,39 +173,39 @@ for _v in ${OSR_GPU_VENDOR:-}; do
             case "$_fam" in
                 modern)
                     run_step "Installing Intel drivers" pkg_install \
-                        mesa lib32-mesa vulkan-intel lib32-vulkan-intel \
+                        mesa lib32-mesa mesa-utils vulkan-intel lib32-vulkan-intel \
                         intel-media-driver libva-utils intel-gpu-tools $_gpu_vk ;;
                 crocus)
                     # gen6-7.5: crocus for GL, hasvk (shipped in vulkan-intel)
                     # for gen7.5 only, i965 VA-API for video.
                     warn "pre-Broadwell Intel: Vulkan is hasvk-only (gen7.5) and partial"
                     run_step "Installing Intel crocus drivers" pkg_install \
-                        mesa lib32-mesa vulkan-intel lib32-vulkan-intel \
+                        mesa lib32-mesa mesa-utils vulkan-intel lib32-vulkan-intel \
                         libva-intel-driver lib32-libva-intel-driver libva-utils $_gpu_vk ;;
                 amber)
                     warn "gen3-5 Intel is mesa-amber only - no Vulkan"
                     run_step "Installing Intel amber drivers" pkg_install \
-                        mesa-amber lib32-mesa-amber xf86-video-intel libva-utils ;;
+                        mesa-amber lib32-mesa-amber mesa-utils xf86-video-intel libva-utils ;;
             esac ;;
         VMware)
             run_step "Installing VMware GPU drivers" pkg_install \
-                open-vm-tools mesa lib32-mesa xf86-video-vmware \
+                open-vm-tools mesa lib32-mesa mesa-utils xf86-video-vmware \
                 vulkan-virtio lib32-vulkan-virtio $_gpu_vk ;;
         VirtualBox)
             run_step "Installing VirtualBox GPU drivers" pkg_install \
-                virtualbox-guest-utils mesa lib32-mesa vulkan-swrast $_gpu_vk ;;
+                virtualbox-guest-utils mesa lib32-mesa mesa-utils vulkan-swrast $_gpu_vk ;;
         QEMU)
             # virtio-gpu with venus/virgl passthrough, or plain software GL.
             run_step "Installing QEMU/virtio GPU drivers" pkg_install \
-                mesa lib32-mesa vulkan-virtio lib32-vulkan-virtio vulkan-swrast $_gpu_vk ;;
+                mesa lib32-mesa mesa-utils vulkan-virtio lib32-vulkan-virtio vulkan-swrast $_gpu_vk ;;
         Microsoft)
             # Hyper-V / WSLg: hyperv_drm is in-kernel, only userspace is needed.
             run_step "Installing Hyper-V GPU drivers" pkg_install \
-                mesa lib32-mesa vulkan-swrast $_gpu_vk ;;
+                mesa lib32-mesa mesa-utils vulkan-swrast $_gpu_vk ;;
         Cirrus|Unknown|"")
             warn "no vendor-specific driver for GPU '$_v' - installing software rendering only"
             run_step "Installing software rendering fallback" pkg_install \
-                mesa lib32-mesa vulkan-swrast $_gpu_vk ;;
+                mesa lib32-mesa mesa-utils vulkan-swrast $_gpu_vk ;;
         *)
             warn "unknown/unsupported GPU vendor '$_v' - skipping driver install" ;;
     esac
