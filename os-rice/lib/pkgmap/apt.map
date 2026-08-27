@@ -126,8 +126,11 @@ xorg-fonts-misc = xfonts-base
 gnome-disks = gnome-disk-utility
 gdk-pixbuf2 = libgdk-pixbuf-2.0-0
 vulkan-icd-loader = libvulkan1
-libva-mesa-driver = mesa-va-drivers
-mesa-vdpau = mesa-vdpau-drivers
+# Metapackages, not mesa-va-drivers/mesa-vdpau-drivers: those two names were
+# dropped in Ubuntu 26.04 (resolute), while va-driver-all / vdpau-driver-all
+# exist on every release here and pull mesa's backend in as a dependency.
+libva-mesa-driver = va-driver-all
+mesa-vdpau = vdpau-driver-all
 noto-fonts = fonts-noto
 noto-fonts-emoji = fonts-noto-color-emoji
 noto-fonts-cjk = fonts-noto-cjk
@@ -392,3 +395,44 @@ exo = exo-utils
 # zramen is Void-only (a runit service). Debian/Ubuntu init is systemd, which
 # takes the zram-generator path in modules/swap.sh instead, so nothing is lost.
 zramen =
+
+# --- GPU drivers (modules/gpu-drivers.sh) -------------------------------
+# Arch splits the GL/Vulkan stack per vendor (vulkan-radeon, vulkan-intel,
+# vulkan-swrast, ...); Debian ships every Mesa Vulkan driver in one package, so
+# all four vendor rows collapse onto mesa-vulkan-drivers. NVIDIA's proprietary
+# branches are NOT mapped here - Debian/Ubuntu version their driver packages
+# (nvidia-driver-<branch>) rather than carrying Arch's <branch>xx names, and the
+# right branch per release has not been verified; an NVIDIA host still fails
+# loudly on the first missing name, which is the documented behaviour (§1).
+mesa = libgl1-mesa-dri libglx-mesa0
+# Amber (pre-shader R100/R200 and Intel gen3-5) is packaged as DRI+GLX vendor
+# libs here, with no standalone `mesa-amber`.
+mesa-amber = libgl1-amber-dri libglx-amber0
+vulkan-radeon = mesa-vulkan-drivers
+vulkan-intel = mesa-vulkan-drivers
+vulkan-swrast = mesa-vulkan-drivers
+vulkan-virtio = mesa-vulkan-drivers
+opencl-mesa = mesa-opencl-icd
+ocl-icd = ocl-icd-libopencl1
+libvdpau = libvdpau1
+libvdpau-va-gl = libvdpau-va-gl1
+libva-intel-driver = i965-va-driver
+intel-media-driver = intel-media-va-driver
+xf86-video-amdgpu = xserver-xorg-video-amdgpu
+xf86-video-ati = xserver-xorg-video-ati
+xf86-video-nouveau = xserver-xorg-video-nouveau
+xf86-video-intel = xserver-xorg-video-intel
+xf86-video-vmware = xserver-xorg-video-vmware
+
+# 32-bit GL/Vulkan needs `dpkg --add-architecture i386`, which is off on a stock
+# install - same call as any.map's `lib32-libnm =`. Empty RHS = skip, so the
+# 64-bit stack still installs and the module does not fail on a name apt cannot
+# see. Enable multilib by hand if you want 32-bit Steam/wine acceleration.
+lib32-mesa =
+lib32-mesa-amber =
+lib32-vulkan-icd-loader =
+lib32-vulkan-radeon =
+lib32-vulkan-intel =
+lib32-vulkan-virtio =
+lib32-libvdpau =
+lib32-libva-intel-driver =

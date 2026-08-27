@@ -67,7 +67,9 @@ _gpu_family_amd() {
         BONAIRE*|KABINI*|MULLINS*|KAVERI*|HAWAII*)                      echo "Sea Islands" ;;
         VERDE*|PITCAIRN*|TAHITI*|OLAND*|HAINAN*)                        echo "Southern Islands" ;;
         ARUBA*|Trinity*|Richland*|BARTS*|TURKS*|CAICOS*|CAYMAN*)        echo "Northern Islands" ;;
-        CEDAR*|REDWOOD*|JUNIPER*|CYPRESS*|PALM*|Wrestler*|Ontario*|SUMO*|Llano*) echo Evergreen ;;
+        Blackcomb*|Whistler*|Seymour*|Robson*|Granville*|Thames*)       echo "Northern Islands" ;;
+        CEDAR*|REDWOOD*|JUNIPER*|CYPRESS*|HEMLOCK*|PALM*|Wrestler*|Ontario*|SUMO*|Llano*) echo Evergreen ;;
+        Park*|Madison*|Broadway*|Manhattan*)                            echo Evergreen ;;
         RV7*)                                                           echo R700 ;;
         R600*|RV6*|RS78*|RS88*)                                         echo R600 ;;
         RV51*|R52*|RV53*|RV56*|RV57*|R58*)                              echo R500 ;;

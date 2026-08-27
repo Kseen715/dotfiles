@@ -74,6 +74,17 @@ gpu_case 'CAYMAN [Radeon HD 6970]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
 assert_contains "$OUT" 'xf86-video-ati' "TeraScale gets the radeon DDX"
 refute_contains "$OUT" 'vulkan-radeon' "TeraScale gets no Vulkan (RADV is GCN+)"
 
+# lspci prints the mobile board codename, not the ASIC one, for the whole
+# TeraScale mobile line - "Whistler" is Turks. Without a row for those names the
+# chip classified as Unknown and fell into the GCN branch, which installs RADV
+# on hardware RADV does not support.
+gpu_case 'Whistler [Radeon HD 6730M/6770M/7690M XT]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
+assert_contains "$OUT" 'xf86-video-ati' "TeraScale mobile codename gets the radeon DDX"
+refute_contains "$OUT" 'vulkan-radeon' "TeraScale mobile gets no Vulkan"
+
+gpu_case 'Park [Mobility Radeon HD 5430]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
+refute_contains "$OUT" 'vulkan-radeon' "Evergreen mobile codename gets no Vulkan"
+
 gpu_case 'RV370 [Radeon X600]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
 assert_contains "$OUT" 'mesa ' "r300-era gets mainline mesa"
 refute_contains "$OUT" 'mesa-amber' "r300-era is not amber"
