@@ -47,7 +47,8 @@ EOF
 REALMKDIR=$(command -v mkdir); export REALMKDIR
 TMPROOT=$TMP; export TMPROOT
 
-for _t in sh env cat cut grep sed awk tr head tail printf id mktemp rm cp \
+for _t in sh env cat cut grep sed awk tr head tail printf id mktemp rm cp chmod \
+          uname nproc \
           find sort wc dirname basename sleep kill test true false; do
     _p=$(command -v "$_t" 2>/dev/null) || :
     case "$_p" in
@@ -122,6 +123,24 @@ for _b in $PLANT; do
     printf '#!/bin/sh\n' >"$_dir/inner/$_b"
     chmod +x "$_dir/inner/$_b"
 done
+# $PLANTPATHS is for the builders that unpack a SOURCE tree and then run
+# something out of it: each entry is a path relative to the -C dir, optionally
+# `path=content`. Without a content it is written executable, because that is
+# what ./configure and ./get-deps have to be.
+for _p in $PLANTPATHS; do
+    case "$_p" in
+        *=*) _rel=${_p%%=*}; _txt=${_p#*=} ;;
+        *)   _rel=$_p; _txt="" ;;
+    esac
+    "$REALMKDIR" -p "$_dir/${_rel%/*}"
+    if [ -n "$_txt" ]; then
+        printf '%s\n' "$_txt" >"$_dir/$_rel"
+    else
+        printf '#!/bin/sh\nprintf "%%s %%s%%s\\n" "$0" "$*" "${PKG_CONFIG_PATH:+ PKG_CONFIG_PATH=$PKG_CONFIG_PATH}" >>"$LOG"\n' \
+            >"$_dir/$_rel"
+        chmod +x "$_dir/$_rel"
+    fi
+done
 exit 0
 EOF
 chmod +x "$BIN/tar"
@@ -144,9 +163,38 @@ exit 0
 EOF
 chmod +x "$BIN/unzip"
 
+cat >"$BIN/git" <<'EOF'
+#!/bin/sh
+printf 'git %s\n' "$*" >>"$LOG"
+[ "$1" = "clone" ] || exit 0
+for _a in "$@"; do _dst=$_a; done       # the destination is the last argument
+case "$_dst" in "$TMPROOT"*) ;; *) exit 0 ;; esac
+"$REALMKDIR" -p "$_dst/assets/icon" "$_dst/target/release"
+# ./get-deps is upstream's own dep installer, run out of the checkout, so it has
+# to be a real executable for the builder to reach it at all.
+printf '#!/bin/sh\nprintf "get-deps %%s\\n" "$*" >>"$LOG"\n' >"$_dst/get-deps"
+chmod +x "$_dst/get-deps"
+: >"$_dst/assets/wezterm.desktop"
+: >"$_dst/assets/icon/terminal.png"
+: >"$_dst/PKGBUILD"
+exit 0
+EOF
+chmod +x "$BIN/git"
+
 stub install
 stub apt-get
 stub dpkg 1
+stub make
+cat >"$BIN/cmake" <<'EOF'
+#!/bin/sh
+printf 'cmake %s%s\n' "$*" "${CMAKE_BUILD_PARALLEL_LEVEL:+ jobs=$CMAKE_BUILD_PARALLEL_LEVEL}" >>"$LOG"
+exit 0
+EOF
+chmod +x "$BIN/cmake"
+stub makepkg
+stub pacman     # paru is Arch-only, and its deps report as present
+stub ldconfig
+stub zig
 # mkdir and ln are MUTATIONS a builder makes outside the sandbox (zig installs a
 # whole tree at /usr/local/zig-<v> and symlinks it), so they log and do nothing.
 stub mkdir
@@ -167,8 +215,9 @@ FACTS="OSR_ROOT=$OSR_ROOT OSR_LIB=$OSR_LIB OSR_DISTRO=ubuntu OSR_ID_LIKE=debian
 run_sh() {
     _fn=$1; _env=${2:-}
     : >"$LOG"
+    rm -rf "$TMP/scratch"; mkdir -p "$TMP/scratch"
     # shellcheck disable=SC2086
-    env -i PATH="$BIN" LOG="$LOG" PLANT="$PLANT" REALMKDIR="$REALMKDIR" \
+    env -i PATH="$BIN" LOG="$LOG" PLANT="$PLANT" PLANTPATHS="$PLANTPATHS" REALMKDIR="$REALMKDIR" \
         TMPROOT="$TMPROOT" $FACTS $_env HOME="$TMP/home" sh -c '
         . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"
         for l in detect user net pkg build; do . "$OSR_LIB/$l.sh"; done
@@ -180,8 +229,9 @@ run_sh() {
 run_c() {
     _fn=$1; _env=${2:-}
     : >"$LOG"
+    rm -rf "$TMP/scratch"; mkdir -p "$TMP/scratch"
     # shellcheck disable=SC2086
-    env -i PATH="$BIN" LOG="$LOG" PLANT="$PLANT" REALMKDIR="$REALMKDIR" \
+    env -i PATH="$BIN" LOG="$LOG" PLANT="$PLANT" PLANTPATHS="$PLANTPATHS" REALMKDIR="$REALMKDIR" \
         TMPROOT="$TMPROOT" $FACTS $_env HOME="$TMP/home" \
         "$OSR_BIN" build run "$_fn" >"$TMP/c.out" 2>&1 || :
     cp "$LOG" "$TMP/c.log"
@@ -212,9 +262,12 @@ compare() {
 # any placeholder for a builder that unpacks nothing.
 both() {
     PLANT=$2; export PLANT
+    PLANTPATHS=${PLANTPATHS:-}; export PLANTPATHS
     run_sh "$1" "${3:-}"
     run_c  "$1" "${3:-}"
+    PLANTPATHS=""
 }
+PLANTPATHS=""; export PLANTPATHS
 
 # --- 1. the tarball builders -------------------------------------------------
 both provide_gh_tarball gh
@@ -369,13 +422,114 @@ assert_contains "$TMP/c.log" 'curl .*mkasberg/ghostty-ubuntu/HEAD/install.sh' \
 assert_contains "$TMP/c.log" 'sudo bash' \
     "provide_ghostty_deb: and it runs as root, which is what it needs"
 
-# --- 8. the row that names the builder ---------------------------------------
+# --- 8. the builders that COMPILE --------------------------------------------
+# OSR_BUILD_JOBS is pinned so the `-j` both tiers pass is the scenario's and not
+# the machine's: without it the sh side asks `nproc` and the C side would have to
+# agree with whatever that box answers.
+JOBS="OSR_BUILD_JOBS=4 OSR_PKG=apt"
+
+# chafa builds from a source tarball -- the only builder here that compiles a
+# release archive rather than unpacking one -- so the tar stub has to lay down
+# the ./configure the builder is about to run.
+PLANTPATHS="chafa-1.2.3/configure"
+both provide_chafa none "$JOBS"
+compare "provide_chafa: same tarball, configure, make and install"
+assert_contains "$TMP/c.log" 'chafa-1.2.3.tar.xz' \
+    "provide_chafa: the source tarball carries the resolved version"
+assert_contains "$TMP/c.log" 'configure --prefix=/usr/local PKG_CONFIG_PATH=.*/pkgconfig' \
+    "provide_chafa: configure runs with the standard .pc dirs appended"
+assert_contains "$TMP/c.log" 'make -j4' \
+    "provide_chafa: and the build honours OSR_BUILD_JOBS"
+assert_contains "$TMP/c.log" 'sudo make -C .* install' \
+    "provide_chafa: the install escalates, the build does not"
+
+# A chafa new enough for yazi's --probe is left alone, like fzf: presence is not
+# what is being tested, the VERSION is.
+cat >"$BIN/chafa" <<'EOF'
+#!/bin/sh
+printf '%s %s\n' chafa "$*" >>"$LOG"
+printf 'Chafa version 1.20.0\n'
+EOF
+chmod +x "$BIN/chafa"
+both provide_chafa none "$JOBS"
+compare "provide_chafa: a new enough chafa is left alone"
+refute_contains "$TMP/c.log" 'configure' \
+    "provide_chafa: nothing is built for a chafa that already works"
+assert_contains "$TMP/c.out" 'chafa 1.20 is already >= 1.16' \
+    "provide_chafa: and it says which version it found"
+rm -f "$BIN/chafa"
+
+# ueberzugpp is cmake, and refuses a tarball whose layout it does not recognise.
+PLANTPATHS="ueberzugpp-1.2.3/CMakeLists.txt"
+both provide_ueberzugpp none "$JOBS"
+compare "provide_ueberzugpp: same cmake configure, build and install"
+assert_contains "$TMP/c.log" 'cmake -S .* -B .*-DENABLE_OPENCV=OFF' \
+    "provide_ueberzugpp: libvips over OpenCV, as upstream documents"
+assert_contains "$TMP/c.log" 'cmake --build .* jobs=4' \
+    "provide_ueberzugpp: the parallelism reaches cmake as its own variable"
+assert_contains "$TMP/c.log" 'sudo cmake --install' \
+    "provide_ueberzugpp: only the install escalates"
+
+# A tarball with no CMakeLists.txt is upstream changing its layout, and both
+# tiers stop on it rather than configuring an empty tree.
+both provide_ueberzugpp none "$JOBS"
+compare "provide_ueberzugpp: a tarball with no CMakeLists.txt stops both tiers"
+refute_contains "$TMP/c.log" 'cmake -S' \
+    "provide_ueberzugpp: and nothing is configured when it does"
+
+# paru is the chicken/egg AUR package: cloned and makepkg'd as OSR_USER, since
+# makepkg refuses to run as root.
+both provide_paru none "OSR_PKG=pacman"
+compare "provide_paru: same clone and makepkg, as the riced user"
+assert_contains "$TMP/c.log" 'git clone --depth 1 https://aur.archlinux.org/paru.git' \
+    "provide_paru: the PKGBUILD comes from the AUR itself"
+assert_contains "$TMP/c.log" 'sudo -u tester makepkg -si --needed --noconfirm' \
+    "provide_paru: makepkg runs as the user, never as root"
+
+# ghostty from source bootstraps its own toolchain: it reads the exact zig
+# version its tree pins and installs THAT one before building.
+PLANTPATHS="ghostty-1.2.3/.zig-version=0.14.1"
+both provide_ghostty none "$JOBS"
+compare "provide_ghostty: same source tarball, pinned zig, and zig build"
+assert_contains "$TMP/c.log" 'zig-linux-x86_64-0.14.1.tar.xz' \
+    "provide_ghostty: the zig it installs is the one the tree pins, not the newest"
+assert_contains "$TMP/c.log" 'sudo env PKG_CONFIG_PATH=.* zig build -p /usr -Doptimize=ReleaseFast' \
+    "provide_ghostty: and the build itself is the documented one"
+
+# wezterm: a rust workspace, built as the user, with upstream's own ./get-deps
+# run as root out of the checkout.
+both provide_wezterm none "OSR_PKG=apt"
+compare "provide_wezterm: no cargo means neither tier starts"
+assert_contains "$TMP/c.out" "install 'rust' before wezterm" \
+    "provide_wezterm: and both name the missing prerequisite"
+
+mkdir -p "$TMP/home/.cargo/bin"
+cat >"$TMP/home/.cargo/bin/cargo" <<'EOF'
+#!/bin/sh
+printf 'cargo %s\n' "$*" >>"$LOG"
+EOF
+chmod +x "$TMP/home/.cargo/bin/cargo"
+both provide_wezterm none "OSR_PKG=apt"
+compare "provide_wezterm: same clone, get-deps, build and installs"
+assert_contains "$TMP/c.log" 'git clone --depth=1 --branch=main --recursive' \
+    "provide_wezterm: the vendored submodules come with the checkout"
+assert_contains "$TMP/c.log" 'sudo env PATH=.*\.cargo/bin.* RUSTUP_HOME=.* CARGO_HOME=.* ./get-deps' \
+    "provide_wezterm: get-deps runs as root but against the USER's toolchain"
+assert_contains "$TMP/c.log" 'sudo -u tester env PKG_CONFIG_PATH=.*cargo build --release' \
+    "provide_wezterm: the compile itself is the user's"
+assert_contains "$TMP/c.log" 'install -m 0755 .*/wezterm-mux-server /usr/local/bin/wezterm-mux-server' \
+    "provide_wezterm: all three binaries are installed"
+assert_contains "$TMP/c.log" 'install -Dm 0644 .*org.wezfurlong.wezterm.desktop' \
+    "provide_wezterm: and the desktop entry, so a launcher finds it"
+rm -rf "$TMP/home/.cargo"
+
+# --- 9. the row that names the builder ---------------------------------------
 # `fzf@noble = source:provide_fzf` in apt.map, driven through the whole package
 # layer, is the wiring lib/pkg.c's M_SOURCE case exists for.
 PLANT=fzf; export PLANT
 : >"$LOG"
 # shellcheck disable=SC2086
-env -i PATH="$BIN" LOG="$LOG" PLANT=fzf REALMKDIR="$REALMKDIR" TMPROOT="$TMPROOT" \
+env -i PATH="$BIN" LOG="$LOG" PLANT=fzf PLANTPATHS="" REALMKDIR="$REALMKDIR" TMPROOT="$TMPROOT" \
     $FACTS OSR_PKG=apt HOME="$TMP/home" sh -c '
     . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"
     for l in detect user net pkg build; do . "$OSR_LIB/$l.sh"; done
@@ -383,22 +537,49 @@ env -i PATH="$BIN" LOG="$LOG" PLANT=fzf REALMKDIR="$REALMKDIR" TMPROOT="$TMPROOT
 cp "$LOG" "$TMP/sh.log"
 : >"$LOG"
 # shellcheck disable=SC2086
-env -i PATH="$BIN" LOG="$LOG" PLANT=fzf REALMKDIR="$REALMKDIR" TMPROOT="$TMPROOT" \
+env -i PATH="$BIN" LOG="$LOG" PLANT=fzf PLANTPATHS="" REALMKDIR="$REALMKDIR" TMPROOT="$TMPROOT" \
     $FACTS OSR_PKG=apt HOME="$TMP/home" \
     "$OSR_BIN" pkg install fzf >"$TMP/c.out" 2>&1 || :
 cp "$LOG" "$TMP/c.log"
 compare "pkg_install fzf: the source: row reaches the same builder from both tiers"
 
-# --- 9. the registry is what lib/pkg.c dispatches on -------------------------
+# --- 10. the registry is what lib/pkg.c dispatches on ------------------------
 if "$OSR_BIN" build has provide_fzf; then
     ok "osr build has: a ported builder is claimed by the C tier"
 else
     fail "osr build has: a ported builder is claimed by the C tier"
 fi
-if "$OSR_BIN" build has provide_wezterm; then
-    fail "osr build has: an unported builder still belongs to lib/build.sh"
+if "$OSR_BIN" build has provide_nosuchbuilder; then
+    fail "osr build has: a name that is nobody's is claimed by neither tier"
 else
-    ok "osr build has: an unported builder still belongs to lib/build.sh"
+    ok "osr build has: a name that is nobody's is claimed by neither tier"
+fi
+
+# The registry is COMPLETE: every source: row in lib/pkgmap/ names a builder the
+# C tier owns. That is the thing that makes lib/pkg.c's fallback into
+# lib/build.sh dead code for a real rice - it stays only until modules/*.sh stop
+# calling the builders as shell functions of their own.
+_missing=""
+for _fn in $(grep -rho 'source:[a-z_]*' "$OSR_ROOT/lib/pkgmap" | sed 's/source://' | sort -u); do
+    "$OSR_BIN" build has "$_fn" || _missing="$_missing $_fn"
+done
+if [ -z "$_missing" ]; then
+    ok "the registry covers every source: row in lib/pkgmap"
+else
+    fail "the registry covers every source: row in lib/pkgmap (missing:$_missing)"
+fi
+
+# And every builder lib/build.sh defines is in it, bar the one that is not a
+# route: provide_amneziavpn_source is reachable only from provide_amneziavpn.
+_missing=""
+for _fn in $(grep -o '^provide_[a-z_]*' "$OSR_LIB/build.sh" | sort -u); do
+    [ "$_fn" = provide_amneziavpn_source ] && continue
+    "$OSR_BIN" build has "$_fn" || _missing="$_missing $_fn"
+done
+if [ -z "$_missing" ]; then
+    ok "and every builder lib/build.sh defines, bar the one that is not a route"
+else
+    fail "and every builder lib/build.sh defines (missing:$_missing)"
 fi
 
 finish

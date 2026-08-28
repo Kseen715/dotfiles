@@ -3,7 +3,7 @@
 # newest one on the RUNNING gnome-shell's major (not the newest overall — a v50
 # Shell must not get v45, and a v45 Shell must not get v50), that the builder
 # short-circuits only when the installed client already matches, and that
-# modules/gpaste.sh skips its GNOME block off GNOME. Hermetic: no net, no root
+# modules/gpaste.c skips its GNOME block off GNOME. Hermetic: no net, no root
 # (gnome-shell, gpaste-client, gsettings and the tags API are all mocks).
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -115,17 +115,39 @@ MOCK_EOF
 chmod +x "$BIN/gsettings" "$BIN/gnome-extensions"
 export OUT
 
-# pkg_install is the installer's job, not this test's — stub it out.
-pkg_install() { :; }
+# The module is C: it runs through the core, and the package layer is a stub on
+# PATH rather than a shell function. dpkg says everything is installed, so the
+# install is a no-op and what is left to observe is the GNOME block.
+printf '#!/bin/sh\nexit 0\n' >"$BIN/dpkg"
+printf '#!/bin/sh\nexit 0\n' >"$BIN/apt-get"
+# On apt `gpaste` is a source: row, and the probe that decides whether to build
+# is `command -v gpaste`. Answering it is what keeps this test about the GNOME
+# block rather than about a meson build.
+printf '#!/bin/sh\nexit 0\n' >"$BIN/gpaste"
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$BIN/sudo"
+printf '#!/bin/sh\nexit 0\n' >"$BIN/systemctl"
+chmod +x "$BIN/dpkg" "$BIN/apt-get" "$BIN/gpaste" "$BIN/sudo" "$BIN/systemctl"
 
-( XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=hyprland \
-  . "$OSR_ROOT/modules/gpaste.sh" ) >/dev/null 2>&1 || true
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip gpaste_module (module half): %s is not built\n' "$OSR_BIN"
+    finish
+fi
+export OSR_ROOT NO_COLOR
+OSR_HOME=${OSR_HOME:-$HOME}; export OSR_HOME
+run_module() { "$OSR_BIN" module run gpaste >/dev/null 2>&1 || :; }
+
+MOCK_SHELL_VER=50.1; export MOCK_SHELL_VER
+XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=hyprland \
+    export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
+run_module
 refute_contains "$OUT" "org.gnome.GPaste" "off GNOME: no GPaste gsettings written"
 refute_contains "$OUT" "gnome-extensions enable" "off GNOME: extension not touched"
 
 : >"$OUT"
-( XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_DESKTOP=gnome \
-  . "$OSR_ROOT/modules/gpaste.sh" ) >/dev/null 2>&1 || true
+XDG_CURRENT_DESKTOP=GNOME XDG_SESSION_DESKTOP=gnome
+export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
+run_module
 assert_contains "$OUT" "gnome-extensions enable" "on GNOME: extension enabled"
 assert_contains "$OUT" "images-support true" "on GNOME: images-support set (the empty-image-history fix)"
 

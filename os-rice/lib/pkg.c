@@ -263,7 +263,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
 }
 
 /* native_installed -- the per-manager probe _native_installed used. */
-static int native_installed(const char *pkg) {
+int osr_pkg_native_installed(const char *pkg) {
     const char *mgr = osr_mod_pkg();
     char *argv[6];
     int devnull_rc;
@@ -317,7 +317,7 @@ int osr_pkg_installed(const char *name) {
             while (is_space(*p)) p++;
             str_reset(&word);
             while (*p != '\0' && !is_space(*p)) str_addc(&word, *p++);
-            if (word.len > 0) ok = native_installed(str_text(&word));
+            if (word.len > 0) ok = osr_pkg_native_installed(str_text(&word));
         }
         str_free(&word);
     }
@@ -527,7 +527,7 @@ static void prune_one(const char *ours) {
  * repo described twice with different signed-by values as fatal, which breaks
  * every later apt call on the box, not just ours.
  */
-static void apt_prune_bootstrap_lists(void) {
+void osr_apt_prune_bootstrap_lists(void) {
     const char *lists = env_str("OSR_APT_BOOTSTRAP_LISTS", APT_BOOTSTRAP_LISTS_DEFAULT);
     const char *p = lists;
 
@@ -550,14 +550,15 @@ static void apt_prune_bootstrap_lists(void) {
  * a fresh container has no package lists yet. */
 static int refreshed = 0;
 
-static void pkg_refresh(void) {
+void osr_pkg_refresh(void) {
+    if (osr_theme_only()) { (void)osr_theme_only_skip("pkg_refresh"); return; }
     const char *mgr = osr_mod_pkg();
     char *argv[8];
 
     if (refreshed) return;
     refreshed = 1;
     if (strcmp(mgr, "apt") == 0) {
-        apt_prune_bootstrap_lists();
+        osr_apt_prune_bootstrap_lists();
         argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
         argv[2] = (char *)"apt-get"; argv[3] = (char *)"update"; argv[4] = (char *)"-q";
         argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Use-Pty=0";
@@ -756,7 +757,7 @@ done:
 
 /* aur_helper -- resolved at install time, not during detection: paru is often
  * BUILT mid-run, so a helper looked up once up front would miss it. */
-static const char *aur_helper(void) {
+const char *osr_pkg_aur_helper(void) {
     if (osr_have_cmd("paru")) return "paru";
     if (osr_have_cmd("yay")) return "yay";
     return "";
@@ -774,7 +775,7 @@ static int via_aur(const char *name, const char *pkg) {
             return 1;
         }
     }
-    helper = aur_helper();
+    helper = osr_pkg_aur_helper();
     if (*helper == '\0') {
         osr_warnf("no AUR helper (paru/yay) for %s - install 'paru' before any aur: package", name);
         return 0;
@@ -988,7 +989,7 @@ static int via_native(const char *const names[]) {
             while (is_space(*p)) p++;
             while (*p != '\0' && !is_space(*p)) str_addc(&word, *p++);
             if (word.len > 0) {
-                if (native_installed(str_text(&word))) {
+                if (osr_pkg_native_installed(str_text(&word))) {
                     osr_infof("%s already installed - skipping", str_text(&word));
                 } else if (native_held(str_text(&word))) {
                     osr_warnf("%s is held/pinned - skipping", str_text(&word));
@@ -1003,7 +1004,7 @@ static int via_native(const char *const names[]) {
     }
     if (todo.len == 0) { str_free(&todo); return 1; }
 
-    pkg_refresh();
+    osr_pkg_refresh();
 
     /* Clear anything that would abort the whole xbps transaction before running
      * it, so one conflicting package cannot take the other N down with it. */
@@ -1056,10 +1057,7 @@ static int via_native(const char *const names[]) {
         argv[argc++] = (char *)"emerge"; argv[argc++] = (char *)"--quiet";
         argv[argc++] = (char *)"--noreplace"; argv[argc++] = (char *)"--getbinpkg";
     } else {
-        osr_warnf("no native installer for OSR_PKG='%s'", mgr);
-        free(argv);
-        str_free(&todo);
-        return 0;
+        osr_die("no native installer for OSR_PKG='%s'", mgr);
     }
     {
         char *p = todo.p;
@@ -1072,13 +1070,20 @@ static int via_native(const char *const names[]) {
     }
     argv[argc] = NULL;
 
+    /* The batch's names, kept before the split above turns todo into a run of
+     * NUL-terminated words: they are what the failure message names. */
     str_init(&desc);
+    for (i = 0; i < todo.len; i++) str_addc(&desc, todo.p[i] == '\0' ? ' ' : todo.p[i]);
+
     rc = osr_run_root(argv);
-    if (rc != 0) osr_warnf("native install failed (exit %d)", rc);
+    /* Fatal, as lib/pkg.sh's `check_error $? "native install failed:..."` was:
+     * a module that goes on to configure a program the package manager did not
+     * install leaves a box in a state nobody asked for. */
+    if (rc != 0) osr_die("native install failed: %s (exit %d)", str_text(&desc), rc);
     str_free(&desc);
     free(argv);
     str_free(&todo);
-    return rc == 0;
+    return 1;
 }
 
 /* osr_pkg_install -- pkg_install: expand, group by method, dispatch. Two
@@ -1087,6 +1092,7 @@ static int via_native(const char *const names[]) {
  * may need, so it cannot run second. Pass 2 keeps manifest order, which is the
  * only dependency graph os-rice has (§4). */
 int osr_pkg_install(const char *const names[]) {
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_install");
     size_t i;
 
     if (!via_native(names)) return 0;
@@ -1124,12 +1130,24 @@ int osr_pkg_install(const char *const names[]) {
     return 1;
 }
 
+static int pkg_remove_thunk(void *ctx) {
+    return osr_pkg_remove((const char *const *)ctx);
+}
+
+int osr_pkg_remove_step(const char *desc, const char *const names[]) {
+    return osr_step(desc, pkg_remove_thunk, (void *)names);
+}
+
 static int pkg_install_thunk(void *ctx) {
     return osr_pkg_install((const char *const *)ctx);
 }
 
 int osr_pkg_install_step(const char *desc, const char *const names[]) {
     return osr_step(desc, pkg_install_thunk, (void *)names);
+}
+
+int osr_pkg_install_step_try(const char *desc, const char *const names[]) {
+    return osr_step_try(desc, pkg_install_thunk, (void *)names);
 }
 
 
@@ -1156,6 +1174,7 @@ static int pkg_usage(void) {
  * must stay a no-op).
  */
 int osr_pkg_remove(const char *const names[]) {
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_remove");
     Str rm;
     const char *mgr = osr_mod_pkg();
     char **argv;
@@ -1181,7 +1200,7 @@ int osr_pkg_remove(const char *const names[]) {
             while (is_space(*p)) p++;
             while (*p != '\0' && !is_space(*p)) str_addc(&word, *p++);
             if (word.len > 0) {
-                if (native_installed(str_text(&word))) {
+                if (osr_pkg_native_installed(str_text(&word))) {
                     if (rm.len > 0) str_addc(&rm, ' ');
                     str_add(&rm, str_text(&word), word.len);
                 } else {

@@ -44,8 +44,16 @@ for _f in "$OSR_ROOT"/modules/*.sh; do
     if [ "$_marked" = 1 ]; then _n_yes=$((_n_yes + 1)); fi
 done
 assert_eq "" "$_bad" "every module's '# themable:' marker matches its theme usage"
+
+# The count is a canary on the reading itself: a bug that answered "no" for
+# everything would leave the loop above with nothing to disagree about. It spans
+# BOTH tiers, because a module moving to C moves its answer from the header to
+# its registry row and the total must not fall as the port proceeds.
+for _m in $("$OSR_BIN" module list); do
+    if "$OSR_BIN" module themable "$_m"; then _n_yes=$((_n_yes + 1)); fi
+done
 if [ "$_n_yes" -ge 20 ]; then
-    ok "$_n_yes shell modules declare themselves themable"
+    ok "$_n_yes modules across both tiers declare themselves themable"
 else
     fail "only $_n_yes themable modules - the marker is probably not being read"
 fi

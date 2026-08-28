@@ -114,7 +114,7 @@ scripts:
 > tool assumes a C compiler. See [[archive-decisions#A2|A2]].
 
 **Contract:** byte-for-byte identical output. The sh version is frozen under
-`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 938
+`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 1105
 checks over the twenty-one units. Exactly one divergence is accepted and asserted
 rather than hidden (see [[archive-decisions#A2|A2]]).
 
@@ -875,11 +875,11 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | what | lines of sh | why it is where it is in the queue |
 | --- | --- | --- |
 | `lib/pkg.sh` | 554 | **no longer the blocker.** `lib/pkg.c` covers all five methods — native, `script:`, `cargo:`, `aur:`, `source:` — so a C module can install anything a rice lists. What keeps the file alive is the other direction: `modules/*.sh` source it, and a `source:` row naming a builder `lib/build.c` does not know yet goes back through `pkg_install` in sh for that one row |
-| `lib/build.sh` | 1387 | the `source:` builders, **in progress**: `lib/build.c` holds the registry, both archive primitives (tarball and zip) and the eleven prebuilt-artifact builders — `gh` `btop` `lsd` `fzf` `fastfetch` ×2 `lsd_deb`, and now `yazi_bin` (a .zip holding two binaries, with a cargo fallback), `zig` (a whole tree under a versioned prefix, resolved out of `index.json`) and `ghostty_copr` / `ghostty_deb`. What is left is the compiling half — `chafa` `ueberzugpp` `ghostty` `wezterm` — and the big application builders; a name the registry does not know still runs in sh, one row at a time. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
+| `lib/build.sh` | 1387 | **done as a table.** `lib/build.c` holds all 26 builders plus both archive primitives, and every `source:` row in `lib/pkgmap/` resolves to one of them (asserted). The file stays only because `modules/*.sh` call the builders as shell functions of their own — `modules/yazi.sh` calls `provide_chafa` directly — so it goes when they do |
 | `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers. **In progress**: `lib/config.c` holds the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer and the whole wallpaper family (resolve, install, record, set, library, pick) |
-| `lib/apply.sh` (the stubbing half) | 70 | `osr_apply_stub_mutators` + `osr_apply_theme`: `eval`-defined no-ops for the shell modules that are sourced next. Cannot leave sh before `modules/*.sh` does |
-| `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |
-| `modules/*.sh` | 115 files | see [[#11a. Every `.sh` module is legacy\|11a]] |
+| `lib/apply.sh` (the stubbing half) | 70 | `osr_apply_stub_mutators` stays sh — it redefines shell functions for the shell modules sourced next, which cannot be done from another process. Its **C counterpart now exists**: `osr_theme_only()` (lib/module.h), a flag the mutating entry points of `pkg/build/fetch/git/service/nerdfont` check, driven by `osr module run --theme-only <name>`. `osr_apply_theme` picks the tier per module. The sh list is derived and the C one enumerated; `test/unit/theme_apply.sh` is what holds them together |
+| `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules, and sixteen of them are left |
+| `modules/*.sh` | 16 files, 2121 lines | **104 are C**, registered in `lib/modules.c`, each with its sh original frozen at `test/ref/<name>_sh_ref.sh` and diffed by `test/unit/module_c_parity.sh`. What is left is the biggest sixteen — `swap` `gpu-drivers` `zsh` `xorg` `lightdm` `benchmark` `evolution` `ghostty` `mirrors` `theming` `firefox` `yazi` `i3` `cliphist` `yandex-browser` `wezterm`. See [[#11a. Every `.sh` module is legacy\|11a]] |
 
 > [!note] `bootstrap.sh` is not on this list
 > It runs before a compiler is a given, and stays sh forever.
@@ -889,7 +889,7 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 > Byte-for-byte identical output, asserted, or it is not a port.
 
 Every unit's shell original is frozen under `test/ref/` and diffed by
-`test/unit/*_c_parity.sh` — 938 checks over the twenty-one done so far, and
+`test/unit/*_c_parity.sh` — 1105 checks over the twenty-one done so far, and
 exactly one accepted divergence, asserted rather than hidden. A port that cannot be
 diffed this way (`helpers.c`, which never had a `.sh` form) asserts its
 behaviour directly instead.

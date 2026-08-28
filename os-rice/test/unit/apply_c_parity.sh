@@ -90,10 +90,11 @@ else fail "the whole-tree scan is far too short ($_all_n modules)"; fi
 
 # Sorted, and nothing that is not a module.
 assert_eq "$C_ALL" "$(printf '%s\n' "$C_ALL" | LC_ALL=C sort)" "the scan is in sorted order"
+# "a module" means either tier now: a ported one has no .sh to point at.
 _bad=$(printf '%s\n' "$C_ALL" | while IFS= read -r _m; do
     [ -n "$_m" ] || continue
-    [ -f "$OSR_ROOT/modules/$_m.sh" ] || printf '%s ' "$_m"
+    [ -f "$OSR_ROOT/modules/$_m.sh" ] || "$OSR_BIN" module has "$_m" || printf '%s ' "$_m"
 done)
-assert_eq "" "$_bad" "every name in the scan is a module"
+assert_eq "" "$_bad" "every name in the scan is a module of one tier or the other"
 
 finish

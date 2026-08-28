@@ -1,9 +1,14 @@
 #!/bin/sh
-# Proves modules/thunderbird.sh §5/§6 config ownership and the Debian/Ubuntu
+# Proves modules/thunderbird.c §5/§6 config ownership and the Debian/Ubuntu
 # install route: user.js is dotfiles-owned (and carries the Exchange/EWS prefs),
 # userChrome.css is rice-owned, both land in every profile, and on apt the
 # package resolves to the Mozilla tarball builder instead of the archive's
-# snap-stub/ESR. Hermetic (no net/root; pkg_install is stubbed).
+# snap-stub/ESR. Hermetic (no net/root; the package layer is stubbed).
+#
+# The module is C now, so it runs through the core: sudo records the escalated
+# commands (the "ROOT ..." lines) instead of an as_root shell function, and the
+# `thunderbird` on PATH is what keeps the source: probe from starting a real
+# tarball install.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -16,9 +21,6 @@ NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
 . "$HERE/../lib.sh"
 
 OUT=$(mktemp)
-run_step() { shift; "$@"; }
-pkg_install() { echo "PKG $*" >>"$OUT"; }
-as_root() { echo "ROOT $*" >>"$OUT"; }        # nothing here touches the real system
 # Fake snap/dpkg on PATH: a machine that HAS the snap and its transitional deb.
 BIN=$(mktemp -d)
 cat >"$BIN/snap" <<'EOF'
@@ -31,7 +33,32 @@ cat >"$BIN/dpkg" <<'EOF'
 [ "$1" = -s ] && { echo "Package: thunderbird"; echo "Version: 2:1snap1-0ubuntu5"; exit 0; }
 exit 0
 EOF
-chmod +x "$BIN/snap" "$BIN/dpkg"; PATH="$BIN:$PATH"; export PATH
+# sudo records the escalations; nothing here touches the real system. A
+# `thunderbird` on PATH answers the source: probe, so no tarball is fetched, and
+# its --version is what the "old ESR" scenario turns on.
+cat >"$BIN/sudo" <<EOF
+#!/bin/sh
+if [ "\$1" = "-u" ]; then shift 2; exec "\$@"; fi
+printf 'ROOT %s\\n' "\$*" >>"$OUT"
+exit 0
+EOF
+cat >"$BIN/thunderbird" <<'EOF'
+#!/bin/sh
+echo "Thunderbird ${MOCK_TB_VER:-140.0}"
+EOF
+printf '#!/bin/sh\nprintf "PKG %%s\\n" "$*" >>"%s"\nexit 0\n' "$OUT" >"$BIN/apt-get"
+chmod +x "$BIN/snap" "$BIN/dpkg" "$BIN/sudo" "$BIN/thunderbird" "$BIN/apt-get"
+PATH="$BIN:$PATH"; export PATH
+
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip thunderbird_module: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+export OSR_ROOT NO_COLOR
+ERR=$(mktemp)
+# stderr goes to $ERR, which is where the ESR warning is looked for below.
+run_module() { "$OSR_BIN" module run thunderbird >/dev/null 2>"$ERR" || :; }
 
 # --- pkgmap: apt never takes the archive package -----------------------------
 OSR_ARCH=x86_64; export OSR_ARCH
@@ -79,12 +106,14 @@ mkdir -p "$OSR_HOME/.thunderbird/aaa.default" "$OSR_HOME/.thunderbird/bbb.work"
 printf '[Profile0]\nPath=aaa.default\n\n[Profile1]\nPath=bbb.work\n' \
     >"$OSR_HOME/.thunderbird/profiles.ini"
 
-. "$OSR_ROOT/modules/thunderbird.sh"
+run_module
 
-assert_contains "$OUT" 'PKG thunderbird' "installs thunderbird via pkg_install"
+# The package step is the source: row's probe, which the thunderbird on PATH
+# satisfies - so what is asserted is that the de-snap ran BEFORE it.
+assert_contains "$OUT" 'ROOT snap remove --purge thunderbird' \
+    "removes the Thunderbird snap"
 # De-snap must happen, and BEFORE the install: the source: probe is
 # `command -v thunderbird`, which a snap on PATH would satisfy.
-assert_contains "$OUT" 'ROOT snap remove --purge thunderbird' "removes the Thunderbird snap"
 assert_contains "$OUT" 'ROOT env DEBIAN_FRONTEND=noninteractive dpkg --purge --force-all thunderbird' \
     "purges the transitional snap-stub deb"
 assert_eq "1" "$(grep -n 'PKG thunderbird\|ROOT snap remove' "$OUT" | head -n1 | grep -c 'ROOT snap remove')" \
@@ -110,14 +139,13 @@ rm -rf "$OSR_HOME"
 OSR_PKG=dnf                                   # no de-snap path on dnf
 OSR_HOME=$(mktemp -d); export OSR_HOME
 printf '#!/bin/sh\necho "Thunderbird 128.4.0"\n' >"$BIN/thunderbird"; chmod +x "$BIN/thunderbird"
-ERR=$(mktemp)
-. "$OSR_ROOT/modules/thunderbird.sh" 2>"$ERR"
+run_module
 assert_contains "$ERR" 'older than 140' "an ESR below 140 warns that Exchange/EWS is unavailable"
 refute_contains "$OUT" 'ROOT snap remove' "no de-snap outside apt"
 
 printf '#!/bin/sh\necho "Thunderbird 152.0"\n' >"$BIN/thunderbird"
 : >"$ERR"
-. "$OSR_ROOT/modules/thunderbird.sh" 2>"$ERR"
+run_module
 refute_contains "$ERR" 'older than 140' "a current build warns about nothing"
 
 rm -rf "$OSR_HOME" "$BIN"; rm -f "$OUT" "$ERR"

@@ -21,6 +21,7 @@
  *   osr module session <name> its session marker
  *   osr module themable <name>  exit 0 when it consumes the theme
  *   osr module run <name>     install it
+ *   osr module run --theme-only <name>   only its theme layer (§6a)
  *
  * C89 + POSIX.
  */
@@ -38,18 +39,216 @@ typedef struct {
     int (*run)(void);
 } ModuleRow;
 
+int osrm_alacritty(void);
+int osrm_amnezia_vpn(void);
+int osrm_arandr(void);
+int osrm_archives(void);
+int osrm_audio(void);
+int osrm_avahi(void);
+int osrm_blueman(void);
+int osrm_brightnessctl(void);
+int osrm_btop(void);
+int osrm_celluloid(void);
+int osrm_codecs(void);
+int osrm_copyq(void);
+int osrm_cpu_microcodes(void);
+int osrm_curseforge(void);
+int osrm_datagrip(void);
+int osrm_discord(void);
+int osrm_disks(void);
+int osrm_dkms(void);
+int osrm_dnscrypt(void);
 int osrm_docker(void);
+int osrm_dunst(void);
+int osrm_easyeffects(void);
 int osrm_fastfetch(void);
+int osrm_fcitx5(void);
+int osrm_feh(void);
 int osrm_flameshot(void);
+int osrm_flatpak(void);
+int osrm_foot(void);
+int osrm_gh(void);
+int osrm_git_base(void);
+int osrm_gnome_focus(void);
+int osrm_gnome_overview(void);
+int osrm_go(void);
+int osrm_gpaste(void);
+int osrm_gtklock(void);
+int osrm_gvfs(void);
 int osrm_helpers(void);
+int osrm_helvum(void);
+int osrm_htop(void);
+int osrm_hyprcursor(void);
+int osrm_hypridle(void);
+int osrm_hyprland(void);
+int osrm_hyprlock(void);
+int osrm_hyprpaper(void);
+int osrm_hyprpicker(void);
+int osrm_i3lock(void);
+int osrm_input(void);
+int osrm_inxi(void);
+int osrm_kate(void);
+int osrm_kdeconnect(void);
+int osrm_keyring(void);
+int osrm_loupe(void);
+int osrm_luminance(void);
+int osrm_mako(void);
+int osrm_micro(void);
+int osrm_nautilus(void);
+int osrm_ncdu(void);
+int osrm_networkmanager(void);
+int osrm_nwg_displays(void);
+int osrm_obs_studio(void);
+int osrm_onlyoffice(void);
+int osrm_openssh(void);
+int osrm_pacman_multilib(void);
+int osrm_paru(void);
+int osrm_picom(void);
+int osrm_pipewire(void);
+int osrm_polkit_agent(void);
+int osrm_polybar(void);
+int osrm_power(void);
+int osrm_printer(void);
+int osrm_proteus(void);
+int osrm_pulseaudio(void);
+int osrm_qbittorrent(void);
+int osrm_qpwgraph(void);
+int osrm_redshift(void);
+int osrm_rofi(void);
+int osrm_rust(void);
+int osrm_sddm(void);
+int osrm_serie(void);
+int osrm_starship(void);
+int osrm_steam(void);
+int osrm_swaylock(void);
 int osrm_tcc(void);
+int osrm_telegram(void);
+int osrm_thumbnails(void);
+int osrm_thunar(void);
+int osrm_thunderbird(void);
+int osrm_ufw(void);
+int osrm_viewers(void);
+int osrm_vlc(void);
+int osrm_vmware_init(void);
+int osrm_vscode(void);
+int osrm_vscode_insiders(void);
+int osrm_waybar(void);
+int osrm_waydroid(void);
+int osrm_wayland(void);
+int osrm_waylock(void);
+int osrm_wleave(void);
+int osrm_wlogout(void);
+int osrm_wofi(void);
+int osrm_xdg(void);
+int osrm_zen_browser(void);
+int osrm_zig(void);
+int osrm_zip(void);
 
 static const ModuleRow modules[] = {
-    { "docker",    "x11+wayland", 0, osrm_docker },
-    { "fastfetch", "x11+wayland", 1, osrm_fastfetch },
-    { "flameshot", "x11",         0, osrm_flameshot },
-    { "helpers",   "x11+wayland", 0, osrm_helpers },
-    { "tcc",       "x11+wayland", 0, osrm_tcc }
+    { "alacritty",       "x11+wayland", 1, osrm_alacritty },
+    { "amnezia-vpn",     "x11+wayland", 0, osrm_amnezia_vpn },
+    { "arandr",          "x11",         0, osrm_arandr },
+    { "archives",        "x11+wayland", 0, osrm_archives },
+    { "audio",           "x11+wayland", 0, osrm_audio },
+    { "avahi",           "x11+wayland", 0, osrm_avahi },
+    { "blueman",         "x11+wayland", 0, osrm_blueman },
+    { "brightnessctl",   "x11+wayland", 0, osrm_brightnessctl },
+    { "btop",            "x11+wayland", 1, osrm_btop },
+    { "celluloid",       "x11+wayland", 0, osrm_celluloid },
+    { "codecs",          "x11+wayland", 0, osrm_codecs },
+    { "copyq",           "x11",         1, osrm_copyq },
+    { "cpu-microcodes",  "x11+wayland", 0, osrm_cpu_microcodes },
+    { "curseforge",      "x11+wayland", 0, osrm_curseforge },
+    { "datagrip",        "x11+wayland", 0, osrm_datagrip },
+    { "discord",         "x11+wayland", 0, osrm_discord },
+    { "disks",           "x11+wayland", 0, osrm_disks },
+    { "dkms",            "x11+wayland", 0, osrm_dkms },
+    { "dnscrypt",        "x11+wayland", 0, osrm_dnscrypt },
+    { "docker",          "x11+wayland", 0, osrm_docker },
+    { "dunst",           "x11+wayland", 1, osrm_dunst },
+    { "easyeffects",     "x11+wayland", 0, osrm_easyeffects },
+    { "fastfetch",       "x11+wayland", 1, osrm_fastfetch },
+    { "fcitx5",          "x11+wayland", 1, osrm_fcitx5 },
+    { "feh",             "x11",         0, osrm_feh },
+    { "flameshot",       "x11",         0, osrm_flameshot },
+    { "flatpak",         "x11+wayland", 0, osrm_flatpak },
+    { "foot",            "wayland",     1, osrm_foot },
+    { "gh",              "x11+wayland", 0, osrm_gh },
+    { "git-base",        "x11+wayland", 0, osrm_git_base },
+    { "gnome-focus",     "wayland",     0, osrm_gnome_focus },
+    { "gnome-overview",  "x11+wayland", 0, osrm_gnome_overview },
+    { "go",              "x11+wayland", 0, osrm_go },
+    { "gpaste",          "x11+wayland", 0, osrm_gpaste },
+    { "gtklock",         "wayland",     1, osrm_gtklock },
+    { "gvfs",            "x11+wayland", 0, osrm_gvfs },
+    { "helpers",         "x11+wayland", 0, osrm_helpers },
+    { "helvum",          "x11+wayland", 0, osrm_helvum },
+    { "htop",            "x11+wayland", 0, osrm_htop },
+    { "hyprcursor",      "wayland",     0, osrm_hyprcursor },
+    { "hypridle",        "wayland",     1, osrm_hypridle },
+    { "hyprland",        "wayland",     1, osrm_hyprland },
+    { "hyprlock",        "wayland",     1, osrm_hyprlock },
+    { "hyprpaper",       "wayland",     1, osrm_hyprpaper },
+    { "hyprpicker",      "wayland",     0, osrm_hyprpicker },
+    { "i3lock",          "x11",         1, osrm_i3lock },
+    { "input",           "x11",         0, osrm_input },
+    { "inxi",            "x11+wayland", 0, osrm_inxi },
+    { "kate",            "x11+wayland", 1, osrm_kate },
+    { "kdeconnect",      "x11+wayland", 0, osrm_kdeconnect },
+    { "keyring",         "x11+wayland", 0, osrm_keyring },
+    { "loupe",           "x11+wayland", 0, osrm_loupe },
+    { "luminance",       "wayland",     0, osrm_luminance },
+    { "mako",            "wayland",     1, osrm_mako },
+    { "micro",           "x11+wayland", 1, osrm_micro },
+    { "nautilus",        "x11+wayland", 0, osrm_nautilus },
+    { "ncdu",            "x11+wayland", 0, osrm_ncdu },
+    { "networkmanager",  "x11+wayland", 0, osrm_networkmanager },
+    { "nwg-displays",    "wayland",     0, osrm_nwg_displays },
+    { "obs-studio",      "x11+wayland", 0, osrm_obs_studio },
+    { "onlyoffice",      "x11+wayland", 0, osrm_onlyoffice },
+    { "openssh",         "x11+wayland", 0, osrm_openssh },
+    { "pacman-multilib", "x11+wayland", 0, osrm_pacman_multilib },
+    { "paru",            "x11+wayland", 0, osrm_paru },
+    { "picom",           "x11",         1, osrm_picom },
+    { "pipewire",        "x11+wayland", 0, osrm_pipewire },
+    { "polkit-agent",    "x11+wayland", 0, osrm_polkit_agent },
+    { "polybar",         "x11",         1, osrm_polybar },
+    { "power",           "x11+wayland", 0, osrm_power },
+    { "printer",         "x11+wayland", 0, osrm_printer },
+    { "proteus",         "x11+wayland", 0, osrm_proteus },
+    { "pulseaudio",      "x11+wayland", 0, osrm_pulseaudio },
+    { "qbittorrent",     "x11+wayland", 0, osrm_qbittorrent },
+    { "qpwgraph",        "x11+wayland", 0, osrm_qpwgraph },
+    { "redshift",        "x11",         0, osrm_redshift },
+    { "rofi",            "x11",         1, osrm_rofi },
+    { "rust",            "x11+wayland", 0, osrm_rust },
+    { "sddm",            "x11+wayland", 1, osrm_sddm },
+    { "serie",           "x11+wayland", 1, osrm_serie },
+    { "starship",        "x11+wayland", 1, osrm_starship },
+    { "steam",           "x11+wayland", 0, osrm_steam },
+    { "swaylock",        "wayland",     1, osrm_swaylock },
+    { "tcc",             "x11+wayland", 0, osrm_tcc },
+    { "telegram",        "x11+wayland", 1, osrm_telegram },
+    { "thumbnails",      "x11+wayland", 0, osrm_thumbnails },
+    { "thunar",          "x11+wayland", 0, osrm_thunar },
+    { "thunderbird",     "x11+wayland", 1, osrm_thunderbird },
+    { "ufw",             "x11+wayland", 0, osrm_ufw },
+    { "viewers",         "x11+wayland", 1, osrm_viewers },
+    { "vlc",             "x11+wayland", 1, osrm_vlc },
+    { "vmware-init",     "x11",         0, osrm_vmware_init },
+    { "vscode",          "x11+wayland", 0, osrm_vscode },
+    { "vscode-insiders", "x11+wayland", 0, osrm_vscode_insiders },
+    { "waybar",          "wayland",     1, osrm_waybar },
+    { "waydroid",        "wayland",     0, osrm_waydroid },
+    { "wayland",         "wayland",     0, osrm_wayland },
+    { "waylock",         "wayland",     1, osrm_waylock },
+    { "wleave",          "wayland",     1, osrm_wleave },
+    { "wlogout",         "wayland",     1, osrm_wlogout },
+    { "wofi",            "wayland",     1, osrm_wofi },
+    { "xdg",             "x11+wayland", 0, osrm_xdg },
+    { "zen-browser",     "x11+wayland", 1, osrm_zen_browser },
+    { "zig",             "x11+wayland", 0, osrm_zig },
+    { "zip",             "x11+wayland", 0, osrm_zip }
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 
@@ -128,6 +327,7 @@ static int usage(void) {
     fputs("  session <name>    its `# session:` marker\n", stderr);
     fputs("  themable <name>   exit 0 when it consumes the resolved theme\n", stderr);
     fputs("  run <name>        install it\n", stderr);
+    fputs("  run --theme-only <name>  only its theme layer, no installs\n", stderr);
     fputs("  pkgmap <name>     what lib/pkgmap resolves that name to\n", stderr);
     return 2;
 }
@@ -165,8 +365,19 @@ int osr_module_main(int argc, char **argv) {
     if (strcmp(argv[1], "themable") == 0 && argc == 3) {
         return osr_module_themable(argv[2]) ? 0 : 1;
     }
-    if (strcmp(argv[1], "run") == 0 && argc == 3) {
-        const ModuleRow *m = find(argv[2]);
+    if (strcmp(argv[1], "run") == 0 && (argc == 3 || argc == 4)) {
+        const ModuleRow *m;
+        int theme_only = argc == 4;
+
+        /* `run --theme-only <name>`: the §6a pass. Everything that installs,
+         * downloads, builds or starts becomes a no-op for the rest of this
+         * process, so what the module does is its file copying -- which is what
+         * a theme is. The sh tier spells the same thing osr_apply_stub_mutators
+         * (lib/apply.sh); see lib/module.h on why one is derived and one is
+         * enumerated. */
+        if (theme_only && strcmp(argv[2], "--theme-only") != 0) return usage();
+        if (theme_only) osr_set_theme_only(1);
+        m = find(argv[theme_only ? 3 : 2]);
         if (m == NULL) {
             osr_warn("no such C module");
             return 1;

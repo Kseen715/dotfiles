@@ -170,15 +170,15 @@ EOF
     # Everything the manifest parser has to survive: comments (whole-line,
     # trailing, mid-word), blank lines, tabs and trailing whitespace,
     # require:/theme:/themes: directives, and a last line with no newline.
-    printf '# the demo rice\ntheme: nord\nthemes: nord xin\n\nzsh   \n\t foot\t\nrequire: gpu:amd\nbar # trailing comment\n#full comment\nrequire: ram:8G\nlast-no-newline' \
+    printf '# the demo rice\ntheme: nord\nthemes: nord xin\n\ndemo-one   \n\t demo-two\t\nrequire: gpu:amd\ndemo-three # trailing comment\n#full comment\nrequire: ram:8G\ndemo-last' \
         >"$_t/rices/demo/rice.list"
-    printf 'zsh\n' >"$_t/rices/broken/nothing-here"
+    printf 'demo-one\n' >"$_t/rices/broken/nothing-here"
     # `# themable: yes` on every fixture module so both trees take the same
     # branch: the frozen reference predates the marker and always resolves a
     # theme, and this file compares bytes, not intentions. The branch the marker
     # added -- a module set that reads no theme resolves none, and asks nothing
     # -- is the subject of test/unit/module_themable.sh instead.
-    for _m in zsh foot bar last-no-newline other; do
+    for _m in demo-one demo-two demo-three demo-last other; do
         printf '# session: x11\n# themable: yes\nprintf "STUB module %s ran\\n" %s\n' "$_m" "$_m" >"$_t/modules/$_m.sh"
     done
 }
@@ -226,7 +226,7 @@ run_both "--module unknown module" '' --module nosuchmodule
 run_both "parse: plain rice" parse demo
 run_both "parse: every option" parse --user alice --theme xin --verbose demo
 run_both "parse: options after the rice" parse demo --user alice --verbose
-run_both "parse: module mode" parse --module zsh foot
+run_both "parse: module mode" parse --module demo-one demo-two
 run_both "parse: theme-only" parse --theme-only --theme nord --no-reload
 run_both "parse: repeated options (last wins)" parse --theme a --theme b demo
 run_both "parse: value that looks like an option" parse --user --verbose demo
@@ -240,8 +240,8 @@ for _fx in 'empty' 'comments' 'spaces' 'requires'; do
     case "$_fx" in
         empty)    _body='' ;;
         comments) _body='# one\n   # two\n\t\n\n' ;;
-        spaces)   _body='  zsh  \n\t\tfoot\t\n   \n bar' ;;
-        requires) _body='require: a\nrequire:b\nrequire:   c  \nzsh\n' ;;
+        spaces)   _body='  demo-one  \n\t\tdemo-two\t\n   \n demo-three' ;;
+        requires) _body='require: a\nrequire:b\nrequire:   c  \ndemo-one\n' ;;
     esac
     # shellcheck disable=SC2059  # the fixture body IS the format string
     printf "$_body" >"$TMP/ref/rices/demo/rice.list"
@@ -283,7 +283,7 @@ FACTS=$_saved
 # closing sentence depends on how the run was started.
 run_both "full: rice install" '' demo
 run_both "full: rice install, verbose" '' --verbose demo
-run_both "full: module mode" '' --module zsh foot
+run_both "full: module mode" '' --module demo-one demo-two
 run_both "full: theme-only" '' --theme-only --theme xin
 run_both "full: theme-only, no reload" '' --theme-only --theme xin --no-reload
 

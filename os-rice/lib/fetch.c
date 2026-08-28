@@ -98,6 +98,7 @@ pid_t osr_fetch_child(const char *backend, const char *url, int write_fd) {
 }
 
 int osr_fetch_stdout(const char *url) {
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
     const char *backend = osr_fetch_ensure();
     char *argv[5];
 
@@ -109,7 +110,43 @@ int osr_fetch_stdout(const char *url) {
     return osr_run(argv) == 0;
 }
 
+/* fetch_pipe -- `<fetch url> | [as_user|as_root] <argv>`: a payload that is
+ * piped into a command rather than saved. The one shape an upstream installer
+ * script needs (`curl ... | sh -s -- -y`), and the reason osr_fetch_child
+ * exists. Returns 1 when the RIGHT-hand side exited 0, which is what `$?` after
+ * a pipeline gave the shell tier. */
+static int fetch_pipe(const char *url, char *const argv[], int as_root) {
+    const char *backend;
+    int fds[2];
+    pid_t dl;
+    int rc, status;
+
+    if (osr_theme_only()) return osr_theme_only_skip("osr_fetch_stdout | ...");
+    backend = osr_fetch_ensure();
+    if (*backend == '\0') {
+        osr_warn("no downloader found (need curl, wget, or busybox)");
+        return 0;
+    }
+    if (pipe(fds) != 0) return 0;
+    dl = osr_fetch_child(backend, url, fds[1]);
+    close(fds[1]);
+    if (dl < 0) { close(fds[0]); return 0; }
+    rc = as_root ? osr_run_root_in(argv, fds[0]) : osr_run_user_in(argv, fds[0]);
+    close(fds[0]);
+    waitpid(dl, &status, 0);
+    return rc == 0;
+}
+
+int osr_fetch_pipe_user(const char *url, char *const argv[]) {
+    return fetch_pipe(url, argv, 0);
+}
+
+int osr_fetch_pipe_root(const char *url, char *const argv[]) {
+    return fetch_pipe(url, argv, 1);
+}
+
 int osr_fetch_buffer(Str *out, const char *url) {
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
     const char *backend = osr_fetch_ensure();
     char *argv[5];
 
@@ -255,6 +292,7 @@ static void progress_line(Str *out, const char *name, long now, long total, long
 }
 
 int osr_fetch_download(const char *url, const char *dest, long expected) {
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_download");
     const char *backend = osr_fetch_ensure();
     char *argv[6];
     long total = expected;
@@ -317,9 +355,10 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-/* json_string_field -- the first "<key>": "<value>" in a JSON blob, which is
- * all github_latest's sed pattern ever extracted. */
-static int json_string_field(Str *out, const char *json, const char *key) {
+/* osr_json_string_field -- the first "<key>": "<value>" in a JSON blob, which
+ * is all github_latest's sed pattern ever extracted, and all a vendor release
+ * feed's version needs either. */
+int osr_json_string_field(Str *out, const char *json, const char *key) {
     Str pat;
     const char *p;
     int found = 0;
@@ -349,6 +388,7 @@ static int json_string_field(Str *out, const char *json, const char *key) {
  * resolve" warning, which is what a caller with a fallback wants: lib/build.sh
  * spelled that `github_latest ... 2>/dev/null || _tag=""`. */
 static int github_tag(Str *out, const char *repo, int quiet) {
+    if (osr_theme_only()) return !osr_theme_only_skip("github_latest");
     Str url, json;
 
     str_init(&url);
@@ -357,7 +397,7 @@ static int github_tag(Str *out, const char *repo, int quiet) {
     str_addz(&url, "/releases/latest");
     str_init(&json);
     osr_fetch_buffer(&json, str_text(&url));
-    if (json_string_field(out, str_text(&json), "tag_name")) {
+    if (osr_json_string_field(out, str_text(&json), "tag_name")) {
         str_free(&json);
         str_free(&url);
         return 1;
@@ -370,7 +410,7 @@ static int github_tag(Str *out, const char *repo, int quiet) {
     str_addz(&url, repo);
     str_addz(&url, "/tags");
     osr_fetch_buffer(&json, str_text(&url));
-    if (json_string_field(out, str_text(&json), "name")) {
+    if (osr_json_string_field(out, str_text(&json), "name")) {
         str_free(&json);
         str_free(&url);
         return 1;

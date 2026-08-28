@@ -92,6 +92,7 @@ static void clone_into(const char *name, const char *url, const char *dir,
 
 int osr_git_repo(const char *name, const char *url, const char *dir,
                  char *const clone_args[]) {
+    if (osr_theme_only()) return osr_theme_only_skip("git_repo");
     Str git_dir;
     Str remote;
     int have_git_dir;
@@ -176,6 +177,7 @@ int osr_git_repo(const char *name, const char *url, const char *dir,
 }
 
 int osr_zsh_plugin(const char *name, const char *url) {
+    if (osr_theme_only()) return osr_theme_only_skip("zsh_plugin");
     Str dir;
     char *args[3];
     int ok;
@@ -266,6 +268,7 @@ static void patch_installer(Str *out, const char *script, size_t len) {
 }
 
 int osr_install_omz(void) {
+    if (osr_theme_only()) return osr_theme_only_skip("install_omz");
     Str core;
     Str script;
     Str patched;

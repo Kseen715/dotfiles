@@ -38,7 +38,9 @@ EOF
     chmod +x "$BIN/$1"
 }
 # The tools the sh libs themselves need to run at all.
-for _t in sh env cat cut grep sed awk tr head tail printf id mktemp rm cp mkdir tee sort od wc dirname basename sleep kill; do
+for _t in sh env cat cut grep sed awk tr head tail printf id mktemp rm cp mkdir \
+          tee sort od wc dirname basename sleep kill chmod test true false bash \
+          find touch; do
     _p=$(command -v "$_t" 2>/dev/null) && ln -sf "$_p" "$BIN/$_t"
 done
 
@@ -53,6 +55,15 @@ FACTS="OSR_ROOT=$OSR_ROOT OSR_LIB=$OSR_LIB OSR_DOTFILES=$OSR_DOTFILES
 # sudo: the one tool both sides really do call. It records the escalation and
 # then runs the command, so `as_root apt-get ...` in sh and osr_run_root() in C
 # leave the same two lines.
+# fc-list reports the Nerd Font already present, so the font step short-circuits
+# on both tiers (§2). It is not what any of these scenarios is about, and a font
+# install that cannot complete in a sandbox is only noise in the comparison.
+cat >"$BIN/fc-list" <<'EOF'
+#!/bin/sh
+echo "/f: JetBrainsMono Nerd Font:style=Regular"
+EOF
+chmod +x "$BIN/fc-list"
+
 cat >"$BIN/sudo" <<'EOF'
 #!/bin/sh
 printf 'sudo %s\n' "$*" >>"$LOG"
@@ -70,7 +81,13 @@ run_sh() {
     # shellcheck disable=SC2086
     env -i PATH="$BIN" LOG="$LOG" $FACTS HOME="$TMP/home" sh -c '
         . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"
-        for l in detect user pkg service; do . "$OSR_LIB/$l.sh"; done
+        # net and build come along because a package row may be a provider one
+        # (source:provide_zig): the C tier always has those linked in, so the sh
+        # side has to have them sourced, or the comparison is between a builder
+        # and a "command not found".
+        for l in detect user net pkg service build fonts gnome git; do
+            . "$OSR_LIB/$l.sh"
+        done
         . "$1"' _ "$OSR_ROOT/test/ref/$1_sh_ref.sh" >"$TMP/sh.out" 2>&1 || :
     cp "$LOG" "$TMP/sh.log"
 }
@@ -87,7 +104,17 @@ run_c() {
 # normalize <file> — drop `id -u`, which is only how the SHELL as_root asks
 # whether it is already root; the C tier calls getuid(). Same decision, one
 # fewer process, and not a difference in what the module did to the box.
-normalize() { grep -v '^id -u$' "$1" || :; }
+#
+# The random temp suffix is collapsed for the same reason build_c_parity.sh
+# collapses it: `mktemp -d` and mkdtemp() pick different numbers of characters,
+# and a module that stages a download in one is not thereby a different module.
+# The pid in a rendered template's name (osr-theme-<app>-<pid>-<file>,
+# osr-wallpaper-layer-<pid>) goes the same way: it names one run, not one
+# decision.
+normalize() {
+    grep -v '^id -u$' "$1" \
+        | sed 's#tmp\.[A-Za-z0-9]*#tmp.X#g; s#\(osr-[a-z-]*-\)[0-9][0-9]*#\1PID#g' || :
+}
 
 # ..._env variants: the same two runners with extra facts (a sandboxed
 # dotfiles tree and theme, for the config-layer cases).
@@ -96,7 +123,9 @@ run_sh_env() {
     # shellcheck disable=SC2086
     env -i PATH="$BIN" LOG="$LOG" $FACTS $2 HOME="$TMP/home" sh -c '
         . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"
-        for l in detect user net pkg service config theme build; do . "$OSR_LIB/$l.sh"; done
+        for l in detect user net pkg service config theme build fonts gnome git; do
+            . "$OSR_LIB/$l.sh"
+        done
         . "$1"' _ "$OSR_ROOT/test/ref/$1_sh_ref.sh" >"$TMP/sh.out" 2>&1 || :
     cp "$LOG" "$TMP/sh.log"
 }
@@ -218,10 +247,39 @@ assert_eq "DOTFILES BASE" "$(cat "$TMP/ff.c" 2>/dev/null)" "fastfetch: falls bac
 assert_eq "$(cat "$TMP/ff.sh" 2>/dev/null)" "$(cat "$TMP/ff.c" 2>/dev/null)" "fastfetch: same fallback both ways"
 
 # (d) the provider row: `fastfetch@noble = source:provide_fastfetch_deb` in
-# apt.map. The C tier implements the native path only and hands such a row back
-# to lib/pkg.sh, which owns the builders in lib/build.sh - so the same builder
-# runs either way. This sandbox has no downloader, so what is compared is that
-# both reach the builder and both fail there, identically.
+# apt.map. What is being checked here is the ROUTING - that a C module's
+# pkg_install lands on the same builder the sh tier would have reached, and runs
+# the same commands there. (The builders' own command sequences are compared one
+# by one in test/unit/build_c_parity.sh; this is the wiring above them.)
+#
+# The sandbox needs a downloader for that: with none, the only thing the two
+# tiers would differ on is how many times each retried a doomed `pkg_install
+# curl` before giving up, which says nothing about the routing. So curl is
+# stubbed the same way build_c_parity.sh stubs it - a fixed GitHub release, and
+# an -o destination that gets created, since apt-get only runs when the .deb is
+# actually there.
+cat >"$BIN/curl" <<'EOF'
+#!/bin/sh
+printf 'curl %s\n' "$*" >>"$LOG"
+_dest=""; _prev=""; _url=""
+for _a in "$@"; do
+    [ "$_prev" = "-o" ] && _dest=$_a
+    case "$_a" in https://*) _url=$_a ;; esac
+    _prev=$_a
+done
+case "$_url" in
+    *api.github.com*/releases/latest) _json='{"tag_name": "v1.2.3"}' ;;
+    *api.github.com*)                 _json='[{"name": "v1.2.3"}]' ;;
+    *)                                _json="" ;;
+esac
+if [ -n "$_dest" ]; then
+    printf 'payload\n' >"$_dest"
+elif [ -n "$_json" ]; then
+    printf '%s\n' "$_json"
+fi
+exit 0
+EOF
+chmod +x "$BIN/curl"
 : >"$LOG"
 stub dpkg 1
 _prov=$(env -i PATH="$BIN" LOG="$LOG" $FACTS HOME="$TMP/home" \
@@ -254,15 +312,15 @@ assert_contains "$TMP/c.log" "apt-get install -y -q -o Dpkg::Use-Pty=0 exo-utils
     "helpers: exo maps to exo-utils on apt, and xterm is the fallback terminal"
 _hrc="$TMP/home/.config/xfce4/helpers.rc"
 [ -f "$_hrc" ] && ok "helpers: helpers.rc seeded" || fail "helpers: helpers.rc seeded"
-assert_contains "$_hrc" "TerminalEmulator=ghostty" \
-    "helpers: the terminal role resolves to the rice's terminal"
+assert_contains "$_hrc" "TerminalEmulator=osr-term" \
+    "helpers: the terminal role resolves to the session's own launcher"
 assert_contains "$_hrc" "FileManager=Thunar" "helpers: the file-manager role too"
 # The system helper entry is written as ROOT (it lands under /usr/share): the
 # sudo stub is what proves the escalation happened, since the sandbox cannot own
 # a real /usr/share write.
-assert_contains "$TMP/c.log" "tee /usr/share/xfce4/helpers/ghostty.desktop" \
-    "helpers: the ghostty helper entry is written under /usr/share"
-assert_contains "$TMP/c.log" "sudo .*tee /usr/share/xfce4/helpers/ghostty.desktop" \
+assert_contains "$TMP/c.log" "tee /usr/share/xfce4/helpers/osr-term.desktop" \
+    "helpers: the osr-term helper entry is written under /usr/share"
+assert_contains "$TMP/c.log" "sudo .*tee /usr/share/xfce4/helpers/osr-term.desktop" \
     "helpers: and it escalates to do it, unlike the file in \$HOME"
 refute_contains "$TMP/c.log" "sudo -u tester tee /usr/share" \
     "helpers: the system file is not written as the riced user"
@@ -274,6 +332,239 @@ run_c helpers
 refute_contains "$TMP/c.log" "apt-get install" "helpers: a rerun installs nothing"
 assert_eq "TerminalEmulator=xterm" "$(cat "$_hrc")" \
     "helpers: a rerun leaves an edited helpers.rc alone"
+
+# --- 3d. the package-only modules, one row each ------------------------------
+# Two dozen modules whose whole body was `run_step "..." pkg_install <names>`.
+# They are all the same shape, so they are one loop rather than two dozen
+# scenarios: the frozen sh ref and the C module are run under the same stubs and
+# their command logs diffed, which for a module of this shape IS the module.
+#
+# A name that resolves to a provider row on this target (amnezia-vpn, zig) is
+# not skipped: both tiers then run the same builder, and that they agree there
+# too is the point of not special-casing them.
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+stub dpkg 1; stub apt-get 0
+for _m in amnezia-vpn arandr brightnessctl celluloid discord feh gh git-base go \
+          helvum htop hyprpicker inxi kdeconnect loupe luminance nautilus ncdu \
+          nwg-displays onlyoffice qpwgraph vscode zig zip \
+          obs-studio qbittorrent openssh vscode-insiders \
+          networkmanager easyeffects wayland archives blueman disks flatpak \
+          steam gvfs thunar audio thumbnails dnscrypt polkit-agent \
+          hyprcursor keyring codecs printer ufw avahi xdg power; do
+    # $HOME is wiped between the two runs: a module that WRITES there (steam
+    # appends to .bashrc) would otherwise find its own sh-side output already in
+    # place and skip the write, which is a difference in the sandbox and not in
+    # the module.
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"; run_sh "$_m"
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"; run_c  "$_m"
+    compare "$_m: the C module installs what the sh one did"
+done
+
+# vlc, redshift and zen-browser read a theme or the dotfiles tree, so they need
+# a sandboxed one on BOTH sides: the C tier derives the dotfiles root from
+# OSR_ROOT where the sh tier reads $OSR_DOTFILES, and with neither set the two
+# would be looking at different trees rather than doing different things.
+mkdir -p "$TMP/df/redshift" "$TMP/themes/nord/config/vlc" \
+         "$TMP/themes/nord/config/firefox"
+printf 'BASE REDSHIFT\n' >"$TMP/df/redshift/redshift.conf"
+printf 'THEME VLCRC\n'   >"$TMP/themes/nord/config/vlc/vlcrc"
+printf 'THEME CHROME\n'  >"$TMP/themes/nord/config/firefox/userChrome.css"
+SANDBOX_ENV="OSR_DOTFILES=$TMP/df OSR_THEME=nord OSR_THEME_DIR=$TMP/themes/nord"
+for _m in vlc redshift zen-browser input; do
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"; run_sh_env "$_m" "$SANDBOX_ENV"
+    (cd "$TMP/home" && find . -type f | sort) >"$TMP/tree.sh" 2>/dev/null || : >"$TMP/tree.sh"
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"; run_c_env  "$_m" "$SANDBOX_ENV"
+    (cd "$TMP/home" && find . -type f | sort) >"$TMP/tree.c" 2>/dev/null || : >"$TMP/tree.c"
+    compare "$_m: same package and the same layer, against the same tree"
+    assert_eq "$(cat "$TMP/tree.sh")" "$(cat "$TMP/tree.c")" \
+        "$_m: and the same files land in \$HOME"
+done
+
+# dunst layers the dotfiles base and the theme drop-in beside it; waybar and
+# hyprpaper take the theme's own tree. All three only act with a theme, so they
+# go through the _env runners with one.
+mkdir -p "$TMP/df/dunst" "$TMP/themes/nord/config/waybar" "$TMP/themes/nord/config/hypr"
+printf 'BASE DUNSTRC\n' >"$TMP/df/dunst/dunstrc"
+printf 'WAYBAR CONFIG\n' >"$TMP/themes/nord/config/waybar/config.jsonc"
+printf 'WAYBAR STYLE\n'  >"$TMP/themes/nord/config/waybar/style.css"
+printf 'WAYBAR DDC\n'    >"$TMP/themes/nord/config/waybar/waybar-ddc-module.sh"
+printf 'preload = {{WALLPAPER_PATH}}\n' >"$TMP/themes/nord/config/hypr/hyprpaper.conf"
+mkdir -p "$TMP/df/rofi" "$TMP/themes/nord/config/rofi" \
+         "$TMP/themes/nord/config/gtklock" "$TMP/themes/nord/config/sddm/glass-theme"
+for _f in config.rasi launcher.rasi powermenu.rasi; do
+    printf 'ROFI %s\n' "$_f" >"$TMP/df/rofi/$_f"
+done
+printf 'ROFI COLORS\n'   >"$TMP/themes/nord/config/rofi/colors.rasi"
+printf 'GTKLOCK INI\n'   >"$TMP/themes/nord/config/gtklock/config.ini"
+printf 'bg = {{WALLPAPER_PATH}}\n' >"$TMP/themes/nord/config/gtklock/style.css"
+printf 'FACE\n'          >"$TMP/themes/nord/config/gtklock/.face"
+printf 'SDDM MAIN\n'     >"$TMP/themes/nord/config/sddm/hyprland.main.conf"
+printf 'SDDM THEME\n'    >"$TMP/themes/nord/config/sddm/theme.conf.user"
+printf 'QML\n'           >"$TMP/themes/nord/config/sddm/glass-theme/Main.qml"
+mkdir -p "$TMP/df/micro" "$TMP/df/btop" "$TMP/df/zathura" "$TMP/df/mpv" \
+         "$TMP/df/proteus" "$TMP/themes/nord/config/micro" \
+         "$TMP/themes/nord/config/btop" "$TMP/themes/nord/config/zathura" \
+         "$TMP/themes/nord/config/mpv" "$TMP/themes/nord/config/fcitx5" \
+         "$TMP/themes/nord/config/wofi"
+printf '{"tabsize": 4}\n'  >"$TMP/df/micro/settings.json"
+printf '{"colorscheme": "nord"}\n' >"$TMP/themes/nord/config/micro/settings.json"
+printf 'MICRO THEME\n'     >"$TMP/themes/nord/config/micro/theme.micro"
+printf 'BTOP CONF\n'       >"$TMP/df/btop/btop.conf"
+printf 'BTOP THEME\n'      >"$TMP/themes/nord/config/btop/btop.theme"
+printf 'ZATHURARC\n'       >"$TMP/df/zathura/zathurarc"
+printf 'ZATHURA THEME\n'   >"$TMP/themes/nord/config/zathura/90-theme.rc"
+printf 'MPV CONF\n'        >"$TMP/df/mpv/mpv.conf"
+printf 'MPV THEME\n'       >"$TMP/themes/nord/config/mpv/90-theme.conf"
+printf 'PROTEUS TOML\n'    >"$TMP/df/proteus/proteus.toml"
+printf 'FCITX THEME\n'     >"$TMP/themes/nord/config/fcitx5/theme.conf"
+printf 'FCITX UI\n'        >"$TMP/themes/nord/config/fcitx5/classicui.conf"
+printf 'WOFI CONFIG\n'     >"$TMP/themes/nord/config/wofi/config"
+printf 'WOFI STYLE\n'      >"$TMP/themes/nord/config/wofi/style.css"
+mkdir -p "$TMP/df/kate" "$TMP/df/picom" "$TMP/df/polybar/scripts" \
+         "$TMP/themes/nord/config/kde" "$TMP/themes/nord/config/konsole" \
+         "$TMP/themes/nord/config/kate" "$TMP/themes/nord/config/picom" \
+         "$TMP/themes/nord/config/polybar" "$TMP/df/xdg"
+printf 'KATERC\n'         >"$TMP/df/kate/katerc"
+printf 'KDE COLORS\n'     >"$TMP/themes/nord/config/kde/color-scheme.colors"
+printf 'KONSOLE\n'        >"$TMP/themes/nord/config/konsole/osr.colorscheme"
+printf 'KATE THEME\n'     >"$TMP/themes/nord/config/kate/osr.theme"
+printf 'PICOM CONF\n'     >"$TMP/df/picom/picom.conf"
+printf 'PICOM LAUNCH\n'   >"$TMP/df/picom/launch.sh"
+printf 'PICOM THEME\n'    >"$TMP/themes/nord/config/picom/90-theme.conf"
+printf 'PB CONFIG\n'      >"$TMP/df/polybar/config.ini"
+printf 'PB MODULES\n'     >"$TMP/df/polybar/modules.ini"
+printf 'PB LAUNCH\n'      >"$TMP/df/polybar/launch.sh"
+printf 'PB SCRIPT\n'      >"$TMP/df/polybar/scripts/battery.sh"
+printf 'PB COLORS\n'      >"$TMP/themes/nord/config/polybar/colors.ini"
+printf 'MIMEAPPS\n'       >"$TMP/df/xdg/mimeapps.list"
+mkdir -p "$TMP/df/serie" "$TMP/df/alacritty" "$TMP/df/input" \
+         "$TMP/themes/nord/config/serie" "$TMP/themes/nord/config/alacritty" \
+         "$TMP/themes/nord/config/hypr" "$TMP/themes/nord/config/qt6ct" \
+         "$TMP/themes/nord/config/wayland-sessions"
+printf 'SERIE BASE\n'     >"$TMP/df/serie/config.toml"
+printf 'SERIE THEME\n'    >"$TMP/themes/nord/config/serie/config.toml"
+printf '[window]\n'       >"$TMP/df/alacritty/alacritty.toml"
+printf 'ALA THEME\n'      >"$TMP/themes/nord/config/alacritty/alacritty-theme.toml"
+printf 'GESTURES\n'       >"$TMP/df/input/libinput-gestures.conf"
+printf 'env = WALLPAPER_PATH,{{WALLPAPER_PATH}}\n' \
+                           >"$TMP/themes/nord/config/hypr/hyprland.conf"
+printf 'AUDIO\n'          >"$TMP/themes/nord/config/hypr/start-audio.sh"
+printf 'QT6CT\n'          >"$TMP/themes/nord/config/qt6ct/qt6ct.conf"
+printf 'SESSION\n'        >"$TMP/themes/nord/config/wayland-sessions/hyprland.desktop"
+printf 'LAUNCH\n'         >"$TMP/themes/nord/config/wayland-sessions/start-hyprland.sh"
+mkdir -p "$TMP/df/cargo"
+printf 'SHIM\n'           >"$TMP/df/cargo/cargo-binstall-shim"
+mkdir -p "$TMP/themes/nord/config/copyq" "$TMP/themes/nord/config/thunderbird" \
+         "$TMP/themes/nord/config/betterlockscreen" "$TMP/df/thunderbird"
+printf '[Theme]\ncolor_bg=#000\n' >"$TMP/themes/nord/config/copyq/theme.ini"
+printf 'CHROME\n'         >"$TMP/themes/nord/config/thunderbird/userChrome.css"
+printf 'USERJS\n'         >"$TMP/df/thunderbird/user.js"
+printf 'BLSRC\n'          >"$TMP/themes/nord/config/betterlockscreen/betterlockscreenrc"
+THEME_ENV="OSR_DOTFILES=$TMP/df OSR_THEME=nord OSR_THEME_DIR=$TMP/themes/nord"
+for _m in dunst waybar hyprpaper rofi gtklock sddm micro btop viewers \
+          proteus fcitx5 wofi kate picom polybar serie alacritty hyprland \
+          copyq thunderbird i3lock; do
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+    run_sh_env "$_m" "$THEME_ENV"
+    (cd "$TMP/home" && find . -type f | sort) >"$TMP/tree.sh" 2>/dev/null || : >"$TMP/tree.sh"
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+    run_c_env "$_m" "$THEME_ENV"
+    (cd "$TMP/home" && find . -type f | sort) >"$TMP/tree.c" 2>/dev/null || : >"$TMP/tree.c"
+    compare "$_m: same packages and the same config layering"
+    assert_eq "$(cat "$TMP/tree.sh")" "$(cat "$TMP/tree.c")" \
+        "$_m: and the same files land in \$HOME"
+done
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"; run_c_env waybar "$THEME_ENV"
+assert_contains "$TMP/home/.config/waybar/config.jsonc" "WAYBAR CONFIG" \
+    "waybar: the layout comes from the theme's own tree"
+
+# The lock screens and mako are the same shape plus one file: the theme owns
+# the whole config, and a theme that ships none leaves the package default. Both
+# halves are checked - the commands, and the file that ended up in $HOME.
+mkdir -p "$TMP/themes/nord/config/hypr" "$TMP/themes/nord/config/waylock" \
+         "$TMP/themes/nord/config/swaylock" "$TMP/themes/nord/config/mako"
+printf 'THEME LOCK\n' >"$TMP/themes/nord/config/hypr/hypridle.conf"
+printf 'THEME LOCK\n' >"$TMP/themes/nord/config/hypr/hyprlock.conf"
+printf 'THEME LOCK\n' >"$TMP/themes/nord/config/waylock/waylock.toml"
+printf 'THEME LOCK\n' >"$TMP/themes/nord/config/swaylock/config"
+printf 'THEME LOCK\n' >"$TMP/themes/nord/config/mako/config"
+LOCK_ENV="OSR_DOTFILES=$TMP/df OSR_THEME=nord OSR_THEME_DIR=$TMP/themes/nord"
+for _m in hypridle:hypr/hypridle.conf hyprlock:hypr/hyprlock.conf \
+          waylock:waylock/waylock.toml swaylock:swaylock/config mako:mako/config; do
+    _name=${_m%%:*}; _rel=${_m#*:}
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+    run_sh_env "$_name" "$LOCK_ENV"
+    cp "$TMP/home/.config/$_rel" "$TMP/lock.sh" 2>/dev/null || rm -f "$TMP/lock.sh"
+    rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+    run_c_env "$_name" "$LOCK_ENV"
+    cp "$TMP/home/.config/$_rel" "$TMP/lock.c" 2>/dev/null || rm -f "$TMP/lock.c"
+    compare "$_name: same package and same theme layer"
+    assert_eq "$(cat "$TMP/lock.sh" 2>/dev/null)" "$(cat "$TMP/lock.c" 2>/dev/null)" \
+        "$_name: the installed file is the theme's"
+    assert_eq "THEME LOCK" "$(cat "$TMP/lock.c" 2>/dev/null)" \
+        "$_name: and it is the theme's own bytes"
+done
+
+# No theme: the package default is left alone, and neither tier writes anything.
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+run_sh hyprlock; run_c hyprlock
+compare "hyprlock: with no theme, only the package is installed"
+if [ -f "$TMP/home/.config/hypr/hyprlock.conf" ]; then
+    fail "hyprlock: and nothing is written into \$HOME"
+else
+    ok "hyprlock: and nothing is written into \$HOME"
+fi
+
+# The Arch-only swaps and helpers take an early exit on an apt target, and say
+# so. Same shape as paru below, checked as a group.
+for _m in dkms pacman-multilib pulseaudio pipewire vmware-init; do
+    run_sh "$_m"; run_c "$_m"
+    if [ ! -s "$TMP/sh.log" ] && [ ! -s "$TMP/c.log" ]; then
+        ok "$_m: an Arch-only module does nothing on apt, both tiers"
+    else
+        fail "$_m: an Arch-only module does nothing on apt, both tiers"
+        diff -u "$TMP/sh.log" "$TMP/c.log" >&2 || :
+    fi
+done
+assert_eq "$(cat "$TMP/sh.out")" "$(cat "$TMP/c.out")" \
+    "vmware-init: and the two tiers give the same reason"
+
+# paru is Arch-only and this target is apt; cpu-microcodes has no vendor to act
+# on unless osr_detect found one; gpaste stops at "no gnome-shell here", which is
+# the first thing it checks. All three therefore run NOTHING, which is the
+# assertion - and the one thing compare() cannot make, since it reads an empty
+# sh log as a broken sandbox.
+for _m in paru cpu-microcodes gpaste; do
+    run_sh "$_m"; run_c "$_m"
+    if [ ! -s "$TMP/sh.log" ] && [ ! -s "$TMP/c.log" ]; then
+        ok "$_m: does nothing on a target it has nothing to do on, both tiers"
+    else
+        fail "$_m: does nothing on a target it has nothing to do on, both tiers"
+        diff -u "$TMP/sh.log" "$TMP/c.log" >&2 || :
+    fi
+done
+# Each of the three says why it did nothing, and the message is the only output
+# there is - so it is checked while that module's run is still the last one.
+run_c cpu-microcodes
+assert_contains "$TMP/c.out" "no microcode installed" \
+    "cpu-microcodes: and says why it installed none"
+run_c gpaste
+assert_contains "$TMP/c.out" "gnome-shell not found" \
+    "gpaste: and says it needs a GNOME Shell to be a clipboard manager for"
+
+# Given a vendor, it installs that vendor's microcode and only that one.
+run_sh_env cpu-microcodes "OSR_CPU_VENDOR=AuthenticAMD"
+run_c_env  cpu-microcodes "OSR_CPU_VENDOR=AuthenticAMD"
+compare "cpu-microcodes: AMD gets amd-ucode, both tiers"
+refute_contains "$TMP/c.log" "intel-ucode" "cpu-microcodes: and not the Intel one"
+
+# A rerun of any of them installs nothing - the §2 contract, checked once on a
+# module whose row is a plain native package.
+stub dpkg 0
+run_sh htop; run_c htop
+compare "htop: a rerun installs nothing, both tiers"
+refute_contains "$TMP/c.log" "apt-get install" "htop: and no install command is run"
+stub dpkg 1
 
 # --- 4. docker: the full path (package, group, membership, service) ----------
 stub dpkg 1

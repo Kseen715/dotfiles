@@ -1,9 +1,13 @@
 #!/bin/sh
-# Proves modules/alacritty.sh §5 config ownership and the version adaptation:
+# Proves modules/alacritty.c §5 config ownership and the version adaptation:
 # `alacritty.toml` is dotfiles-owned behaviour-only config, the palette is a
 # rice-owned theme that overrides the dotfiles default, and the `[general]`
 # section is downgraded to a top-level `import` for an Alacritty older than 0.14
 # (lib/config.sh). Hermetic (no net/root; the package install is stubbed).
+#
+# The module is C now, so it runs through the core rather than being sourced and
+# the package manager is stubbed on PATH. The version adapter it drives is still
+# lib/config.c's, and scenario 4 calls that directly.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -25,12 +29,21 @@ cat >"$BIN/alacritty" <<'EOF'
 #!/bin/sh
 echo "alacritty ${FAKE_ALACRITTY_VER:-0.15.1} (1234abc)"
 EOF
-chmod +x "$BIN/fc-list" "$BIN/alacritty"; PATH="$BIN:$PATH"; export PATH
+printf '#!/bin/sh\ncase "$1" in install) printf "PKG %%s\\n" "$*" >>"%s" ;; esac\nexit 0\n' \
+    "$OUT" >"$BIN/apt-get"
+printf '#!/bin/sh\nexit 1\n' >"$BIN/dpkg"
+printf '#!/bin/sh\nprintf "DOWNLOAD %%s\\n" "$*" >>"%s"\nexit 1\n' "$OUT" >"$BIN/curl"
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$BIN/sudo"
+chmod +x "$BIN/fc-list" "$BIN/alacritty" "$BIN/apt-get" "$BIN/dpkg" "$BIN/curl" "$BIN/sudo"
+PATH="$BIN:$PATH"; export PATH
 
-# Stubs: run_step runs the wrapped command; downloads/pkg installs are recorded.
-run_step() { shift; "$@"; }
-pkg_install() { echo "PKG $*" >>"$OUT"; }
-osr_download() { echo "DOWNLOAD $*" >>"$OUT"; return 1; }
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip alacritty_module: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+export OSR_ROOT NO_COLOR
+run_module() { "$OSR_BIN" module run alacritty >/dev/null 2>&1 || :; }
 
 # --- scenario 1: current Alacritty + a rice palette --------------------------
 FAKE_ALACRITTY_VER=0.15.1; export FAKE_ALACRITTY_VER
@@ -40,10 +53,11 @@ mkdir -p "$THEME/config/alacritty"
 printf '# RICE-PALETTE-MARKER\n[colors.primary]\nbackground = "#123456"\n' \
     >"$THEME/config/alacritty/alacritty-theme.toml"
 
-. "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
+run_module
 
 _CFG="$OSR_HOME/.config/alacritty/alacritty.toml"
-assert_contains "$OUT" 'PKG alacritty unzip fontconfig' "installs alacritty + font deps via pkg_install"
+assert_contains "$OUT" 'PKG .*alacritty.*unzip.*fontconfig' \
+    "installs alacritty + font deps via pkg_install"
 assert_contains "$_CFG" 'JetBrainsMono Nerd Font' "base config installed (dotfiles-owned)"
 assert_contains "$_CFG" '^\[general\]$' "0.14+ keeps the [general] section"
 assert_contains "$_CFG" 'import = \["~/.config/alacritty/alacritty-theme.toml"\]' \
@@ -66,7 +80,7 @@ rm -rf "$OSR_HOME" "$THEME"
 OSR_HOME=$(mktemp -d); export OSR_HOME
 THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR   # no config/alacritty
 
-. "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
+run_module
 
 _THEME="$OSR_HOME/.config/alacritty/alacritty-theme.toml"
 assert_contains "$_THEME" '^\[colors.normal\]$' "dotfiles default palette used when rice ships none"
@@ -79,7 +93,7 @@ FAKE_ALACRITTY_VER=0.13.2
 OSR_HOME=$(mktemp -d); export OSR_HOME
 THEME=$(mktemp -d); OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
 
-. "$OSR_ROOT/modules/alacritty.sh" >/dev/null 2>&1
+run_module
 
 _CFG="$OSR_HOME/.config/alacritty/alacritty.toml"
 refute_contains "$_CFG" '^\[general\]$' "0.13 drops the [general] section it cannot parse"
@@ -90,7 +104,7 @@ rm -rf "$OSR_HOME" "$THEME"
 # --- scenario 4: pre-TOML Alacritty -> warn, do not pretend it landed --------
 FAKE_ALACRITTY_VER=0.12.3
 OSR_HOME=$(mktemp -d); export OSR_HOME
-CAP=$(install_alacritty_config "$OSR_DOTFILES/alacritty/alacritty.toml" \
+CAP=$("$OSR_BIN" config alacritty "$OSR_DOTFILES/alacritty/alacritty.toml" \
     "$OSR_HOME/.config/alacritty/alacritty.toml" 2>&1)
 printf '%s\n' "$CAP" | grep -q 'alacritty.yml' \
     && ok "0.12 warns that the TOML config is ignored (§9)" \

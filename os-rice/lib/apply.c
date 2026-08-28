@@ -109,6 +109,26 @@ static int cmp_name(const void *a, const void *b) {
     return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
+/* module_is_themable -- does this module carry a theme layer, whichever tier it
+ * lives in? A .sh module answers the way lib/apply.sh asked -- the markers in
+ * its own text, a grep that cannot go stale. A module that has moved to C has no
+ * .sh to grep, so it answers from its registry row instead (lib/modules.c), and
+ * test/unit/module_themable.sh is what keeps those two criteria agreeing. */
+static int module_is_themable(const char *name) {
+    Str path;
+    int ok;
+
+    str_init(&path);
+    str_addz(&path, osr_mod_root());
+    str_addz(&path, "/modules/");
+    str_addz(&path, name);
+    str_addz(&path, ".sh");
+    ok = file_exists(str_text(&path)) ? is_theme_module(str_text(&path))
+                                      : osr_module_themable(name);
+    str_free(&path);
+    return ok;
+}
+
 /* module_path -- os-rice/modules/<name>.sh */
 static void module_path(Str *out, const char *name) {
     str_addz(out, osr_mod_root());
@@ -149,13 +169,10 @@ void osr_theme_modules(Str *out, const char *rice) {
                 continue;   /* require: / theme: / themes: -- not modules */
             str_init(&name);
             str_add(&name, line.start, line.len);
-            str_init(&path);
-            module_path(&path, str_text(&name));
-            if (file_exists(str_text(&path)) && is_theme_module(str_text(&path))) {
+            if (module_is_themable(str_text(&name))) {
                 str_add(out, str_text(&name), name.len);
                 str_addc(out, '\n');
             }
-            str_free(&path);
             str_free(&name);
         }
         str_free(&lines);
@@ -190,19 +207,40 @@ void osr_theme_modules(Str *out, const char *rice) {
             }
             closedir(d);
         }
+        /* The C tier's names go into the same sorted sweep: `modules/*.sh` was
+         * the whole world when lib/apply.sh wrote this, and a module that has
+         * moved to C still paints. */
+        {
+            Str reg;
+            size_t pos = 0;
+            Line l;
+            str_init(&reg);
+            osr_module_names(&reg);
+            while (next_line(str_text(&reg), reg.len, &pos, &l)) {
+                if (n == cap) {
+                    cap = cap ? cap * 2 : 32;
+                    names = (char **)realloc(names, cap * sizeof *names);
+                    if (names == NULL) break;
+                }
+                names[n] = (char *)malloc(l.len + 4);
+                if (names[n] == NULL) break;
+                memcpy(names[n], l.start, l.len);
+                memcpy(names[n] + l.len, ".sh", 4);   /* the same ".sh" tail */
+                n++;
+            }
+            str_free(&reg);
+        }
         /* readdir order is the filesystem's; the glob the shell expanded was
          * sorted, and the module order decides the order layers land in. */
         if (names != NULL) qsort(names, n, sizeof *names, cmp_name);
 
         for (i = 0; i < n; i++) {
-            Str path;
-            str_init(&path);
-            str_addz(&path, str_text(&dir));
-            str_addc(&path, '/');
-            str_addz(&path, names[i]);
-            if (is_theme_module(str_text(&path)))
-                { str_add(out, names[i], strlen(names[i]) - 3); str_addc(out, '\n'); }
-            str_free(&path);
+            Str name;
+            str_init(&name);
+            str_add(&name, names[i], strlen(names[i]) - 3);
+            if (module_is_themable(str_text(&name)))
+                { str_add(out, str_text(&name), name.len); str_addc(out, '\n'); }
+            str_free(&name);
             free(names[i]);
         }
         free(names);

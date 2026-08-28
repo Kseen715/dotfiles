@@ -47,6 +47,32 @@ void osr_warnf(const char *fmt, ...);
 void osr_successf(const char *fmt, ...);
 void osr_die(const char *fmt, ...);
 
+/* --- theme-only mode ------------------------------------------------------
+ * §6a. `osr theme <name>` runs the SAME modules a rice install runs, with every
+ * mutating verb neutralized first; what survives is the file copying, which is
+ * what a theme IS. In the shell tier that is osr_apply_stub_mutators, which
+ * redefines the functions of the mutating libs in the shell the modules are
+ * then sourced into. A C module is not sourced into anything, so the same
+ * decision is made here instead: the mutating entry points of lib/{pkg,build,
+ * fetch,git,service,nerdfont}.c check this flag and become logging no-ops.
+ *
+ * The two lists have to say the same thing. The sh one is DERIVED (every
+ * function the mutating libs define, minus a read-only allowlist) and this one
+ * is enumerated, because C has no way to ask a translation unit what it
+ * defines -- so lib/apply.c's verb list stays the specification, and
+ * test/unit/theme_apply.sh is what holds them together.
+ *
+ * Queries stay live on both sides: pkgmap resolution, "is this installed",
+ * service name lookup, a version probe. A module branches on those, and a
+ * stubbed query answers "" for everything, which is a different module.
+ */
+int osr_theme_only(void);
+void osr_set_theme_only(int on);
+
+/* osr_theme_only_skip -- log the verb that is being skipped and return 1, the
+ * body every neutralized entry point shares. */
+int osr_theme_only_skip(const char *verb);
+
 /* --- running things ------------------------------------------------------- */
 /* osr_run_step -- run argv under the live step window (dimmed tail of its
  * output, spinner, collapsing to one [ok]/[!!] line), or plain streamed lines
@@ -68,9 +94,18 @@ int osr_run_step(const char *desc, char *const argv[]);
  */
 int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx);
 
+/* osr_step_try -- the same step, in a child, so a failure is reported and the
+ * run continues. The C form of `( run_step "..." <verb> )`: the subshell was
+ * what kept run_step's error() from ending the install, and it exists for the
+ * one shape that needs it -- an OPTIONAL package only some distros carry. */
+int osr_step_try(const char *desc, int (*fn)(void *ctx), void *ctx);
+
 /* osr_pkg_install_step -- the shape almost every module opens with:
  * `run_step "<desc>" pkg_install <names...>`. */
 int osr_pkg_install_step(const char *desc, const char *const names[]);
+/* osr_pkg_install_step_try -- the same, non-fatal: for a package the rice would
+ * like but can live without. */
+int osr_pkg_install_step_try(const char *desc, const char *const names[]);
 
 /* osr_run / osr_run_root / osr_run_user -- run argv now, output straight
  * through, returning its exit status. The last two are as_root/as_user: they
@@ -100,9 +135,16 @@ int osr_run_user_quiet_in(char *const argv[], int in_fd);
  * script that must run as root is fed (lib/build.sh's provide_ghostty_deb). */
 int osr_run_root_in(char *const argv[], int in_fd);
 
+/* osr_run_root_quiet_in -- the same with stdout on /dev/null: a file written
+ * through `as_root tee <path> >/dev/null` must not echo what it wrote. */
+int osr_run_root_quiet_in(char *const argv[], int in_fd);
+
 /* osr_run_step_root -- run_step around an as_root command, the
  * `run_step "..." as_root <cmd>` every privileged step used. */
 int osr_run_step_root(const char *desc, char *const argv[]);
+
+/* osr_run_step_user -- run_step around an as_user command. */
+int osr_run_step_user(const char *desc, char *const argv[]);
 
 /* osr_run_capture -- run argv and collect its stdout (stderr discarded), for
  * the probes modules make (`id -nG`, ...). Returns 1 when it exited 0. */
@@ -139,6 +181,12 @@ int osr_have_cmd(const char *name);
 int osr_pkg_install(const char *const names[]);
 int osr_pkg_installed(const char *name);
 
+/* osr_pkg_native_installed -- the native package database's answer for a REAL
+ * package name, with no pkgmap resolution in front of it (_native_installed).
+ * A builder uses it to report a distro package that shadows the tree it
+ * installs -- reported, never removed (§5). */
+int osr_pkg_native_installed(const char *pkg);
+
 /* osr_pkg_cargo -- the cargo: provider on its own: install <crate> as OSR_USER
  * into ~/.cargo/bin (cargo-binstall first where it exists, then a source
  * build), behind the same `as_user test -x` probe. Exposed because a source:
@@ -151,9 +199,27 @@ int osr_pkg_cargo(const char *name, const char *crate);
  * remove command. Providers own their own removal, so a non-native row is
  * warned about and skipped. */
 int osr_pkg_remove(const char *const names[]);
+/* osr_pkg_remove_step -- `run_step "<desc>" pkg_remove <names...>`. */
+int osr_pkg_remove_step(const char *desc, const char *const names[]);
+
+/* osr_pkg_refresh -- pkg_refresh: bring the package index up to date, once per
+ * run. A module calls it after CHANGING what the index covers (enabling a
+ * repository); every install path already refreshes on its own. */
+void osr_pkg_refresh(void);
+
+/* osr_pkg_aur_helper -- "paru", "yay", or "" (_osr_aur_helper). Resolved at
+ * call time, not during detection: paru is often BUILT mid-run. A module needs
+ * it only to pass flags no `aur:` row can carry (curseforge's --skipchecksums). */
+const char *osr_pkg_aur_helper(void);
 /* osr_pkgmap_resolve -- the logical name -> real package name(s) mapping by
  * itself (lib/pkgmap/<manager>.map then any.map, facet-qualified keys first). */
 void osr_pkgmap_resolve(Str *out, const char *name);
+
+/* osr_apt_prune_bootstrap_lists -- drop the bootstrap source lists os-rice wrote
+ * for a repo whose vendor package has since written its own. Two lists for one
+ * URI with different signed-by keys is what apt 3.0 refuses to parse at all,
+ * taking every later apt call on the box down with it. */
+void osr_apt_prune_bootstrap_lists(void);
 
 /* --- services ------------------------------------------------------------- */
 /* osr_service_enable -- enable + start a service under whatever init this box
@@ -171,6 +237,25 @@ int osr_install_file(const char *src, const char *dst);
 int osr_ensure_line(const char *file, const char *line);
 /* osr_mkdir_p -- as_user mkdir -p. */
 int osr_mkdir_p(const char *dir);
+/* osr_mkdir_p_all -- the same for several directories in ONE command, which is
+ * what `as_user mkdir -p "$a" "$b"` was: not an optimisation, a module that
+ * forks twice where the sh one forked once is a different command log. */
+int osr_mkdir_p_all(const char *const dirs[]);
+
+/* osr_write_root / osr_append_root -- `as_root tee [-a] <path> >/dev/null`: a
+ * file this program owns at a path only root can write (a .desktop entry, an
+ * apt source list, a PAM stack line). Content is written verbatim - include the
+ * trailing newline. Distinct from osr_seed_file_root, which writes ONCE and
+ * never again: these two rewrite, which is right only where the file is ours. */
+int osr_write_root(const char *path, const char *text);
+int osr_append_root(const char *path, const char *text);
+
+/* osr_write_user / osr_append_user -- the same as OSR_USER, for a file under
+ * that account's own $HOME which this program owns and rewrites. Pick by who
+ * should OWN the result, not by who is running: the pairing rule is the one
+ * osr_seed_file / osr_seed_file_root document. */
+int osr_write_user(const char *path, const char *text);
+int osr_append_user(const char *path, const char *text);
 
 /* osr_install_layer -- install_layer: one owned config file into place
  * (backup once, then copy, skipping an identical write). */

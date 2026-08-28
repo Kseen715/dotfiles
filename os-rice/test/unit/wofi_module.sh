@@ -1,9 +1,13 @@
 #!/bin/sh
-# Proves modules/wofi.sh: package install, GNOME Super+R custom-keybinding
+# Proves modules/wofi.c: package install, GNOME Super+R custom-keybinding
 # registration, the toggle command, idempotency, appending alongside an existing
 # custom shortcut, freeing Super+R from a GNOME Shell key that holds it, and that
 # a non-GNOME session touches gsettings not at all -- all hermetic (no net/root;
 # gsettings is a mock state file).
+#
+# The module is C now, so it runs through the core rather than being sourced;
+# the gsettings mock is unchanged, and the theme layer is asserted as the file
+# it installs rather than as a stubbed shell function.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -54,16 +58,20 @@ MOCK_EOF
 chmod +x "$BIN/gsettings"
 PATH="$BIN:$PATH"; export PATH GSFILE
 
-# Stubs.
-run_step()     { shift; "$@"; }
-pkg_install()  { echo "PKG $*" >>"$OUT"; }
-# Stands in for lib/config.sh's helper, including its contract: non-zero when
-# no theme is resolved, which is what "no layer applied" means now.
-install_theme_layer() {
-    [ -n "${OSR_THEME:-}" ] || return 1
-    echo "THEME_LAYER $1 $2" >>"$OUT"
-}
-warn()         { echo "WARN $*" >>"$OUT"; }
+# Package tooling: apt-get logs, dpkg says "not installed", sudo is a
+# pass-through (there is no terminal here to authenticate at).
+printf '#!/bin/sh\nprintf "PKG %%s\\n" "$*" >>"%s"\nexit 0\n' "$OUT" >"$BIN/apt-get"
+printf '#!/bin/sh\nexit 1\n' >"$BIN/dpkg"
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$BIN/sudo"
+chmod +x "$BIN/apt-get" "$BIN/dpkg" "$BIN/sudo"
+
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip wofi_module: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+export OSR_ROOT NO_COLOR
+run_module() { "$OSR_BIN" module run wofi >/dev/null 2>&1 || :; }
 
 # ---- scenario 1: non-GNOME session -> GNOME block skipped entirely ----------
 : >"$OUT"; : >"$GSFILE"
@@ -72,11 +80,15 @@ OSR_THEME=""; OSR_THEME_DIR=""; export OSR_THEME
 XDG_CURRENT_DESKTOP=i3 XDG_SESSION_DESKTOP=i3
 export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
 
-. "$OSR_ROOT/modules/wofi.sh" >/dev/null
+run_module
 
-assert_contains "$OUT" 'PKG wofi' "installs wofi regardless of session"
+assert_contains "$OUT" 'PKG .*wofi' "installs wofi regardless of session"
 assert_eq "" "$(cat "$GSFILE")" "no gsettings calls on non-GNOME"
-refute_contains "$OUT" 'THEME_LAYER' "no theme layer applied without a resolved theme"
+if [ -f "$OSR_HOME/.config/wofi/style.css" ]; then
+    fail "no theme layer applied without a resolved theme"
+else
+    ok "no theme layer applied without a resolved theme"
+fi
 rm -rf "$OSR_HOME"
 
 # ---- scenario 2: GNOME (ubuntu:GNOME) -> Super+R registered ----------------
@@ -86,13 +98,17 @@ OSR_THEME=xin; OSR_THEME_DIR="$OSR_ROOT/themes/xin"; export OSR_THEME
 XDG_CURRENT_DESKTOP=ubuntu:GNOME XDG_SESSION_DESKTOP=gnome
 export XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
 
-. "$OSR_ROOT/modules/wofi.sh" >/dev/null
+run_module
 
 assert_contains "$GSFILE" "$_schema custom-keybindings \['$_path'\]" "parent array holds the wofi path"
 assert_contains "$GSFILE" "$_child:$_path name Application Launcher" "shortcut name set"
 assert_contains "$GSFILE" "$_child:$_path binding <Super>r" "binding is Super+r (Win+R)"
 assert_contains "$GSFILE" "$_child:$_path command $_cmd" "command toggles wofi drun via sh -c"
-assert_contains "$OUT" 'THEME_LAYER wofi style.css' "theme-owned wofi stylesheet applied"
+if [ -f "$OSR_HOME/.config/wofi/style.css" ]; then
+    ok "theme-owned wofi stylesheet applied"
+else
+    fail "theme-owned wofi stylesheet applied"
+fi
 rm -rf "$OSR_HOME"
 
 # ---- scenario 3: idempotent -- second run adds nothing ---------------------
@@ -104,7 +120,7 @@ gsettings set "$_child:$_path" name "Application Launcher"
 gsettings set "$_child:$_path" binding "<Super>r"
 gsettings set "$_child:$_path" command "$_cmd"
 
-. "$OSR_ROOT/modules/wofi.sh" >/dev/null
+run_module
 
 # Pre-population wrote 4 lines (array + name + binding + command); no extras.
 assert_eq "4" "$(wc -l < "$GSFILE")" "no duplicate registration (idempotent)"
@@ -117,7 +133,7 @@ OSR_HOME=$(mktemp -d); export OSR_HOME
 gsettings set "$_schema" custom-keybindings "['$_base/cliphist/']"
 gsettings set "$_child:$_base/cliphist/" binding "<Super>v"
 
-. "$OSR_ROOT/modules/wofi.sh" >/dev/null
+run_module
 
 assert_contains "$GSFILE" "$_schema custom-keybindings \['$_base/cliphist/', '$_path'\]" "wofi path appended, cliphist kept"
 assert_contains "$GSFILE" "$_child:$_base/cliphist/ binding <Super>v" "existing Super+V shortcut untouched"
@@ -133,7 +149,7 @@ OSR_HOME=$(mktemp -d); export OSR_HOME
 gsettings set "org.gnome.shell.keybindings" show-screen-recording-ui "['<Super>r']"
 gsettings set "org.gnome.desktop.wm.keybindings" begin-resize "['<Shift><Super>r']"
 
-. "$OSR_ROOT/modules/wofi.sh" >/dev/null
+run_module
 
 assert_contains "$GSFILE" "org.gnome.shell.keybindings show-screen-recording-ui \[\]" "Super+R freed from the Shell key"
 assert_contains "$GSFILE" "org.gnome.desktop.wm.keybindings begin-resize \['<Shift><Super>r'\]" "<Shift><Super>r left alone"

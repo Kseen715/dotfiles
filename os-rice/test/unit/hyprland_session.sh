@@ -1,10 +1,14 @@
 #!/bin/sh
-# Proves modules/hyprland.sh lays down a complete session: every autostart script
+# Proves modules/hyprland.c lays down a complete session: every autostart script
 # hyprland.conf's exec-once lines reference (the port had dropped start-mako and
 # start-amnezia-vpn-client), the wallpaper env resolved to a real path, and the
 # VMware session entry - installed only under a VMware hypervisor, alongside the
 # normal entry rather than replacing it. Hermetic: temp HOME + temp rice, every
-# system write captured by an as_root mock, packages stubbed.
+# system write captured by a sudo mock, packages stubbed.
+#
+# The module is C now, so it runs through the core: the as_root mock becomes a
+# sudo stub on PATH that redirects the system writes into the sandbox, which is
+# the same trick one layer down.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -18,21 +22,35 @@ trap 'rm -rf "$TMP"' EXIT
 OUT="$TMP/out"
 THEME="$TMP/rice"; OSR_THEME_DIR="$THEME"; export OSR_THEME_DIR
 
-run_step()    { shift; "$@"; }
-pkg_install() { echo "PKG $*" >>"$OUT"; }
-# as_root logs the escalation and redirects system paths into the sandbox, so
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip hyprland_session: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+
+# sudo logs the escalation and redirects system paths into the sandbox, so
 # /usr/share/wayland-sessions on the machine running the tests is never touched.
+# `sudo -u <user>` (as_user) runs for real: those writes are inside $HOME.
 SYSROOT="$TMP/sys"
-as_root() {
-    echo "ROOT $*" >>"$OUT"
-    _cmd=$1; shift
-    case "$_cmd" in
-        mkdir) mkdir -p "$SYSROOT/$2" ;;
-        cp)    _dst=$(eval "echo \${$#}"); mkdir -p "$SYSROOT/$(dirname "$_dst")"
-               cp -f "$2" "$SYSROOT/$_dst" ;;
-        chmod) : ;;
-    esac
-}
+BIN="$TMP/bin"; mkdir -p "$BIN"
+cat >"$BIN/sudo" <<EOF
+#!/bin/sh
+if [ "\$1" = "-u" ]; then shift 2; exec "\$@"; fi
+printf 'ROOT %s\\n' "\$*" >>"$OUT"
+_cmd=\$1; shift
+case "\$_cmd" in
+    mkdir) mkdir -p "$SYSROOT/\$2" ;;
+    cp)    for _a in "\$@"; do _dst=\$_a; done
+           mkdir -p "$SYSROOT/\$(dirname "\$_dst")"
+           cp -f "\$2" "$SYSROOT/\$_dst" ;;
+esac
+exit 0
+EOF
+# pacman answers the "is it installed" probe with no; the install itself goes
+# through sudo, and is logged there.
+printf '#!/bin/sh\ncase "$1" in -Q*) exit 1 ;; esac\nexit 0\n' >"$BIN/pacman"
+chmod +x "$BIN/sudo" "$BIN/pacman"
+PATH="$BIN:$PATH"; export PATH OSR_ROOT NO_COLOR
 
 # --- rice fixture: the real config layout, minimal contents ------------------
 mkdir -p "$THEME/config/hypr" "$THEME/config/qt6ct" "$THEME/config/wayland-sessions" \
@@ -57,13 +75,14 @@ run_module() {
     rm -rf "$TMP/home" "$SYSROOT"; : >"$OUT"
     OSR_HOME="$TMP/home"; export OSR_HOME
     OSR_VIRT=$1; export OSR_VIRT
-    . "$OSR_ROOT/modules/hyprland.sh" >>"$OUT" 2>&1
+    "$OSR_BIN" module run hyprland >>"$OUT" 2>&1 || :
 }
 
 # --- bare metal --------------------------------------------------------------
 run_module none
 
-assert_contains "$OUT" 'PKG hyprland' "installs the compositor via pkg_install"
+assert_contains "$OUT" 'ROOT pacman -S .*hyprland' \
+    "installs the compositor via pkg_install"
 
 # Every exec-once target from the rice's hyprland.conf must exist and be run-able.
 for s in start-audio start-amnezia-vpn-client start-mako start-easyeffects \

@@ -99,9 +99,19 @@ osr_apply_theme() {
         # a subshell so a module's `error` (which exits) kills only its layer,
         # and its chatter goes to the run log rather than the user's terminal:
         # the interesting output of a theme apply is the one success line.
-        # shellcheck disable=SC1090
-        ( . "$OSR_ROOT/modules/$_at_m.sh" ) >>"$OSR_LOG" 2>&1 \
-            || warn "layer '$_at_m' failed - skipped (see $OSR_LOG)"
+        #
+        # A module that has moved to C is not sourced into anything, so it is
+        # run through the core with the same verbs neutralized on its side
+        # (`module run --theme-only`, lib/module.h); the sh no-ops above do not
+        # reach into another process.
+        if [ -f "$OSR_ROOT/modules/$_at_m.sh" ]; then
+            # shellcheck disable=SC1090
+            ( . "$OSR_ROOT/modules/$_at_m.sh" ) >>"$OSR_LOG" 2>&1 \
+                || warn "layer '$_at_m' failed - skipped (see $OSR_LOG)"
+        else
+            "$OSR_BIN" module run --theme-only "$_at_m" >>"$OSR_LOG" 2>&1 \
+                || warn "layer '$_at_m' failed - skipped (see $OSR_LOG)"
+        fi
     done
 
     osr_apply_theme_configs
@@ -120,6 +130,20 @@ osr_apply_theme() {
 # apply would write ~/.config/polybar on a Hyprland box, creating configs for
 # programs that are not installed.
 OSR_THEME_MARKERS='OSR_THEME_DIR|install_theme_layer|osr_theme_source'
+
+# _osr_module_themable <name> — does this module carry a theme layer, whichever
+# tier it lives in? A .sh module answers from the markers in its own text, which
+# is the grep a person would run and cannot go stale. A module that has moved to
+# C has no .sh to grep and answers from its registry row instead; the two
+# criteria are kept in agreement by test/unit/module_themable.sh.
+_osr_module_themable() {
+    if [ -f "$OSR_ROOT/modules/$1.sh" ]; then
+        grep -qE "$OSR_THEME_MARKERS" "$OSR_ROOT/modules/$1.sh"
+    else
+        "$OSR_BIN" module themable "$1" 2>/dev/null
+    fi
+}
+
 osr_theme_modules() {
     _tm_rice=${1:-}
     if [ -n "$_tm_rice" ] && [ -f "$OSR_ROOT/rices/$_tm_rice/rice.list" ]; then
@@ -127,17 +151,23 @@ osr_theme_modules() {
             case "$_tm_l" in
                 *:*) continue ;;    # require: / theme: / themes: - not modules
             esac
-            [ -f "$OSR_ROOT/modules/$_tm_l.sh" ] || continue
-            grep -qE "$OSR_THEME_MARKERS" "$OSR_ROOT/modules/$_tm_l.sh" || continue
+            _osr_module_themable "$_tm_l" || continue
             printf '%s\n' "$_tm_l"
         done
     else
         # No recorded rice (first run, or a hand-built system): every module that
-        # can paint something. Overshoots rather than under-paints.
-        for _tm_f in "$OSR_ROOT"/modules/*.sh; do
-            grep -qE "$OSR_THEME_MARKERS" "$_tm_f" || continue
-            _tm_b=$(basename "$_tm_f")
-            printf '%s\n' "${_tm_b%.sh}"
+        # can paint something. Overshoots rather than under-paints. Both tiers'
+        # names, in one sorted sweep: the glob was the whole world when this was
+        # written, and a module that moved to C still paints.
+        {
+            for _tm_f in "$OSR_ROOT"/modules/*.sh; do
+                _tm_b=$(basename "$_tm_f")
+                printf '%s\n' "${_tm_b%.sh}"
+            done
+            "$OSR_BIN" module list 2>/dev/null
+        } | sort | while IFS= read -r _tm_n; do
+            _osr_module_themable "$_tm_n" || continue
+            printf '%s\n' "$_tm_n"
         done
     fi
 }

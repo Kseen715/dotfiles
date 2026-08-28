@@ -68,6 +68,7 @@ static int font_registered(const char *name) {
 }
 
 int osr_install_nerd_font(const char *name) {
+    if (osr_theme_only()) return osr_theme_only_skip("install_nerd_font");
     Str url;
     Str dir;
     Str zip;

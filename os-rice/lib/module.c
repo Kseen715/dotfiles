@@ -151,11 +151,51 @@ static int spawn(char *const argv[], int out_fd, int err_fd) {
     return spawn_io(argv, -1, out_fd, err_fd);
 }
 
+/* --- theme-only mode ------------------------------------------------------ */
+
+static int theme_only = -1;
+
+int osr_theme_only(void) {
+    if (theme_only < 0) theme_only = *env_str("OSR_THEME_ONLY", "") != '\0';
+    return theme_only;
+}
+
+void osr_set_theme_only(int on) { theme_only = on ? 1 : 0; }
+
+int osr_theme_only_skip(const char *verb) {
+    osr_debugf("theme-apply: skipped %s", verb);
+    return 1;
+}
+
+/* can_root -- a theme apply escalates only with a ticket already in hand: a
+ * hotkey has no terminal to type a password into, and a blocked sudo prompt
+ * would hang the switch forever. Asked once. (A few theme layers are genuinely
+ * root-owned -- the LightDM greeter's conf lives in /etc -- so this is a
+ * question, not a blanket no.) */
+static int can_root(void) {
+    static int answer = -1;
+    char *argv[4];
+
+    if (answer >= 0) return answer;
+    if (getuid() == 0) { answer = 1; return answer; }
+    argv[0] = (char *)"sudo"; argv[1] = (char *)"-n"; argv[2] = (char *)"true";
+    argv[3] = NULL;
+    answer = osr_run_quiet(argv) == 0;
+    return answer;
+}
+
 int osr_run(char *const argv[]) { return spawn(argv, -1, -1); }
 
 int osr_run_root(char *const argv[]) {
-    char **v = escalate(argv, NULL);
-    int rc = spawn(v, -1, -1);
+    char **v;
+    int rc;
+
+    if (osr_theme_only() && !can_root()) {
+        osr_debugf("theme-apply: no sudo ticket - skipped root step: %s", argv[0]);
+        return 0;
+    }
+    v = escalate(argv, NULL);
+    rc = spawn(v, -1, -1);
     free(v);
     return rc;
 }
@@ -219,6 +259,19 @@ int osr_run_user_quiet_in(char *const argv[], int in_fd) {
 int osr_run_root_in(char *const argv[], int in_fd) {
     char **v = escalate(argv, NULL);
     int rc = spawn_io(v, in_fd, -1, -1);
+    free(v);
+    return rc;
+}
+
+/* osr_run_root_quiet_in -- as_root with stdin replaced and stdout discarded,
+ * the `<text> | as_root tee "$file" >/dev/null` shape a builder uses to write a
+ * .desktop entry or an apt source list. stderr is left alone so a real write
+ * failure is still seen. */
+int osr_run_root_quiet_in(char *const argv[], int in_fd) {
+    char **v = escalate(argv, NULL);
+    int fd = open("/dev/null", O_WRONLY);
+    int rc = spawn_io(v, in_fd, fd, -1);
+    if (fd >= 0) close(fd);
     free(v);
     return rc;
 }
@@ -354,9 +407,37 @@ int osr_run_step_root(const char *desc, char *const argv[]) {
     return ok;
 }
 
+/* osr_run_step_user -- the same around an as_user command, the
+ * `run_step "..." as_user <cmd>` a module uses when the thing being run has to
+ * be the riced account (an AUR helper: makepkg refuses root). */
+int osr_run_step_user(const char *desc, char *const argv[]) {
+    char **v = escalate(argv, osr_mod_user());
+    int ok = osr_run_step(desc, v);
+    free(v);
+    return ok;
+}
+
 /* osr_step -- run_step around a function of this process. The child gets the
  * step log on stdout+stderr, the parent paints; identical to what
  * osr_run_step does for a command, minus the exec. */
+/* osr_step_try -- osr_step in a child, so a failing step reports instead of
+ * ending the run. That is exactly what `( run_step "..." <verb> )` was in the
+ * shell tier: the subshell is what kept run_step's error() from taking the
+ * whole install with it, and it is used for the one shape that needs it -- an
+ * OPTIONAL package that only some distros carry. */
+int osr_step_try(const char *desc, int (*fn)(void *ctx), void *ctx) {
+    pid_t pid;
+    int status;
+
+    fflush(stdout);
+    fflush(stderr);
+    pid = fork();
+    if (pid < 0) return 0;
+    if (pid == 0) _exit(osr_step(desc, fn, ctx) ? 0 : 1);
+    if (waitpid(pid, &status, 0) < 0) return 0;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
 int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
     Str log_path;
     int painted;
@@ -417,10 +498,96 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
 
 /* --- files ---------------------------------------------------------------- */
 
-int osr_mkdir_p(const char *dir) {
+/* tee_root -- `as_root tee [-a] <path> >/dev/null <<'EOF' ... EOF`: write, or
+ * append to, a file this program OWNS at a path only root can write -- a
+ * .desktop entry, an apt source list, a PAM stack line.
+ *
+ * tee and not a plain write because the escalation is the whole point, and the
+ * heredoc becomes a temp file handed to tee on stdin: sh's heredoc was one too,
+ * so this is the same shape and not an extra command in anybody's log. */
+static int tee_root(const char *path, const char *text, int append) {
+    char tmpl[] = "/tmp/osr-tee.XXXXXX";
     char *argv[4];
-    argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = (char *)dir; argv[3] = NULL;
-    return osr_run_user(argv) == 0;
+    size_t len = strlen(text);
+    int fd, rc;
+
+    fd = mkstemp(tmpl);
+    if (fd < 0) return 0;
+    if (len > 0 && (size_t)write(fd, text, len) != len) {
+        close(fd);
+        (void)unlink(tmpl);
+        return 0;
+    }
+    close(fd);
+    fd = open(tmpl, O_RDONLY);
+    if (fd < 0) { (void)unlink(tmpl); return 0; }
+    argv[0] = (char *)"tee";
+    argv[1] = append ? (char *)"-a" : (char *)path;
+    argv[2] = append ? (char *)path : NULL;
+    argv[3] = NULL;
+    rc = osr_run_root_quiet_in(argv, fd);
+    close(fd);
+    (void)unlink(tmpl);
+    return rc == 0;
+}
+
+int osr_write_root(const char *path, const char *text)  { return tee_root(path, text, 0); }
+int osr_append_root(const char *path, const char *text) { return tee_root(path, text, 1); }
+
+/* tee_user -- the same as the RICED ACCOUNT, for a file under its own $HOME
+ * that this program owns and rewrites (a portal preference, a generated
+ * fragment). Identity matters more than privilege here: a root-owned dotfile is
+ * one the user's session cannot rewrite. */
+static int tee_user(const char *path, const char *text, int append) {
+    char tmpl[] = "/tmp/osr-tee.XXXXXX";
+    char *argv[4];
+    size_t len = strlen(text);
+    int fd, rc;
+
+    fd = mkstemp(tmpl);
+    if (fd < 0) return 0;
+    if (len > 0 && (size_t)write(fd, text, len) != len) {
+        close(fd);
+        (void)unlink(tmpl);
+        return 0;
+    }
+    close(fd);
+    fd = open(tmpl, O_RDONLY);
+    if (fd < 0) { (void)unlink(tmpl); return 0; }
+    argv[0] = (char *)"tee";
+    argv[1] = append ? (char *)"-a" : (char *)path;
+    argv[2] = append ? (char *)path : NULL;
+    argv[3] = NULL;
+    rc = osr_run_user_quiet_in(argv, fd);
+    close(fd);
+    (void)unlink(tmpl);
+    return rc == 0;
+}
+
+int osr_write_user(const char *path, const char *text)  { return tee_user(path, text, 0); }
+int osr_append_user(const char *path, const char *text) { return tee_user(path, text, 1); }
+
+int osr_mkdir_p_all(const char *const dirs[]) {
+    char **argv;
+    size_t n = 0, i;
+    int rc;
+
+    while (dirs[n] != NULL) n++;
+    argv = (char **)malloc((n + 3) * sizeof(char *));
+    if (argv == NULL) osr_die_oom();
+    argv[0] = (char *)"mkdir";
+    argv[1] = (char *)"-p";
+    for (i = 0; i < n; i++) argv[2 + i] = (char *)dirs[i];
+    argv[2 + n] = NULL;
+    rc = osr_run_user(argv);
+    free(argv);
+    return rc == 0;
+}
+
+int osr_mkdir_p(const char *dir) {
+    const char *one[2];
+    one[0] = dir; one[1] = NULL;
+    return osr_mkdir_p_all(one);
 }
 
 /* dir_of -- `dirname`. */

@@ -1,8 +1,0 @@
-# session: wayland
-# themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
-# modules/wlogout.sh — wlogout logout menu (AUR) + rice-owned config dir. ONE
-# copy, POSIX (was .../modules/wlogout.sh). Not in the default rice.list (wleave
-# is used), kept as an available alternative module.
-run_step "Installing wlogout (AUR)" pkg_install wlogout
-if [ -n "$OSR_THEME_DIR" ]; then apply_config wlogout; fi

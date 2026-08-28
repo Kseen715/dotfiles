@@ -109,11 +109,11 @@ NO_COLOR=1; export NO_COLOR
         *) ok "theme:/themes:/require: lines are not treated as modules" ;;
     esac
 
-    # Every name emitted must be a real module file - the list is fed straight
-    # to `. modules/$name.sh`.
+    # Every name emitted must be a real module of ONE of the tiers: the list is
+    # fed either to `. modules/$name.sh` or to `osr module run --theme-only`.
     _bad=""
     for m in $(osr_theme_modules ""); do
-        [ -f "$OSR_ROOT/modules/$m.sh" ] || _bad="$_bad $m"
+        [ -f "$OSR_ROOT/modules/$m.sh" ] || "$OSR_BIN" module has "$m" || _bad="$_bad $m"
     done
     assert_eq "" "$_bad" "every emitted layer name is a real module"
     finish
