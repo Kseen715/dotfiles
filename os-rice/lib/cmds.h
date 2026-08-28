@@ -33,6 +33,8 @@ int osr_git_main(int argc, char **argv);      /* lib/git.sh */
 int osr_service_main(int argc, char **argv);  /* lib/service.sh */
 int osr_preflight_main(int argc, char **argv);/* lib/preflight.sh */
 int osr_fonts_main(int argc, char **argv);    /* lib/fonts.sh */
+int osr_gnome_main(int argc, char **argv);    /* lib/gnome.sh */
+int osr_migrate_main(int argc, char **argv);  /* lib/migrate.sh */
 /* osr_benchmark_main -- measure the CPU: throughput, power, thermals, clocks.
  * Standalone, and the source of the numbers the undervolt perf gate compares. */
 int osr_benchmark_main(int argc, char **argv);

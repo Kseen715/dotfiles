@@ -90,6 +90,10 @@ int osr_run_user_quiet(char *const argv[]);
  * of a `<fetch> | as_user sh -s -- ...` pipeline. */
 int osr_run_user_in(char *const argv[], int in_fd);
 
+/* osr_run_user_quiet_in -- the same, with stdout on /dev/null: an append made
+ * through `tee -a` must not echo what it wrote. */
+int osr_run_user_quiet_in(char *const argv[], int in_fd);
+
 /* osr_run_step_root -- run_step around an as_root command, the
  * `run_step "..." as_root <cmd>` every privileged step used. */
 int osr_run_step_root(const char *desc, char *const argv[]);

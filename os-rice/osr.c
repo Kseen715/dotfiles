@@ -58,6 +58,8 @@ static const Command commands[] = {
     { "service",  osr_service_main, "enable/disable a service on any init" },
     { "preflight", osr_preflight_main, "rice preconditions, before any mutation" },
     { "fonts",    osr_fonts_main,   "install a Nerd Font" },
+    { "gnome",    osr_gnome_main,   "GNOME session probe and custom keybindings" },
+    { "migrate",  osr_migrate_main, "patch a seeded, user-owned layer in place" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }

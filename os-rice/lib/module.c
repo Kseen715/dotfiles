@@ -193,6 +193,19 @@ int osr_run_user_in(char *const argv[], int in_fd) {
     return rc;
 }
 
+/* osr_run_user_quiet_in -- as_user with stdin replaced and stdout discarded,
+ * the `<text> | as_user tee -a "$file" >/dev/null` shape lib/migrate.sh uses to
+ * append to a user-owned file. stderr is left alone so a real write failure is
+ * still seen. */
+int osr_run_user_quiet_in(char *const argv[], int in_fd) {
+    char **v = escalate(argv, osr_mod_user());
+    int fd = open("/dev/null", O_WRONLY);
+    int rc = spawn_io(v, in_fd, fd, -1);
+    if (fd >= 0) close(fd);
+    free(v);
+    return rc;
+}
+
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
 
 /* capture -- the shared body of the two capture helpers: run argv, collect its
