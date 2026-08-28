@@ -7,8 +7,8 @@
  * because ~118 shell modules still call them; these are the same behaviors
  * for the modules that have moved to C.
  *
- * Package handling is the native path only -- see osr_pkg_install's comment in
- * lib/module.h for what that deliberately excludes.
+ * Packages are no longer here: they moved to lib/pkg.c when they grew the
+ * provider methods (script:, cargo:, aur:), which is a whole unit's worth.
  *
  * C89 + POSIX.
  */
@@ -121,7 +121,7 @@ static char **escalate(char *const argv[], const char *want_user) {
 /* spawn -- fork+exec, wait, return the exit status. out_fd/err_fd, when not
  * -1, replace the child's stdout/stderr (the step window redirects both into
  * one log, exactly as `( "$@" ) >>log 2>&1` did). */
-static int spawn(char *const argv[], int out_fd, int err_fd) {
+static int spawn_io(char *const argv[], int in_fd, int out_fd, int err_fd) {
     pid_t pid;
     int status;
 
@@ -130,6 +130,7 @@ static int spawn(char *const argv[], int out_fd, int err_fd) {
     pid = fork();
     if (pid < 0) return 127;
     if (pid == 0) {
+        if (in_fd >= 0) dup2(in_fd, 0);
         if (out_fd >= 0) dup2(out_fd, 1);
         if (err_fd >= 0) dup2(err_fd, 2);
         execvp(argv[0], argv);
@@ -137,6 +138,10 @@ static int spawn(char *const argv[], int out_fd, int err_fd) {
     }
     if (waitpid(pid, &status, 0) < 0) return 127;
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+static int spawn(char *const argv[], int out_fd, int err_fd) {
+    return spawn_io(argv, -1, out_fd, err_fd);
 }
 
 int osr_run(char *const argv[]) { return spawn(argv, -1, -1); }
@@ -148,6 +153,17 @@ int osr_run_root(char *const argv[]) {
     return rc;
 }
 
+/* osr_run_root_quiet -- as_root with both streams on /dev/null, the
+ * `as_root <cmd> >/dev/null 2>&1 || :` shape of a best-effort probe. */
+int osr_run_root_quiet(char *const argv[]) {
+    char **v = escalate(argv, NULL);
+    int fd = open("/dev/null", O_WRONLY);
+    int rc = spawn(v, fd, fd);
+    if (fd >= 0) close(fd);
+    free(v);
+    return rc;
+}
+
 int osr_run_user(char *const argv[]) {
     char **v = escalate(argv, osr_mod_user());
     int rc = spawn(v, -1, -1);
@@ -155,9 +171,21 @@ int osr_run_user(char *const argv[]) {
     return rc;
 }
 
+/* osr_run_user_in -- as_user with the child's stdin replaced, which is the C
+ * form of the one shape a pipeline needs: `<fetch> | as_user sh -s -- args`,
+ * lib/pkg.sh's script: provider. */
+int osr_run_user_in(char *const argv[], int in_fd) {
+    char **v = escalate(argv, osr_mod_user());
+    int rc = spawn_io(v, in_fd, -1, -1);
+    free(v);
+    return rc;
+}
+
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
 
-int osr_run_capture(char *const argv[], Str *out) {
+/* capture -- the shared body of the two capture helpers: run argv, collect its
+ * stdout, and either discard stderr or fold it into the same pipe. */
+static int capture(char *const argv[], Str *out, int merge_err) {
     int fds[2];
     pid_t pid;
     int status;
@@ -167,9 +195,13 @@ int osr_run_capture(char *const argv[], Str *out) {
     pid = fork();
     if (pid < 0) { close(fds[0]); close(fds[1]); return 0; }
     if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
         dup2(fds[1], 1);
-        if (devnull >= 0) { dup2(devnull, 2); close(devnull); }
+        if (merge_err) {
+            dup2(fds[1], 2);
+        } else {
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull >= 0) { dup2(devnull, 2); close(devnull); }
+        }
         close(fds[0]);
         close(fds[1]);
         execvp(argv[0], argv);
@@ -185,6 +217,17 @@ int osr_run_capture(char *const argv[], Str *out) {
     close(fds[0]);
     if (waitpid(pid, &status, 0) < 0) return 0;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+int osr_run_capture(char *const argv[], Str *out) { return capture(argv, out, 0); }
+
+/* osr_run_root_capture -- `as_root <cmd> 2>&1`: a privileged probe whose
+ * DIAGNOSTICS are the answer, so stderr belongs in the captured text. */
+int osr_run_root_capture(char *const argv[], Str *out) {
+    char **v = escalate(argv, NULL);
+    int ok = capture(v, out, 1);
+    free(v);
+    return ok;
 }
 
 /* osr_run_step -- run_step, with a real command in the middle. The paint loop
@@ -310,471 +353,6 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
     }
     str_free(&log_path);
     return 1;
-}
-
-/* --- packages ------------------------------------------------------------- */
-
-/* row_rhs -- the value half of a pkgmap row, given the text just past the '=':
- * a trailing ` # comment` dropped (the space before # is required, so `a#b`
- * survives) and both ends trimmed. _pkgmap_rhs in lib/pkg.sh. */
-static void row_rhs(Str *out, const char *p, size_t remain) {
-    size_t i;
-    size_t end = remain;
-    for (i = 0; i + 1 < remain; i++) {
-        if (is_space(p[i]) && p[i + 1] == '#') { end = i; break; }
-    }
-    while (end > 0 && is_space(p[end - 1])) end--;
-    for (i = 0; i < end && is_space(p[i]); i++) { /* ltrim */ }
-    str_add(out, p + i, end - i);
-}
-
-/* map_lookup -- one pkgmap row: `^[[:space:]]*<key>[[:space:]]*=`, then the
- * right-hand side per row_rhs. Same two files, same order, as _pkgmap_exact. */
-static int map_lookup(Str *out, const char *map_path, const char *key) {
-    char *buf;
-    size_t len;
-    size_t pos = 0;
-    Line line;
-    int found = 0;
-
-    buf = slurp(map_path, &len);
-    if (buf == NULL) return 0;
-    while (!found && next_line(buf, len, &pos, &line)) {
-        const char *p = line.start;
-        size_t remain = line.len;
-        size_t klen = strlen(key);
-        while (remain > 0 && is_space(*p)) { p++; remain--; }
-        if (remain <= klen || strncmp(p, key, klen) != 0) continue;
-        p += klen;
-        remain -= klen;
-        while (remain > 0 && is_space(*p)) { p++; remain--; }
-        if (remain == 0 || *p != '=') continue;
-        p++;
-        remain--;
-        row_rhs(out, p, remain);
-        found = 1;
-    }
-    free(buf);
-    return found;
-}
-
-/* ver_cmp -- _ver_cmp in lib/pkg.sh: component-wise numeric compare, -1/0/1.
- * Missing components count as 0 (3 == 3.0.0, and 3.21 < 3.21.3), and each
- * component keeps its leading digits only, which is what makes 15-SP5,
- * 3.24_alpha and Ubuntu's 24.04 comparable at all. */
-static int ver_cmp(const char *a, const char *b) {
-    while (*a != '\0' || *b != '\0') {
-        long x = 0;
-        long y = 0;
-        while (*a >= '0' && *a <= '9') x = x * 10 + (*a++ - '0');
-        while (*b >= '0' && *b <= '9') y = y * 10 + (*b++ - '0');
-        if (x != y) return x > y ? 1 : -1;
-        while (*a != '\0' && *a != '.') a++;
-        while (*b != '\0' && *b != '.') b++;
-        if (*a == '.') a++;
-        if (*b == '.') b++;
-    }
-    return 0;
-}
-
-/* ver_match -- _ver_match: does <ver> satisfy a comparison facet (`<=3.20`,
- * `<3.22`, `>=0.66`, `>13`)? Anything not starting with an operator is not a
- * range, so a plain `name@3.20` key is never mistaken for one. */
-static int ver_match(const char *ver, const char *expr) {
-    int op;          /* 0 '<'   1 "<="   2 '>'   3 ">=" */
-    int c;
-
-    if (expr[0] == '<') {
-        op = expr[1] == '=' ? 1 : 0;
-        expr += op == 1 ? 2 : 1;
-    } else if (expr[0] == '>') {
-        op = expr[1] == '=' ? 3 : 2;
-        expr += op == 3 ? 2 : 1;
-    } else {
-        return 0;
-    }
-    if (*expr == '\0') return 0;
-    c = ver_cmp(ver, expr);
-    switch (op) {
-        case 0:  return c < 0;
-        case 1:  return c <= 0;
-        case 2:  return c > 0;
-        default: return c >= 0;
-    }
-}
-
-/* map_lookup_range -- the first `name@<op><ver>` row in this file whose
- * comparison holds for <ver>. Ranges cannot be ordered by specificity the way
- * exact keys can, so file order is the tie-break, exactly as in _pkgmap_range. */
-static int map_lookup_range(Str *out, const char *map_path, const char *name,
-                            const char *ver) {
-    char *buf;
-    size_t len;
-    size_t pos = 0;
-    Line line;
-    int found = 0;
-    size_t nlen = strlen(name);
-
-    buf = slurp(map_path, &len);
-    if (buf == NULL) return 0;
-    while (!found && next_line(buf, len, &pos, &line)) {
-        const char *p = line.start;
-        size_t remain = line.len;
-        Str expr;
-
-        while (remain > 0 && is_space(*p)) { p++; remain--; }
-        if (remain <= nlen + 1 || strncmp(p, name, nlen) != 0 || p[nlen] != '@') continue;
-        p += nlen + 1;
-        remain -= nlen + 1;
-        if (remain == 0 || (*p != '<' && *p != '>')) continue;
-        /* The comparison facet: the operator, then the version. Stopping at the
-         * first '=' the way the row separator is normally found would cut
-         * `<=3.22` down to `<`, so the operator is consumed first and only
-         * digits and dots after it (_pkgmap_range reads it with a sed for the
-         * same reason). */
-        str_init(&expr);
-        str_addc(&expr, *p);
-        p++;
-        remain--;
-        if (remain > 0 && *p == '=') { str_addc(&expr, *p); p++; remain--; }
-        while (remain > 0 && ((*p >= '0' && *p <= '9') || *p == '.')) {
-            str_addc(&expr, *p);
-            p++;
-            remain--;
-        }
-        while (remain > 0 && is_space(*p)) { p++; remain--; }
-        if (remain > 0 && *p == '=' && ver_match(ver, str_text(&expr))) {
-            row_rhs(out, p + 1, remain - 1);
-            found = 1;
-        }
-        str_free(&expr);
-    }
-    free(buf);
-    return found;
-}
-
-/* pkgmap_one -- the logical name resolved to real package name(s), most
- * specific facet first, in <manager>.map then any.map (§1a, _pkgmap_one):
- *
- *   name@trixie    codename      exact
- *   name@3.21.3    version_id    exact
- *   name@3.21      version_id    dotted prefix, longest first (then name@3)
- *   name@<=3.21    version_id    comparison, first matching row wins
- *   name@x86_64    arch          exact
- *   name           -             the bare row
- *
- * An unlisted name passes through unchanged (§1). */
-void osr_pkgmap_resolve(Str *out, const char *name) {
-    const char *codename = env_str("OSR_CODENAME", NULL);
-    const char *version  = env_str("OSR_VERSION_ID", NULL);
-    const char *arch     = env_str("OSR_ARCH", NULL);
-    Str key;
-    Str map;
-    int stage;
-    int j;
-    int done = 0;
-
-    str_init(&key);
-    str_init(&map);
-
-    /* The two map paths, rebuilt per probe: <manager>.map then any.map. */
-    #define OSR_MAP_PATH(which) do {                                  \
-        str_reset(&map);                                              \
-        str_addz(&map, env_str("OSR_LIB", "lib"));                    \
-        str_addz(&map, "/pkgmap/");                                   \
-        if ((which) == 0) {                                           \
-            str_addz(&map, osr_mod_pkg());                            \
-            str_addz(&map, ".map");                                   \
-        } else {                                                      \
-            str_addz(&map, "any.map");                                \
-        }                                                             \
-    } while (0)
-
-    /* stage 0 codename, 1 version_id, 2 version prefixes, 3 ranges, 4 arch,
-     * 5 the bare name. */
-    for (stage = 0; !done && stage <= 5; stage++) {
-        if (stage == 0 && codename == NULL) continue;
-        if ((stage == 1 || stage == 2 || stage == 3) && version == NULL) continue;
-        if (stage == 4 && arch == NULL) continue;
-
-        if (stage == 2) {
-            /* dotted prefixes, longest first: 3.21.3 -> 3.21 -> 3 */
-            size_t plen = strlen(version);
-            for (;;) {
-                size_t i = plen;
-                while (i > 0 && version[i - 1] != '.') i--;
-                if (i == 0) break;                   /* no dot left to drop */
-                plen = i - 1;
-                str_reset(&key);
-                str_addz(&key, name);
-                str_addc(&key, '@');
-                str_add(&key, version, plen);
-                for (j = 0; j < 2; j++) {
-                    OSR_MAP_PATH(j);
-                    if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
-                }
-                if (done) break;
-            }
-            continue;
-        }
-
-        if (stage == 3) {
-            for (j = 0; j < 2; j++) {
-                OSR_MAP_PATH(j);
-                if (map_lookup_range(out, str_text(&map), name, version)) { done = 1; break; }
-            }
-            continue;
-        }
-
-        str_reset(&key);
-        str_addz(&key, name);
-        if (stage == 0) { str_addc(&key, '@'); str_addz(&key, codename); }
-        if (stage == 1) { str_addc(&key, '@'); str_addz(&key, version); }
-        if (stage == 4) { str_addc(&key, '@'); str_addz(&key, arch); }
-        for (j = 0; j < 2; j++) {
-            OSR_MAP_PATH(j);
-            if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
-        }
-    }
-    #undef OSR_MAP_PATH
-
-    str_free(&key);
-    str_free(&map);
-    if (!done) str_addz(out, name);          /* not listed -> unchanged */
-}
-
-/* native_installed -- the per-manager probe _native_installed used. */
-static int native_installed(const char *pkg) {
-    const char *mgr = osr_mod_pkg();
-    char *argv[6];
-    int devnull_rc;
-
-    if (strcmp(mgr, "apt") == 0) {
-        argv[0] = (char *)"dpkg"; argv[1] = (char *)"-s"; argv[2] = (char *)pkg; argv[3] = NULL;
-    } else if (strcmp(mgr, "dnf") == 0) {
-        argv[0] = (char *)"rpm"; argv[1] = (char *)"-q"; argv[2] = (char *)pkg; argv[3] = NULL;
-    } else if (strcmp(mgr, "pacman") == 0) {
-        argv[0] = (char *)"pacman"; argv[1] = (char *)"-Q"; argv[2] = (char *)pkg; argv[3] = NULL;
-    } else if (strcmp(mgr, "apk") == 0) {
-        argv[0] = (char *)"apk"; argv[1] = (char *)"info"; argv[2] = (char *)"-e";
-        argv[3] = (char *)pkg; argv[4] = NULL;
-    } else if (strcmp(mgr, "xbps") == 0) {
-        argv[0] = (char *)"xbps-query"; argv[1] = (char *)pkg; argv[2] = NULL;
-    } else if (strcmp(mgr, "portage") == 0) {
-        if (osr_have_cmd("qlist")) {
-            argv[0] = (char *)"qlist"; argv[1] = (char *)"-I"; argv[2] = (char *)"-e";
-            argv[3] = (char *)pkg; argv[4] = NULL;
-        } else {
-            argv[0] = (char *)"portageq"; argv[1] = (char *)"has_version";
-            argv[2] = (char *)"/"; argv[3] = (char *)pkg; argv[4] = NULL;
-        }
-    } else {
-        return 0;
-    }
-    devnull_rc = osr_run_quiet(argv);
-    return devnull_rc == 0;
-}
-
-int osr_pkg_installed(const char *name) {
-    Str rhs;
-    int ok = 1;
-    const char *p;
-
-    str_init(&rhs);
-    osr_pkgmap_resolve(&rhs, name);
-    p = str_text(&rhs);
-    if (strncmp(p, "aur:", 4) == 0) {
-        char *argv[4];
-        argv[0] = (char *)"pacman"; argv[1] = (char *)"-Q";
-        argv[2] = (char *)(p + 4); argv[3] = NULL;
-        ok = osr_run_quiet(argv) == 0;
-    } else if (strncmp(p, "script:", 7) == 0 || strncmp(p, "source:", 7) == 0 ||
-               strncmp(p, "cargo:", 6) == 0) {
-        ok = osr_have_cmd(name);
-    } else {
-        Str word;
-        str_init(&word);
-        while (*p != '\0' && ok) {
-            while (is_space(*p)) p++;
-            str_reset(&word);
-            while (*p != '\0' && !is_space(*p)) str_addc(&word, *p++);
-            if (word.len > 0) ok = native_installed(str_text(&word));
-        }
-        str_free(&word);
-    }
-    str_free(&rhs);
-    return ok;
-}
-
-/* pkg_refresh -- once per process, lazily, right before the first install:
- * a fresh container has no package lists yet. */
-static int refreshed = 0;
-
-static void pkg_refresh(void) {
-    const char *mgr = osr_mod_pkg();
-    char *argv[8];
-
-    if (refreshed) return;
-    refreshed = 1;
-    if (strcmp(mgr, "apt") == 0) {
-        argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
-        argv[2] = (char *)"apt-get"; argv[3] = (char *)"update"; argv[4] = (char *)"-q";
-        argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Use-Pty=0";
-        argv[7] = NULL;
-    } else if (strcmp(mgr, "dnf") == 0) {
-        argv[0] = (char *)"dnf"; argv[1] = (char *)"-q"; argv[2] = (char *)"makecache"; argv[3] = NULL;
-    } else if (strcmp(mgr, "pacman") == 0) {
-        argv[0] = (char *)"pacman"; argv[1] = (char *)"-Sy"; argv[2] = (char *)"--noconfirm"; argv[3] = NULL;
-    } else if (strcmp(mgr, "apk") == 0) {
-        argv[0] = (char *)"apk"; argv[1] = (char *)"update"; argv[2] = NULL;
-    } else if (strcmp(mgr, "xbps") == 0) {
-        argv[0] = (char *)"xbps-install"; argv[1] = (char *)"-S"; argv[2] = NULL;
-    } else if (strcmp(mgr, "portage") == 0) {
-        argv[0] = (char *)"emerge"; argv[1] = (char *)"--sync"; argv[2] = (char *)"--quiet"; argv[3] = NULL;
-    } else {
-        return;
-    }
-    if (osr_run_root(argv) != 0) osr_warn("package index refresh failed - continuing");
-}
-
-/* pkg_install_via_sh -- run lib/pkg.sh's pkg_install for one package, with the
- * libs it needs sourced around it. The facts are already exported, so
- * detect.sh only defines functions here; nothing is re-detected. */
-static int pkg_install_via_sh(const char *name) {
-    Str script;
-    char *argv[6];
-    int rc;
-
-    str_init(&script);
-    str_addz(&script, ". \"$OSR_LIB/ui.sh\"; . \"$OSR_LIB/log.sh\"; ");
-    str_addz(&script, "for l in detect user net pkg git config build; do ");
-    str_addz(&script, "[ -f \"$OSR_LIB/$l.sh\" ] && . \"$OSR_LIB/$l.sh\"; done; ");
-    str_addz(&script, "pkg_install \"$1\"");
-    argv[0] = (char *)"sh";
-    argv[1] = (char *)"-c";
-    argv[2] = script.p;
-    argv[3] = (char *)"_";
-    argv[4] = (char *)name;
-    argv[5] = NULL;
-    rc = osr_run(argv);
-    str_free(&script);
-    if (rc != 0) osr_warnf("provider install failed for %s (exit %d)", name, rc);
-    return rc == 0;
-}
-
-int osr_pkg_install(const char *const names[]) {
-    Str todo;                 /* the real package names still to install */
-    Str desc;
-    char **argv;
-    size_t argc = 0;
-    size_t i;
-    const char *mgr = osr_mod_pkg();
-    int rc;
-
-    str_init(&todo);
-    for (i = 0; names[i] != NULL; i++) {
-        Str rhs;
-        const char *p;
-        str_init(&rhs);
-        osr_pkgmap_resolve(&rhs, names[i]);
-        p = str_text(&rhs);
-        if (strncmp(p, "aur:", 4) == 0 || strncmp(p, "script:", 7) == 0 ||
-            strncmp(p, "source:", 7) == 0 || strncmp(p, "cargo:", 6) == 0) {
-            /* A provider row (build from source, run an install script, AUR,
-             * cargo). Those live in lib/pkg.sh and its provide/ builders, and
-             * porting the download/build stack is a separate job -- so hand
-             * this one package back to the shell tier that owns it, rather
-             * than refusing to install or guessing a native name.
-             *
-             * This is the one place the C tier calls back into sh, and it is
-             * temporary by construction: when the providers are ported, this
-             * branch goes away and nothing else changes. */
-            str_free(&rhs);
-            if (!pkg_install_via_sh(names[i])) {
-                str_free(&todo);
-                return 0;
-            }
-            continue;
-        }
-        while (*p != '\0') {
-            Str word;
-            str_init(&word);
-            while (is_space(*p)) p++;
-            while (*p != '\0' && !is_space(*p)) str_addc(&word, *p++);
-            if (word.len > 0) {
-                if (native_installed(str_text(&word))) {
-                    osr_infof("%s already installed - skipping", str_text(&word));
-                } else {
-                    if (todo.len > 0) str_addc(&todo, ' ');
-                    str_add(&todo, str_text(&word), word.len);
-                }
-            }
-            str_free(&word);
-        }
-        str_free(&rhs);
-    }
-    if (todo.len == 0) { str_free(&todo); return 1; }
-
-    pkg_refresh();
-
-    /* one install command for everything left */
-    argv = (char **)calloc(16 + todo.len, sizeof(char *));
-    if (argv == NULL) osr_die_oom();
-    if (strcmp(mgr, "apt") == 0) {
-        argv[argc++] = (char *)"env";
-        argv[argc++] = (char *)"DEBIAN_FRONTEND=noninteractive";
-        argv[argc++] = (char *)"apt-get";
-        argv[argc++] = (char *)"install";
-        argv[argc++] = (char *)"-y";
-        /* -q and no dpkg pty: the step log is a file, and apt/dpkg's
-         * in-place progress redraws only make the tail window churn. */
-        argv[argc++] = (char *)"-q";
-        argv[argc++] = (char *)"-o";
-        argv[argc++] = (char *)"Dpkg::Use-Pty=0";
-    } else if (strcmp(mgr, "dnf") == 0) {
-        argv[argc++] = (char *)"dnf"; argv[argc++] = (char *)"install"; argv[argc++] = (char *)"-y";
-    } else if (strcmp(mgr, "pacman") == 0) {
-        argv[argc++] = (char *)"pacman"; argv[argc++] = (char *)"-S";
-        argv[argc++] = (char *)"--needed"; argv[argc++] = (char *)"--noconfirm";
-    } else if (strcmp(mgr, "apk") == 0) {
-        argv[argc++] = (char *)"apk"; argv[argc++] = (char *)"add";
-    } else if (strcmp(mgr, "xbps") == 0) {
-        argv[argc++] = (char *)"xbps-install"; argv[argc++] = (char *)"-y";
-    } else if (strcmp(mgr, "portage") == 0) {
-        argv[argc++] = (char *)"emerge"; argv[argc++] = (char *)"--quiet";
-        argv[argc++] = (char *)"--noreplace"; argv[argc++] = (char *)"--getbinpkg";
-    } else {
-        osr_warnf("no native installer for OSR_PKG='%s'", mgr);
-        free(argv);
-        str_free(&todo);
-        return 0;
-    }
-    {
-        char *p = todo.p;
-        while (*p != '\0') {
-            while (*p == ' ') *p++ = '\0';
-            if (*p == '\0') break;
-            argv[argc++] = p;
-            while (*p != '\0' && *p != ' ') p++;
-        }
-    }
-    argv[argc] = NULL;
-
-    str_init(&desc);
-    rc = osr_run_root(argv);
-    if (rc != 0) osr_warnf("native install failed (exit %d)", rc);
-    str_free(&desc);
-    free(argv);
-    str_free(&todo);
-    return rc == 0;
-}
-
-static int pkg_install_thunk(void *ctx) {
-    return osr_pkg_install((const char *const *)ctx);
-}
-
-int osr_pkg_install_step(const char *desc, const char *const names[]) {
-    return osr_step(desc, pkg_install_thunk, (void *)names);
 }
 
 /* --- services ------------------------------------------------------------- */

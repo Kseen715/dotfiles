@@ -78,6 +78,14 @@ int osr_run(char *const argv[]);
 int osr_run_root(char *const argv[]);
 int osr_run_user(char *const argv[]);
 
+/* osr_run_root_quiet -- as_root with stdout and stderr discarded, for the
+ * best-effort probes lib/pkg.sh spells `as_root <cmd> >/dev/null 2>&1 || :`. */
+int osr_run_root_quiet(char *const argv[]);
+
+/* osr_run_user_in -- as_user with stdin taken from in_fd: the receiving half
+ * of a `<fetch> | as_user sh -s -- ...` pipeline. */
+int osr_run_user_in(char *const argv[], int in_fd);
+
 /* osr_run_step_root -- run_step around an as_root command, the
  * `run_step "..." as_root <cmd>` every privileged step used. */
 int osr_run_step_root(const char *desc, char *const argv[]);
@@ -85,6 +93,11 @@ int osr_run_step_root(const char *desc, char *const argv[]);
 /* osr_run_capture -- run argv and collect its stdout (stderr discarded), for
  * the probes modules make (`id -nG`, ...). Returns 1 when it exited 0. */
 int osr_run_capture(char *const argv[], Str *out);
+
+/* osr_run_root_capture -- `as_root <cmd> 2>&1`: a privileged probe whose
+ * diagnostics ARE the answer (xbps's conflict report), so stderr is folded
+ * into the captured text instead of discarded. */
+int osr_run_root_capture(char *const argv[], Str *out);
 
 /* osr_have_cmd -- `command -v <name>`. */
 int osr_have_cmd(const char *name);
@@ -102,6 +115,11 @@ int osr_have_cmd(const char *name);
  */
 int osr_pkg_install(const char *const names[]);
 int osr_pkg_installed(const char *name);
+
+/* osr_pkg_remove -- pkg_remove: resolve, drop what is not installed, then one
+ * remove command. Providers own their own removal, so a non-native row is
+ * warned about and skipped. */
+int osr_pkg_remove(const char *const names[]);
 /* osr_pkgmap_resolve -- the logical name -> real package name(s) mapping by
  * itself (lib/pkgmap/<manager>.map then any.map, facet-qualified keys first). */
 void osr_pkgmap_resolve(Str *out, const char *name);

@@ -460,7 +460,7 @@ pkg_installed() {
 # OSR_APT_BOOTSTRAP_LISTS — the sources.list.d files os-rice writes ITSELF, to
 # bootstrap a vendor repo that no Debian/Ubuntu archive carries. Currently just
 # the Yandex Browser one (provide_yandex_browser, lib/build.sh).
-OSR_APT_BOOTSTRAP_LISTS="/etc/apt/sources.list.d/yandex-browser.list"
+: "${OSR_APT_BOOTSTRAP_LISTS:=/etc/apt/sources.list.d/yandex-browser.list}"
 
 # _apt_prune_bootstrap_lists — drop a bootstrap list once the vendor package
 # describes the same repo itself, and do it BEFORE any apt call.
@@ -489,7 +489,10 @@ _apt_prune_bootstrap_lists() {
         # Substring match on purpose: the vendor writes the URI with a trailing
         # slash ("...deb/ stable"), and deb822 .sources files put it on a
         # URIs: line - both still contain ours.
-        _pb_other=$(grep -rlF "$_pb_uri" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null \
+        # The searched directories are derived from the list's own path, which
+        # in production is /etc/apt/sources.list.d and /etc/apt/sources.list.
+        _pb_dir=$(dirname "$_pb_list")
+        _pb_other=$(grep -rlF "$_pb_uri" "$(dirname "$_pb_dir")/sources.list" "$_pb_dir" 2>/dev/null \
             | grep -vxF "$_pb_list" | head -n 1)
         [ -n "$_pb_other" ] || continue
         info "dropping $_pb_list - $_pb_other already describes $_pb_uri (two signed-by values for one repo is fatal to apt 3.0)"

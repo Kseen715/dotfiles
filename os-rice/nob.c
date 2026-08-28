@@ -166,6 +166,7 @@ static const char *posix_srcs[] = {
     "lib/uv/journal.c",
     "lib/render.c",
     "lib/module.c",
+    "lib/pkg.c",
     "lib/modules.c",
     "modules/flameshot.c",
     "modules/helpers.c",
