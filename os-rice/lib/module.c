@@ -246,6 +246,16 @@ int osr_run_root_capture(char *const argv[], Str *out) {
     return ok;
 }
 
+/* osr_run_user_capture -- `as_user <cmd> 2>/dev/null`: a probe the riced
+ * account has to make itself, because the answer depends on that account
+ * (git's view of a repo it owns). Its stderr is noise, not the answer. */
+int osr_run_user_capture(char *const argv[], Str *out) {
+    char **v = escalate(argv, osr_mod_user());
+    int ok = capture(v, out, 0);
+    free(v);
+    return ok;
+}
+
 /* osr_run_step -- run_step, with a real command in the middle. The paint loop
  * is lib/ui.c's, driven here the way lib/ui.sh drives it: the command's output
  * goes to a per-step log, the block repaints while it runs, and the whole

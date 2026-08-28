@@ -863,6 +863,7 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/testrun.c` | `test/run.sh` | removed outright |
 | `lib/render.c` | the `{{role}}` sed script | shared with `theme.c` |
 | `lib/manifest.c` `theme_list.c` `theme_render.c` `config_copy.c` `net.c` | — | written for the Windows core, already portable |
+| `lib/fetch.c` `git.c` | `lib/net.sh` `git.sh` | the shell tier's downloader and the git/oh-my-zsh helpers; `lib/net.c` stays the landing spot for a future native fetch backend |
 
 ### Remaining, in the order the dependencies force
 
@@ -871,7 +872,6 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/pkg.sh` | 551 | **the blocker.** `osr_pkg_install` covers the native path only; every provider (`cargo:` `script:` `aur:` `source:`) still lands back in sh, and that is what pins most modules to the shell tier |
 | `lib/build.sh` | 1387 | the `source:` builders, **in progress**: `lib/build.c` holds the registry, the tarball primitive and the seven prebuilt-binary builders (`gh` `btop` `lsd` `fzf` `fastfetch` ×2, `lsd_deb`); a name it does not know still runs in sh, one row at a time. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
 | `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers. **In progress**: `lib/config.c` holds the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer and the whole wallpaper family (resolve, install, record, set, library, pick) |
-| `lib/net.sh` `git.sh` | 268 | `lib/net.c` exists but its POSIX branch is a documented stub |
 | `lib/service.sh` `preflight.sh` `fonts.sh` `gnome.sh` `migrate.sh` | 405 | small, mechanical, unblocked — good first ports |
 | `lib/apply.sh` `reload.sh` | 294 | theme-only apply and the reload table. Depend on the module tier's shape, so late |
 | `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |

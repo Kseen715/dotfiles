@@ -107,6 +107,10 @@ int osr_run_capture_err(char *const argv[], Str *out);
  * into the captured text instead of discarded. */
 int osr_run_root_capture(char *const argv[], Str *out);
 
+/* osr_run_user_capture -- `as_user <cmd> 2>/dev/null`: a probe that has to be
+ * made as the riced account, stderr discarded. */
+int osr_run_user_capture(char *const argv[], Str *out);
+
 /* osr_have_cmd -- `command -v <name>`. */
 int osr_have_cmd(const char *name);
 

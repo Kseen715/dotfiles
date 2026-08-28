@@ -54,6 +54,7 @@ static const Command commands[] = {
     { "net",      osr_net_main,     "fetch a URL, resolve a GitHub tag" },
     { "build",    osr_build_main,   "the source: builders (lib/build.sh)" },
     { "config",   osr_config_main,  "layered config: seeds, blocks, composed files" },
+    { "git",      osr_git_main,     "clone/update a repo, oh-my-zsh and its plugins" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }

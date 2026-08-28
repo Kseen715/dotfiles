@@ -29,6 +29,7 @@ int osr_pkg_main(int argc, char **argv);      /* lib/pkg.sh */
 int osr_net_main(int argc, char **argv);      /* lib/net.sh */
 int osr_build_main(int argc, char **argv);    /* lib/build.sh */
 int osr_config_main(int argc, char **argv);   /* lib/config.sh */
+int osr_git_main(int argc, char **argv);      /* lib/git.sh */
 /* osr_benchmark_main -- measure the CPU: throughput, power, thermals, clocks.
  * Standalone, and the source of the numbers the undervolt perf gate compares. */
 int osr_benchmark_main(int argc, char **argv);
