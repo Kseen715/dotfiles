@@ -22,6 +22,14 @@ rice is a plain list of what to install.
 [[PLAN_UNIVERSAL]] (the Windows/legacy C core) ·
 [[os-rice/modules/WINDOWS|the win- modules]] · [[archive-decisions]]
 
+> [!important] Where this is going: the backbone becomes C
+> The shell tier works, but it is not the destination. The libs, the runner
+> and the front end are being rewritten as C translation units linked into one
+> binary (`build/osr`) — the shape the Windows core already has. Eight units
+> are done; `lib/pkg.sh` is the blocker for the rest, since its providers are
+> what pin most modules to the shell tier. Score and order:
+> [[os-rice/DESIGN#13. The port, and what is left of it|DESIGN 13]].
+
 > [!success] Status: past MVP
 > The harness (`lib/`, `install.sh`, `osr`, `build/osr`) plus **115 shell
 > modules and 11 C modules** pass the idempotency matrix on apt/apk/pacman.
@@ -148,8 +156,10 @@ is not a TTY, so piping to a logfile stays clean.
 A module installs one thing. It is either a POSIX shell script under
 `modules/` or a C translation unit `modules/<name>.c`. A rice names the module
 either way; `install.sh` asks `osr module has <name>` and the core runs it when
-it owns it. **C is the target tier** — see
-[[os-rice/DESIGN#11a. Every `.sh` module is legacy|DESIGN 11a]].
+it owns it. **C is the target tier, and shell is legacy** — every `.sh` module
+carries a `# legacy: sh` marker enforced by `test/lint.sh`. See
+[[os-rice/DESIGN#11a. Every `.sh` module is legacy|DESIGN 11a]] and
+[[os-rice/DESIGN#13. The port, and what is left of it|DESIGN 13]].
 
 ```c
 /* modules/flameshot.c */

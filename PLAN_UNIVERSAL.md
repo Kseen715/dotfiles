@@ -27,7 +27,9 @@ tags:
 ## Problem statement
 
 [[os-rice/DESIGN|os-rice]] covers every OS with a real shell and a real
-package manager. Two targets fall outside what a shell can reach at all:
+package manager — and is itself being rewritten into C
+([[os-rice/DESIGN#13. The port, and what is left of it|DESIGN 13]]), which is
+why this core and that one are converging on the same shape rather than two. Two targets fall outside what a shell can reach at all:
 
 - **Legacy Windows** — Windows 7 (PowerShell 2.0 built in, no winget) and Windows XP (no guaranteed PowerShell, no TLS 1.2 without patching, no package manager, ever).
 - **Obscure / bare embedded Linux** — a kernel, maybe a `/bin/sh`, no `apt`/`pacman`/`apk`.

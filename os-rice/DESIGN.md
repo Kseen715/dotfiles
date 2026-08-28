@@ -18,6 +18,15 @@ tags:
 A DRY, declarative, POSIX-portable installer for unix-like apps, configs, and
 whole rices.
 
+> [!important] Direction: the backbone becomes C
+> The shell tier works and is not going anywhere tomorrow, but it is **not
+> the destination**. Every part of the backbone — the libs, the runner, the
+> front end, and eventually the ~115 modules — is being rewritten as C
+> translation units linked into one binary (`build/osr`), the same shape the
+> Windows core already has. Sections [[#D-3. The C harness|D-3]],
+> [[#D-4. A module may be a C unit instead of a script|D-4]] and
+> [[#13. The port, and what is left of it|13]] are the plan and the score.
+
 > [!abstract] Problem
 > Describe a whole rice (apps + modules + configs) as one readable list, and
 > install it re-runnably on any unix-like distro, without pasting the same
@@ -130,9 +139,11 @@ What C buys is not speed:
 - **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and the C module side by side under stubbed package tooling and diffs what they did to the box.
 
 What C costs is the property the module system was built for: a module as one
-readable POSIX script anyone can copy and edit. So this is an **option**, not
-a migration plan — for modules whose logic is real, not three lines of package
-install.
+readable POSIX script anyone can copy and edit. Modules are the **last** stage of the port, not the first: the backbone has to
+be able to carry them (providers included) before a shell module can move
+without losing behaviour. Until then a port happens when a module is being
+touched anyway, and preferably one whose logic is real rather than three lines
+of package install.
 
 > [!warning] Providers are not ported
 > `osr_pkg_install` covers the **native** path only and hands a provider row
@@ -833,6 +844,54 @@ loop is also where peak temperature and peak clock come from.
 > [!warning] Reachability
 > `benchmark` is a core command (`build/osr benchmark cpu`). The `./osr` front
 > end does not list it as a verb; `undervolt` it does.
+
+---
+
+## 13. The port, and what is left of it
+
+The target is one binary. Nothing about the design changes to get there — the
+libs keep their responsibilities, the manifests keep their format, the module
+API is `lib/module.h`. What changes is the language the backbone is written in.
+
+### Done
+
+| unit | replaced | note |
+| --- | --- | --- |
+| `lib/ui.c` `log.c` `user.c` `detect.c` `theme.c` | `lib/*.sh` | the `.sh` file survives as a shim only (see [[#D-3. The C harness\|D-3]]) |
+| `lib/state.c` | `lib/state.sh` | file removed outright |
+| `lib/install.c` | `install.sh`'s option loop, help, listings, manifest, report | `install.sh` remains only because it **sources** modules |
+| `lib/testrun.c` | `test/run.sh` | removed outright |
+| `lib/render.c` | the `{{role}}` sed script | shared with `theme.c` |
+| `lib/manifest.c` `theme_list.c` `theme_render.c` `config_copy.c` `net.c` | — | written for the Windows core, already portable |
+
+### Remaining, in the order the dependencies force
+
+| what | lines of sh | why it is where it is in the queue |
+| --- | --- | --- |
+| `lib/pkg.sh` | 551 | **the blocker.** `osr_pkg_install` covers the native path only; every provider (`cargo:` `script:` `aur:` `source:`) still lands back in sh, and that is what pins most modules to the shell tier |
+| `lib/build.sh` | 1387 | the `source:` builders. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
+| `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers |
+| `lib/net.sh` `git.sh` | 268 | `lib/net.c` exists but its POSIX branch is a documented stub |
+| `lib/service.sh` `preflight.sh` `fonts.sh` `gnome.sh` `migrate.sh` | 405 | small, mechanical, unblocked — good first ports |
+| `lib/apply.sh` `reload.sh` | 294 | theme-only apply and the reload table. Depend on the module tier's shape, so late |
+| `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |
+| `modules/*.sh` | 115 files | see [[#11a. Every `.sh` module is legacy\|11a]] |
+
+> [!note] `bootstrap.sh` is not on this list
+> It runs before a compiler is a given, and stays sh forever.
+
+### The rule the port runs under
+
+> Byte-for-byte identical output, asserted, or it is not a port.
+
+Every unit's shell original is frozen under `test/ref/` and diffed by
+`test/unit/*_c_parity.sh` — 317 checks over the eight done so far, and exactly
+one accepted divergence, asserted rather than hidden. A port that cannot be
+diffed this way (`helpers.c`, which never had a `.sh` form) asserts its
+behaviour directly instead.
+
+`grep -c '^# legacy:' modules/*.sh` and the table above are the remaining-work
+count. Both only go down.
 
 ---
 

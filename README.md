@@ -11,6 +11,12 @@ tags:
 
 Configs for apps, plus the machinery that installs them.
 
+> [!important] Current direction
+> os-rice's backbone is being rewritten from POSIX sh into C — one binary,
+> `build/osr`, the same shape the Windows core already has. See
+> [[os-rice/DESIGN#13. The port, and what is left of it|DESIGN 13]] for what is
+> done and what is left.
+
 ## Start here
 
 | note | what it is |
