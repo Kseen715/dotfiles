@@ -55,6 +55,9 @@ static const Command commands[] = {
     { "build",    osr_build_main,   "the source: builders (lib/build.sh)" },
     { "config",   osr_config_main,  "layered config: seeds, blocks, composed files" },
     { "git",      osr_git_main,     "clone/update a repo, oh-my-zsh and its plugins" },
+    { "service",  osr_service_main, "enable/disable a service on any init" },
+    { "preflight", osr_preflight_main, "rice preconditions, before any mutation" },
+    { "fonts",    osr_fonts_main,   "install a Nerd Font" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }
