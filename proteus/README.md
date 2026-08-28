@@ -1,3 +1,14 @@
+---
+title: Proteus
+type: readme
+tags:
+  - kind/readme
+  - topic/theming
+  - topic/gui
+  - lang/rust
+  - os/linux
+---
+
 # Proteus
 
 A theme and wallpaper picker that opens in the middle of the screen, shows you

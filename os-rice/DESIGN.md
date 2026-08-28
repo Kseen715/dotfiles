@@ -1,254 +1,166 @@
+---
+title: os-rice — Design
+type: design
+status: past-MVP
+updated: 2026-08-28
+tags:
+  - kind/design
+  - topic/os-rice
+  - topic/theming
+  - topic/hardware
+  - lang/sh
+  - lang/c
+  - os/linux
+---
+
 # os-rice — Design
 
-A DRY, declarative, POSIX-portable installer for custom unix-like apps, configs,
-and whole rices.
+A DRY, declarative, POSIX-portable installer for unix-like apps, configs, and
+whole rices.
 
-## Problem Statement
+> [!abstract] Problem
+> Describe a whole rice (apps + modules + configs) as one readable list, and
+> install it re-runnably on any unix-like distro, without pasting the same
+> module once per package manager.
 
-How might I describe a whole rice (apps + modules + configs) as one readable
-list, and install it re-runnably on any unix-like distro, without pasting the
-same module three times per package manager?
-
----
-
-## Current state (what triggered the redesign)
-
-The module system is a good idea — `install-module.sh foo,bar` sourcing
-`modules/foo.sh` is simple and works. Logging / `trace` / `check_error` are
-solid. Per-rice folders as self-contained bundles is the right mental model.
-
-The problem is it's **copy-paste, not DRY**:
-
-- `install-module.sh` is **byte-identical** across debian/rhel/arch except one
-  line (`apt update` vs `pacman -Sy`) and which `detect-*.sh` it sources.
-- `common.sh` is duplicated per-distro — a ~600-line grab-bag mixing apt repo
-  helpers, brew, cargo, and git-clone logic in one file.
-- `zsh.sh` is **~95% identical** across all three distros. The only real
-  difference is the package line: `install_pkg_apt` / `install_pkg_dnf` /
-  `pacman -S`. Everything else (oh-my-zsh, plugins, config copy, chsh) is pasted
-  three times.
-- `install_or_update_zsh_plugin` is defined *inside* the zsh module and
-  duplicated in all 3 copies. It belongs in a shared lib.
-- Copy-paste drift already produced bugs: the arch `zsh.sh` has
-  `trace "git -C ..."` (quotes the whole command as one arg — broken) and
-  silently dropped all its `check_error` calls.
-
-**Core insight:** the only thing that actually varies per-distro in most modules
-is the package manager. Abstract it behind one interface, detect the distro once,
-and write each module **once**.
+**Related:** [[os-rice/README|os-rice/README]] · [[PLAN_UNIVERSAL]] ·
+[[archive-decisions]] · [[proteus/README|Proteus]]
 
 ---
 
-## Target layout
+## Core principle
 
-```
-os-rice/
-  lib/                 # single copy (was per-distro common.sh), POSIX sh
-    log.sh             # info / warn / error / check_error
-    ui.sh              # colors, run_step, _spin, step counter, tty detection
-    pkg.sh             # pkg_install / pkg_installed / pkg_refresh / pkg_add_repo / pkg_remove
-    detect.sh          # sets OSR_DISTRO, OSR_PKG, OSR_INIT, OSR_GPU, OSR_VIRT, OSR_USER once
-    service.sh         # enable_service / disable_service, dispatch on OSR_INIT (§8)
-    git.sh             # install_or_update_git_repo, zsh-plugin helper, etc.
-    net.sh             # download, github_latest version resolution (§7 G4)
-    user.sh            # OSR_USER resolution, as_user, ensure_line, ensure_block, backup_copy
-    pkgmap/
-      apt.map          # logical package name -> real package(s), one-to-many
-      dnf.map
-      pacman.map
-      apk.map
-      xbps.map
-    servicemap         # logical service name -> real unit(s), only where they differ (§8)
-  modules/             # ONE copy each, POSIX sh, distro-agnostic
-    zsh.sh             # calls pkg_install, not install_pkg_apt
-    ...
-  rices/
-    arch-hyprland-glass/
-      rice.list        # the readable "what to install" description
-      config/          # this rice's own configs
-      wallpapers/
-  install.sh           # single shared runner: install.sh <rice>
-```
+> Distro variance lives in exactly one place — `pkg.sh` + `pkgmap/` +
+> `detect.sh` — never smeared across modules.
 
-Distro variance lives in exactly one place (`pkg.sh` + `pkgmap/` + `detect.sh`),
-not smeared across every module. New distro = teach `pkg.sh` its verbs and add a
-`pkgmap`; most modules light up for free.
+A new distro means teaching `pkg.sh` its verbs and adding a `pkgmap`. Most
+modules light up for free.
 
-> Windows stays its own world — different package model, different language.
-> Do **not** force it into this abstraction. It is not PowerShell any more
-> either: it is the C core (`install.c`, `lib/*.c`, `modules/win-*.c`,
-> `windows.map`), which has its own package dispatch and its own OS-tweak
-> layer. See [PLAN_UNIVERSAL.md](../PLAN_UNIVERSAL.md).
+> [!note] Windows is its own world
+> Different package model, different language. It is **not** PowerShell any
+> more either: it is the C core (`install.c`, `lib/win*.c`, `modules/win-*.c`,
+> `windows.map`). See [[PLAN_UNIVERSAL]]. Do not force it into this
+> abstraction.
 
 ---
 
-## Decisions
+## Decisions in force
 
-### Shell target: POSIX sh everywhere
+### D-1. POSIX sh everywhere (shell tier)
 
-Runs on Alpine / busybox `ash` out of the box, no bash required — the honest
-answer for "max compatible with barebone systems." Cost: rewrite bash-isms
-(`[[ ]]` → `[ ]`, arrays → space-lists or `while read`). Validate every module
-under `dash` / busybox `ash`, not just bash.
+Runs on Alpine / busybox `ash` out of the box, no bash. Cost: no `[[ ]]`, no
+arrays — space-lists or `while read`. Every module is validated under `dash`
+and busybox `ash`, not just bash.
 
-### CLI output is ASCII-only
+### D-2. CLI output is ASCII-only
 
-Every byte the tool writes to the terminal is 7-bit ASCII — no Unicode spinners
-(`⠋⠙⠹`), box-drawing, em-dashes, or checkmark glyphs (`✔`/`✗`) in program output.
-Barebone targets (busybox on a fresh Alpine, a serial console, a `LANG=C`
-non-UTF-8 locale, a minimal `TERM`) mangle non-ASCII into mojibake — this design
-already carries one such corruption (`✗` rendered as `�’` in §3). ASCII removes
-the whole class of locale/encoding bugs for free. Concretely: spinner frames
-`-\|/`, success `[ok]`, failure `[!!]`, separators `|`/`-`. Color via ANSI SGR is
-fine (still ASCII bytes) and stays gated on `[ -t 1 ]`.
+Every byte written to the terminal is 7-bit ASCII. No Unicode spinners, box
+drawing, em-dashes or checkmark glyphs.
 
-> Scope: this governs **program output**, not this document — arrows and dashes
-> in the prose/tables here are fine. Enforce in CI with a non-ASCII grep over
-> `lib/` + `modules/` string literals.
+| purpose | bytes |
+| --- | --- |
+| spinner frames | `-\|/` |
+| success | `[ok]` |
+| failure | `[!!]` |
+| separators | `\|` `-` |
 
-### No compiled C binary (for now)
+**Why:** busybox on fresh Alpine, a serial console, `LANG=C`, or a minimal
+`TERM` mangle non-ASCII into mojibake. ANSI SGR color is still ASCII bytes and
+stays gated on `[ -t 1 ]`.
 
-The C idea was about bootstrap primitives ("compile a helper binary to not
-download some tools"), not speed. But:
+> [!info] Scope
+> This governs **program output**, not this document. Enforced in CI by a
+> non-ASCII grep over `lib/` + `modules/` string literals.
 
-- A barebone box that lacks `curl` almost always has `wget` or busybox —
-  `bootstrap.sh` should detect whatever's present.
-- If a primitive is *truly* missing everywhere, the answer is **static busybox**
-  (one battle-tested binary giving sh/wget/tar/sha256), not hand-rolled C.
-- Installer wall-clock is `apt`/`curl`/network, not shell parsing — C saves
-  nothing measurable and breaks self-bootstrap (needs a toolchain on target).
+### D-3. The C harness
 
-**Trigger to revisit:** a concrete bootstrap need that busybox genuinely can't
-fill. Until then, custom C never enters.
+The POSIX side is C, arranged like the Windows core: `nob.c` links `osr.c` (a
+command dispatcher) with one translation unit per file it replaced into a
+single binary, `build/osr`.
 
-> **Superseded, deliberately, for the harness itself (not for bootstrap).** The
-> POSIX side is C now, arranged exactly like the Windows core: `nob.c` links
-> `osr.c` (a command dispatcher) with one translation unit per file it
-> replaced into a single binary, `build/osr`. Each unit is named after the
-> shell file it replaced (`lib/ui.sh` -> `lib/ui.c`); the Windows core's own
-> ui/state units moved into its `win*` family (`lib/winui.c`,
-> `lib/winstate.c`, next to `winpkg`/`winbin`/`wintweak`) to free those names. No per-file helper binaries, no
-> build step hidden in a shell script — `./osr`, like `osr.ps1`, just runs nob.
->
-> | shell file | unit | command | what moved |
-> |---|---|---|---|
-> | `lib/ui.sh` | `lib/ui.c` | `osr ui` | palette, live step window, step counter |
-> | `lib/log.sh` | `lib/log.c` | `osr log` | the five log lines |
-> | `lib/state.sh` | `lib/state.c` | `osr state` | the whole thing — **file removed** |
-> | `lib/user.sh` | `lib/user.c` | `osr user` | user model, login shells, file primitives |
-> | `lib/detect.sh` | `lib/detect.c` | `osr detect` | every distro and hardware probe |
-> | `lib/theme.sh` | `lib/theme.c` | `osr theme` | manifests, palette, the {{key}} script |
-> | `install.sh` | `lib/install.c` | `osr install` | help, listings, option loop, manifest, report |
-> | `test/run.sh` | `lib/testrun.c` | `osr test-run` | the suite runner |
->
-> `test/run.sh`, `lib/state.sh` and the build shim are **gone**, not shrunk:
-> nothing was left in them that the core could not do. state.sh existed only
-> for its `as_user tee` write, and `osr state set` performs that escalation
-> itself. The six that remain are not
-> implementations — they are the shell-callable surface, which cannot go away
-> while ~120 modules are shell scripts:
->
-> - `run_step`'s arguments are shell FUNCTIONS (`pkg_install`, `as_root`), so
->   only a shell can fork them;
-> - `error` must `exit` the running shell;
-> - `as_user`/`as_root` are command prefixes wrapping `sudo`, and every write
->   that must land as the riced user goes through them;
-> - `osr_detect`/`osr_resolve_theme` set the variables modules branch on, so
->   the core prints assignments and the shim evals them;
-> - `install.sh` SOURCES each module.
->
-> The reasoning above still holds where it was aimed: **`bootstrap.sh` stays
-> pure sh and compiles nothing** — it has to run before a toolchain is a given.
-> Past that point the tool assumes a C compiler.
->
-> The contract for each slice is byte-for-byte identical output: the sh version
-> is frozen under `test/ref/` and diffed against the C one by a unit test
-> (`test/unit/*_c_parity.sh` — 317 checks over the eight). Exactly one
-> divergence has been accepted, and it is asserted rather than hidden: an
-> install.sh option missing its operand was `${2:?--user needs a name}`, whose
-> diagnostic and exit status came from the shell itself; it is now an ordinary
-> `[ERROR]` line, exit 1.
+| shell file | unit | command | what moved |
+| --- | --- | --- | --- |
+| `lib/ui.sh` | `lib/ui.c` | `osr ui` | palette, live step window, step counter |
+| `lib/log.sh` | `lib/log.c` | `osr log` | the five log lines |
+| `lib/state.sh` | `lib/state.c` | `osr state` | all of it — **file removed** |
+| `lib/user.sh` | `lib/user.c` | `osr user` | user model, login shells, file primitives |
+| `lib/detect.sh` | `lib/detect.c` | `osr detect` | every distro and hardware probe |
+| `lib/theme.sh` | `lib/theme.c` | `osr theme` | manifests, palette, the `{{key}}` script |
+| `install.sh` | `lib/install.c` | `osr install` | help, listings, option loop, manifest, report |
+| `test/run.sh` | `lib/testrun.c` | `osr test-run` | the suite runner |
 
-### A module may be a C unit instead of a script
+Five of the ported units keep a shell shim in `lib/` (`ui.sh`, `log.sh`,
+`user.sh`, `detect.sh`, `theme.sh`). They are **not** implementations — they are the
+shell-callable surface, which cannot go away while ~115 modules are shell
+scripts:
 
-The Windows core has always dispatched its modules from C (`modules.c`). The
-POSIX side can now do both: `modules/<name>.c` registered in `lib/modules.c`,
-against the API in `lib/module.h`, with `modules/*.sh` unchanged beside them.
-`install.sh` asks `osr module has <name>` per manifest entry, so a rice never
-says which kind it wants and a module can move from one to the other without
-touching a rice.
+- `run_step`'s arguments are shell **functions** (`pkg_install`, `as_root`), so only a shell can fork them;
+- `error` must `exit` the running shell;
+- `as_user`/`as_root` are command prefixes wrapping `sudo`;
+- `osr_detect`/`osr_resolve_theme` set the variables modules branch on — the core prints assignments, the shim `eval`s them;
+- `install.sh` **sources** each module.
 
-A module is **one file, not one per OS**. `modules/fastfetch.c` holds both
-implementations — the Windows one behind `#ifdef _WIN32`, dispatched from
-`modules.c`; the POSIX one after the `#else`, registered in `lib/modules.c` —
-and they export the same `osrm_fastfetch`, because only one of them is ever
-compiled. `nob.c` gives the object to whichever core the host is building.
-Modules only one system can have (the `win-*` OS passes, `flameshot`) are
-simply files whose other branch is empty. The alternative, a `linux/` and a
-`windows/` folder, made the same module two files that could drift apart
-without anyone noticing; asking "do these still agree" should not need a
-`diff` between trees.
+> [!important] `bootstrap.sh` compiles nothing
+> It runs before a toolchain is a given and stays pure sh. Past that point the
+> tool assumes a C compiler. See [[archive-decisions#A2|A2]].
 
-What C buys is precisely what forced the sh tier's shape: `osr_step` runs the
-live step window around a **function of the program**, where `run_step` could
-only fork a *shell* function. That is why `run_step pkg_install foo` had to
-stay in `lib/ui.sh`, and why a module in C needs no shell at all.
+**Contract:** byte-for-byte identical output. The sh version is frozen under
+`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 317
+checks over the eight units. Exactly one divergence is accepted and asserted
+rather than hidden (see [[archive-decisions#A2|A2]]).
 
-What C costs is the property the module system was built for: a module is one
-readable POSIX script that anyone can copy and edit. So this is not a migration
-plan — it is an option, for modules whose logic is real (dispatch on tooling,
-group membership, per-distro branching) rather than three lines of package
-install. `flameshot`, `docker` and `fastfetch` are the first three, kept honest by
-`test/unit/module_c_parity.sh`, which diffs them against their frozen scripts
-command for command — and, for fastfetch, byte for byte on the config file it
-renders.
+### D-4. A module may be a C unit instead of a script
 
-> Not ported: the provider methods (`cargo:`, `script:`, `aur:`, `source:`).
-> `osr_pkg_install` covers the native path and hands a provider row back to
-> `lib/pkg.sh`, which owns them — `source:` in particular dispatches into
-> `lib/build.sh`, 1250 lines of per-package downloaders and builders. That one
-> call is the only place the C tier calls back into sh, and it disappears when
-> those are ported.
+`modules/<name>.c` registered in `lib/modules.c` against `lib/module.h`, with
+`modules/*.sh` unchanged beside them. `install.sh` asks `osr module has
+`<name>` per manifest entry, so a `rice.list` never says which tier it wants
+and a module can move between them without touching a rice.
 
-### Rices are declarative manifests, not folders of scripts
+**One file, not one per OS.** `modules/fastfetch.c` holds both
+implementations — Windows behind `#ifdef _WIN32` (dispatched from
+`modules.c`), POSIX after the `#else` (registered in `lib/modules.c`) — both
+exporting `osrm_fastfetch`, because only one is ever compiled. `nob.c` gives
+the object to whichever core the host builds.
 
-The headline lever. A rice = a plain list of modules/apps + configs to copy,
-with `#` comments, parsed with `while read` (no TOML/YAML parser — un-POSIX,
-un-lazy). The module count in the list *is* the progress-bar denominator.
+What C buys is not speed:
 
-### A package has a *method*, not just a *name*
+- **`osr_step` forks a function of the program.** `run_step` could only fork a *shell* function — the single reason `lib/ui.sh` still exists.
+- **A module is a translation unit, not a sourced fragment.** A `.sh` module runs inside the installer's shell and can clobber any lib variable.
+- **The contract is a header**, not "whatever happens to be defined by the time we source you".
+- **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and the C module side by side under stubbed package tooling and diffs what they did to the box.
 
-`pkgmap` name→name(s) only covers the case where the same package manager has a
-different *name* per distro. It has no answer for the case where the *install
-method itself* varies: AUR-build on Arch, `apt` on Debian, `cargo` where no
-package exists, `curl | sh` for starship, a from-source build for paru/amnezia.
-The repo already proves this — `vscode-insiders.sh` shells out to `$AUR_HELPER`,
-and `build-paru.sh` / `build-amneziavpn-client.sh` are standalone.
+What C costs is the property the module system was built for: a module as one
+readable POSIX script anyone can copy and edit. So this is an **option**, not
+a migration plan — for modules whose logic is real, not three lines of package
+install.
 
-So a `pkgmap` row's RHS may carry an optional **provider tag**. No tag = native
-package manager (the common, zero-effort case is untouched). The resolver
-expands names, **groups by method, and dispatches each group** — native rows
-still batch into one install call. Each provider owns its own idempotency probe.
+> [!warning] Providers are not ported
+> `osr_pkg_install` covers the **native** path only and hands a provider row
+> back to `lib/pkg.sh`. `source:` in particular dispatches into
+> `lib/build.sh` (~1250 lines of downloaders and builders). That one call is
+> the only place the C tier calls back into sh.
 
-### Config is layered by ownership, not one dotfile
+### D-5. Rices are declarative manifests
 
-A dotfile is not one thing. `.zshrc` today jams together PATH/toolchain env
-(machine-specific), aliases and functions (personal, rice-independent), and
-theme/prompt (rice-specific) in one blob — so `cp -f .zshrc` destroys any env
-the user added on that machine. The same wound exists in every monolithic DE
-config (`hyprland.conf`, `waybar`, `foot`).
+A rice is a plain list of modules/apps + configs, `#` comments, parsed with
+`while read`. No TOML/YAML — that needs a parser, which is un-POSIX. The
+module count in the list **is** the progress-bar denominator.
 
-Split **every** config along ownership layers with distinct lifecycles, and let
-os-rice write **only what it owns**:
+### D-6. A package has a *method*, not just a *name*
 
-| layer      | owner          | overwrite policy                 | rice-scoped? |
-|------------|----------------|----------------------------------|--------------|
-| `00-env`   | user / machine | seeded once if absent, then kept | no           |
-| `10-*`     | dotfiles repo  | overwrite on update              | no           |
-| `20-*`     | dotfiles repo  | overwrite on update              | no           |
-| `30-*`     | dotfiles repo  | overwrite on update              | no           |
-| `90-theme` | rice           | **swapped** on rice switch       | **yes**      |
-| `99-local` | machine        | gitignored, never touched        | no           |
+`pkgmap` name→name(s) only covers "same manager, different name". It has no
+answer for "the install *method* itself varies": AUR on Arch, `apt` on Debian,
+`cargo` where no package exists, `curl | sh` for starship, from-source for
+paru. So a row's RHS may carry a **provider tag**. No tag = native manager.
+
+### D-7. Config is layered by ownership
+
+| layer | owner | overwrite policy | rice-scoped? |
+| --- | --- | --- | --- |
+| `00-env` | user / machine | seeded once if absent, then kept | no |
+| `10-*` `20-*` `30-*` | dotfiles repo | overwrite on update | no |
+| `90-theme` | rice | **swapped** on rice switch | **yes** |
+| `99-local` | machine | gitignored, never touched | no |
 
 This is what makes rice-switching non-destructive: the user's env and aliases
 are structurally out of os-rice's reach.
@@ -258,20 +170,18 @@ are structurally out of os-rice's reach.
 ## 1. Package abstraction + one-to-many table
 
 One map file per package manager, logical name → real package(s). No entry =
-pass the name through unchanged (the common case stays zero-effort). Only
-packages that *actually differ* need a row — don't pre-fill identity mappings.
+pass the name through unchanged, so the common case is zero-effort. Only
+packages that *actually differ* get a row.
 
 ```
 # lib/pkgmap/apt.map          # lib/pkgmap/dnf.map
 zsh = zsh                     zsh = zsh
-neovim = neovim               neovim = neovim
-build = build-essential       build = gcc gcc-c++ make      # <- one-to-many
+build = build-essential       build = gcc gcc-c++ make      # one-to-many
 dev-headers = libssl-dev      dev-headers = openssl-devel pkgconf
 ```
 
 ```sh
-# lib/pkg.sh — native batch: the group that §4's method-dispatch calls with
-# already-resolved names. Distro variance is exactly this one case statement.
+# lib/pkg.sh -- distro variance is exactly this one case statement.
 _via_native() {                     # _via_native build-essential zsh
   case "$OSR_PKG" in
     apt)    apt-get install -y "$@" ;;
@@ -283,215 +193,136 @@ _via_native() {                     # _via_native build-essential zsh
 }
 ```
 
-Name resolution (`_pkgmap`, logical→real) is §1a; the top-level `pkg_install`
-that groups by install *method* and batches the native rows through `_via_native`
-is §4. Modules only ever say `pkg_install build`.
-
 Five verbs cover ~everything: `pkg_install`, `pkg_installed`, `pkg_refresh`,
-`pkg_add_repo`, `pkg_remove`. The table absorbs every distro's splitting; a
-central table (not inline `case` per module) wins — one place, only rows for
-packages that differ.
+`pkg_add_repo`, `pkg_remove`. Modules only ever say `pkg_install build`.
 
-### 1a. Facet qualifiers — `name@facet`, most-specific wins (G6, G8)
+### 1a. Facet qualifiers — `name@facet`, most specific wins
 
-`OSR_PKG` (apt/dnf/pacman) is not the only axis of variance. Two more bite in
-practice:
+`OSR_PKG` is not the only axis of variance. Two more bite in practice:
 
-- **Release version (G6).** A package's *install method* can differ by distro
-  *release*, not just distro: `ghostty` is native on Ubuntu noble (24.04) but
-  must build from source on jammy (22.04). One `apt.map` shared across all
-  Ubuntu releases can't say that.
-- **CPU arch (G8).** Native pkg managers already resolve arch themselves — this
-  bites only artifact-fetching providers (`tarball:`/`source:`/`github`) that
-  name a specific asset (`go1.22.linux-amd64.tar.gz`).
+- **Release version.** `ghostty` is native on Ubuntu noble (24.04) but must build from source on jammy (22.04).
+- **CPU arch.** Native managers resolve arch themselves; this bites artifact-fetching providers naming a specific asset (`go1.22.linux-amd64.tar.gz`).
 
-Both are handled by **one mechanism**: a map key may carry an optional `@facet`
-qualifier, and the resolver checks the most specific match first, falling back to
-the bare name. No qualifier = today's behavior, zero cost for the common case —
-a qualified row exists *only* where that facet actually diverges (same ethos as
-§1's "only rows that differ").
+Both are one mechanism: a map key may carry an `@facet`, and the resolver
+checks most specific first, falling back to the bare name.
 
 ```
-# apt.map
-ghostty            = source:build-ghostty                 # default for apt
-ghostty@noble      = ghostty                              # 24.04 ships it -> native
-ghostty@resolute   = ghostty
-# jammy has no row -> falls through to the source: default
+ghostty            = source:build-ghostty     # default for apt
+ghostty@noble      = ghostty                  # 24.04 ships it
+# jammy has no row -> falls through to source:
 
 go                 = tarball:https://go.dev/dl/go1.22.linux-${OSR_ARCH_DEB}.tar.gz
-zig@aarch64        = source:build-zig                     # no prebuilt for arm64
+zig@aarch64        = source:build-zig         # no prebuilt for arm64
 ```
 
-```sh
-_pkgmap() {          # facet order: codename > version (exact, prefix, range) > arch > bare
-  for name; do
-    line=""
-    for key in "$name@$OSR_CODENAME" "$name@$OSR_VERSION_ID" "$name@$OSR_ARCH" "$name"; do
-      line=$(grep "^$key[[:space:]]*=" "$OSR_LIB/pkgmap/$OSR_PKG.map" 2>/dev/null) && break
-    done
-    if [ -n "$line" ]; then
-      # RHS may interpolate ${OSR_ARCH*}; eval only the value, not arbitrary input.
-      eval "printf '%s ' \"${line#*= }\""
-    else
-      printf '%s ' "$name"
-    fi
-  done
-}
-```
+**Resolution ladder:**
 
-**Free properties worth noting:**
-- The §4 idempotency probe follows for free — the tag drives the probe, and a
-  qualified row resolves to a different tag per release/arch, so the skip check
-  changes with it automatically.
-- A version/arch that flips to `source:`/`tarball:` needs a build toolchain
-  (jammy ghostty → zig). Keep that **out of `rice.list`** (which is
-  version/arch-agnostic and logic-free) — the build function declares its own
-  prerequisite (`pkg_install zig` at its top), so the qualifier never forces a
-  conditional into the manifest.
+| key form | axis | match |
+| --- | --- | --- |
+| `name@trixie` | codename | exact |
+| `name@3.21.3` | version_id | exact |
+| `name@3.21` | version_id | dotted prefix, longest first |
+| `name@<=3.21` | version_id | comparison `<` `<=` `>` `>=`, first matching row wins |
+| `name@x86_64` | arch | exact |
+| `name` | — | the bare row |
 
-**Version facets** (the ceiling this section used to draw, since crossed). Two
-things pushed past hand-listing one row per release: a distro whose
-`VERSION_ID` carries a patch level (Alpine reports `3.21.3`, so an exact key
-would have to name every point release), and the shape of the question a row
-usually asks — "is this release old enough to need the fallback", which no
-exact key can express. So `OSR_VERSION_ID` gets two extra rungs, and the full
-ladder is:
+Prefixes are **components**, not string prefixes: `name@3.21` covers 3.21.x
+and never 3.210. Comparisons are component-wise and numeric, missing
+components count as 0, and each component keeps its leading digits only —
+which is what makes `24.04`, `15-SP5` and `3.24_alpha` comparable at all. A
+hand-rolled `_ver_cmp`, not `sort -V`, because it must run identically in
+`lib/module.c`.
 
-```
-name@trixie    codename        exact
-name@3.21.3    version_id      exact
-name@3.21      version_id      dotted prefix, longest first (then name@3)
-name@<=3.21    version_id      comparison: < <= > >=, first matching row wins
-name@x86_64    arch            exact
-name           -               the bare row
-```
+> [!warning] Boundary that follows from that
+> `3.22.1` is **greater** than `3.22`. A bound meant to cover a whole series
+> is `<3.23`, not `<=3.22`. Ranges have no specificity order between them, so
+> **file order is the tie-break: write the tightest bound first.**
 
-Prefixes are *components*, not string prefixes: `name@3.21` covers 3.21.x and
-never 3.210. Comparisons are component-wise and numeric, missing components
-count as 0 (`3` == `3.0.0`), and each component keeps its leading digits only,
-which is what makes `24.04`, `15-SP5` and `3.24_alpha` comparable at all — a
-hand-rolled compare in `_ver_cmp`, not `sort -V`, because it must run identically
-in `lib/module.c` (§C tier). Mind the boundary that follows from that: `3.22.1` is *greater* than `3.22`, so
-a bound meant to cover a whole series is `<3.23`, not `<=3.22`. Ranges have no
-specificity order between them
-(`<=3.21` and `<4` are both "one row"), so **file order is the tie-break: write
-the tightest bound first**.
+**Free properties:** the §2 idempotency probe follows automatically, since the
+tag drives the probe and a qualified row resolves to a different tag per
+release/arch. A version that flips to `source:` needs a toolchain — that stays
+**out of `rice.list`**; the build function declares its own prerequisite.
 
-> Remaining ceiling: no ranges on codename (unordered by nature) and none on
-> arch. Likewise arch keeps two naming schemes (`OSR_ARCH`, `OSR_ARCH_DEB`); add
-> a third alias var only when a third upstream convention (`x64`, …) forces it —
-> no general arch-name mapper.
+**Remaining ceiling:** no ranges on codename (unordered by nature) and none on
+arch. Arch keeps two naming schemes (`OSR_ARCH`, `OSR_ARCH_DEB`); add a third
+alias var only when a third upstream convention forces it.
 
 ---
 
-## 2. Re-runnable / idempotent — a hard contract
+## 2. Idempotency — a hard contract
 
-**Rule: a module may be run 100× and converge, never error on the 2nd run.**
+> [!important] Rule
+> A module may be run 100× and converge. It never errors on the 2nd run.
 
-Idempotency comes from guard helpers every module uses instead of raw mutation:
+Idempotency comes from guard helpers used instead of raw mutation:
 
 ```sh
-pkg_installed zsh || pkg_install zsh              # skip if present (dnf/apt need this; pacman --needed is built-in)
-ensure_line "$rc" 'eval "$(starship init sh)"'    # grep -q before append — safe on rerun
-backup_copy "$src" "$dst"                          # copies to .bak once, then overwrites; rerun-safe
+pkg_installed zsh || pkg_install zsh              # pacman --needed is built-in
+ensure_line "$rc" 'eval "$(starship init sh)"'    # grep -q before append
+backup_copy "$src" "$dst"                         # .bak once, then overwrite
 
-# only change the login shell if it isn't already zsh
 osr_shell_is "$u" "$(command -v zsh)" || osr_set_login_shell "$u" "$(command -v zsh)"
 ```
 
-`osr_set_login_shell` (lib/user.sh) exists because `chsh` is not a given:
-busybox images (Alpine) have no such applet and a minimal Fedora leaves it in
-`util-linux-user`, so a chsh-only module quietly leaves those boxes on
-`/bin/sh`. It registers the shell in `/etc/shells`, then tries `chsh` ->
-`usermod` -> a direct `/etc/passwd` rewrite, **verifying the passwd entry after
-each** rather than trusting an exit code.
+`osr_set_login_shell` exists because `chsh` is not a given: busybox images have
+no such applet and minimal Fedora leaves it in `util-linux-user`, so a
+chsh-only module quietly leaves those boxes on `/bin/sh`. It registers the
+shell in `/etc/shells`, then tries `chsh` → `usermod` → a direct `/etc/passwd`
+rewrite, **verifying the passwd entry after each** rather than trusting an
+exit code.
 
-The existing "already installed, skipping" checks already lean this way — this
-makes it law and gives it a toolbox.
+Holds and pins are part of the contract: never reinstall or override a
+user-held, pinned or ignored package. That is "don't destroy user-defined
+state" applied to packages.
 
 ---
 
-## 3. Fancy logs — spinners + step progress, no fake byte bars
+## 3. Progress output — two-level steps, no fake byte bars
 
-Colors and spinners are achievable in POSIX. A real **byte-level progress bar is
-not** — `apt`/`pacman` own their stdout and don't report parseable progress.
-Fighting that is a time sink for a jittery result. So:
+A real byte-level progress bar is impossible: `apt`/`pacman` own their stdout
+and report no parseable progress. So:
 
-- **Two-level step progress** (honest, easy, looks pro): `[03/12] zsh | 4/6 [ok]`.
-  Outer `[03/12]` = module count from the manifest (exact, pre-known). Inner
-  `4/6` = steps *within* the current module, its total known the instant the
-  module starts from a static `grep -c '^[[:space:]]*run_step' modules/zsh.sh`
-  (every visible step routes through `run_step`, so that count is authoritative).
-  This is the progress bar that actually works, at the granularity that shows
-  even the small steps.
-  - **Skipped branch counts as finished.** Executed `run_step`s tick +1; guarded
-    ones that don't fire (§2 idempotency: `chsh` only if needed, plugin clone
-    only if absent) don't. At module end, `step_finish_module` fast-forwards the
-    inner counter to its total, so the inner bar always reaches `6/6` and skipped
-    work renders `[ok] skipped`. The occasional jump (`4/6 -> 6/6`) is the honest
-    signal a guard skipped work — not a stall.
-  - **Why not an exact global pre-count?** Conditionals + loops (N plugins) mean
-    the true total isn't knowable without running, and a dry-run pre-pass counts
-    guarded steps the real run then skips — so "exact" drifts anyway. Two-level
-    sidesteps it: outer is exact, inner is locally exact per module.
-  - **Lint rule this depends on:** a raw `git clone`/`curl` not wrapped in
-    `run_step` is invisible to the count. Grep for install-ish verbs outside
-    `run_step` in CI (cheap) so the convention stays a rule, not a habit.
-- **Spinner** wraps long *silent* steps (clone, download, build): run in the
-  background, capture output to a per-run logfile, animate `-\|/` on `\r`, print
-  `[ok]`/`[!!]` on completion. On failure, dump the log tail.
-- **Auto-degrade:** everything keys off `[ -t 1 ]`. TTY → spinners + hidden
-  output. Piped / CI / `--verbose` → plain streamed lines, no escape junk in
-  logs. This is what makes it both fancy *and* re-runnable-into-a-logfile.
+**Two-level step progress:** `[03/12] zsh | 4/6 [ok]`
 
-```sh
-# lib/ui.sh
-run_step() {                         # run_step "Cloning oh-my-zsh" git clone ...
-  desc=$1; shift
-  if [ -t 1 ] && [ -z "$OSR_VERBOSE" ]; then
-    ( "$@" ) >>"$OSR_LOG" 2>&1 & pid=$!
-    _spin "$pid" "$desc"
-    wait "$pid" || { tail -n 20 "$OSR_LOG"; error "$desc failed"; }
-    printf '\r%b[ok]%b %s\n' "$GREEN" "$NC" "$desc"
-  else
-    info "$desc"; "$@" || error "$desc failed"   # non-tty: current trace behavior
-  fi
-}
-```
+| level | source | exactness |
+| --- | --- | --- |
+| outer `[03/12]` | module count from the manifest | exact, pre-known |
+| inner `4/6` | `grep -c '^[[:space:]]*run_step' modules/zsh.sh` | locally exact per module |
 
-`run_step` replaces `trace` at call sites — same ergonomics, gains the spinner.
-`trace` becomes the non-tty branch.
+- **A skipped branch counts as finished.** Executed `run_step`s tick +1; guarded ones that do not fire do not. At module end `step_finish_module` fast-forwards the inner counter to its total, so it always reaches `6/6` and skipped work renders `[ok] skipped`. The jump `4/6 -> 6/6` is the honest signal a guard skipped work, not a stall.
+- **Why not an exact global pre-count?** Conditionals and loops mean the true total is unknowable without running, and a dry-run pre-pass counts guarded steps the real run then skips — so "exact" drifts anyway.
+- **Lint rule this depends on:** a raw `git clone`/`curl` outside `run_step` is invisible to the count. CI greps for install-ish verbs outside `run_step`.
 
-> Honest caveat: spinner + hidden output means a hang shows a spinner, not the
-> tool's live output. Mitigate with `--verbose` and the on-failure log dump —
-> the standard tradeoff (what `brew`, `paru`, etc. do).
->
-> Implementation note: the sketch above is still the shape of `run_step`, but
-> the painting is `osr ui` (`lib/ui.c`); `lib/ui.sh` keeps only the fork,
-> because a step's argv is a shell *function* (`pkg_install`). See the C
-> rewrite note under Decisions.
+**Spinner** wraps long silent steps: run in background, capture output to a
+per-run logfile, animate `-\|/` on `\r`, print `[ok]`/`[!!]`, dump the log
+tail on failure.
+
+**Auto-degrade** keys off `[ -t 1 ]`. TTY → spinners + hidden output. Piped /
+CI / `--verbose` → plain streamed lines, no escape junk in logs.
+
+> [!note] Honest caveat
+> Hidden output means a hang shows a spinner, not the tool's live output.
+> Mitigated by `--verbose` and the on-failure log dump — the same tradeoff
+> `brew` and `paru` make.
+
+The painting lives in `osr ui` (`lib/ui.c`); `lib/ui.sh` keeps only the fork,
+because a step's argv is a shell function.
 
 ---
 
 ## 4. Provider-tagged install methods
 
-A `pkgmap` row's RHS gets an optional `method:` prefix. No prefix = native
-package manager. This keeps the common case zero-effort and only tags the rows
-that genuinely install a different way.
-
 ```
-# any.map (shared) / per-distro maps
 zsh      = zsh                                    # native (default)
 build    = gcc gcc-c++ make                       # native, one-to-many
 starship = script:https://starship.rs/install.sh  # curl | sh
-ripgrep  = cargo:ripgrep                           # cargo where no pkg exists
-vscode   = aur:visual-studio-code-insiders-bin     # arch.map only
-paru     = source:build-paru                       # from-source build fn
+ripgrep  = cargo:ripgrep                          # where no package exists
+vscode   = aur:visual-studio-code-insiders-bin    # arch.map only
+paru     = source:build-paru                      # from-source build fn
 ```
 
-`pkg_install` stops being "expand names into one `case`". It becomes
-**expand → group by method → dispatch each group**; native rows still batch
-into a single `apt-get install` / `pacman -S`:
+`pkg_install` is **expand → group by method → dispatch each group**; native
+rows still batch into one call:
 
 ```sh
 pkg_install() {                    # pkg_install zsh starship paru
@@ -501,7 +332,7 @@ pkg_install() {                    # pkg_install zsh starship paru
       script:*) _via_script "${spec#script:}" ;;
       aur:*)    _via_aur    "${spec#aur:}"    ;;
       source:*) _via_source "${spec#source:}" ;;
-      *)        native="$native $spec"        ;;   # collect, batch below
+      *)        native="$native $spec"        ;;
     esac
   done
   [ -n "$native" ] && _via_native $native
@@ -509,128 +340,103 @@ pkg_install() {                    # pkg_install zsh starship paru
 ```
 
 **Each provider owns its idempotency probe** — the tag drives the skip check,
-not just the install, or the re-run contract (§2) breaks:
+not just the install, or the §2 contract breaks.
 
-| method   | install            | `pkg_installed` probe                |
-|----------|--------------------|--------------------------------------|
-| native   | apt / dnf / pacman | `dpkg -s` / `rpm -q` / `pacman -Q`   |
-| cargo    | `cargo install`    | `cargo install --list \| grep -q`    |
-| script   | `curl … \| sh`     | `command -v <bin>`                   |
-| aur      | `$AUR_HELPER -S`   | `pacman -Q`                          |
-| source   | build fn in `lib/` | `command -v <bin>` \|\| marker file  |
+| method | install | `pkg_installed` probe |
+| --- | --- | --- |
+| native | apt / dnf / pacman | `dpkg -s` / `rpm -q` / `pacman -Q` |
+| cargo | `cargo install` | `cargo install --list \| grep -q` |
+| script | `curl … \| sh` | `command -v <bin>` |
+| aur | `$AUR_HELPER -S` | `pacman -Q` |
+| source | build fn in `lib/build.sh` | `command -v <bin>` \|\| marker file |
 
 **Prerequisites are ordinary manifest lines, in order** — `rust` before any
-`cargo:` row, `paru` before any `aur:` row. Manifest order *is* the dependency
-graph. No auto-resolved DAG (that's the plugin framework already in Not Doing).
+`cargo:` row, `paru` before any `aur:` row. Manifest order **is** the
+dependency graph.
 
-> Decided: `script:` (curl | sh) installers are **not** pinned to a checksum —
-> accept upstream drift for the convenience. Revisit only if a drifting
+> [!note] `script:` installers are not checksum-pinned
+> Upstream drift is accepted for the convenience. Revisit only if a drifting
 > installer actually burns a run.
 
 ---
 
 ## 5. Config layering — every config, not just zsh
 
-The ownership table (see Decisions) is realized as a **drop-in dir sourced in
-lexical order**, plus **managed marker blocks** wherever a single file is
-unavoidable. This applies to *all* configs now, not just the shell — DE configs
-get the same split via their native include mechanisms.
+A drop-in dir sourced in lexical order, plus managed marker blocks wherever a
+single file is unavoidable.
 
 ```
 ~/.config/osr/zsh/rc.d/
-  00-env.zsh      user / per-machine   seeded once if absent, then never touched
+  00-env.zsh      user / per-machine   seeded once if absent, never touched after
   10-aliases.zsh  dotfiles             overwrite on update, rice-independent
   20-func.zsh     dotfiles             overwrite on update
-  30-tools.zsh    dotfiles             overwrite on update; guarded tool init
-                                       (lazy nvm, shared ssh-agent) that must
-                                       reach new machines, so it cannot live in
-                                       99-local
-  90-theme.zsh    rice-owned           swapped on rice switch (prompt/omz theme)
+  30-tools.zsh    dotfiles             guarded tool init (lazy nvm, shared
+                                       ssh-agent) that must reach new machines,
+                                       so it cannot live in 99-local
+  90-theme.zsh    rice-owned           swapped on rice switch
   99-local.zsh    per-machine          gitignored, never touched
 ```
 
-The shipped `~/.zshrc` is a **thin loader** that sources `rc.d/*.zsh`. Where the
-target file must stay singular (the user already has their own `~/.zshrc`), inject
-only a marked block and rewrite **only** between the markers:
+The shipped `~/.zshrc` is a thin loader. Where the target file must stay
+singular, inject only a marked block:
 
 ```sh
-# >>> os-rice:loader >>>   (managed — edits between markers are overwritten)
+# >>> os-rice:loader >>>   (managed -- edits between markers are overwritten)
 for f in "$HOME"/.config/osr/zsh/rc.d/*.zsh; do . "$f"; done
 # <<< os-rice:loader <<<
 ```
 
-`ensure_block` (sibling to `ensure_line`) owns the marked region. The same
-pattern layers DE configs through their own includes:
+`ensure_block` owns the marked region. DE configs layer through their own
+include mechanisms:
 
-```
-config/hypr/hyprland.conf     source = ./00-env.conf    # user monitors/input
-                              source = ./90-theme.conf   # rice: colors, decoration
-config/waybar/                config.jsonc + 90-theme.css (rice-owned)
-config/foot/                  foot.ini includes foot-colors.ini (rice-owned)
-config/btop/                  btop.conf selects themes/rice.theme (rice-owned)
-config/serie/                 config.toml is pure palette (rice-owned)
-```
+| app | mechanism |
+| --- | --- |
+| hyprland | `source = ./00-env.conf` + `source = ./90-theme.conf` |
+| waybar | `config.jsonc` + `90-theme.css` (rice-owned) |
+| foot | `foot.ini` includes `foot-colors.ini` |
+| btop | `btop.conf` selects `themes/rice.theme` |
 
-**Two seeding rules matter:**
+**Two seeding rules:**
 
-- `00-env` / `99-local` are **seeded once if absent**, then never rewritten —
-  os-rice reads them via the loader but treats them as user territory.
-- Config idempotency: PATH/env mutation in `00-env` is **guard-style**, never a
-  blind append (`case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH" ;; esac`), so
-  a re-run never duplicates entries.
+1. `00-env` / `99-local` are seeded once if absent, then never rewritten.
+2. PATH/env mutation in `00-env` is **guard-style**, never a blind append, so a re-run never duplicates entries.
 
-### 5a. System config paths vary by distro *family* (G7)
+### 5a. System config paths vary by distro *family*
 
-Most of the layering above is `$HOME`/XDG — stable across distros. The variance
-is a narrow set of **system** config, and it varies by distro *family*, not
-per-package: `/etc/default/foo` (Debian) vs `/etc/conf.d/foo` (OpenRC/Alpine)
-vs `/etc/sysconfig/foo` (RHEL). Because it's family-wide, a per-package map
-(a "confmap" mirroring `pkgmap`) is the wrong shape — it'd be rows of identical
-values. Instead resolve the base dir **once in `detect.sh`** as `OSR_ETC_DEFAULT`
-(the same detect-once move the whole design rests on); modules write to
-`"$OSR_ETC_DEFAULT/foo"`, never a literal path.
+The variance is a narrow set of system config: `/etc/default/foo` (Debian) vs
+`/etc/conf.d/foo` (OpenRC/Alpine) vs `/etc/sysconfig/foo` (RHEL). Because it
+is family-wide, a per-package "confmap" is the wrong shape — it would be rows
+of identical values. Resolve the base dir **once in `detect.sh`** as
+`OSR_ETC_DEFAULT`; modules write to `"$OSR_ETC_DEFAULT/foo"`, never a literal.
 
-- **Prefer a drop-in file over editing the package's own config.** Drop a *new*
-  file into the conventional `.d/` dir (whose location is the thing that varies)
-  rather than rewriting a package-owned file — this extends §5's "write only what
-  it owns" from `$HOME` to system config.
-- The rare genuinely-per-package-*and*-per-distro path oddball gets an inline
-  `case "$OSR_DISTRO"` in that one module — §1's own logic: a central table is
-  for variance that's common (package *names*); path divergence is rare, so
-  inline is the lazy-correct choice.
+- **Prefer a drop-in file over editing the package's own config** — extends §5's "write only what it owns" from `$HOME` to system config.
+- The rare per-package *and* per-distro oddball gets an inline `case "$OSR_DISTRO"` in that one module. Path divergence is rare, so inline is correct.
 
 ---
 
 ## 6. Rice switching — additive for packages, replace for owned config
 
-Moving A → B must be cheaper and safer than a reinstall. The asymmetry is the
-whole trick: **packages accrete, rice-owned config layers get replaced.**
-
 ```sh
 osr switch <rice>:
   install manifest(rice)        # install missing pkgs; NEVER uninstall
   swap 90-theme.* layers        # replace rice-owned shell theme
-  relink config/{hypr,waybar,…} # replace rice-owned DE config (their 90-* only)
+  relink config/{hypr,waybar,...} # replace rice-owned DE config (their 90-* only)
   set wallpaper
 ```
 
-Untouched by a switch: `00-env`, `10-aliases`, `20-func`, `99-local`, and every
-installed toolchain. Old rice's packages linger (disk cruft is the accepted
-cost); an opt-in `osr prune <rice>` may come later but removal is out of scope.
+Untouched: `00-env`, `10-aliases`, `20-func`, `99-local`, and every installed
+toolchain. Old packages linger — disk cruft is the accepted cost.
 
----
+### 6a. Themes are objects, not a folder inside a rice
 
-## 6a. Themes are objects, not a folder inside a rice
+A switch is still a full manifest run: package managers, source builds,
+services, network. Minutes, and a sudo ticket. Nobody binds that to a key, so
+a rice got chosen once and never changed — the opposite of having six.
 
-§6 makes a switch cheap *relative to a reinstall*. It is still a full manifest
-run: package managers, source builds, services, the network. Minutes, and a sudo
-ticket. Nobody binds that to a key, so in practice a rice was chosen once and
-never changed - which is the opposite of the point of having six of them.
-
-The fix is to split the two things that were living in one directory:
-
-- a **rice** is a set of PACKAGES (`rices/<name>/rice.list`)
-- a **theme** is a set of APPEARANCE LAYERS (`themes/<name>/`)
+| thing | is | lives in |
+| --- | --- | --- |
+| **rice** | a set of PACKAGES | `rices/<name>/rice.list` |
+| **theme** | a set of APPEARANCE LAYERS | `themes/<name>/` |
 
 ```
 themes/<name>/
@@ -639,13 +445,12 @@ themes/<name>/
   wallpapers/     0..n images
 ```
 
-Any theme applies onto any rice. The layers of apps a rice never installed land
-in `~/.config` and are simply never read - which is why this is safe, and why
-`osr theme` never needs to know what is installed.
+Any theme applies onto any rice. Layers for apps a rice never installed land
+in `~/.config` and are simply never read — which is why this is safe.
 
 ```sh
 osr theme <name>:
-  run ONLY the modules that carry a theme layer, with every install/build/
+  run ONLY the modules carrying a theme layer, with every install/build/
   download/service verb neutralized (lib/apply.sh)
   apply the theme's whole-dir `config:` entries
   set the wallpaper (per-theme choice, remembered)
@@ -653,137 +458,111 @@ osr theme <name>:
 ```
 
 **The engine is the same modules, not a second copy of the mapping.** A module
-already knows that gruvbox's `config/dunst/90-theme.conf` belongs at
-`~/.config/dunst/dunstrc.d/90-theme.conf`; a declarative theme manifest would
-duplicate that knowledge and then drift from it. So a theme apply sources the
-same module files with `pkg_install`, `enable_service`, `provide_*`,
-`osr_install_nerd_font` and friends replaced by no-ops. The neutralized set is
-*derived from the libs* rather than listed, so a provider added to
-`lib/build.sh` tomorrow is inert here the day it is written.
+already knows where gruvbox's `config/dunst/90-theme.conf` belongs; a
+declarative theme manifest would duplicate that and then drift. So a theme
+apply sources the same module files with `pkg_install`, `enable_service`,
+`provide_*`, `osr_install_nerd_font` and friends replaced by no-ops. The
+neutralized set is **derived from the libs** rather than listed, so a provider
+added to `lib/build.sh` tomorrow is inert here the day it is written.
 
-Three properties that make it hotkey-safe:
+Three properties make it hotkey-safe:
 
-- **No package manager, no network, no sudo prompt.** `as_root` degrades to a
-  no-op unless a ticket already exists - a key press has no terminal to type a
-  password into, and a blocked prompt would hang the switch forever.
-- **Narrowed by the installed rice.** `~/.config/osr/state` records which
-  manifest was installed, so a theme apply runs that rice's ~20 modules rather
-  than all 39 that could paint something. Without it, switching a theme on a
-  Hyprland box would write `~/.config/polybar`.
-- **Never fatal.** A module that fails costs its own layer and a warning; the
-  desktop is not left half-painted.
+1. **No package manager, no network, no sudo prompt.** `as_root` degrades to a no-op unless a ticket already exists — a key press has no terminal to type a password into.
+2. **Narrowed by the installed rice.** `~/.config/osr/state` records which manifest was installed, so a theme apply runs that rice's ~20 modules, not all 39 that could paint something.
+3. **Never fatal.** A failing module costs its own layer and a warning; the desktop is not left half-painted.
 
-`rice.list` gains two directives: `theme:` (installed with the rice) and
-`themes:` (the set the picker offers). Both are advisory - they say what the
-rice was designed against, not what may be applied.
+`rice.list` gains `theme:` (installed with the rice) and `themes:` (the set
+the picker offers). Both are advisory.
 
 ### 6b. A theme is a palette, not a directory of app configs
 
-Splitting themes out of rices fixed the *cost* of a switch. It did nothing about
-the cost of **owning** themes, which was quadratic: every theme kept a full
-config file per app, so adding a seventh theme meant writing seven more files,
-and adding an eighth app meant editing six themes. Six themes x seven shared apps
-was 31 files that all said the same thing in six palettes - and they drifted,
-because nothing forced the sixth copy to be updated with the first five.
-
-So the config moved to where there is one of it, and the theme kept only what is
-actually different between themes: the colors.
+Owning themes used to be quadratic: every theme kept a full config file per
+app, so a seventh theme meant seven more files and an eighth app meant editing
+six themes. Six themes × seven shared apps was 31 files saying the same thing
+in six palettes — and they drifted.
 
 ```
 <app>/<file>.tmpl           ONE template per app, beside that app's dotfiles
-                            (ghostty/ghostty-theme.tmpl, btop/btop.theme.tmpl, ...)
 themes/<name>/theme.list    the palette that fills it in
 ```
 
 A template is the app's real config with `{{role}}` where a color goes.
-`render_theme_template` (lib/config.sh) substitutes every `color:` role, every
-single-valued meta field, and `{{THEME}}` from the theme's own `theme.list`. The
-whole substitution engine is one generated sed script (`_osr_theme_sed`,
-lib/theme.sh) - no template language, same reason `theme.list` is not TOML.
+`render_theme_template` (`lib/config.sh`) substitutes every `color:` role,
+every single-valued meta field, and `{{THEME}}`. The whole engine is one
+generated sed script (`_osr_theme_sed`) — no template language, same reason
+`theme.list` is not TOML.
 
-The palette has four groups, and the names are spelled out rather than
-abbreviated because they are the API a template is written against:
+**The palette vocabulary** (spelled out, because it is the API a template is
+written against):
 
 | group | roles |
-|---|---|
+| --- | --- |
 | the window | `background` `foreground` `cursor` `selection_background` `selection_foreground` `background_opacity` `background_blur` |
 | the 16 ANSI slots | `ansi_black` .. `ansi_white`, `ansi_bright_black` .. `ansi_bright_white` |
 | TUI chrome | `text_primary` `text_metadata` `text_muted` `panel_background` `border` `highlight` `accent_red` .. `accent_cyan` `box_cpu` `box_memory` `box_network` `box_process` `gradient_mid` `gradient_peak` |
 | semantic | `surface` `text_dim` `accent` `success` `error` `warning` `prompt_secondary` |
 
-`background_opacity` and `background_blur` are in the palette for the same reason
-the colours are: how translucent a terminal is, is part of how the theme *looks*.
-They used to sit in each terminal's base config, where four terminals had drifted
-to four different numbers (ghostty 0.85, wezterm 0.9, foot 0.7, alacritty 0.7)
-with no theme able to say otherwise. Now glass is 0.7 everywhere because glass
-says so.
+`background_opacity` and `background_blur` are palette values for the same
+reason the colors are: how translucent a terminal is, is part of how the theme
+looks. They used to sit in each terminal's base config, where four terminals
+had drifted to four different numbers (ghostty 0.85, wezterm 0.9, foot 0.7,
+alacritty 0.7). Now glass is 0.7 everywhere because glass says so.
 
-Every colour role has three spellings, because the configs os-rice owns write a
-colour three ways: `{{role}}` is `#rrggbb` (GTK, Xresources, most TUIs),
-`{{role_rgb}}` is bare `rrggbb` (foot), `{{role_dec}}` is `r,g,b` (KDE colour
-schemes, Konsole, CSS `rgba()`). One value, three shapes, nothing hard-coded into
-a template to get the one its app parses.
+**Three spellings per color**, because the configs os-rice owns write a color
+three ways:
 
-Not every theme field is a colour. `gtk_theme`, `icon_theme`, `cursor_theme`,
-`cursor_size`, `ui_font`, `mono_font`, `gnome_accent` are names,
-and they substitute the same way - which is what collapsed five files that each
-repeated the same six toolkit names (`gtk-2.0/gtkrc`, GTK3 and GTK4
-`settings.ini`, `xsettingsd.conf`, the cursor `index.theme`) into one template
-each. `modules/theming.sh` no longer parses those names back out of the file it
-just wrote to feed `gsettings`; it reads `theme.list`.
+| form | shape | consumers |
+| --- | --- | --- |
+| `{{role}}` | `#rrggbb` | GTK, Xresources, most TUIs |
+| `{{role_rgb}}` | bare `rrggbb` | foot |
+| `{{role_dec}}` | `r,g,b` | KDE color schemes, Konsole, CSS `rgba()` |
 
-The chrome group is why this is a vocabulary and not just a colour list. A
+Non-color fields substitute the same way: `gtk_theme`, `icon_theme`,
+`cursor_theme`, `cursor_size`, `ui_font`, `mono_font`, `gnome_accent`. That
+collapsed five files repeating the same six toolkit names (`gtk-2.0/gtkrc`,
+GTK3 and GTK4 `settings.ini`, `xsettingsd.conf`, the cursor `index.theme`)
+into one template each. `modules/theming.sh` no longer parses those names back
+out of the file it just wrote to feed `gsettings`; it reads `theme.list`.
+
+The chrome group is why this is a vocabulary and not just a color list. A
 full-screen app paints furniture the ANSI slots have no name for, and *which*
-intensity it accents with is a design choice: most themes accent with the bright
-set, rosemary accents with the normal one because it is deliberately muted. A
-template that hard-coded `ansi_bright_green` would force every theme into the
-first choice. `accent_green` lets the theme answer.
+intensity it accents with is a design choice: most themes accent with the
+bright set, rosemary accents with the normal one because it is deliberately
+muted. `accent_green` lets the theme answer.
 
-Writing a new theme is that block and nothing else - one file, no per-app
-directories. `themes/nord/` and `themes/catppuccin/` are now exactly a
-`theme.list` and a `wallpapers/`.
+> [!tip] Escape hatch
+> A theme can still ship a literal file, and it wins. `osr_theme_source <app> <name>` returns `themes/<t>/config/<app>/<name>` when it exists and a rendered template otherwise. That is what made the migration incremental rather than a flag day. None of the shared apps need it today.
 
-**A theme can still ship a literal file**, and it wins over the template:
-`osr_theme_source <app> <name>` returns `themes/<t>/config/<app>/<name>` when it
-exists and a rendered template otherwise. That escape hatch is what made the
-migration incremental rather than a flag day, and it is what a genuinely bespoke
-layer would use - but none of the shared apps need it today. Where a theme looked
-bespoke, the honest fix was a role: glass's blur became `background_blur`, and
-rosemary's muted look became the `accent_*` group rather than two hand-written
-config files.
+Where a theme looked bespoke, the honest fix was a role: glass's blur became `background_blur`, rosemary's muted look became the `accent_*` group.
 
-yazi was the last holdout and the clearest case. A flavor there is a DIRECTORY -
-`flavor.toml` plus the `tmtheme.xml` that colours file previews - so the tree
-carried five vendored flavors, ~4400 lines, and only the four themes that had one
-were painted. Both files are palette maps with a 600-line icon table attached, so
-both are templates now: every theme gets a flavor named after itself, and
-syntax-highlighted previews, from the same palette its terminal uses. The
-`yazi_flavor` field retired with them - the flavor is `{{THEME}}`, so the
-selector and the flavor cannot disagree about a name.
+yazi was the clearest case. A flavor there is a **directory** — `flavor.toml`
+plus the `tmtheme.xml` colouring file previews — so the tree carried five
+vendored flavors, ~4400 lines, and only four themes were painted. Both files
+are palette maps with a 600-line icon table attached, so both are templates
+now: every theme gets a flavor named after itself. The `yazi_flavor` field
+retired with them — the flavor is `{{THEME}}`, so selector and flavor cannot
+disagree.
 
-A theme's `config/` now holds only what is genuinely single-theme - glass's
-Hyprland/waybar/sddm tree, rosemary's i3/polybar/GTK tree. Those are not
-duplication; no other theme has a copy to drift from.
+A theme's `config/` now holds only what is genuinely single-theme: glass's
+Hyprland/waybar/sddm tree, rosemary's i3/polybar/GTK tree. No other theme has a copy to drift from.
 
-Modules go through `install_theme_layer <app> <name> <dst>`, which is that
-resolution plus `install_layer`, and returns non-zero when the theme has
-neither, which is the module's cue to fall back to its dotfiles default. Because the
-helpers no longer name `$OSR_THEME_DIR` directly, `osr_theme_modules` greps for
-them too (`OSR_THEME_MARKERS`) when deciding which modules carry a theme layer.
+Modules go through `install_theme_layer <app> <name> <dst>`, which returns
+non-zero when the theme has neither a literal nor a template — the module's
+cue to fall back to its dotfiles default. Because the helpers no longer name
+`$OSR_THEME_DIR` directly, `osr_theme_modules` greps for them too
+(`OSR_THEME_MARKERS`) when deciding which modules carry a theme layer.
 
-The GUI half is **Proteus** (`../proteus`), a standalone Rust crate: a
-rofi-style overlay listing the themes with their wallpapers as previews, on both
-X11 and Wayland from one binary. It reads `theme.list` directly and shells out
-to `osr theme`, so neither half depends on the other's internals.
+The GUI half is **[[proteus/README|Proteus]]**, a standalone Rust crate. It
+reads `theme.list` directly and shells out to `osr theme`, so neither half
+depends on the other's internals.
 
 ---
 
-## Manifest format
-
-Plain list, `#` comments, parsed with `while read`:
+## 7. Manifest format
 
 ```
 # rices/arch-hyprland-glass/rice.list
+require: arch:x86_64
 base
 zsh
 hyprland
@@ -792,394 +571,289 @@ firefox
 config: hypr waybar foot      # copy these config dirs from the rice's config/
 ```
 
-`install.sh arch-hyprland-glass` reads the list, runs each module, copies each
-config. Adding an app to a rice = add one line. New rice = new list, reuse every
-module.
+Plain list, `#` comments, `while read`. Adding an app = one line. New rice =
+new list, reuse every module.
 
 ---
 
-## 7. Observed install style + gaps (read from the existing rices)
-
-A pass over the Linux rices (arch = 83 `.sh`, mature; debian/rhel = thin
-skeletons) to pin the design to what actually exists, not what's imagined. A
-fourth rice, `linux-debian-x86_64-kde-gruvbox`, was **deleted** — it was a dead
-8k-file vendored-theme dump, and its wholesale-vendoring anti-pattern is exactly
-what G5 below argues against.
-
-### What the rices already do (ground truth to preserve)
-
-- **Privilege model — `DELEVATED_USER`.** `sudo -v` once upfront + a keep-alive
-  loop; run system installs as root but **drop to the target user**
-  (`sudo -u "$DELEVATED_USER" …`) for user-space (cargo, oh-my-zsh, dotfiles),
-  then `chown -R` back. Home resolved via `getent`, default `root`. This is in
-  ~every module and *must* become a `lib/user.sh` primitive (`as_user`), not be
-  hand-rolled — the dropped-`check_error` arch drift bug came from hand-rolling.
-- **Idempotency is already the de-facto style** — "already installed, skipping"
-  guards, git repos updated-or-cloned with remote-URL check + dirty-reset. §2
-  is codifying existing behavior, not inventing it.
-- **Native installs already respect user holds/pins** — `install_pkg_apt`
-  filters `dpkg --get-selections | grep hold` **and** negative-priority apt
-  preferences; `install_pkg_brew` honors `--pinned`; cargo reads
-  `~/.cargo/ignore`. The naive `pkg_install` in §1 silently drops this.
-- **Detectors already factored** — `detect-{cpu,gpu,virt,hwaccel,aur-helper}.sh`.
-  `lib/detect.sh` must **absorb all five**, not just distro/pkg.
-
-### The real provider palette (wider than §4's five tags)
-
-- **native** + hold/pin filtering — *all rices* — ✅ (add pin-respect, see gaps)
-- **`aur:`** (paru/yay via detect) — *arch apps, 15 files* — ✅ covered
-- **`cargo:`** (`--locked`, run as user) — *debian/rhel starship, serie* — ✅ covered
-- **`script:`** (curl \| sh, oh-my-zsh sed-patched) — *debian zsh* — ✅ covered
-- **`brew:`** — *debian common.sh* — ➕ add tag
-- **`repo:`** (add 3rd-party repo + GPG key, then native) — *debian gh/docker* — ➕ **missing**
-- **`tarball:`** (fetch release binary → `/usr/local`) — *debian go, zig* — ➕ **missing**
-- **`source:` with a bootstrapped build toolchain** — *debian ghostty (fetches matching zig first, then builds)* — ⚠️ §4's `source:` is too simple
-- **`flatpak:`** — *arch flatpack, hyprcursor* — ➕ add tag
-
-### Gaps the design must close
-
-- **G1 — widen §4 providers:** add `repo:`, `tarball:`, `brew:`, `flatpak:`;
-  let `source:` declare a build-toolchain prerequisite (ghostty→zig) as an
-  ordinary earlier manifest line.
-- **G2 — respect holds/pins in the idempotency contract (§2):** never reinstall
-  or override a user-held/pinned/ignored package. This *is* "don't destroy
-  user-defined state" applied to packages, not just config.
-- **G3 — service management isn't POSIX/systemd-portable → resolved with
-  `enable_service` / `disable_service`.** Every rice uses `systemctl enable
-  --now` (NetworkManager, sshd, sddm, cups, smb, waydroid, vmtoolsd) — but the
-  Alpine/busybox target runs **OpenRC/runit**, no `systemctl`. **Decided:** a
-  universal `enable_service` / `disable_service` verb pair in `lib/service.sh`
-  dispatches on the detected init, idempotently (see §8).
-- **G4 — `github_latest` version resolution is duplicated** (go, zig, ghostty
-  each re-query `api.github.com/.../tags`). One helper in `lib/net.sh`.
-- **G5 — program-data vs config.** `.oh-my-zsh` was copied wholesale (640
-  vendored files in the now-deleted kde rice) and *also* script-installed in
-  debian — same tool, two methods, drift. It's an **installed program** (belongs
-  to `script:`/`git:` install, one method), not config; only `.zshrc` +
-  `starship.toml` are the config layer (§5). Split the two so a rice never
-  vendors 640 files.
-- **G6 — install method varies by distro *release*.** `ghostty` is native on
-  noble, source-built on jammy. One `apt.map` across all Ubuntu releases can't
-  say it → `name@release` qualifier (§1a), `OSR_CODENAME`/`OSR_VERSION_ID` in
-  detect.
-- **G7 — system config paths vary by distro family** (`/etc/default` vs
-  `/etc/conf.d` vs `/etc/sysconfig`) → resolve `OSR_ETC_DEFAULT` once in detect,
-  prefer drop-in files (§5a).
-- **G8 — artifact-fetching providers are arch-specific** (`*-x86_64` vs
-  `*-aarch64`, Go's `amd64`). Native pkg managers self-resolve arch; tarball/
-  source/github don't → `OSR_ARCH`/`OSR_ARCH_DEB` + `name@arch` qualifier (§1a).
-- **G9 — a rice has no way to declare hardware/OS preconditions** → `require:`
-  manifest directive + `lib/preflight.sh`, checked before any mutation (§10).
-- **G10 — "GPU present + Vulkan actually initializes" can't be proven pre-install**
-  (the prober is itself a package) → cheap `require: gpu:present` gate up front +
-  a functional probe as an early module (§10).
-
-### The migration wound, concretely
-
-Config today is `cp -f "$REPO/zsh/.zshrc" "$HOME/.zshrc"` + `chown -R` — the
-exact blob-clobber §5 replaces. The `.zshrc` I profiled mixes toolchain PATHs
-(cargo/go/brew/cuda/nvm), aliases, a `y()` yazi function, and starship/omz theme
-in one file. That single file is the §5 split's first and best test case.
-
----
-
-## 8. Init & privilege — universal services + target-user install
-
-Two "who/what am I acting on" abstractions the modules currently hand-roll.
+## 8. Init and privilege
 
 ### Universal service control
 
-`lib/service.sh` gives two idempotent verbs that work on any init — no module
-ever calls `systemctl` directly again:
+`lib/service.sh` gives two idempotent verbs. No module calls `systemctl`
+directly.
 
 ```sh
 enable_service NetworkManager     # enable + start now, idempotent
 disable_service cups              # stop + disable, idempotent
 ```
 
-Dispatch on `OSR_INIT` (added to `detect.sh`); check current state before acting:
+Dispatch on `OSR_INIT`, checking current state before acting:
 
-- **systemd** — enable: `systemctl enable --now` · disable: `systemctl disable --now`
-- **OpenRC** (Alpine) — enable: `rc-update add … default` + `rc-service … start` · disable: `rc-update del …` + stop
-- **runit** (Void) — enable: `ln -s /etc/sv/… /var/service/` · disable: `rm /var/service/…`
-- **sysvinit** (fallback) — enable: `update-rc.d … enable` + `service … start` · disable: `update-rc.d … disable`
+| init | enable | disable |
+| --- | --- | --- |
+| systemd | `systemctl enable --now` | `systemctl disable --now` |
+| OpenRC (Alpine) | `rc-update add … default` + `rc-service … start` | `rc-update del …` + stop |
+| runit (Void) | `ln -s /etc/sv/… /var/service/` | `rm /var/service/…` |
+| sysvinit | `update-rc.d … enable` + `service … start` | `update-rc.d … disable` |
 
 Service *names* differ per init (`NetworkManager` vs `networkmanager`) → a
-`servicemap` echoing `pkgmap`, rows only for names that actually differ.
+`servicemap` echoing `pkgmap`, rows only where names actually differ.
 
-### Target-user model: root-for-root **or** user-for-user
+### Target-user model: root-for-root or user-for-user
 
-Generalize today's `DELEVATED_USER` into **`OSR_USER` = the account being riced**,
-with two symmetric modes:
+`OSR_USER` is the account being riced.
 
-- **root-for-root** — run as root, `OSR_USER=root`, `HOME=/root`; dotfiles/configs
-  land in root's home; no privilege drop.
-- **user-for-user** — `OSR_USER=<name>`; user-space work (cargo, oh-my-zsh,
-  dotfiles, `chsh`, flatpak-user) runs **as that user**; only the native package
-  step escalates to root.
+| mode | behavior |
+| --- | --- |
+| **root-for-root** | run as root, `OSR_USER=root`, `HOME=/root`, no privilege drop |
+| **user-for-user** | user-space work (cargo, oh-my-zsh, dotfiles, `chsh`, flatpak-user) runs as that user; only the native package step escalates |
 
-Resolution order: `--user <name>` > `$SUDO_USER` (when invoked via sudo) >
-current `$USER` > `root`. The key inversion for user-mode: **root is the
-exception, not the default** — most providers (`cargo:`, `brew:`, `flatpak:`
-user, `git:` clones, config layering) need no root at all; `as_user` is the
-default wrapper and escalation is opt-in per step.
+Resolution order: `--user <name>` > `$SUDO_USER` > current `$USER` > `root`.
+
+> [!important] The key inversion
+> **Root is the exception, not the default.** Most providers need no root at
+> all; `as_user` is the default wrapper and escalation is opt-in per step.
 
 ```sh
 as_user() { [ "$(id -un)" = "$OSR_USER" ] && "$@" || sudo -u "$OSR_USER" "$@"; }
 ```
 
-Modules call `as_user cargo install …`; they never hand-roll `sudo -u` + a
-`chown -R` afterthought (the source of the arch drift bug).
+Modules call `as_user cargo install …` — never a hand-rolled `sudo -u` plus a
+`chown -R` afterthought, which is where the historical drift bug came from.
 
 ---
 
-## 9. Testing harness — no real machine (containers + QEMU)
+## 9. Testing — containers plus QEMU, no real machine
 
-Yes: **podman/docker cover ~everything except the GPU/DE**, QEMU covers the rest.
-Split by what each layer can actually exercise:
+| what it exercises | how |
+| --- | --- |
+| install logic, `pkgmap`, idempotency, POSIX-sh under `dash`/`ash`, 5-distro matrix | podman/docker (`archlinux`, `debian:stable-slim`, `alpine`, `fedora`, `void`) |
+| user-for-user mode | rootless podman — a non-root uid surfaces bad root assumptions for free |
+| `enable_service` dispatch | PATH-mocked `systemctl`/`rc-update`/`sv` that log their args |
+| full DE / hyprland / sddm / GPU / wallpaper | QEMU VM — needs a real kernel, display, GPU |
 
-- **install logic, `pkgmap`, idempotency, POSIX-sh under `dash`/`ash`, 5-distro
-  matrix** → **podman/docker** (`archlinux`, `debian:stable-slim`, `alpine`,
-  `fedora`, `void`): fast, ephemeral, CI-friendly; covers 5 pkg managers + 3 inits.
-- **user-for-user mode (§8)** → **rootless podman**: runs as a non-root uid →
-  exercises no-root install for free, surfaces bad root assumptions.
-- **`enable_service` dispatch** → **PATH-mocked** `systemctl`/`rc-update`/`sv`:
-  assert the right command per `OSR_INIT`; real init is painful in a container.
-- **full DE / hyprland / sddm / GPU / wallpaper** → **QEMU VM**: needs a real
-  kernel, display, GPU — impossible in a container.
+- **The matrix is the idempotency test.** `podman run --rm -v "$PWD":/os-rice img sh -c 'install.sh <rice> && install.sh <rice>'` — the double run **is** §2's acceptance.
+- **POSIX lint in CI:** every `lib/` + `modules/` file through `dash -n` and `shellcheck -s sh`.
+- **QEMU is manual/nightly**, never per-commit: boot an Arch VM, run the hyprland rice, screenshot.
 
-Concretely:
-
-- **Matrix = the idempotency test.** For each image:
-  `podman run --rm -v "$PWD":/os-rice img sh -c 'install.sh <rice> && install.sh <rice>'`
-  — the **double run is** §2's "second run all skipped, zero errors" acceptance.
-- **POSIX lint in CI:** every `lib/`+`modules/` file through `dash -n` and
-  `shellcheck -s sh` — catches the bash-isms the POSIX decision commits to killing.
-- **Service tests without real services:** fake `systemctl`/`rc-update`/`sv` on
-  `PATH` that log their args; assert `enable_service foo` emits the right call for
-  each `OSR_INIT`. Real start only in an occasional systemd/OpenRC full image.
-- **QEMU only for the DE smoke test:** one heavy, *manual/nightly* job — boot an
-  Arch VM, run the hyprland rice, screenshot. Not per-commit.
-
-**Recommendation: podman-first** (rootless matches user-mode, no daemon), docker
-as fallback, QEMU reserved for the DE/service smoke test. Container matrix +
-`dash -n` + shellcheck run per-commit; QEMU stays manual.
+**Podman-first** (rootless matches user-mode, no daemon), docker as fallback.
 
 ---
 
-## 10. Rice preconditions — declare requirements, fail before mutation
-
-A rice can demand things of the host (an arch, an init, a real GPU). Discovering
-the mismatch **halfway through** — after packages are installed — is the bad
-outcome. So requirements are declared as data in the manifest and checked up
-front. Two tiers, split by cost and by whether the check touches the system.
+## 10. Rice preconditions — declare, fail before mutation
 
 ### Tier 1 — `require:` (cheap, declarative, pre-mutation)
 
-A `require:` directive in `rice.list`; the runner parses it and errors before
-step 1, exiting non-zero **before anything is written**. This actively
-strengthens the §2 safety contract — fail clean, touch nothing.
+Parsed by the runner and checked before step 1, exiting non-zero **before
+anything is written**.
 
 ```
-# rices/arch-hyprland-glass/rice.list
-require: arch:x86_64          # x86_64-only rice -> fail on arm instead of 404ing a tarball
+require: arch:x86_64          # fail on arm instead of 404ing a tarball
 require: init:systemd
-require: gpu:present          # a real GPU exists at all
-base
-zsh
-hyprland
+require: gpu:present
 ```
 
-Predicates stay small, cheap, and **data-only** (no installs):
+| predicate | check |
+| --- | --- |
+| `arch:<m>` | `uname -m` (or `OSR_ARCH_DEB`) |
+| `init:<i>` | `OSR_INIT` |
+| `distro:<d>` / `release:<c>` | `OSR_DISTRO` / `OSR_CODENAME` |
+| `cmd:<bin>` | `command -v` |
+| `gpu:present` | `/dev/dri/renderD*` or a GPU in `lspci` |
 
-| predicate                    | check                                      |
-|------------------------------|--------------------------------------------|
-| `arch:<m>`                   | `uname -m` (or `OSR_ARCH_DEB`)             |
-| `init:<i>`                   | `OSR_INIT`                                 |
-| `distro:<d>` / `release:<c>` | `OSR_DISTRO` / `OSR_CODENAME` (ties to G6) |
-| `cmd:<bin>`                  | `command -v`                               |
-| `gpu:present`                | `/dev/dri/renderD*` or a GPU in `lspci`    |
+The value half may list alternatives with `|` —
+`require: distro:void|debian|ubuntu` — and holds when any branch does. Two
+`require:` lines already mean AND, so `|` is the only combinator needed.
 
-The value half may list alternatives with `|` — `require: distro:void|debian|ubuntu`
-— and holds when any branch does. A rice's portability claim is a *set* of
-targets, and two `require:` lines already mean AND, so `|` is the only
-combinator needed.
+`lib/preflight.sh` dispatches each. Preflight runs on `osr switch` too — you
+cannot switch into a rice the hardware cannot run.
 
-`lib/preflight.sh` dispatches each; unmet → `error "rice needs <pred>; detected …"`.
-Preflight runs on `osr switch <rice>` too — you can't switch into a rice the
-hardware can't run.
-
-### Tier 2 — functional capability probe (real init, as an early module)
+### Tier 2 — functional capability probe, as an early module
 
 "GPU present" is cheap; "Vulkan actually initializes" is not — the tool that
-proves it (`vulkaninfo`) is itself a package you haven't installed yet, and a
-true probe **touches the system**, which collides with "fail before mutation".
-So functional capability is *not* a `require:` predicate — it's an **early
-module** (`modules/gpu-vulkan.sh`, first in the rice) that does real, idempotent
-work:
+proves it is itself a package you have not installed, and a true probe
+**touches the system**, colliding with "fail before mutation". So it is an
+early module (`modules/gpu-vulkan.sh`), not a predicate:
 
 ```
 detect GPU  ->  install minimal driver + loader + prober (mesa, vulkan-loader, vulkan-tools)
-            ->  headless probe: `vulkaninfo --summary` (or `vkcube --c 1`)
+            ->  headless probe: vulkaninfo --summary (or vkcube --c 1)
             ->  parse for a REAL hardware device, reject software fallback (llvmpipe/lavapipe)
-            ->  device initializes: proceed  |  errors / software-only: hard-fail with the driver diagnostic
+            ->  initializes: proceed | software-only or error: hard-fail with the driver diagnostic
 ```
 
-This "bring it up to the point where we can decide, then go or error" is exactly
-the ask. It stays honest: the probe installs only its **own** prerequisites
-(which a Vulkan rice needs anyway), never rice-specific packages. `require:
-gpu:vulkan` in a manifest is sugar meaning "ensure the `gpu-vulkan` probe module
-runs early and hard."
+It stays honest: the probe installs only its **own** prerequisites, never
+rice-specific packages. `require: gpu:vulkan` is sugar meaning "run the
+`gpu-vulkan` probe early and hard".
 
 ---
 
-## 11. Two module tiers — and only one of them is the target
+## 11. Two module tiers — and only one is the target
 
-A module is either a shell script at `modules/<name>.sh` or a C function at
-`modules/<name>.c` registered in `lib/modules.c`. `install.sh` asks
-`osr module has <name>` and runs whichever exists, so a `rice.list` never says
-which tier a module belongs to — and that is what makes the migration
-incremental rather than a rewrite.
-
-The C tier is the target. What it buys is not speed:
-
-- **`osr_step` can fork a function of this program.** The shell `run_step` could
-  only fork a *shell* function, which is the single reason `lib/ui.sh` still
-  exists at all. A step in C can be "install these packages" instead of "run
-  this one command".
-- **A module is a translation unit, not a sourced fragment.** A `.sh` module
-  runs inside the installer's shell and can therefore clobber any variable the
-  libs use; `_il_cargo` is one typo away from `_i3d`. The C module has scope.
-- **The contract is a header, not a convention.** `lib/module.h` is the whole
-  API a module may assume. In the shell tier the API is "whatever happens to be
-  defined by the time we source you".
-- **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and
-  the C module side by side under stubbed package tooling and diffs *what they
-  did to the box*, so a port is provably behaviour-preserving rather than
-  hopefully so.
+`install.sh` asks `osr module has <name>` and runs whichever exists, so a
+`rice.list` never says which tier a module belongs to. That is what makes the
+migration incremental rather than a rewrite. The C tier is the target; see
+[[#D-4. A module may be a C unit instead of a script]] for what it buys.
 
 ### 11a. Every `.sh` module is legacy
 
-The ~115 shell modules carry a marker beside `# session:` and `# themable:`:
+All 115 shell modules carry a marker beside `# session:` and `# themable:`:
 
 ```sh
 # session: x11
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
+# legacy: sh  -- port to C (modules/<name>.c + lib/modules.c); see DESIGN 11a
 ```
 
-It is enforced by `test/lint.sh`, for the same reason `# session:` is: a marker
-that is only usually there answers no question. `grep -c '^# legacy:' modules/*.sh`
-is the remaining-work count, and it only ever goes down.
+Enforced by `test/lint.sh`, for the same reason `# session:` is: a marker only
+usually present answers no question. `grep -c '^# legacy:' modules/*.sh` is
+the remaining-work count, and it only goes down.
 
-The marker means "should be C", not "is broken". A legacy module is fully
-supported and a rice may depend on it; what it may not do is be the pattern a
-NEW module copies. Ports happen when a module is being touched anyway — that is
-how `flameshot`, `docker`, `fastfetch` and `tcc` moved — and one blocker is
-worth knowing up front: `osr_pkg_install` implements the **native** path only.
-A module whose packages resolve to a `cargo:`/`source:`/`script:`/`aur:` row
-must stay shell until those providers are ported, and it gets a clear failure
-rather than a wrong install if it tries. `modules/i3lock.sh` (cargo:xidlehook,
-source:provide_betterlockscreen) is the canonical example of one that cannot
-move yet.
+> [!note] "Legacy" means "should be C", not "is broken"
+> A legacy module is fully supported and a rice may depend on it. What it may
+> not be is the pattern a **new** module copies.
 
-A brand-new module goes straight to C — `modules/helpers.c` is the first that
-never had a `.sh` form, and therefore has no `test/ref` twin to diff against;
-its scenario in `module_c_parity.sh` asserts behaviour directly instead.
+Ports happen when a module is being touched anyway — that is how `flameshot`,
+`docker`, `fastfetch` and `tcc` moved. One blocker is worth knowing up front:
+`osr_pkg_install` implements the **native** path only, so a module whose
+packages resolve to `cargo:`/`source:`/`script:`/`aur:` must stay shell until
+those providers are ported. It fails loudly rather than installing wrongly.
+`modules/i3lock.sh` (`cargo:xidlehook`, `source:provide_betterlockscreen`) is
+the canonical example.
+
+A brand-new module goes straight to C. `modules/helpers.c` is the first that
+never had a `.sh` form and therefore has no `test/ref` twin; its scenario in
+`module_c_parity.sh` asserts behaviour directly.
 
 ---
 
-## Module example (target)
+## 12. Hardware commands — `undervolt` and `benchmark`
 
-`zsh.sh` written **once**, POSIX, distro-agnostic — compare to the three pasted
-copies today:
+Two commands that are not ricing at all. They live in the same binary because
+it is already the thing that knows the machine.
 
-```sh
-# modules/zsh.sh
-run_step "Installing zsh + tools" pkg_install zsh curl lsd starship
+### `osr undervolt cpu <verb>`
 
-install_omz                                        # shared helper in lib/git.sh
-install_zsh_plugin zsh-autosuggestions     https://github.com/zsh-users/zsh-autosuggestions
-install_zsh_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting
+CPU voltage offsets, by hand or found automatically. The loop it exists to
+automate:
 
-backup_copy "$DOTFILES/zsh/.zshrc"          "$HOME_U/.zshrc"
-backup_copy "$DOTFILES/starship/starship.toml" "$HOME_U/.config/starship.toml"
-
-osr_shell_is "$U" "$(command -v zsh)" || osr_set_login_shell "$U" "$(command -v zsh)"
+```
+undervolt -> stress -> crashed/errored ? back off : record, go deeper
+          -> repeat -> long soak at the safe value
 ```
 
+By hand that is an evening per machine, and it leaves no record of where you
+were when the box locked up. The pieces exist (intel-undervolt, ryzen_smu,
+stress-ng); what does not is anything that runs the loop, decides what
+"stable" means, and **survives the machine dying mid-test**.
+
+| verb | state |
+| --- | --- |
+| `probe` | implemented — what this machine exposes; **never writes anything** |
+| `status` `set` `reset` | not yet |
+| `test` | not yet (needs `lib/uv/stress.c`) |
+| `auto` `resume` | not yet (needs `lib/uv/search.c`) |
+| `apply` `enable-boot` `disable-boot` | not yet |
+
+> [!tip] Start with `probe`
+> On most machines the answer is that firmware has voltage control locked,
+> and that is worth knowing before anything else. `probe` works on a machine
+> with no voltage control at all, and its answer decides whether the rest of
+> the command has anything to do.
+
+| unit | responsibility | state |
+| --- | --- | --- |
+| `lib/uv/backend.h` | four verbs per vendor — all hardware knowledge behind it | done |
+| `lib/uv/generic_opp.c` | the only backend today; last in the table and always claims | done |
+| `lib/uv/journal.c` | crash-safe record of what was applied when | done |
+| `lib/uv/stress.c` | the tiered validator | planned |
+| `lib/uv/search.c` | vendor-neutral descent: coarse step, back off, refine, subtract a margin, soak | planned |
+| `lib/undervolt.c` | argument parsing and reports. No hardware. | done |
+
+Vendor backends (`amd_smu`, `intel_msr`, `arm_dt`) are what `backend.h` exists
+for; none is written yet, and `uv_detect` walks the table most-specific-first,
+so adding one is a row, not a refactor.
+
+> [!important] The journal is load-bearing, not bookkeeping
+> An undervolt one step too far does not return an error — it hard-locks the
+> box between one instruction and the next, and the next thing that runs is
+> the BIOS. So the search's memory cannot live in the search's process.
+>
+> ```
+> append TRY <what we are about to apply>   <- fsync, file AND directory
+> apply it
+> run the test
+> append OK (or FAIL) <the same thing>      <- fsync
+> ```
+>
+> A `TRY` with no verdict after it is a machine that died mid-test.
+> Distinguishing "died" from "still running" is what the boot id is for: a
+> dangling `TRY` from a **previous** boot is a crash, one from **this** boot
+> is an interrupted run (^C, killed). Those need opposite responses — back off
+> versus carry on — and nothing else can tell them apart.
+>
+> The directory fsync matters for the same reason: a freshly created journal
+> whose directory entry never reached the platter reads as "no journal at
+> all" after the power cycle, which is exactly the case being survived.
+
+Analysis is a pure function over a record array (`uv_journal_analyze`),
+separate from file I/O.
+
+### `osr benchmark cpu` / `osr benchmark sensors`
+
+Throughput, power, thermals, clocks — `lib/benchmark.c` over
+`lib/bench/{cpu,power,util}.c`. Its own command rather than a private corner
+of the undervolt code, because "what is this machine actually doing" is worth
+asking on its own, and the undervolt perf gate then consumes these numbers
+instead of growing a second, subtly different measurement.
+
+Flags: `--seconds`, `--json`, `--verbose`, `--save <file>`, `--compare <file>`,
+`--install-deps`.
+
+**The headline number for undervolting is ops per watt, not ops/s.**
+Throughput barely moves when an undervolt works; what changes is the power
+needed to reach it, and therefore how long the part holds boost.
+
+Power has no portable interface on Linux, so it is layered exactly like
+`lib/uv/backend.h`: try each source, take the first that answers, and if none
+does, **say so rather than invent a number**.
+
+| source | kind | caveats |
+| --- | --- | --- |
+| RAPL | energy counter (uJ) | accurate, cannot miss a spike between samples; wraps, and root-only on most kernels since PLATYPUS |
+| hwmon | instantaneous (uW) | must be sampled and averaged; whatever happens between samples is lost |
+| SMU | package power from the Ryzen SMU PM table | best on Granite Ridge |
+| battery | discharge rate | laptops only, and only on battery |
+
+That difference is why the workload runs as a child process while the parent
+polls — an instantaneous source needs sampling throughout, and the polling
+loop is also where peak temperature and peak clock come from.
+
+> [!warning] Reachability
+> `benchmark` is a core command (`build/osr benchmark cpu`). The `./osr` front
+> end does not list it as a verb; `undervolt` it does.
+
 ---
 
-## MVP scope
+## Not doing (and why)
 
-Prove the whole thesis end to end on the smallest slice:
-
-**In:**
-- `lib/{log,ui,pkg,detect}.sh` + `lib/pkgmap/{apt,pacman}.map`
-- one shared `install.sh` runner
-- migrate `zsh.sh` to POSIX + `pkg_*` + `run_step`
-- make it install on **arch and debian from the same module file**
-- **prove group-by-method dispatch** on two non-native rows: `starship=script:`
-  and `paru=source:` install correctly alongside native `zsh` in one
-  `pkg_install` call, each with its own idempotency probe (§4)
-- **split this `.zshrc`** into `rc.d/{00-env,10-aliases,90-theme}.zsh` behind a
-  marker-managed loader via `ensure_block`; env seeded-once, guard-style PATH (§5)
-- **`osr switch <rice>`** that swaps `90-theme` + wallpaper only, proving the
-  additive/replace asymmetry (§6)
-- **podman idempotency test** on arch + debian + alpine images: double-run
-  `install.sh` is green, `dash -n` + shellcheck clean (§9)
-
-**Out of MVP:** rewriting all ~40 arch modules; `cargo:`/`flatpak:` providers;
-layering DE configs beyond zsh; `osr prune`; the auto-dependency resolver; the
-bootstrap binary; Windows.
-
-**Acceptance:**
-- [ ] The 5-verb `pkg_*` abstraction covers `zsh` with only package *names*
-      differing (handled by `pkgmap`).
-- [ ] `pkg_install zsh starship paru` resolves to native-batched `zsh`,
-      `script:` starship, and `source:` paru in one call.
-- [ ] Modules run under `dash` / busybox `ash`, not just bash.
-- [ ] `bootstrap.sh` finds a downloader (curl || wget || busybox wget) on
-      minimal Alpine + minimal Debian; no compiled binary needed.
-- [ ] Running the rice **twice** → second run is all `[ok] skipped`, zero errors,
-      and `$PATH` has **no duplicated entries**.
-- [ ] `osr switch other-rice` changes the prompt + wallpaper while leaving
-      `00-env`, aliases, and every installed package untouched.
-- [ ] Piping install to a file yields clean plain-text logs (no escape junk).
+| not doing | why |
+| --- | --- |
+| C rewrite for speed | wall-clock is `apt`/`curl`/network, not shell |
+| byte-level per-package progress bars | package managers will not feed them; step progress delivers the same for a fraction of the code |
+| TOML/YAML manifests | needs a parser, un-POSIX; a newline list with `#` is more readable *and* free to parse |
+| merging Windows in | different package model and language; a shared abstraction is negative value |
+| per-commit full-VM (QEMU) CI | too slow for the inner loop; containers carry the per-commit matrix |
+| a plugin/hook framework | YAGNI. `use module` = source a file. Add structure when a second contributor needs it |
+| auto-resolved provider dependency DAG | manifest order is the graph. A DAG is the plugin framework by another name |
+| package removal on rice switch | additive-only; removal is un-idempotent and risky. An opt-in `osr prune` may come later |
+| provider fallback chains (native → cargo → source) | non-deterministic and hard to make idempotent. Explicit per-distro tags are predictable |
+| pinning `curl \| sh` installers | accept upstream drift for the convenience |
 
 ---
 
-## Not Doing (and Why)
+## Open questions
 
-- **Custom C helper binary** — busybox-static covers missing primitives;
-  hand-rolled C reinvents it. Revisit only on a concrete gap busybox can't fill.
-- **C rewrite for speed** — wall-clock is `apt`/`curl`/network, not shell. Saves
-  nothing measurable and breaks self-bootstrap.
-- **Byte-level per-package progress bars** — package managers won't feed them;
-  step progress + spinners deliver the same "feels alive" for a fraction of the
-  code.
-- **TOML/YAML manifests** — need a parser, un-POSIX, un-lazy. A newline list with
-  `#` comments is more readable *and* free to parse.
-- **Merging Windows in** — different package model and language; a shared
-  abstraction there is negative value.
-- **Per-commit full-VM (QEMU) CI** — too slow for the inner loop; containers
-  carry the per-commit matrix, QEMU is a manual/nightly DE smoke test (§9).
-- **A plugin/hook framework** — YAGNI. `use module` = source a file. Add
-  structure when a second contributor actually needs it.
-- **Auto-resolved provider dependency DAG** — manifest order is the graph (`rust`
-  before `cargo:`, `paru` before `aur:`). A DAG is the plugin framework by
-  another name. YAGNI.
-- **Package removal on rice switch** — additive-only; removal is un-idempotent
-  and risky. A separate opt-in `osr prune <rice>` may come later.
-- **Provider fallback chains** (native → cargo → source) — non-deterministic and
-  hard to make idempotent. Explicit per-distro tags are predictable; revisit only
-  if hand-maintaining N maps hurts.
-- **Pinning `curl | sh` installers** — accept upstream drift for the convenience;
-  revisit only if a drifting installer burns a run.
-
----
-
-## Open Questions
-
-- Layer taxonomy beyond `00/10/20/90/99` — is a two-digit numeric prefix enough
-  ordering headroom for every config, or will some need sub-layers?
+- Is a two-digit numeric prefix (`00/10/20/90/99`) enough ordering headroom for every config, or will some need sub-layers?
+- G1 (the `repo:` / `tarball:` / `brew:` / `flatpak:` providers) is still open. Which, if any, is worth adding before the C tier can consume providers at all?

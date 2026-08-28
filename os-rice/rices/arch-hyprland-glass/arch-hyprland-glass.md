@@ -1,9 +1,19 @@
+---
+title: arch-hyprland-glass rice
+type: rice
+tags:
+  - kind/rice
+  - topic/theming
+  - topic/wayland
+  - os/arch
+---
+
 # arch-hyprland-glass
 
 The Hyprland "glass" desktop: SDDM with a QML theme, Hyprland + Waybar + wofi +
 mako, gtklock, PipeWire with EasyEffects, and the application set on top.
 Arch / x86_64 / systemd only — `rice.list` declares that up front (`require:`),
-so a mismatched host fails before any mutation (§10).
+so a mismatched host fails before any mutation ([[os-rice/DESIGN#10. Rice preconditions — declare, fail before mutation|DESIGN 10]]).
 
 ```sh
 os-rice/osr install arch-hyprland-glass
@@ -14,14 +24,15 @@ bundle: ~30 bash scripts that each re-implemented logging, sudo, `pacman -S`,
 `mkdir`/`chown` and config copying. All of it now runs on the shared harness —
 `modules/*.sh` (one distro-agnostic copy each), `lib/` and this directory's
 `config/`. The bundle is gone; anything from it is recoverable from git history
-(the pre-migration tree is at commit `63bbfd9`).
+(the pre-migration tree is at commit `63bbfd9`; see
+[[archive-decisions#Part 3 — deleted trees]]).
 
 ## What CI cannot prove here
 
 The container matrix covers package installs, config layering and idempotency.
 It cannot cover a display, a GPU, a real kernel or a hypervisor, so the modules
 below are **correct-by-construction, not verified end to end** — they need a real
-machine or a QEMU boot (DESIGN §9). Treat a change to one of them as untested
+machine or a QEMU boot ([[os-rice/DESIGN#9. Testing — containers plus QEMU, no real machine|DESIGN 9]]). Treat a change to one of them as untested
 until it has run on hardware.
 
 - **Kernel / CPU / GPU / VM**: `dkms` (headers must match the *running* kernel),

@@ -1,3 +1,14 @@
+---
+title: The win- modules
+type: readme
+tags:
+  - kind/reference
+  - topic/os-rice
+  - topic/windows
+  - lang/c
+  - os/windows
+---
+
 # The `win-` modules
 
 OS-level passes over a Windows machine: debloat, tweaks, updates —
@@ -10,7 +21,7 @@ program and paint its config; nothing here installs anything or has a theme
 layer — each one changes the operating system. That is what the `win-` prefix
 says, and it is a prefix rather than a folder because every module in this repo
 is one file in `modules/`, whichever operating systems it runs on (see
-[PLAN_UNIVERSAL.md](../../PLAN_UNIVERSAL.md) decision 12). They are asked for
+[[PLAN_UNIVERSAL]] ([[archive-decisions#D12|D12]])). They are asked for
 by name, never listed in a `rice.list`. A `--theme-only` run treats every one
 of them as a no-op, on purpose.
 
@@ -20,6 +31,10 @@ of them as a no-op, on purpose.
 .\osr.ps1 module win-debloat    # Raphire's Win11Debloat  (third-party)
 .\osr.ps1 module win-winutil    # Chris Titus WinUtil     (third-party)
 ```
+
+> [!warning] Four modules, three files
+> `win-winutil` has no `win-winutil.c`; it lives in `modules/win-debloat.c`
+> beside `win-debloat`.
 
 All four need Administrator for most of what they do and ask for it once, up
 front, through `lib/elevate.c` — the same single UAC prompt the rest of a run
@@ -52,7 +67,7 @@ setting the machine did want fails silently.
 | --- | --- |
 | `win-tweaks.c` | `setup.ps1` + `microscripts/reg-*.ps1` + `microscripts/disable-*.ps1` |
 | `win-update.c` | `win-update.ps1` + `microscripts/update-windows.ps1` |
-| `win-debloat.c` | `winutils.ps1` + `microscripts/raphire-win11debloat.ps1` |
+| `win-debloat.c` | `winutils.ps1` + `microscripts/raphire-win11debloat.ps1` — and `win-winutil` too: both vendor scripts are one file, since they differ only in which script is fetched |
 | `../lib/wintweak.c` | `src/common.ps1`'s `UpdateRegistryValue`, `Stop-Service`/`Set-Service`, `Remove-Item -Recurse` |
 
 `src/common.ps1`'s other half needed no port: its `EchoInfo`/`EchoWarning`/

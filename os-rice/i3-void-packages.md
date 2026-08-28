@@ -1,7 +1,23 @@
+---
+title: i3 components on Void (xbps)
+type: reference
+status: snapshot
+snapshot: 2026-08-28
+tags:
+  - kind/reference
+  - topic/i3
+  - topic/packages
+  - os/void
+---
+
 # i3wm on Void Linux — where every component in `i3-sugg.md` actually comes from
 
-Companion to `i3-sugg.md` (the distro-agnostic checklist). This file answers the
-*second* question: for Void specifically, what is the real `xbps` package name,
+> [!info] Reference, and a dated snapshot
+> Companion to [[os-rice/i3-sugg|i3-sugg]] (the distro-agnostic checklist).
+> The package facts below were verified against the Void index on
+> **2026-08-28**; a **MISSING** row can stop being missing at any time.
+
+This file answers the *second* question: for Void specifically, what is the real `xbps` package name,
 and what do you do for the handful of things Void does not ship.
 
 **Verification method.** Every name in the "xbps package" column was checked
@@ -13,7 +29,7 @@ curl -O https://repo-default.voidlinux.org/current/x86_64-repodata          # + 
 ```
 
 14 737 names in `current`, 68 in `nonfree`, 5 704 in `multilib`. Anything marked
-**MISSING** is genuinely absent from all three as of this writing.
+**MISSING** was genuinely absent from all three on 2026-08-28.
 
 Void naming rules that explain most of the diffs:
 

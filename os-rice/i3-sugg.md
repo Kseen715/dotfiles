@@ -1,7 +1,26 @@
+---
+title: i3 desktop component checklist
+type: reference
+status: reference-not-spec
+tags:
+  - kind/reference
+  - topic/i3
+  - topic/x11
+  - os/linux
+---
+
 # i3wm full desktop — component checklist (distro-agnostic)
 
-Scratch/planning doc. Not a rice, not a module. Source material: the legacy
-`linux-arch-x86_64-hyprland-glass/` bundle + current `modules/` + `rices/arch-hyprland-glass/rice.list`.
+> [!info] Reference, not a spec
+> A checklist of what a full X11 desktop needs and why, distro-agnostic.
+> Nothing here is authoritative about what is installed — the rice files are.
+> Source material: the pre-migration `linux-arch-x86_64-hyprland-glass/`
+> bundle (deleted, see [[archive-decisions#Part 3 — deleted trees]]), the
+> current `modules/`, and
+> [[os-rice/rices/arch-hyprland-glass/arch-hyprland-glass|rices/arch-hyprland-glass]].
+>
+> Void package names for these components:
+> [[os-rice/i3-void-packages|i3-void-packages]].
 
 Legend:
 

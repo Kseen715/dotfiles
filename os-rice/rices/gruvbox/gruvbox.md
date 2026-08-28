@@ -1,3 +1,13 @@
+---
+title: gruvbox rice
+type: rice
+tags:
+  - kind/rice
+  - topic/theming
+  - topic/kde
+  - os/debian
+---
+
 # gruvbox rice
 
 A shell + KDE/Plasma gruvbox desktop. Originally the standalone
@@ -29,7 +39,7 @@ rice-owned starship + `90-theme.zsh` set the gruvbox prompt (swapped on
 
 ## What os-rice vendors vs. what you download
 
-Following the config-vs-program-data split (DESIGN G5), this rice vendors only
+Following the config-vs-program-data split ([[archive-decisions#A4|DESIGN G5]]), this rice vendors only
 small **local theme config**; anything installable or downloadable is left to be
 fetched, not committed:
 
@@ -53,6 +63,12 @@ theming is a desktop concern outside the container-tested install path.
 - **Konsole theme:** [store.kde.org/p/1327725](https://store.kde.org/p/1327725)
 - **Gruvbox icon theme:** install from your distro or its upstream project.
 - **Wallpaper:** [gruvbox_forest-4.png](https://raw.githubusercontent.com/D3Ext/aesthetic-wallpapers/main/images/gruvbox_forest-4.png)
+
+> [!warning] The KDE steps below are manual, and stay manual
+> This rice began as the standalone `linux-debian-x86_64-kde-gruvbox` bundle.
+> os-rice installs the packages and the layered config; the Plasma
+> look-and-feel, SDDM theme and Konsole scheme are store.kde.org downloads a
+> person clicks through. Nothing here is run by `osr install gruvbox`.
 
 ## Applying the KDE color theme manually
 

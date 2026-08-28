@@ -1,3 +1,15 @@
+---
+title: i3-rosemary rice
+type: rice
+tags:
+  - kind/rice
+  - topic/theming
+  - topic/i3
+  - topic/x11
+  - os/void
+  - os/debian
+---
+
 # i3-rosemary
 
 A full i3/X11 desktop in a muted rose dark palette, on **Void (xbps)** and on
@@ -18,7 +30,7 @@ betterlockscreen) are derived from [dcindallas/dots-new][dots] — its Base16
 Twilight bases pulled toward rose, plus the pink accent that setup uses for its
 rofi selection. The upstream repo drives all of this through `flavours` at
 runtime; here the colors are static files instead, because os-rice's config
-model is layered ownership (§5), not a theme daemon.
+model is layered ownership ([[os-rice/DESIGN#5. Config layering — every config, not just zsh|DESIGN 5]]), not a theme daemon.
 
 [dots]: https://github.com/dcindallas/dots-new
 
@@ -45,7 +57,7 @@ model is layered ownership (§5), not a theme daemon.
 Exactly one saturated color (the accent) does the work; everything else is a
 desaturated neutral. Keep it that way when adding modules.
 
-## Layers this rice owns (§5/§6)
+## Layers this rice owns
 
 | file | lands at |
 |---|---|
@@ -156,7 +168,7 @@ Nothing extra to do — the manifest is the same. Two things worth knowing:
 | `discord`, `gradia` | Flatpak | Flatpak |
 | `elogind` | installed (runit has no logind) | **not** installed — systemd provides it, and apt would remove `systemd-sysv` to make room |
 
-See `../../i3-void-packages.md` for the Void component → package writeup, and
+See [[os-rice/i3-void-packages|i3-void-packages]] for the Void component → package writeup, and
 the third-pass block in `lib/pkgmap/apt.map` for the apt one — every row there
 was checked against the real binary index for bullseye, bookworm, trixie, jammy
 and noble.
