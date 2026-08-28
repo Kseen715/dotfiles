@@ -24,6 +24,7 @@
 #include "common.h"
 #include "cmds.h"
 #include "module.h"
+#include "fetch.h"
 
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -623,73 +624,6 @@ static const char *spec_arg(const char *rhs) {
  * Probe: the logical name is the command it is supposed to leave behind.
  */
 
-/* downloader -- osr_downloader in lib/net.sh: the first backend present. */
-static const char *downloader(void) {
-    if (osr_have_cmd("curl")) return "curl";
-    if (osr_have_cmd("wget")) return "wget";
-    if (osr_have_cmd("busybox")) {
-        char *argv[3];
-        argv[0] = (char *)"busybox"; argv[1] = (char *)"wget"; argv[2] = NULL;
-        /* `busybox wget --help` is how net.sh asks whether this busybox was
-         * built with the applet at all. */
-        {
-            Str out;
-            int ok;
-            char *probe[4];
-            probe[0] = (char *)"busybox"; probe[1] = (char *)"wget";
-            probe[2] = (char *)"--help"; probe[3] = NULL;
-            str_init(&out);
-            ok = osr_run_capture(probe, &out);
-            str_free(&out);
-            (void)argv;
-            if (ok) return "busybox-wget";
-        }
-    }
-    return "";
-}
-
-/* ensure_downloader -- install curl when the box has no downloader at all, so
- * a script:/tarball: row works on a minimal image. */
-static const char *ensure_downloader(void) {
-    const char *d = downloader();
-    const char *curl[2];
-    if (*d != '\0') return d;
-    curl[0] = "curl"; curl[1] = NULL;
-    osr_pkg_install(curl);
-    return downloader();
-}
-
-/* fetch_child -- fork the downloader with its stdout on write_fd. Returns its
- * pid, or -1. The payload is a stream, never a buffer: it is piped straight
- * into a shell, exactly as `osr_fetch_stdout <url> | sh` did. */
-static pid_t fetch_child(const char *backend, const char *url, int write_fd) {
-    pid_t pid;
-    char *argv[5];
-    size_t n = 0;
-
-    if (strcmp(backend, "curl") == 0) {
-        argv[n++] = (char *)"curl"; argv[n++] = (char *)"-fsSL"; argv[n++] = (char *)url;
-    } else if (strcmp(backend, "wget") == 0) {
-        argv[n++] = (char *)"wget"; argv[n++] = (char *)"-qO-"; argv[n++] = (char *)url;
-    } else {
-        argv[n++] = (char *)"busybox"; argv[n++] = (char *)"wget";
-        argv[n++] = (char *)"-qO-"; argv[n++] = (char *)url;
-    }
-    argv[n] = NULL;
-
-    fflush(stdout);
-    fflush(stderr);
-    pid = fork();
-    if (pid < 0) return -1;
-    if (pid == 0) {
-        dup2(write_fd, 1);
-        close(write_fd);
-        execvp(argv[0], argv);
-        _exit(127);
-    }
-    return pid;
-}
-
 static int via_script(const char *name, const char *spec) {
     Str words;
     char **argv;
@@ -726,7 +660,7 @@ static int via_script(const char *name, const char *spec) {
     }
     argv[argc] = NULL;
 
-    backend = ensure_downloader();
+    backend = osr_fetch_ensure();
     if (*backend == '\0') {
         osr_warn("no downloader found (need curl, wget, or busybox)");
         free(argv);
@@ -736,7 +670,7 @@ static int via_script(const char *name, const char *spec) {
 
     osr_infof("installing %s via script installer", name);
     if (pipe(fds) != 0) { free(argv); str_free(&words); return 0; }
-    dl = fetch_child(backend, url, fds[1]);
+    dl = osr_fetch_child(backend, url, fds[1]);
     close(fds[1]);
     if (dl < 0) { close(fds[0]); free(argv); str_free(&words); return 0; }
     rc = osr_run_user_in(argv, fds[0]);

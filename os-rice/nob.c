@@ -167,6 +167,10 @@ static const char *posix_srcs[] = {
     "lib/render.c",
     "lib/module.c",
     "lib/pkg.c",
+    /* lib/fetch.c is lib/net.sh; lib/net.c comes with it for the shared
+     * header parsers (its I/O half is the Windows one, stubbed here). */
+    "lib/fetch.c",
+    "lib/net.c",
     "lib/modules.c",
     "modules/flameshot.c",
     "modules/helpers.c",

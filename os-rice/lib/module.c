@@ -221,6 +221,10 @@ static int capture(char *const argv[], Str *out, int merge_err) {
 
 int osr_run_capture(char *const argv[], Str *out) { return capture(argv, out, 0); }
 
+/* osr_run_capture_err -- `<cmd> 2>&1`, for a tool that reports on stderr and
+ * whose report IS the answer (wget --spider prints headers there). */
+int osr_run_capture_err(char *const argv[], Str *out) { return capture(argv, out, 1); }
+
 /* osr_run_root_capture -- `as_root <cmd> 2>&1`: a privileged probe whose
  * DIAGNOSTICS are the answer, so stderr belongs in the captured text. */
 int osr_run_root_capture(char *const argv[], Str *out) {

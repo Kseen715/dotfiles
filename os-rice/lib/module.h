@@ -94,6 +94,10 @@ int osr_run_step_root(const char *desc, char *const argv[]);
  * the probes modules make (`id -nG`, ...). Returns 1 when it exited 0. */
 int osr_run_capture(char *const argv[], Str *out);
 
+/* osr_run_capture_err -- the same with stderr folded in, for a tool whose
+ * report goes to stderr (wget --spider -S prints the headers there). */
+int osr_run_capture_err(char *const argv[], Str *out);
+
 /* osr_run_root_capture -- `as_root <cmd> 2>&1`: a privileged probe whose
  * diagnostics ARE the answer (xbps's conflict report), so stderr is folded
  * into the captured text instead of discarded. */
