@@ -32,6 +32,7 @@
 
 #include "common.h"
 #include "cmds.h"
+#include "config.h"
 
 #include <limits.h>
 #include <pwd.h>
@@ -314,82 +315,21 @@ static int cmd_needs_line(const char *path, const char *needle) {
  * between the markers (§5) and keeping every byte outside them. The body
  * arrives on stdin, as it did through the shell's heredoc. */
 static int cmd_compose_block(const char *path, const char *name) {
-    Str begin;
-    Str end;
     Str body;
     Str out;
-    char *buf;
-    size_t len;
     int c;
 
-    str_init(&begin);
-    str_addz(&begin, "# >>> os-rice:");
-    str_addz(&begin, name);
-    str_addz(&begin, " >>>");
-    str_init(&end);
-    str_addz(&end, "# <<< os-rice:");
-    str_addz(&end, name);
-    str_addz(&end, " <<<");
-
-    /* `_eb_body=$(cat)` -- trailing newlines eaten by the substitution. */
+    /* `_eb_body=$(cat)` -- the body arrives on stdin, as it did through the
+     * shell's heredoc. The composition itself lives in lib/config.c, which is
+     * where ensure_block's callers are. */
     str_init(&body);
     while ((c = fgetc(stdin)) != EOF) str_addc(&body, (char)c);
-    str_trim_trailing(&body, '\n');
 
     str_init(&out);
-    buf = slurp(path, &len);
-    if (buf != NULL) {
-        size_t pos = 0;
-        Line line;
-        int has_marker = 0;
-        size_t i;
-        /* `grep -qF "$_eb_begin"` -- a SUBSTRING search, deliberately not the
-         * exact-line test the rewrite below uses. The two disagree on a file
-         * whose last line had no newline when the block was first appended
-         * (the marker ends up glued to it), and reproducing that disagreement
-         * is the point: the sh version's output in that case is what modules
-         * on disk already have. */
-        for (i = 0; i + begin.len <= len && !has_marker; i++) {
-            if (memcmp(buf + i, str_text(&begin), begin.len) == 0) has_marker = 1;
-        }
-        if (has_marker) {
-            /* Replace the existing region: drop the markers and everything
-             * between them, keep the rest verbatim. */
-            int skip = 0;
-            while (next_line(buf, len, &pos, &line)) {
-                if (line.len == begin.len && strncmp(line.start, str_text(&begin), begin.len) == 0) {
-                    skip = 1;
-                    continue;
-                }
-                if (line.len == end.len && strncmp(line.start, str_text(&end), end.len) == 0) {
-                    skip = 0;
-                    continue;
-                }
-                if (!skip) {
-                    str_add(&out, line.start, line.len);
-                    str_addc(&out, '\n');
-                }
-            }
-        } else {
-            /* No region yet: the file as it stands, then the block appended.
-             * `cat` copies it byte for byte, trailing newline or not. */
-            str_add(&out, buf, len);
-        }
-        free(buf);
-    }
-
-    str_add(&out, str_text(&begin), begin.len);
-    str_addc(&out, '\n');
-    str_add(&out, str_text(&body), body.len);
-    str_addc(&out, '\n');
-    str_add(&out, str_text(&end), end.len);
-    str_addc(&out, '\n');
-
+    osr_compose_block(&out, path, name, str_text(&body));
     out_flush(&out);
     str_free(&out);
     str_free(&body);
-    str_free(&begin);
-    str_free(&end);
     return 0;
 }
 
