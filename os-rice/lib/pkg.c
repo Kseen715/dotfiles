@@ -707,10 +707,11 @@ static void cargo_path(Str *out, const char *leaf) {
     str_addz(out, leaf);
 }
 
-static int via_cargo(const char *name, const char *crate) {
+int osr_pkg_cargo(const char *name, const char *crate) {
     Str bin, cargo, binstall;
     char *argv[6];
     int ok = 0;
+    int rc;
 
     str_init(&bin); str_init(&cargo); str_init(&binstall);
     cargo_path(&bin, name);
@@ -722,10 +723,10 @@ static int via_cargo(const char *name, const char *crate) {
         ok = 1;
         goto done;
     }
-    if (!user_test_x(str_text(&cargo))) {
-        osr_warnf("cargo not found for %s - install 'rust' before any cargo: package", name);
-        goto done;
-    }
+    /* Fatal, not a warning: lib/pkg.sh spelled this `error`, and a missing
+     * toolchain is a manifest-order bug (§4) the run cannot install around. */
+    if (!user_test_x(str_text(&cargo)))
+        osr_die("cargo not found for %s - install 'rust' before any cargo: package", name);
     /* binstall first (modules/rust.sh installs it): a prebuilt binary where
      * upstream ships one. Not every crate/arch has an asset, so a failure
      * falls through to the source build rather than ending the install. */
@@ -739,10 +740,8 @@ static int via_cargo(const char *name, const char *crate) {
     osr_infof("installing %s via cargo (%s)", name, crate);
     argv[0] = cargo.p; argv[1] = (char *)"install";
     argv[2] = (char *)"--locked"; argv[3] = (char *)crate; argv[4] = NULL;
-    if (osr_run_user(argv) != 0) {
-        osr_warnf("cargo install failed for %s", name);
-        goto done;
-    }
+    rc = osr_run_user(argv);
+    if (rc != 0) osr_die("cargo install failed for %s (exit %d)", name, rc);
     ok = 1;
 done:
     str_free(&bin); str_free(&cargo); str_free(&binstall);
@@ -1104,7 +1103,7 @@ int osr_pkg_install(const char *const names[]) {
             ok = via_script(names[i], spec_arg(str_text(&rhs)));
             break;
         case M_CARGO:
-            ok = via_cargo(names[i], spec_arg(str_text(&rhs)));
+            ok = osr_pkg_cargo(names[i], spec_arg(str_text(&rhs)));
             break;
         case M_AUR:
             ok = via_aur(names[i], spec_arg(str_text(&rhs)));

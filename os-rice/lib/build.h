@@ -31,4 +31,11 @@ int osr_build_run(const char *fn);
  * works where a modern zstd .deb cannot (bullseye's dpkg lacks zstd). */
 int osr_install_tarball_bin(const char *url, const char *bin);
 
+/* osr_build_zig -- install Zig from ziglang.org as a whole tree, symlinked into
+ * /usr/local/bin. want pins an exact version ("0.14.1"); "" or NULL takes the
+ * newest stable. Exposed because it is also a PREREQUISITE: the ghostty source
+ * build reads the exact Zig version ghostty pins and asks for that one (G1, a
+ * source: builder with a bootstrapped toolchain under it). */
+int osr_build_zig(const char *want);
+
 #endif /* OSR_BUILD_H */

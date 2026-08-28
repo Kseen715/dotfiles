@@ -114,8 +114,8 @@ scripts:
 > tool assumes a C compiler. See [[archive-decisions#A2|A2]].
 
 **Contract:** byte-for-byte identical output. The sh version is frozen under
-`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 317
-checks over the eight units. Exactly one divergence is accepted and asserted
+`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 938
+checks over the twenty-one units. Exactly one divergence is accepted and asserted
 rather than hidden (see [[archive-decisions#A2|A2]]).
 
 ### D-4. A module may be a C unit instead of a script
@@ -874,8 +874,8 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 
 | what | lines of sh | why it is where it is in the queue |
 | --- | --- | --- |
-| `lib/pkg.sh` | 551 | **the blocker.** `osr_pkg_install` covers the native path only; every provider (`cargo:` `script:` `aur:` `source:`) still lands back in sh, and that is what pins most modules to the shell tier |
-| `lib/build.sh` | 1387 | the `source:` builders, **in progress**: `lib/build.c` holds the registry, the tarball primitive and the seven prebuilt-binary builders (`gh` `btop` `lsd` `fzf` `fastfetch` ×2, `lsd_deb`); a name it does not know still runs in sh, one row at a time. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
+| `lib/pkg.sh` | 554 | **no longer the blocker.** `lib/pkg.c` covers all five methods — native, `script:`, `cargo:`, `aur:`, `source:` — so a C module can install anything a rice lists. What keeps the file alive is the other direction: `modules/*.sh` source it, and a `source:` row naming a builder `lib/build.c` does not know yet goes back through `pkg_install` in sh for that one row |
+| `lib/build.sh` | 1387 | the `source:` builders, **in progress**: `lib/build.c` holds the registry, both archive primitives (tarball and zip) and the eleven prebuilt-artifact builders — `gh` `btop` `lsd` `fzf` `fastfetch` ×2 `lsd_deb`, and now `yazi_bin` (a .zip holding two binaries, with a cargo fallback), `zig` (a whole tree under a versioned prefix, resolved out of `index.json`) and `ghostty_copr` / `ghostty_deb`. What is left is the compiling half — `chafa` `ueberzugpp` `ghostty` `wezterm` — and the big application builders; a name the registry does not know still runs in sh, one row at a time. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
 | `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers. **In progress**: `lib/config.c` holds the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer and the whole wallpaper family (resolve, install, record, set, library, pick) |
 | `lib/apply.sh` (the stubbing half) | 70 | `osr_apply_stub_mutators` + `osr_apply_theme`: `eval`-defined no-ops for the shell modules that are sourced next. Cannot leave sh before `modules/*.sh` does |
 | `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |
@@ -889,8 +889,8 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 > Byte-for-byte identical output, asserted, or it is not a port.
 
 Every unit's shell original is frozen under `test/ref/` and diffed by
-`test/unit/*_c_parity.sh` — 317 checks over the eight done so far, and exactly
-one accepted divergence, asserted rather than hidden. A port that cannot be
+`test/unit/*_c_parity.sh` — 938 checks over the twenty-one done so far, and
+exactly one accepted divergence, asserted rather than hidden. A port that cannot be
 diffed this way (`helpers.c`, which never had a `.sh` form) asserts its
 behaviour directly instead.
 

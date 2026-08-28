@@ -345,7 +345,10 @@ static int json_string_field(Str *out, const char *json, const char *key) {
     return found;
 }
 
-int osr_github_latest(Str *out, const char *repo) {
+/* github_tag -- the body both entry points share. quiet drops the "could not
+ * resolve" warning, which is what a caller with a fallback wants: lib/build.sh
+ * spelled that `github_latest ... 2>/dev/null || _tag=""`. */
+static int github_tag(Str *out, const char *repo, int quiet) {
     Str url, json;
 
     str_init(&url);
@@ -374,9 +377,12 @@ int osr_github_latest(Str *out, const char *repo) {
     }
     str_free(&json);
     str_free(&url);
-    osr_warnf("github_latest: could not resolve a tag for %s", repo);
+    if (!quiet) osr_warnf("github_latest: could not resolve a tag for %s", repo);
     return 0;
 }
+
+int osr_github_latest(Str *out, const char *repo) { return github_tag(out, repo, 0); }
+int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out, repo, 1); }
 
 static int net_usage(void) {
     fputs("usage: osr net <subcommand> [args]\n\n", stderr);

@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "build.h"
@@ -90,6 +91,18 @@ static int find_file(Str *out, const char *dir, const char *name) {
     return found;
 }
 
+/* has_text -- `grep <needle>` over len bytes that are not NUL-terminated. */
+static int has_text(const char *hay, size_t len, const char *needle) {
+    size_t n = strlen(needle);
+    size_t i;
+
+    if (n > len) return 0;
+    for (i = 0; i + n <= len; i++) {
+        if (memcmp(hay + i, needle, n) == 0) return 1;
+    }
+    return 0;
+}
+
 /* run_ok -- run argv with its output straight through, as the sh builders did. */
 static int run_ok(char *const argv[]) { return osr_run(argv) == 0; }
 
@@ -130,6 +143,67 @@ int osr_install_tarball_bin(const char *url, const char *bin) {
     return ok;
 }
 
+/* install_zip_bins -- _osr_install_zip_bins: the .zip counterpart of
+ * osr_install_tarball_bin, for an upstream that ships no tarball (yazi), and
+ * for several binaries out of the one archive. Unlike the tarball primitive it
+ * WARNS AND RETURNS 0 rather than stopping the run, because its only caller has
+ * a fallback route and a hard exit here would take that away. */
+static int install_zip_bins(const char *url, const char *const bins[]) {
+    Str tmp, zip_path, found, dest;
+    char *argv[7];
+    size_t i;
+    int ok = 1;
+
+    if (!osr_have_cmd("unzip")) {
+        const char *want[2];
+        want[0] = "unzip"; want[1] = NULL;
+        (void)osr_pkg_install(want);
+    }
+    if (!osr_have_cmd("unzip")) {
+        osr_warnf("unzip not available for %s", url);
+        return 0;
+    }
+
+    str_init(&tmp); str_init(&zip_path); str_init(&found); str_init(&dest);
+    if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
+    str_addz(&zip_path, str_text(&tmp));
+    str_addz(&zip_path, "/pkg.zip");
+
+    if (!osr_fetch_download(url, zip_path.p, 0)) {
+        osr_warnf("failed to download %s", url);
+        ok = 0;
+    }
+    if (ok) {
+        argv[0] = (char *)"unzip"; argv[1] = (char *)"-q"; argv[2] = (char *)"-o";
+        argv[3] = zip_path.p; argv[4] = (char *)"-d"; argv[5] = tmp.p; argv[6] = NULL;
+        if (!run_ok(argv)) {
+            osr_warnf("failed to extract %s", url);
+            ok = 0;
+        }
+    }
+    for (i = 0; ok && bins[i] != NULL; i++) {
+        if (!find_file(&found, str_text(&tmp), bins[i])) {
+            osr_warnf("%s not found in %s", bins[i], url);
+            ok = 0;
+            break;
+        }
+        str_reset(&dest);
+        str_addz(&dest, "/usr/local/bin/");
+        str_addz(&dest, bins[i]);
+        argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
+        argv[3] = found.p; argv[4] = dest.p; argv[5] = NULL;
+        if (osr_run_root(argv) != 0) {
+            osr_warnf("failed to install %s", bins[i]);
+            ok = 0;
+            break;
+        }
+    }
+    rm_rf(str_text(&tmp));
+
+    str_free(&tmp); str_free(&zip_path); str_free(&found); str_free(&dest);
+    return ok;
+}
+
 /* install_local_deb -- the tail both .deb builders share: download it next to
  * the other temporaries, hand the file to apt-get (which pulls its deps), then
  * drop it whether or not the install worked. */
@@ -165,6 +239,282 @@ static const char *arch(void)     { return env_str("OSR_ARCH", ""); }
 static const char *arch_deb(void) { return env_str("OSR_ARCH_DEB", ""); }
 
 /* --- the builders ---------------------------------------------------------- */
+
+/* provide_yazi_bin -- Yazi from its official prebuilt release archive, falling
+ * back to `cargo install` (the crates route upstream documents) where there is
+ * no asset for this target or the download does not come through. Upstream
+ * ships one .zip holding BOTH binaries -- `yazi` (the TUI) and `ya` (the
+ * package/plugin CLI modules/yazi.sh's package.toml layer needs) -- so either
+ * route installs the pair.
+ *
+ * The fallback lives inside the one builder rather than spanning two pkgmap
+ * rows: the row still resolves to exactly one method, and cargo only runs when
+ * the binary route is genuinely unavailable here. */
+static int provide_yazi_bin(void) {
+    const char *a = arch();
+    const char *target = NULL;
+    const char *bins[3];
+    Str tag, url;
+    int ok = 0;
+
+    if (strcmp(a, "x86_64") == 0)       target = "x86_64-unknown-linux-gnu";
+    else if (strcmp(a, "aarch64") == 0) target = "aarch64-unknown-linux-gnu";
+
+    bins[0] = "yazi"; bins[1] = "ya"; bins[2] = NULL;
+    if (target == NULL) {
+        osr_warnf("no yazi release binary for arch %s - falling back to cargo", a);
+    } else {
+        str_init(&tag); str_init(&url);
+        /* Quiet: an unreachable API is a reason to take the cargo route, not to
+         * end the run. lib/build.sh spent a subshell on catching error() here
+         * for exactly that. */
+        if (osr_github_latest_quiet(&tag, "sxyazi/yazi")) {          /* v26.5.6 */
+            osr_infof("installing yazi %s from the upstream release binary", str_text(&tag));
+            str_addz(&url, "https://github.com/sxyazi/yazi/releases/download/");
+            str_addz(&url, str_text(&tag));
+            str_addz(&url, "/yazi-");
+            str_addz(&url, target);
+            str_addz(&url, ".zip");
+            ok = install_zip_bins(str_text(&url), bins);
+        }
+        str_free(&tag); str_free(&url);
+        if (ok) return 1;
+        osr_warnf("yazi release binary unavailable (%s) - falling back to cargo", target);
+    }
+    /* Needs the toolchain: list `rust` before `yazi` in the rice when a target
+     * can land here (manifest order is the dependency graph, §4). osr_pkg_cargo
+     * carries its own §2 probe and the "install 'rust' first" message.
+     * The sh function's status was the LAST call's, and so is this one's. */
+    (void)osr_pkg_cargo("yazi", "yazi-fm");     /* the TUI */
+    return osr_pkg_cargo("ya", "yazi-cli");     /* the `ya` plugin/package CLI */
+}
+
+/* --- zig ---------------------------------------------------------------------
+ * Zig installs as a whole TREE (it needs its lib/ beside the binary), so this
+ * is the one builder that does not end in `install <bin> /usr/local/bin`: the
+ * tarball is unpacked into /usr/local/zig-<version> and a symlink points at it.
+ * The exact tarball URL is resolved out of index.json rather than composed,
+ * because the asset naming changed mid-flight: zig-<arch>-linux on 0.15+,
+ * zig-linux-<arch> on <= 0.14. */
+
+/* zig_candidates -- lib/build.sh's
+ *   grep -oE 'https://ziglang\.org/download/[0-9][0-9.]+/[^"]+\.tar\.xz'
+ *   | grep -E "zig-(<m>-linux|linux-<m>)-"
+ * Every match, one per line, in index order -- which is what the `head -n 1`
+ * downstream depends on, since the index lists the newest release first.
+ *
+ * Two details of grep the loop has to keep: `[^"]+` may cross neither a quote
+ * nor a LINE BOUNDARY, and the match is leftmost-LONGEST, so within one such
+ * run it is the LAST `.tar.xz` that ends the match, not the first. */
+static void zig_candidates(Str *out, const char *json, const char *m) {
+    static const char base[] = "https://ziglang.org/download/";
+    const size_t blen = sizeof(base) - 1;
+    const char *p = json;
+    Str new_style, old_style;
+
+    str_init(&new_style);
+    str_addz(&new_style, "zig-"); str_addz(&new_style, m); str_addz(&new_style, "-linux-");
+    str_init(&old_style);
+    str_addz(&old_style, "zig-linux-"); str_addz(&old_style, m); str_addc(&old_style, '-');
+    str_reset(out);
+
+    while ((p = strstr(p, base)) != NULL) {
+        const char *q = p + blen;
+        const char *run, *end, *hit, *last = NULL;
+
+        if (*q < '0' || *q > '9') { p = q; continue; }             /* [0-9] */
+        while ((*q >= '0' && *q <= '9') || *q == '.') q++;         /* [0-9.]+ */
+        if (*q != '/') { p = q; continue; }
+        run = q + 1;
+        for (end = run; *end != '\0' && *end != '"' && *end != '\n'; end++) ;
+        for (hit = run; (hit = strstr(hit, ".tar.xz")) != NULL; hit++) {
+            if (hit + 7 > end) break;
+            if (hit > run) last = hit;                             /* [^"]+ is one or more */
+        }
+        if (last == NULL) { p = run; continue; }
+        if (has_text(p, (size_t)(last + 7 - p), str_text(&new_style)) ||
+            has_text(p, (size_t)(last + 7 - p), str_text(&old_style))) {
+            str_add(out, p, (size_t)(last + 7 - p));
+            str_addc(out, '\n');
+        }
+        p = last + 7;
+    }
+    str_free(&new_style); str_free(&old_style);
+}
+
+/* zig_url_version -- the sed script lib/build.sh runs over the resolved URL to
+ * pull the version out of its `/download/<version>/` segment. That script's
+ * leading `.` `*` is greedy, so it is the LAST such segment that names the
+ * version. Returns 0 when nothing matches, which for a URL that came
+ * out of zig_candidates cannot happen -- the caller keeps sed's no-match
+ * behaviour anyway, which was to pass the line through unchanged. */
+static int zig_url_version(Str *out, const char *url) {
+    static const char seg[] = "/download/";
+    const char *p = url, *hit = NULL, *start, *q;
+
+    while ((p = strstr(p, seg)) != NULL) { hit = p; p += sizeof(seg) - 1; }
+    if (hit == NULL) return 0;
+    start = hit + sizeof(seg) - 1;
+    if (*start < '0' || *start > '9') return 0;
+    for (q = start; (*q >= '0' && *q <= '9') || *q == '.'; q++) ;
+    if (*q != '/') return 0;
+    str_reset(out);
+    str_add(out, start, (size_t)(q - start));
+    return 1;
+}
+
+int osr_build_zig(const char *want) {
+    const char *a = arch();
+    const char *m;
+    Str json, cands, url, ver, dir, exe;
+    char *argv[7];
+    size_t pos = 0;
+    Line line;
+    int picked = 0;
+
+    if (strcmp(a, "x86_64") == 0)       m = "x86_64";
+    else if (strcmp(a, "aarch64") == 0) m = "aarch64";
+    else                                { osr_die("no zig tarball for arch %s", a); return 0; }
+
+    {                                   /* the tarball is .tar.xz, §1a */
+        const char *xz[2];
+        xz[0] = "xz"; xz[1] = NULL;
+        (void)osr_pkg_install(xz);
+    }
+
+    str_init(&json); str_init(&cands); str_init(&url);
+    (void)osr_fetch_buffer(&json, "https://ziglang.org/download/index.json");
+    zig_candidates(&cands, str_text(&json), m);
+    str_free(&json);
+
+    /* `grep "/$want/" | head -n 1`, or plain `head -n 1` for the newest. */
+    while (!picked && next_line(str_text(&cands), cands.len, &pos, &line)) {
+        if (want != NULL && *want != '\0') {
+            Str pat;
+            int hit;
+            str_init(&pat);
+            str_addc(&pat, '/'); str_addz(&pat, want); str_addc(&pat, '/');
+            hit = has_text(line.start, line.len, str_text(&pat));
+            str_free(&pat);
+            if (!hit) continue;
+        }
+        str_add(&url, line.start, line.len);
+        picked = 1;
+    }
+    str_free(&cands);
+    if (!picked)
+        osr_die("no zig tarball found (version='%s', arch=%s)",
+                (want != NULL && *want != '\0') ? want : "latest", m);
+
+    str_init(&ver);
+    if (!zig_url_version(&ver, str_text(&url))) str_addz(&ver, str_text(&url));
+    str_init(&dir);
+    str_addz(&dir, "/usr/local/zig-");
+    str_addz(&dir, str_text(&ver));
+    str_init(&exe);
+    str_addz(&exe, str_text(&dir));
+    str_addz(&exe, "/zig");
+
+    if (access(str_text(&exe), X_OK) != 0) {
+        Str tmp, tar_path;
+
+        str_init(&tmp); str_init(&tar_path);
+        if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
+        str_addz(&tar_path, str_text(&tmp));
+        str_addz(&tar_path, "/zig.tar.xz");
+        if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
+            rm_rf(str_text(&tmp));
+            osr_die("failed to download %s", str_text(&url));
+        }
+        argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = dir.p; argv[3] = NULL;
+        (void)osr_run_root(argv);
+        argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
+        argv[3] = (char *)"-C"; argv[4] = dir.p;
+        argv[5] = (char *)"--strip-components=1"; argv[6] = NULL;
+        if (osr_run_root(argv) != 0) {
+            rm_rf(str_text(&tmp));
+            osr_die("failed to extract zig %s", str_text(&ver));
+        }
+        rm_rf(str_text(&tmp));
+        str_free(&tmp); str_free(&tar_path);
+    }
+    argv[0] = (char *)"ln"; argv[1] = (char *)"-sf"; argv[2] = exe.p;
+    argv[3] = (char *)"/usr/local/bin/zig"; argv[4] = NULL;
+    (void)osr_run_root(argv);
+
+    str_free(&url); str_free(&ver); str_free(&dir); str_free(&exe);
+    return 1;
+}
+
+/* provide_zig -- the pkgmap row's entry point: no argument, so the version is
+ * whatever $ZIG_VERSION pins, or the newest stable. A caller that needs an
+ * EXACT one (ghostty reads the version its source tree pins) calls
+ * osr_build_zig directly instead. */
+static int provide_zig(void) { return osr_build_zig(env_str("ZIG_VERSION", "")); }
+
+/* --- ghostty -----------------------------------------------------------------
+ * The install prefers a prebuilt community binary over a source build wherever
+ * one exists (https://ghostty.org/docs/install/binary). Native packages pass
+ * through pkgmap; these two cover the rest, and the Zig source build (still
+ * lib/build.sh's) is the last-resort fallback. */
+
+/* provide_ghostty_copr -- Fedora community binary via COPR (scottames/ghostty). */
+static int provide_ghostty_copr(void) {
+    char *argv[6];
+    int rc;
+
+    {
+        const char *deps[2];
+        deps[0] = "dnf-plugins-core"; deps[1] = NULL;             /* provides `dnf copr` */
+        (void)osr_pkg_install(deps);
+    }
+    argv[0] = (char *)"dnf"; argv[1] = (char *)"copr"; argv[2] = (char *)"enable";
+    argv[3] = (char *)"-y"; argv[4] = (char *)"scottames/ghostty"; argv[5] = NULL;
+    (void)osr_run_root(argv);
+    argv[0] = (char *)"dnf"; argv[1] = (char *)"install"; argv[2] = (char *)"-y";
+    argv[3] = (char *)"ghostty"; argv[4] = NULL;
+    rc = osr_run_root(argv);
+    if (rc != 0) osr_die("ghostty COPR install failed (exit %d)", rc);
+    return 1;
+}
+
+/* provide_ghostty_deb -- Debian/Ubuntu community .deb through the
+ * ghostty-ubuntu installer (mkasberg/ghostty-ubuntu), which self-detects
+ * release and arch and dpkg-installs. Needs bash, and needs to run as root --
+ * so this is the `<fetch> | as_root bash` shape, not the as_user one the
+ * script: provider uses. */
+static int provide_ghostty_deb(void) {
+    static const char url[] =
+        "https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh";
+    const char *backend;
+    char *argv[2];
+    int fds[2];
+    pid_t dl;
+    int rc, status;
+
+    if (!osr_have_cmd("bash")) {
+        const char *deps[2];
+        deps[0] = "bash"; deps[1] = NULL;
+        (void)osr_pkg_install(deps);
+    }
+    backend = osr_fetch_ensure();
+    if (*backend == '\0') osr_die("no downloader found (need curl, wget, or busybox)");
+    if (pipe(fds) != 0) osr_die("ghostty-ubuntu install failed (exit 1)");
+    dl = osr_fetch_child(backend, url, fds[1]);
+    close(fds[1]);
+    if (dl < 0) {
+        close(fds[0]);
+        osr_die("ghostty-ubuntu install failed (exit 1)");
+    }
+    argv[0] = (char *)"bash"; argv[1] = NULL;
+    rc = osr_run_root_in(argv, fds[0]);
+    close(fds[0]);
+    waitpid(dl, &status, 0);
+    /* `$?` after the pipeline is the RIGHT-hand side's, which is what
+     * lib/build.sh handed check_error. */
+    if (rc != 0) osr_die("ghostty-ubuntu install failed (exit %d)", rc);
+    return 1;
+}
 
 /* provide_gh_tarball -- GitHub CLI from its release tarball (one static
  * binary), for apt releases with no native `gh` (Debian bullseye). */
@@ -427,6 +777,10 @@ typedef struct {
 } Builder;
 
 static const Builder builders[] = {
+    { "provide_yazi_bin",          provide_yazi_bin },
+    { "provide_zig",               provide_zig },
+    { "provide_ghostty_copr",      provide_ghostty_copr },
+    { "provide_ghostty_deb",       provide_ghostty_deb },
     { "provide_gh_tarball",        provide_gh_tarball },
     { "provide_btop_tarball",      provide_btop_tarball },
     { "provide_lsd_tarball",       provide_lsd_tarball },

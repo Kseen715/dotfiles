@@ -45,4 +45,9 @@ int osr_fetch_final_url(Str *out, const char *url);
 /* osr_github_latest -- the newest release tag of owner/repo (github_latest). */
 int osr_github_latest(Str *out, const char *repo);
 
+/* osr_github_latest_quiet -- the same lookup with the "could not resolve"
+ * warning suppressed, for a builder that falls back to another route rather
+ * than stopping when the API is unreachable. */
+int osr_github_latest_quiet(Str *out, const char *repo);
+
 #endif /* OSR_FETCH_H */

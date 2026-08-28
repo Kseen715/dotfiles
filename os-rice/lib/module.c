@@ -213,6 +213,16 @@ int osr_run_user_quiet_in(char *const argv[], int in_fd) {
     return rc;
 }
 
+/* osr_run_root_in -- as_root with the child's stdin replaced: the other half of
+ * that pipeline shape, `<fetch> | as_root bash`, where the installer script has
+ * to run privileged rather than as the riced account. */
+int osr_run_root_in(char *const argv[], int in_fd) {
+    char **v = escalate(argv, NULL);
+    int rc = spawn_io(v, in_fd, -1, -1);
+    free(v);
+    return rc;
+}
+
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
 
 /* capture -- the shared body of the two capture helpers: run argv, collect its

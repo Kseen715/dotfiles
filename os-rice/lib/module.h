@@ -95,6 +95,11 @@ int osr_run_user_in(char *const argv[], int in_fd);
  * through `tee -a` must not echo what it wrote. */
 int osr_run_user_quiet_in(char *const argv[], int in_fd);
 
+/* osr_run_root_in -- as_root with stdin taken from in_fd: the privileged half
+ * of a `<fetch> | as_root bash` pipeline, which is how an upstream installer
+ * script that must run as root is fed (lib/build.sh's provide_ghostty_deb). */
+int osr_run_root_in(char *const argv[], int in_fd);
+
 /* osr_run_step_root -- run_step around an as_root command, the
  * `run_step "..." as_root <cmd>` every privileged step used. */
 int osr_run_step_root(const char *desc, char *const argv[]);
@@ -124,14 +129,23 @@ int osr_have_cmd(const char *name);
  * through lib/pkgmap/, skip what is already installed, refresh the index once
  * per run, then one install command for the rest. names is NULL-terminated.
  *
- * Provider-tagged rows (`cargo:`, `script:`, `aur:`, `source:`) are NOT
- * handled here: they are lib/pkg.sh's build/download providers, which have not
- * been ported. A module whose package resolves to one of them gets a clear
- * failure telling it to stay a .sh module for now, rather than a wrong
- * install.
+ * Provider-tagged rows are handled too, in a second pass that keeps manifest
+ * order: `script:` (a piped installer), `cargo:` (a crate as OSR_USER),
+ * `aur:` (paru/yay) and `source:` (a builder in lib/build.c -- or, for a
+ * builder that has not been ported yet, that one row back through lib/pkg.sh).
+ * The pass order is not cosmetic: the native batch carries the downloaders and
+ * toolchains a provider row may need, so it cannot run second.
  */
 int osr_pkg_install(const char *const names[]);
 int osr_pkg_installed(const char *name);
+
+/* osr_pkg_cargo -- the cargo: provider on its own: install <crate> as OSR_USER
+ * into ~/.cargo/bin (cargo-binstall first where it exists, then a source
+ * build), behind the same `as_user test -x` probe. Exposed because a source:
+ * builder may want it as its FALLBACK when no prebuilt release asset exists for
+ * this target -- lib/build.sh's provide_yazi_bin ends in exactly that call.
+ * Returns 1 on success. */
+int osr_pkg_cargo(const char *name, const char *crate);
 
 /* osr_pkg_remove -- pkg_remove: resolve, drop what is not installed, then one
  * remove command. Providers own their own removal, so a non-native row is
