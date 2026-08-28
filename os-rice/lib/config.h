@@ -87,4 +87,70 @@ void osr_mozilla_profiles(Str *out, const char *root);
  * guessing a name the app would ignore. */
 int osr_install_mozilla_layer(const char *root, const char *user_js, const char *user_chrome);
 
+
+/* --- wallpaper: one resolution, one installed copy (§6) --------------------
+ *
+ * Four consumers want the same answer (hyprpaper's `preload =`, hyprland's
+ * `env = WALLPAPER_PATH`, gtklock's background, the recorded state), so it is
+ * resolved once here, installed once into a user-owned directory, and every
+ * consumer is handed the same absolute path.
+ *
+ * The Windows tier has its own wallpaper unit (lib/wallpaper.c, painting
+ * through SystemParametersInfo). These names are the POSIX ones and the two
+ * are never linked into the same binary -- see nob.c's two source lists.
+ */
+
+/* osr_is_image -- a file whose extension says it is an image. Filtered by
+ * extension on purpose: a theme's `wallpapers/README.txt` must never resolve
+ * to a wallpaper, because painting a text file is worse than painting none. */
+int osr_is_image(const char *path);
+
+/* osr_theme_wallpapers -- every image a theme ships, one per line, in glob
+ * order. The first is its default; the rest are what the picker scrolls. */
+void osr_theme_wallpapers(Str *out, const char *theme_dir);
+
+/* osr_theme_wallpaper -- the wallpaper the current theme should use, "" when
+ * it ships none. A recorded per-theme choice wins over the theme default,
+ * which is what makes a picked wallpaper survive switching away and back. */
+void osr_theme_wallpaper(Str *out);
+
+/* osr_install_wallpaper -- install the current theme's wallpaper and yield
+ * where it landed ("" when there is none). */
+void osr_install_wallpaper(Str *out);
+
+/* osr_install_wallpaper_file -- copy one image into ~/Pictures/Wallpapers and
+ * yield the installed path. That copy, not the path inside the checkout, is
+ * what the configs point at, so the wallpaper survives moving the repo. */
+void osr_install_wallpaper_file(Str *out, const char *src);
+
+/* osr_install_wallpaper_layer -- install a config layer carrying the
+ * {{WALLPAPER_PATH}} placeholder, substituting the installed wallpaper. A
+ * theme with no wallpaper substitutes empty: the config still lands. */
+int osr_install_wallpaper_layer(const char *src, const char *dst);
+
+/* osr_wallpaper_set_live -- hand the image to whichever setter this session
+ * has (swww, hyprpaper, feh). Best-effort: a headless box has nothing to
+ * paint and that is not a failure (§9). */
+void osr_wallpaper_set_live(const char *img);
+
+/* osr_wallpaper_record -- the one place the applied wallpaper is written
+ * down: ~/.config/osr/wallpaper for non-shell consumers, and the state file
+ * keyed by theme so a per-theme choice survives a switch. */
+void osr_wallpaper_record(const char *img);
+
+/* osr_apply_wallpaper -- install + record + paint, the whole theme-apply
+ * step. Degrades to record-only when headless. */
+int osr_apply_wallpaper(void);
+
+/* osr_wallpaper_library -- every image the user can choose between: the
+ * theme's own first, then ~/Pictures/Wallpapers (which accretes across
+ * themes), deduplicated by basename. */
+void osr_wallpaper_library(Str *out);
+
+/* osr_choose_wallpaper -- make `path` the current theme's wallpaper: record
+ * the choice, install a copy into the library, paint it. Yields the installed
+ * path; the setter's own logging goes to stderr, because this function's
+ * stdout IS its answer. */
+void osr_choose_wallpaper(Str *out, const char *path);
+
 #endif /* OSR_CONFIG_H */

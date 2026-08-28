@@ -164,6 +164,18 @@ int osr_run_root_quiet(char *const argv[]) {
     return rc;
 }
 
+/* osr_run_user_quiet -- as_user with both streams on /dev/null, the
+ * `as_user <cmd> >/dev/null 2>&1 || warn ...` shape of a best-effort action
+ * (handing an image to a wallpaper setter that may not be running). */
+int osr_run_user_quiet(char *const argv[]) {
+    char **v = escalate(argv, osr_mod_user());
+    int fd = open("/dev/null", O_WRONLY);
+    int rc = spawn(v, fd, fd);
+    if (fd >= 0) close(fd);
+    free(v);
+    return rc;
+}
+
 int osr_run_user(char *const argv[]) {
     char **v = escalate(argv, osr_mod_user());
     int rc = spawn(v, -1, -1);

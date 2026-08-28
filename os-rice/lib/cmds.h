@@ -14,6 +14,12 @@
 int osr_ui_main(int argc, char **argv);       /* lib/ui.sh */
 int osr_log_main(int argc, char **argv);      /* lib/log.sh */
 int osr_state_main(int argc, char **argv);    /* lib/state.sh */
+
+/* osr_state_get / osr_state_set -- the state file from inside this process,
+ * where the shell tier spent a fork on `osr state get`. get yields the value
+ * without a trailing newline, the way `$( )` handed it to sh. */
+void osr_state_get(Str *out, const char *key);
+int osr_state_set(const char *key, const char *value);
 int osr_user_main(int argc, char **argv);     /* lib/user.sh */
 int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
 int osr_detect_main(int argc, char **argv);   /* lib/detect.sh */

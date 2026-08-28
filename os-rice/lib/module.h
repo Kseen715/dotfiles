@@ -82,6 +82,10 @@ int osr_run_user(char *const argv[]);
  * best-effort probes lib/pkg.sh spells `as_root <cmd> >/dev/null 2>&1 || :`. */
 int osr_run_root_quiet(char *const argv[]);
 
+/* osr_run_user_quiet -- as_user with stdout and stderr discarded, for a
+ * best-effort action whose failure is reported by us, not by it. */
+int osr_run_user_quiet(char *const argv[]);
+
 /* osr_run_user_in -- as_user with stdin taken from in_fd: the receiving half
  * of a `<fetch> | as_user sh -s -- ...` pipeline. */
 int osr_run_user_in(char *const argv[], int in_fd);

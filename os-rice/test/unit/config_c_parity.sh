@@ -351,4 +351,181 @@ scene "install_mozilla_layer warns when the app has no profile yet" \
 assert_contains "$TMP/c.out" 'launch the app once' \
     "install_mozilla_layer: a profile-less app is a warning, not a failure"
 
+# --- 7. wallpapers ------------------------------------------------------------
+#
+# The setters are stubs that log rather than paint: which one a session has is
+# the scenario's input, and "no setter at all" (a container, CI) is one of the
+# cases that must not fail.
+img() { printf 'PNG-BYTES-%s\n' "$2" >"$1"; }
+
+seed() {
+    mkdir -p "$1/theme/wallpapers"
+    img "$1/theme/wallpapers/01-first.png" one
+    img "$1/theme/wallpapers/02-second.jpg" two
+    printf 'drop a real image here\n' >"$1/theme/wallpapers/README.txt"
+}
+scene "osr_theme_wallpapers lists a theme's images in order" \
+      'osr_theme_wallpapers' 'wallpapers'
+assert_contains "$TMP/c.out" '01-first.png' \
+    "osr_theme_wallpapers: the images are listed"
+refute_contains "$TMP/c.out" 'README.txt' \
+    "osr_theme_wallpapers: the placeholder .txt is not a wallpaper"
+
+scene "osr_theme_wallpaper defaults to the theme's first image" \
+      'osr_theme_wallpaper' 'wallpaper'
+assert_contains "$TMP/c.out" '01-first.png$' \
+    "osr_theme_wallpaper: with no recorded pick, the theme's default wins"
+
+# A recorded per-theme choice, which is what has to survive a theme switch.
+EXTRA="OSR_THEME=nord"
+seed() {
+    mkdir -p "$1/theme/wallpapers" "$1/home/.config/osr"
+    img "$1/theme/wallpapers/01-first.png" one
+    img "$1/theme/wallpapers/02-second.jpg" two
+    printf 'wallpaper.nord=%s\n' "$1/theme/wallpapers/02-second.jpg" \
+        >"$1/home/.config/osr/state"
+}
+scene "osr_theme_wallpaper prefers the recorded per-theme pick" \
+      'osr_theme_wallpaper' 'wallpaper'
+assert_contains "$TMP/c.out" '02-second.jpg$' \
+    "osr_theme_wallpaper: the user's pick for this theme wins over the default"
+
+seed() {
+    mkdir -p "$1/theme/wallpapers" "$1/home/.config/osr"
+    img "$1/theme/wallpapers/01-first.png" one
+    printf 'wallpaper.nord=%s/gone.png\n' "$1" >"$1/home/.config/osr/state"
+}
+scene "osr_theme_wallpaper falls back when the pick is gone" \
+      'osr_theme_wallpaper' 'wallpaper'
+assert_contains "$TMP/c.out" '01-first.png$' \
+    "osr_theme_wallpaper: a deleted pick falls back to the theme default"
+EXTRA=""
+
+seed() {
+    mkdir -p "$1/theme/wallpapers"
+    img "$1/theme/wallpapers/01-first.png" one
+}
+scene "osr_install_wallpaper copies the image into the user's library" \
+      'osr_install_wallpaper' 'install-wallpaper'
+assert_contains "$TMP/c/home/Pictures/Wallpapers/01-first.png" 'PNG-BYTES-one' \
+    "osr_install_wallpaper: the installed copy is the theme's file"
+assert_contains "$TMP/c.out" 'Pictures/Wallpapers/01-first.png$' \
+    "osr_install_wallpaper: and the installed path is what it answers"
+
+seed() {
+    mkdir -p "$1/theme/wallpapers" "$1/home/Pictures/Wallpapers"
+    img "$1/theme/wallpapers/01-first.png" one
+    img "$1/home/Pictures/Wallpapers/01-first.png" one
+}
+scene "osr_install_wallpaper leaves an identical copy alone" \
+      'osr_install_wallpaper' 'install-wallpaper'
+
+seed() {
+    mkdir -p "$1/theme/wallpapers"
+    img "$1/theme/wallpapers/01-first.png" one
+    printf 'preload = {{WALLPAPER_PATH}}\nwallpaper = ,{{WALLPAPER_PATH}}\n' >"$1/layer.conf"
+}
+scene "install_wallpaper_layer substitutes the installed path" \
+      'install_wallpaper_layer "$ROOT/layer.conf" "$ROOT/home/.config/hypr/hyprpaper.conf"' \
+      'wallpaper-layer "$ROOT/layer.conf" "$ROOT/home/.config/hypr/hyprpaper.conf"'
+assert_contains "$TMP/c/home/.config/hypr/hyprpaper.conf" 'Pictures/Wallpapers/01-first.png' \
+    "install_wallpaper_layer: every consumer gets the installed path, not the repo one"
+refute_contains "$TMP/c/home/.config/hypr/hyprpaper.conf" '{{WALLPAPER_PATH}}' \
+    "install_wallpaper_layer: no placeholder survives"
+
+seed() { printf 'no wallpapers here\n' >"$1/note"; printf 'bg = {{WALLPAPER_PATH}}\n' >"$1/layer.conf"; }
+scene "install_wallpaper_layer still lands when the theme ships no wallpaper" \
+      'install_wallpaper_layer "$ROOT/layer.conf" "$ROOT/home/.config/gtklock/style.css"' \
+      'wallpaper-layer "$ROOT/layer.conf" "$ROOT/home/.config/gtklock/style.css"'
+assert_contains "$TMP/c/home/.config/gtklock/style.css" '^bg = $' \
+    "install_wallpaper_layer: an absent wallpaper substitutes empty, the config still lands"
+
+seed() { mkdir -p "$1/theme/wallpapers"; img "$1/theme/wallpapers/01-first.png" one; }
+scene "osr_wallpaper_record writes the path down for non-shell consumers" \
+      'osr_wallpaper_record "$ROOT/home/Pictures/Wallpapers/01-first.png"' \
+      'wallpaper-record "$ROOT/home/Pictures/Wallpapers/01-first.png"'
+assert_contains "$TMP/c/home/.config/osr/wallpaper" 'Pictures/Wallpapers/01-first.png' \
+    "osr_wallpaper_record: the bare path file a bar or lock screen reads"
+assert_contains "$TMP/c/home/.config/osr/state" '^wallpaper=' \
+    "osr_wallpaper_record: and the state key"
+
+# The setters, one session at a time.
+cat >"$BIN/swww" <<'EOF'
+#!/bin/sh
+printf 'swww %s\n' "$*" >>"$HOME/.setter"
+EOF
+chmod +x "$BIN/swww"
+scene "osr_wallpaper_set_live hands the image to swww when it is there" \
+      'osr_wallpaper_set_live "$ROOT/theme/wallpapers/01-first.png"' \
+      'wallpaper-set "$ROOT/theme/wallpapers/01-first.png"'
+assert_contains "$TMP/c/home/.setter" '^swww img .*01-first.png$' \
+    "osr_wallpaper_set_live: swww is asked first"
+rm -f "$BIN/swww"
+
+cat >"$BIN/hyprctl" <<'EOF'
+#!/bin/sh
+printf 'hyprctl %s\n' "$*" >>"$HOME/.setter"
+EOF
+chmod +x "$BIN/hyprctl"
+scene "osr_wallpaper_set_live falls back to hyprpaper" \
+      'osr_wallpaper_set_live "$ROOT/theme/wallpapers/01-first.png"' \
+      'wallpaper-set "$ROOT/theme/wallpapers/01-first.png"'
+assert_contains "$TMP/c/home/.setter" 'hyprpaper wallpaper ,.*01-first.png' \
+    "osr_wallpaper_set_live: hyprpaper is told every monitor"
+rm -f "$BIN/hyprctl"
+
+cat >"$BIN/feh" <<'EOF'
+#!/bin/sh
+printf 'feh %s\n' "$*" >>"$HOME/.setter"
+EOF
+chmod +x "$BIN/feh"
+scene "osr_wallpaper_set_live falls back to feh on X" \
+      'osr_wallpaper_set_live "$ROOT/theme/wallpapers/01-first.png"' \
+      'wallpaper-set "$ROOT/theme/wallpapers/01-first.png"'
+rm -f "$BIN/feh"
+
+scene "osr_wallpaper_set_live records and moves on when headless" \
+      'osr_wallpaper_set_live "$ROOT/theme/wallpapers/01-first.png"' \
+      'wallpaper-set "$ROOT/theme/wallpapers/01-first.png"'
+assert_contains "$TMP/c.out" 'no wallpaper setter' \
+    "osr_wallpaper_set_live: a container has nothing to paint, and that is not a failure"
+
+scene "apply_wallpaper installs, records and paints in one step" \
+      'apply_wallpaper' 'apply-wallpaper'
+assert_contains "$TMP/c/home/.config/osr/wallpaper" '01-first.png' \
+    "apply_wallpaper: the applied image is recorded"
+
+seed() {
+    mkdir -p "$1/theme/wallpapers" "$1/home/Pictures/Wallpapers"
+    img "$1/theme/wallpapers/01-first.png" one
+    img "$1/home/Pictures/Wallpapers/01-first.png" one
+    img "$1/home/Pictures/Wallpapers/older.jpg" old
+    printf 'not an image\n' >"$1/home/Pictures/Wallpapers/notes.txt"
+}
+scene "osr_wallpaper_library is the theme's images then the accreted ones" \
+      'osr_wallpaper_library' 'wallpaper-library'
+assert_contains "$TMP/c.out" 'older.jpg' \
+    "osr_wallpaper_library: what earlier themes left behind is still choosable"
+refute_contains "$TMP/c.out" 'notes.txt' \
+    "osr_wallpaper_library: non-images are not offered"
+assert_eq "1" "$(grep -c '01-first.png' "$TMP/c.out")" \
+    "osr_wallpaper_library: the same basename is offered once, theme copy first"
+
+EXTRA="OSR_THEME=nord"
+seed() {
+    mkdir -p "$1/theme/wallpapers" "$1/pics"
+    img "$1/theme/wallpapers/01-first.png" one
+    img "$1/pics/picked.png" picked
+}
+scene "osr_choose_wallpaper records the pick under this theme" \
+      'osr_choose_wallpaper "$ROOT/pics/picked.png"' \
+      'choose-wallpaper "$ROOT/pics/picked.png"'
+assert_contains "$TMP/c/home/.config/osr/state" '^wallpaper.nord=.*picked.png$' \
+    "osr_choose_wallpaper: the choice is keyed by theme, so a switch brings it back"
+assert_contains "$TMP/c/home/Pictures/Wallpapers/picked.png" 'PNG-BYTES-picked' \
+    "osr_choose_wallpaper: the pick is copied into the library"
+assert_contains "$TMP/c.out" 'Pictures/Wallpapers/picked.png' \
+    "osr_choose_wallpaper: and the installed path is its answer"
+EXTRA=""
+
 finish

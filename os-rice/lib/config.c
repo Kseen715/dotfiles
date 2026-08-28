@@ -647,6 +647,390 @@ int osr_install_mozilla_layer(const char *root, const char *user_js, const char 
     return 1;
 }
 
+/* same_content -- `cmp -s a b`. */
+static int same_content(const char *a, const char *b) {
+    char *ba, *bb;
+    size_t la, lb;
+    int same;
+
+    ba = slurp(a, &la);
+    if (ba == NULL) return 0;
+    bb = slurp(b, &lb);
+    if (bb == NULL) { free(ba); return 0; }
+    same = la == lb && (la == 0 || memcmp(ba, bb, la) == 0);
+    free(ba);
+    free(bb);
+    return same;
+}
+
+/* write_as_user -- bytes into a file the RICED USER owns: a temporary this
+ * process writes, then `as_user cp -f`. A module run under sudo must not leave
+ * a root-owned file in the user's home. */
+static void write_as_user(const char *path, const char *text, size_t len) {
+    Str tmp;
+    str_init(&tmp);
+    tmp_path(&tmp, "osr-write-", "");
+    if (write_file(str_text(&tmp), text, len)) {
+        (void)user_cp(str_text(&tmp), path, 0);
+        remove(str_text(&tmp));
+    }
+    str_free(&tmp);
+}
+
+/* --- wallpaper -------------------------------------------------------------
+ *
+ * The shell resolved the wallpaper four times over (hyprpaper, hyprland's env,
+ * gtklock, the recorded state) and the copies disagreed. Here it is resolved
+ * once, installed once, and every consumer is handed the same absolute path.
+ */
+
+/* ends_with -- a case-sensitive suffix test, which is what the sh `case`
+ * pattern list was: the uppercase spellings it accepts are listed one by one,
+ * and .Gif is deliberately not among them. */
+static int ends_with(const char *s, const char *suffix) {
+    size_t ls = strlen(s), lf = strlen(suffix);
+    return ls >= lf && strcmp(s + ls - lf, suffix) == 0;
+}
+
+int osr_is_image(const char *path) {
+    static const char *exts[] = {
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif",
+        ".JPG", ".JPEG", ".PNG", ".WEBP", NULL
+    };
+    size_t i;
+    if (!file_exists(path)) return 0;
+    for (i = 0; exts[i] != NULL; i++)
+        if (ends_with(path, exts[i])) return 1;
+    return 0;
+}
+
+void osr_theme_wallpapers(Str *out, const char *theme_dir) {
+    Str pat;
+    glob_t g;
+    size_t i;
+
+    if (theme_dir == NULL || *theme_dir == '\0') return;
+    str_init(&pat);
+    str_addz(&pat, theme_dir);
+    str_addz(&pat, "/wallpapers/*");
+    if (glob(str_text(&pat), 0, NULL, &g) == 0) {
+        for (i = 0; i < g.gl_pathc; i++) {
+            if (!osr_is_image(g.gl_pathv[i])) continue;
+            str_addz(out, g.gl_pathv[i]);
+            str_addc(out, '\n');
+        }
+        globfree(&g);
+    }
+    str_free(&pat);
+}
+
+/* first_line -- the `| head -n 1 | tr -d '\n'` at the end of
+ * osr_theme_wallpaper: one path, no newline. */
+static void first_line(Str *out, const Str *lines) {
+    size_t pos = 0;
+    Line l;
+    str_reset(out);
+    if (next_line(str_text(lines), lines->len, &pos, &l)) str_add(out, l.start, l.len);
+}
+
+void osr_theme_wallpaper(Str *out) {
+    const char *dir = osr_mod_theme_dir();
+    const char *theme = osr_mod_theme();
+    Str all;
+
+    str_reset(out);
+    if (*dir == '\0') return;
+
+    if (*theme != '\0') {
+        Str key, pick;
+        str_init(&key);
+        str_addz(&key, "wallpaper.");
+        str_addz(&key, theme);
+        str_init(&pick);
+        osr_state_get(&pick, str_text(&key));
+        str_free(&key);
+        /* A recorded choice whose file is gone (deleted, checkout moved) falls
+         * back to the theme default rather than failing the apply. */
+        if (pick.len > 0 && osr_is_image(str_text(&pick))) {
+            str_add(out, str_text(&pick), pick.len);
+            str_free(&pick);
+            return;
+        }
+        str_free(&pick);
+    }
+
+    str_init(&all);
+    osr_theme_wallpapers(&all, dir);
+    first_line(out, &all);
+    str_free(&all);
+}
+
+void osr_install_wallpaper_file(Str *out, const char *src) {
+    Str dir, dst, base;
+
+    str_reset(out);
+    if (src == NULL || *src == '\0') return;
+
+    str_init(&dir);
+    str_addz(&dir, osr_mod_home());
+    str_addz(&dir, "/Pictures/Wallpapers");
+    str_init(&base);
+    base_of(&base, src);
+    str_init(&dst);
+    str_add(&dst, str_text(&dir), dir.len);
+    str_addc(&dst, '/');
+    str_add(&dst, str_text(&base), base.len);
+    str_free(&base);
+
+    /* Rerun-safe (§2): an identical copy is left where it is, timestamps and
+     * all, so a reapply does not churn the file every consumer points at. */
+    if (!file_exists(str_text(&dst)) || !same_content(src, str_text(&dst))) {
+        osr_mkdir_p(str_text(&dir));
+        (void)user_cp(src, str_text(&dst), 0);
+    }
+    str_add(out, str_text(&dst), dst.len);
+    str_free(&dir);
+    str_free(&dst);
+}
+
+void osr_install_wallpaper(Str *out) {
+    Str src;
+    str_init(&src);
+    osr_theme_wallpaper(&src);
+    if (src.len == 0) {
+        str_reset(out);
+        str_free(&src);
+        return;
+    }
+    osr_install_wallpaper_file(out, str_text(&src));
+    str_free(&src);
+}
+
+int osr_install_wallpaper_layer(const char *src, const char *dst) {
+    Str wp, body, out;
+    char *buf;
+    size_t len, i;
+    int ok;
+    static const char MARK[] = "{{WALLPAPER_PATH}}";
+    const size_t mlen = sizeof(MARK) - 1;
+
+    str_init(&wp);
+    osr_install_wallpaper(&wp);
+
+    buf = read_or_die(src, &len, "install_wallpaper_layer: source");
+    str_init(&out);
+    str_init(&body);
+    for (i = 0; i < len; ) {
+        if (i + mlen <= len && memcmp(buf + i, MARK, mlen) == 0) {
+            str_add(&out, str_text(&wp), wp.len);
+            i += mlen;
+        } else {
+            str_addc(&out, buf[i]);
+            i++;
+        }
+    }
+    free(buf);
+    str_free(&body);
+    str_free(&wp);
+
+    ok = install_transformed("osr-wallpaper-layer-", "", &out, dst);
+    str_free(&out);
+    return ok;
+}
+
+void osr_wallpaper_set_live(const char *img) {
+    char *argv[5];
+
+    if (osr_have_cmd("swww")) {
+        argv[0] = (char *)"swww"; argv[1] = (char *)"img";
+        argv[2] = (char *)img; argv[3] = NULL;
+        if (osr_run_user_quiet(argv) != 0) osr_warnf("swww failed to set wallpaper");
+    } else if (osr_have_cmd("hyprctl")) {
+        Str spec;
+        str_init(&spec);
+        str_addc(&spec, ',');            /* `,<path>`: every monitor */
+        str_addz(&spec, img);
+        argv[0] = (char *)"hyprctl"; argv[1] = (char *)"hyprpaper";
+        argv[2] = (char *)"wallpaper"; argv[3] = spec.p; argv[4] = NULL;
+        if (osr_run_user_quiet(argv) != 0) osr_warnf("hyprpaper failed");
+        str_free(&spec);
+    } else if (osr_have_cmd("feh")) {
+        argv[0] = (char *)"feh"; argv[1] = (char *)"--bg-scale";
+        argv[2] = (char *)img; argv[3] = NULL;
+        if (osr_run_user_quiet(argv) != 0) osr_warnf("feh failed to set wallpaper");
+    } else {
+        /* A container, an ssh session, a CI host: nothing to paint, and that
+         * is not a failure (§9). The record above is still the answer. */
+        osr_infof("no wallpaper setter (headless) - recorded %s", img);
+    }
+}
+
+void osr_wallpaper_record(const char *img) {
+    Str dir, file, line;
+
+    str_init(&dir);
+    str_addz(&dir, osr_mod_home());
+    str_addz(&dir, "/.config/osr");
+    osr_mkdir_p(str_text(&dir));
+
+    /* A bare path on a line, because non-shell consumers read this file (a
+     * lock screen, a bar, Proteus). The state file carries the same value
+     * keyed by theme, which is what survives a theme switch. */
+    str_init(&file);
+    str_add(&file, str_text(&dir), dir.len);
+    str_addz(&file, "/wallpaper");
+    str_init(&line);
+    str_addz(&line, img);
+    str_addc(&line, '\n');
+    write_as_user(str_text(&file), str_text(&line), line.len);
+    (void)osr_state_set("wallpaper", img);
+
+    str_free(&line);
+    str_free(&file);
+    str_free(&dir);
+}
+
+int osr_apply_wallpaper(void) {
+    Str wp;
+    str_init(&wp);
+    osr_install_wallpaper(&wp);
+    if (wp.len == 0) { str_free(&wp); return 1; }
+    osr_wallpaper_record(str_text(&wp));
+    osr_wallpaper_set_live(str_text(&wp));
+    str_free(&wp);
+    return 1;
+}
+
+/* seen_basename -- the `case "$seen" in *"|$b"*)` dedup, kept as the same
+ * pipe-delimited string so a basename containing a pipe behaves identically. */
+static int seen_basename(const Str *seen, const char *base) {
+    Str needle;
+    int found = 0;
+    size_t i;
+
+    str_init(&needle);
+    str_addc(&needle, '|');
+    str_addz(&needle, base);
+    for (i = 0; i + needle.len <= seen->len && !found; i++)
+        if (memcmp(str_text(seen) + i, str_text(&needle), needle.len) == 0) found = 1;
+    str_free(&needle);
+    return found;
+}
+
+void osr_wallpaper_library(Str *out) {
+    Str seen, theme, pat, base;
+    size_t pos = 0;
+    Line l;
+    glob_t g;
+    size_t i;
+
+    str_init(&seen);
+    str_init(&base);
+
+    str_init(&theme);
+    osr_theme_wallpapers(&theme, osr_mod_theme_dir());
+    while (next_line(str_text(&theme), theme.len, &pos, &l)) {
+        Str path;
+        str_init(&path);
+        str_add(&path, l.start, l.len);
+        str_reset(&base);
+        base_of(&base, str_text(&path));
+        str_addc(&seen, '|');
+        str_add(&seen, str_text(&base), base.len);
+        str_add(out, str_text(&path), path.len);
+        str_addc(out, '\n');
+        str_free(&path);
+    }
+    str_free(&theme);
+
+    /* ~/Pictures/Wallpapers is where every image ever applied was copied, so
+     * this half accretes into a library across themes. */
+    str_init(&pat);
+    str_addz(&pat, osr_mod_home());
+    str_addz(&pat, "/Pictures/Wallpapers/*");
+    if (glob(str_text(&pat), 0, NULL, &g) == 0) {
+        for (i = 0; i < g.gl_pathc; i++) {
+            if (!osr_is_image(g.gl_pathv[i])) continue;
+            str_reset(&base);
+            base_of(&base, g.gl_pathv[i]);
+            if (seen_basename(&seen, str_text(&base))) continue;
+            str_addc(&seen, '|');
+            str_add(&seen, str_text(&base), base.len);
+            str_addz(out, g.gl_pathv[i]);
+            str_addc(out, '\n');
+        }
+        globfree(&g);
+    }
+    str_free(&pat);
+    str_free(&base);
+    str_free(&seen);
+}
+
+/* absolute -- the `cd -- "$(dirname)" && pwd`/basename dance the shell did to
+ * turn a relative pick into the absolute path every consumer stores. */
+static void absolute(Str *out, const char *path) {
+    Str dir, base;
+    char buf[4096];
+
+    str_reset(out);
+    if (*path == '/') { str_addz(out, path); return; }
+
+    str_init(&dir);
+    dir_of(&dir, path);
+    str_init(&base);
+    base_of(&base, path);
+    if (realpath(str_text(&dir), buf) != NULL) str_addz(out, buf);
+    else                                       str_addz(out, str_text(&dir));
+    str_addc(out, '/');
+    str_add(out, str_text(&base), base.len);
+    str_free(&dir);
+    str_free(&base);
+}
+
+void osr_choose_wallpaper(Str *out, const char *path) {
+    Str src, installed;
+    int saved_stdout;
+
+    if (!osr_is_image(path)) osr_die("not an image: %s", path);
+
+    str_init(&src);
+    absolute(&src, path);
+
+    /* Keyed by theme on purpose: a wallpaper is part of how a theme looks, so
+     * nord -> gruvbox -> nord must bring back the image picked for nord. */
+    if (*osr_mod_theme() != '\0') {
+        Str key;
+        str_init(&key);
+        str_addz(&key, "wallpaper.");
+        str_addz(&key, osr_mod_theme());
+        (void)osr_state_set(str_text(&key), str_text(&src));
+        str_free(&key);
+    }
+
+    str_init(&installed);
+    osr_install_wallpaper_file(&installed, str_text(&src));
+    str_free(&src);
+
+    /* This function's stdout IS its answer, so the record's and the setter's
+     * logging is moved to stderr for the duration: a "no wallpaper setter"
+     * line landing in a caller's `$( )` would corrupt the path it asked for. */
+    saved_stdout = dup(1);
+    fflush(stdout);
+    if (dup2(2, 1) >= 0) {
+        osr_wallpaper_record(str_text(&installed));
+        osr_wallpaper_set_live(str_text(&installed));
+        fflush(stdout);
+    }
+    if (saved_stdout >= 0) {
+        dup2(saved_stdout, 1);
+        close(saved_stdout);
+    }
+
+    str_reset(out);
+    str_add(out, str_text(&installed), installed.len);
+    str_free(&installed);
+}
+
 /* --- the command ----------------------------------------------------------- */
 
 static int config_usage(void) {
@@ -663,7 +1047,29 @@ static int config_usage(void) {
     fputs("  apply <name>                     a theme's config/<name> dir into ~/.config\n", stderr);
     fputs("  mozilla-profiles <root>          every profile dir, one per line\n", stderr);
     fputs("  mozilla <root> <user.js> <userChrome.css>   the layer into each profile\n", stderr);
+    fputs("  is-image <path>                  exit 0 when it is one\n", stderr);
+    fputs("  wallpapers [theme-dir]           the theme's images, one per line\n", stderr);
+    fputs("  wallpaper                        the wallpaper this theme should use\n", stderr);
+    fputs("  install-wallpaper                install it, print where it landed\n", stderr);
+    fputs("  install-wallpaper-file <src>     install one image into the library\n", stderr);
+    fputs("  wallpaper-layer <src> <dst>      a layer with {{WALLPAPER_PATH}} filled in\n", stderr);
+    fputs("  wallpaper-record <path>          write it down (file + state)\n", stderr);
+    fputs("  wallpaper-set <path>             hand it to the session's setter\n", stderr);
+    fputs("  apply-wallpaper                  install + record + paint\n", stderr);
+    fputs("  wallpaper-library                every image the user can pick\n", stderr);
+    fputs("  choose-wallpaper <path>          make it this theme's wallpaper\n", stderr);
     return 2;
+}
+
+/* print_path -- run one of the "yields a path" entry points and print what it
+ * yielded, newline and all if it produced one. */
+static int print_path(void (*fn)(Str *)) {
+    Str out;
+    str_init(&out);
+    fn(&out);
+    out_flush(&out);
+    str_free(&out);
+    return 0;
 }
 
 int osr_config_main(int argc, char **argv) {
@@ -699,5 +1105,51 @@ int osr_config_main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "mozilla") == 0 && argc == 5)
         return osr_install_mozilla_layer(argv[2], argv[3], argv[4]) ? 0 : 1;
+
+    /* The wallpaper family. The ones that yield a path print it WITHOUT a
+     * trailing newline, because every shell caller read them through `$( )`
+     * and then used the result as a path. */
+    if (strcmp(argv[1], "is-image") == 0 && argc == 3)
+        return osr_is_image(argv[2]) ? 0 : 1;
+    if (strcmp(argv[1], "wallpapers") == 0 && (argc == 2 || argc == 3)) {
+        Str out;
+        str_init(&out);
+        osr_theme_wallpapers(&out, argc == 3 ? argv[2] : osr_mod_theme_dir());
+        out_flush(&out);
+        str_free(&out);
+        return 0;
+    }
+    if (strcmp(argv[1], "wallpaper") == 0 && argc == 2) return print_path(osr_theme_wallpaper);
+    if (strcmp(argv[1], "install-wallpaper") == 0 && argc == 2)
+        return print_path(osr_install_wallpaper);
+    if (strcmp(argv[1], "install-wallpaper-file") == 0 && argc == 3) {
+        Str out;
+        str_init(&out);
+        osr_install_wallpaper_file(&out, argv[2]);
+        out_flush(&out);
+        str_free(&out);
+        return 0;
+    }
+    if (strcmp(argv[1], "wallpaper-layer") == 0 && argc == 4)
+        return osr_install_wallpaper_layer(argv[2], argv[3]) ? 0 : 1;
+    if (strcmp(argv[1], "wallpaper-record") == 0 && argc == 3) {
+        osr_wallpaper_record(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "wallpaper-set") == 0 && argc == 3) {
+        osr_wallpaper_set_live(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "apply-wallpaper") == 0 && argc == 2)
+        return osr_apply_wallpaper() ? 0 : 1;
+    if (strcmp(argv[1], "wallpaper-library") == 0 && argc == 2) return print_path(osr_wallpaper_library);
+    if (strcmp(argv[1], "choose-wallpaper") == 0 && argc == 3) {
+        Str out;
+        str_init(&out);
+        osr_choose_wallpaper(&out, argv[2]);
+        out_flush(&out);
+        str_free(&out);
+        return 0;
+    }
     return config_usage();
 }

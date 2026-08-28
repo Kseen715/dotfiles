@@ -79,17 +79,19 @@ static int key_regex(regex_t *re, const char *key) {
  * newline is carried over from the matched line: sed does not add one to a
  * file that ended without it, and neither does tail.
  */
-static int cmd_get(const char *key) {
+/* state_lookup -- the match itself: the value of the last `KEY=` line, and
+ * whether that line ended in a newline (which `osr state get` prints back and
+ * an in-process caller does not want). */
+static int state_lookup(const char *key, Str *value, int *had_newline) {
     Str path;
     char *buf;
     size_t len;
     size_t pos = 0;
     Line line;
     regex_t re;
-    Str value;
     int found = 0;
-    int found_newline = 0;
 
+    *had_newline = 0;
     str_init(&path);
     state_path(&path);
     buf = slurp(str_text(&path), &len);
@@ -97,31 +99,45 @@ static int cmd_get(const char *key) {
     if (buf == NULL) return 0;
     if (!key_regex(&re, key)) { free(buf); return 0; }
 
-    str_init(&value);
     while (next_line(buf, len, &pos, &line)) {
         regmatch_t m;
         char saved = line.start[line.len];
         ((char *)line.start)[line.len] = '\0';
         if (regexec(&re, line.start, 1, &m, 0) == 0) {
-            value.len = 0;
-            str_add(&value, line.start + m.rm_eo, line.len - (size_t)m.rm_eo);
+            value->len = 0;
+            str_add(value, line.start + m.rm_eo, line.len - (size_t)m.rm_eo);
             found = 1;
-            found_newline = line.had_newline;
+            *had_newline = line.had_newline;
         }
         ((char *)line.start)[line.len] = saved;
     }
     regfree(&re);
+    free(buf);
+    return found;
+}
 
-    if (found) {
+/* osr_state_get -- the value a caller in this process wants: no trailing
+ * newline, because every shell caller read it through `$( )`, which ate it. */
+void osr_state_get(Str *out, const char *key) {
+    int nl;
+    str_reset(out);
+    (void)state_lookup(key, out, &nl);
+}
+
+static int cmd_get(const char *key) {
+    Str value;
+    int nl = 0;
+
+    str_init(&value);
+    if (state_lookup(key, &value, &nl)) {
         Str out;
         str_init(&out);
         str_add(&out, str_text(&value), value.len);
-        if (found_newline) str_addc(&out, '\n');
+        if (nl) str_addc(&out, '\n');
         out_flush(&out);
         str_free(&out);
     }
     str_free(&value);
-    free(buf);
     return 0;
 }
 
@@ -325,6 +341,9 @@ static int cmd_set(const char *key, const char *value) {
     str_free(&path);
     return rc;
 }
+
+/* osr_state_set -- what `osr state set` does, without the fork. */
+int osr_state_set(const char *key, const char *value) { return cmd_set(key, value) == 0; }
 
 static int usage(void) {
     fputs("usage: osr state <subcommand> [args]\n\n", stderr);
