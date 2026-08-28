@@ -53,6 +53,13 @@ void osr_infof(const char *fmt, ...) {
     va_end(ap);
 }
 
+void osr_debugf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    say(osr_debug_line, fmt, ap);
+    va_end(ap);
+}
+
 void osr_warnf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);

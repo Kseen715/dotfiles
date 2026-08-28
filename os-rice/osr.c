@@ -60,6 +60,8 @@ static const Command commands[] = {
     { "fonts",    osr_fonts_main,   "install a Nerd Font" },
     { "gnome",    osr_gnome_main,   "GNOME session probe and custom keybindings" },
     { "migrate",  osr_migrate_main, "patch a seeded, user-owned layer in place" },
+    { "apply",    osr_apply_main,   "the lists a theme-only apply is built out of" },
+    { "reload",   osr_reload_main,  "tell the running apps to re-read their config" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }

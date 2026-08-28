@@ -42,6 +42,7 @@ const char *osr_mod_init(void);      /* systemd | openrc | runit | sysvinit */
 /* Same five lines as lib/log.sh, printf-style. osr_die prints and exits 1,
  * which is lib/log.sh's error(): the one fatal path. */
 void osr_infof(const char *fmt, ...);
+void osr_debugf(const char *fmt, ...);
 void osr_warnf(const char *fmt, ...);
 void osr_successf(const char *fmt, ...);
 void osr_die(const char *fmt, ...);

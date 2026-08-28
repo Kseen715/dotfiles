@@ -175,6 +175,8 @@ static const char *posix_srcs[] = {
     "lib/nerdfont.c",
     "lib/gnome.c",
     "lib/migrate.c",
+    "lib/apply.c",
+    "lib/reload.c",
     /* lib/fetch.c is lib/net.sh; lib/net.c comes with it for the shared
      * header parsers (its I/O half is the Windows one, stubbed here). */
     "lib/fetch.c",

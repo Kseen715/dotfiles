@@ -165,6 +165,26 @@ static void directives_free(Directives *d) {
     d->count = 0;
 }
 
+/* osr_theme_read_lines -- a manifest's directive lines for a caller that would
+ * have run `_osr_theme_lines <file> | while IFS= read -r`. One line per entry,
+ * each newline-terminated, and the manifest's FINAL line dropped when the file
+ * ended without a newline: `read` returns false on a partial line, so the
+ * shell loop never ran its body for it either. */
+void osr_theme_read_lines(Str *out, const char *path) {
+    Directives d;
+    size_t i;
+    size_t n;
+
+    if (!theme_lines(&d, path)) return;
+    n = d.count;
+    if (d.last_incomplete && n > 0) n--;
+    for (i = 0; i < n; i++) {
+        str_add(out, str_text(&d.items[i]), d.items[i].len);
+        str_addc(out, '\n');
+    }
+    directives_free(&d);
+}
+
 /* match_prefix -- the sed `s|^<key>:[[:space:]]*||p` shape: does this directive
  * start with "<key>:"? If so, out points at the value (whitespace skipped).
  * The key goes through a BRE, as it did through sed. */

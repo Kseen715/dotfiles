@@ -867,6 +867,8 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/service.c` | `lib/service.sh` | both verbs on all four inits, and the servicemap facet lookup they share |
 | `lib/preflight.c` `nerdfont.c` | `lib/preflight.sh` `fonts.sh` | the require: predicates and the Nerd Font install; `nerdfont.c` is so named because `lib/fonts.c` is the Windows core's |
 | `lib/gnome.c` `migrate.c` | `lib/gnome.sh` `migrate.sh` | GNOME session detection, freeing a chord off the Shell keys and registering a custom keybinding; and the migrations that patch a seeded, user-owned layer in place. `migrate_replace` takes the old and the new region as text rather than the names of two functions that print them — the fork per region bought a C caller nothing |
+| `lib/reload.c` | `lib/reload.sh` | the reload table: probe first, act second, never fatal, never restart what would lose state |
+| `lib/apply.c` | `lib/apply.sh` (part) | the two lists a theme-only apply is built out of — the mutating verbs it neutralizes and the modules that carry a theme layer. `osr_apply_stub_mutators` stays in sh and has no C counterpart: it redefines shell functions so the shell modules sourced afterwards call the no-op, which cannot be done from another process. `lib/install.c` drives the C module tier's theme-only pass by calling only the config verbs instead |
 
 ### Remaining, in the order the dependencies force
 
@@ -875,7 +877,7 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/pkg.sh` | 551 | **the blocker.** `osr_pkg_install` covers the native path only; every provider (`cargo:` `script:` `aur:` `source:`) still lands back in sh, and that is what pins most modules to the shell tier |
 | `lib/build.sh` | 1387 | the `source:` builders, **in progress**: `lib/build.c` holds the registry, the tarball primitive and the seven prebuilt-binary builders (`gh` `btop` `lsd` `fzf` `fastfetch` ×2, `lsd_deb`); a name it does not know still runs in sh, one row at a time. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
 | `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers. **In progress**: `lib/config.c` holds the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer and the whole wallpaper family (resolve, install, record, set, library, pick) |
-| `lib/apply.sh` `reload.sh` | 294 | theme-only apply and the reload table. Depend on the module tier's shape, so late |
+| `lib/apply.sh` (the stubbing half) | 70 | `osr_apply_stub_mutators` + `osr_apply_theme`: `eval`-defined no-ops for the shell modules that are sourced next. Cannot leave sh before `modules/*.sh` does |
 | `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |
 | `modules/*.sh` | 115 files | see [[#11a. Every `.sh` module is legacy\|11a]] |
 

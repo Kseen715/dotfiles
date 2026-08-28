@@ -22,6 +22,10 @@ void osr_state_get(Str *out, const char *key);
 int osr_state_set(const char *key, const char *value);
 int osr_user_main(int argc, char **argv);     /* lib/user.sh */
 int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
+
+/* osr_theme_read_lines -- a manifest's directive lines, as a `while IFS= read`
+ * loop over `osr theme lines` would have seen them (lib/theme.c). */
+void osr_theme_read_lines(Str *out, const char *path);
 int osr_detect_main(int argc, char **argv);   /* lib/detect.sh */
 int osr_install_main(int argc, char **argv);  /* install.sh */
 int osr_module_main(int argc, char **argv);   /* the Linux C modules */
@@ -35,6 +39,8 @@ int osr_preflight_main(int argc, char **argv);/* lib/preflight.sh */
 int osr_fonts_main(int argc, char **argv);    /* lib/fonts.sh */
 int osr_gnome_main(int argc, char **argv);    /* lib/gnome.sh */
 int osr_migrate_main(int argc, char **argv);  /* lib/migrate.sh */
+int osr_apply_main(int argc, char **argv);    /* lib/apply.sh */
+int osr_reload_main(int argc, char **argv);   /* lib/reload.sh */
 /* osr_benchmark_main -- measure the CPU: throughput, power, thermals, clocks.
  * Standalone, and the source of the numbers the undervolt perf gate compares. */
 int osr_benchmark_main(int argc, char **argv);

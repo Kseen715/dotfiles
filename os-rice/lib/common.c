@@ -258,6 +258,13 @@ static void log_now(FILE *stream, const char *color_env, const char *tag, const 
 void osr_info(const char *msg) { log_now(stdout, "OSR_CYAN", "[INFO]", msg); }
 void osr_success_line(const char *msg) { log_now(stdout, "OSR_GREEN", "[DONE]", msg); }
 void osr_warn(const char *msg) { log_now(stderr, "OSR_YELLOW", "[WARN]", msg); }
+/* osr_debug_line -- off unless OSR_DEBUG is set: a theme apply skips dozens of
+ * steps by design, and printing each one would bury the handful of lines that
+ * say what actually changed. */
+void osr_debug_line(const char *msg) {
+    if (env_is_set("OSR_DEBUG")) log_now(stderr, "OSR_DIM", "[DEBUG]", msg);
+}
+
 void osr_error_line(const char *msg) { log_now(stderr, "OSR_RED", "[ERROR]", msg); }
 
 /* --- small file helpers ---------------------------------------------- */

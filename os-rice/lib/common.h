@@ -150,6 +150,9 @@ void log_line(Str *out, const char *color_env, const char *tag,
  * error() keeps the `exit`). */
 void osr_info(const char *msg);
 void osr_warn(const char *msg);
+
+/* osr_debug_line -- the same, gated on $OSR_DEBUG. */
+void osr_debug_line(const char *msg);
 void osr_success_line(const char *msg);
 void osr_error_line(const char *msg);
 
