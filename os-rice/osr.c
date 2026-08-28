@@ -15,6 +15,7 @@
  *   osr install …   install.sh's help, listings, option loop, manifest, report
  *   osr pkg …       package resolution, the native installer, the providers
  *   osr net …       downloads, redirect resolution, github_latest
+ *   osr build …     the source: provider builders
  *   osr benchmark … CPU throughput/power measurement (no .sh ancestor)
  *   osr undervolt … CPU voltage offsets (no .sh ancestor: new here)
  *   osr test-run …  the test suite runner
@@ -50,6 +51,7 @@ static const Command commands[] = {
     { "module",   osr_module_main,  "the Linux modules written in C" },
     { "pkg",      osr_pkg_main,     "resolve, install and probe packages" },
     { "net",      osr_net_main,     "fetch a URL, resolve a GitHub tag" },
+    { "build",    osr_build_main,   "the source: builders (lib/build.sh)" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
     { "test-run", osr_testrun_main, "run the test suite" }

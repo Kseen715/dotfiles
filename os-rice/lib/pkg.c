@@ -25,6 +25,7 @@
 #include "cmds.h"
 #include "module.h"
 #include "fetch.h"
+#include "build.h"
 
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -814,6 +815,22 @@ static int pkg_install_via_sh(const char *name) {
     return rc == 0;
 }
 
+/* via_source -- _via_source: the builder named by the row, with the same
+ * `command -v <name>` idempotency probe in front of it (§2, §4). A builder that
+ * has been ported runs in this process; anything still living in lib/build.sh
+ * goes back through the shell for that one row, which is the last call from the
+ * C tier into sh and goes away with the last builder. */
+static int via_source(const char *pkg, const char *fn) {
+    if (osr_have_cmd(pkg)) {
+        osr_infof("%s already present (source) - skipping", pkg);
+        return 1;
+    }
+    if (!osr_build_has(fn)) return pkg_install_via_sh(pkg);
+    osr_infof("building %s from source (%s)", pkg, fn);
+    if (!osr_build_run(fn)) osr_die("source build failed for %s", pkg);
+    return 1;
+}
+
 /* via_native -- pass 1: every native row, batched into ONE install command.
  * Already-installed and held packages drop out here, so a rerun with nothing
  * to do runs no package manager at all (§2). */
@@ -1093,10 +1110,7 @@ int osr_pkg_install(const char *const names[]) {
             ok = via_aur(names[i], spec_arg(str_text(&rhs)));
             break;
         case M_SOURCE:
-            /* The builders are lib/build.sh shell FUNCTIONS, so this one row
-             * still runs there. The only remaining call from the C tier back
-             * into sh, and it goes away with lib/build.sh itself. */
-            ok = pkg_install_via_sh(names[i]);
+            ok = via_source(names[i], spec_arg(str_text(&rhs)));
             break;
         default:
             osr_warnf("provider '%.*s:' not yet implemented (%s) - covers native/script/source/cargo/aur",
