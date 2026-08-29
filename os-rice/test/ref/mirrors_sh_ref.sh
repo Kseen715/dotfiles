@@ -1,5 +1,12 @@
+# test/ref/mirrors_sh_ref.sh — the sh implementation of modules/mirrors.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/mirrors.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/mirrors.sh — rank the distro's package mirrors by speed. POSIX port of
 # the legacy standalone .../setup-mirrors.sh, the last un-ported helper of the
 # hyprland-glass bundle. It was a script you ran by hand before the installer;

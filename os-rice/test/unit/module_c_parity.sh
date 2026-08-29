@@ -111,9 +111,42 @@ run_c() {
 # The pid in a rendered template's name (osr-theme-<app>-<pid>-<file>,
 # osr-wallpaper-layer-<pid>) goes the same way: it names one run, not one
 # decision.
+# The staging file an owned block is composed into goes the same way, and for
+# the same reason: the sh ensure_block took a `mktemp` name, the C one builds
+# /tmp/osr-block-<pid>, and neither name is a decision the module made about the
+# box - the only thing that reaches $HOME is what `cp` put there. Collapsed to
+# the mktemp shape so the two spellings compare equal.
+# ...and the two halves of a `<downloader> | <interpreter>` pipeline are put in
+# a fixed order. Both halves are started at once and each appends to the log
+# when it happens to run, so which lands first is the scheduler's choice, not
+# the module's - the same pipeline on the same tier logs them either way. Only
+# an ADJACENT pair is touched, so a downloader that is genuinely a step of its
+# own still has to appear where the module put it.
 normalize() {
     grep -v '^id -u$' "$1" \
-        | sed 's#tmp\.[A-Za-z0-9]*#tmp.X#g; s#\(osr-[a-z-]*-\)[0-9][0-9]*#\1PID#g' || :
+        | sed 's#/tmp/osr-block-[0-9][0-9]*#/tmp/tmp.X#g
+               s#tmp\.[A-Za-z0-9]*#tmp.X#g
+               s#\(osr-[a-z-]*-\)[0-9][0-9]*#\1PID#g' \
+        | awk '
+            function is_fetch(l) { return l ~ /^(curl|wget|busybox) / }
+            function is_pipe_end(l) { return l ~ /^sudo (-u [^ ]+ )?(bash|sh)( |$)/ }
+            {
+                if (held != "") {
+                    # A held line plus its partner is one pipeline: emit the
+                    # downloader first, whichever of the two logged first.
+                    if (is_fetch(held) && is_pipe_end($0)) {
+                        print held; print $0; held = ""; next
+                    }
+                    if (is_pipe_end(held) && is_fetch($0)) {
+                        print $0; print held; held = ""; next
+                    }
+                    print held; held = ""
+                }
+                if (is_fetch($0) || is_pipe_end($0)) { held = $0; next }
+                print
+            }
+            END { if (held != "") print held }
+        ' || :
 }
 
 # ..._env variants: the same two runners with extra facts (a sandboxed
@@ -460,10 +493,56 @@ printf '[Theme]\ncolor_bg=#000\n' >"$TMP/themes/nord/config/copyq/theme.ini"
 printf 'CHROME\n'         >"$TMP/themes/nord/config/thunderbird/userChrome.css"
 printf 'USERJS\n'         >"$TMP/df/thunderbird/user.js"
 printf 'BLSRC\n'          >"$TMP/themes/nord/config/betterlockscreen/betterlockscreenrc"
+mkdir -p "$TMP/df/wezterm" "$TMP/themes/nord/config/wezterm" \
+         "$TMP/df/yazi" "$TMP/themes/nord/config/yazi"
+printf 'WEZTERM LUA\n'   >"$TMP/df/wezterm/.wezterm.lua"
+printf 'WEZTERM THEME\n' >"$TMP/themes/nord/config/wezterm/wezterm-theme.toml"
+printf 'YAZI BASE\n'     >"$TMP/df/yazi/yazi.toml"
+printf 'YAZI PKGS\n'     >"$TMP/df/yazi/package.toml"
+printf 'YAZI FLAVOR\n'   >"$TMP/themes/nord/config/yazi/flavor.toml"
+printf 'YAZI TMTHEME\n'  >"$TMP/themes/nord/config/yazi/tmtheme.xml"
+printf 'YAZI THEME\n'    >"$TMP/themes/nord/config/yazi/theme.toml"
+mkdir -p "$TMP/df/i3/.config/i3/scripts" "$TMP/themes/nord/config/i3"
+printf 'I3 CONFIG\n'     >"$TMP/df/i3/.config/i3/config"
+printf 'POWERMENU\n'     >"$TMP/df/i3/.config/i3/scripts/rofi-powermenu.sh"
+printf 'OSD\n'           >"$TMP/df/i3/.config/i3/scripts/osd.sh"
+printf 'LAYOUT\n'        >"$TMP/df/i3/.config/i3/scripts/layout.sh"
+printf 'TERM\n'          >"$TMP/df/i3/.config/i3/scripts/term.sh"
+printf 'bg {{WALLPAPER_PATH}}\n' >"$TMP/themes/nord/config/i3/90-theme.conf"
+mkdir -p "$TMP/df/ghostty" "$TMP/themes/nord/config/ghostty"
+printf 'GHOSTTY CONFIG\n' >"$TMP/df/ghostty/config"
+printf 'GHOSTTY THEME\n'  >"$TMP/themes/nord/config/ghostty/ghostty-theme"
+mkdir -p "$TMP/df/firefox" "$TMP/themes/nord/config/firefox"
+printf 'FF USERJS\n'     >"$TMP/df/firefox/user.js"
+printf 'FF CHROME\n'     >"$TMP/themes/nord/config/firefox/userChrome.css"
+printf 'CLIPHIST START\n' >"$TMP/themes/nord/config/hypr/start-cliphist-store.sh"
+mkdir -p "$TMP/df/evolution" "$TMP/themes/nord/config/evolution"
+printf 'org.gnome.evolution.mail layout 1\n' >"$TMP/df/evolution/gsettings.conf"
+printf 'EVO CSS\n'      >"$TMP/themes/nord/config/evolution/gtk.css"
+mkdir -p "$TMP/df/environment.d" "$TMP/df/xresources" \
+         "$TMP/themes/nord/config/gtk" "$TMP/themes/nord/config/qtct" \
+         "$TMP/themes/nord/config/xsettingsd" "$TMP/themes/nord/config/icons" \
+         "$TMP/themes/nord/config/xresources"
+printf 'QT_QPA_PLATFORMTHEME=qt5ct\n' >"$TMP/df/environment.d/90-qt.conf"
+printf 'Xft.dpi: 96\n'   >"$TMP/df/xresources/Xresources"
+printf 'GTK SETTINGS\n'  >"$TMP/themes/nord/config/gtk/settings.ini"
+printf 'GTK CSS\n'       >"$TMP/themes/nord/config/gtk/gtk.css"
+printf 'GTK4 CSS\n'      >"$TMP/themes/nord/config/gtk/gtk4.css"
+printf 'GTKRC2\n'        >"$TMP/themes/nord/config/gtk/gtkrc-2.0"
+printf 'XSETTINGSD\n'    >"$TMP/themes/nord/config/xsettingsd/xsettingsd.conf"
+printf 'QT6CT\n'         >"$TMP/themes/nord/config/qtct/qt6ct.conf"
+printf 'QT5CT\n'         >"$TMP/themes/nord/config/qtct/qt5ct.conf"
+printf 'QTCOLORS\n'      >"$TMP/themes/nord/config/qtct/colors.conf"
+printf 'CURSOR\n'        >"$TMP/themes/nord/config/icons/default-index.theme"
+printf '*background: #000\n' >"$TMP/themes/nord/config/xresources/colors"
+mkdir -p "$TMP/df/xprofile" "$TMP/themes/nord/config/xprofile"
+printf 'export XDG_CURRENT_DESKTOP=i3\n' >"$TMP/df/xprofile/10-session.sh"
+printf 'export GTK_THEME=nord\n'         >"$TMP/themes/nord/config/xprofile/90-theme.sh"
 THEME_ENV="OSR_DOTFILES=$TMP/df OSR_THEME=nord OSR_THEME_DIR=$TMP/themes/nord"
 for _m in dunst waybar hyprpaper rofi gtklock sddm micro btop viewers \
           proteus fcitx5 wofi kate picom polybar serie alacritty hyprland \
-          copyq thunderbird i3lock; do
+          copyq thunderbird i3lock wezterm yazi i3 ghostty firefox cliphist \
+          evolution theming xorg; do
     rm -rf "$TMP/home"; mkdir -p "$TMP/home"
     run_sh_env "$_m" "$THEME_ENV"
     (cd "$TMP/home" && find . -type f | sort) >"$TMP/tree.sh" 2>/dev/null || : >"$TMP/tree.sh"
@@ -604,6 +683,79 @@ run_sh docker; run_c docker
 compare "docker: a fully-applied box changes nothing"
 refute_contains "$TMP/c.log" "groupadd" "docker rerun: no group creation"
 refute_contains "$TMP/c.log" "usermod" "docker rerun: no membership change"
+
+# --- 6b. yandex-browser: the low-RAM flags stamped into every launcher -------
+# `yandex-browser` on PATH is the source: provider's own §2 probe, so neither
+# tier builds a browser here; what is compared is the .desktop layer, which is
+# the whole of what this module does after the install.
+rm -f "$BIN/id"
+_p=$(command -v id) && ln -sf "$_p" "$BIN/id"
+stub dpkg 1; stub apt-get 0
+printf '#!/bin/sh\nexit 0\n' >"$BIN/yandex-browser"; chmod +x "$BIN/yandex-browser"
+YB_SYS="$TMP/ybsys"; rm -rf "$YB_SYS"; mkdir -p "$YB_SYS"
+cat >"$YB_SYS/ru.yandex.desktop.browser.desktop" <<'EOF'
+[Desktop Entry]
+Name=Yandex Browser
+Exec=/usr/bin/yandex-browser-stable %U
+Type=Application
+
+[Desktop Action new-private-window]
+Exec=/usr/bin/yandex-browser-stable --incognito
+EOF
+cp "$YB_SYS/ru.yandex.desktop.browser.desktop" "$YB_SYS/yandex-browser.desktop"
+YB_ENV="OSR_DESKTOP_DIRS=$YB_SYS"
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+run_sh_env yandex-browser "$YB_ENV"
+cp "$TMP/home/.local/share/applications/yandex-browser.desktop" "$TMP/yb.sh" 2>/dev/null || :
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+run_c_env yandex-browser "$YB_ENV"
+cp "$TMP/home/.local/share/applications/yandex-browser.desktop" "$TMP/yb.c" 2>/dev/null || :
+compare "yandex-browser: same install route and the same launcher writes"
+assert_eq "$(cat "$TMP/yb.sh" 2>/dev/null)" "$(cat "$TMP/yb.c" 2>/dev/null)" \
+    "yandex-browser: and the stamped launcher is byte-identical"
+assert_contains "$TMP/yb.c" '^Exec=/usr/bin/yandex-browser-stable --.* %U$' \
+    "yandex-browser: the flags land before the %U field code"
+
+# ...and a box with no launcher at all: warn, install nothing, fail nothing.
+rm -f "$YB_SYS"/*.desktop
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+run_sh_env yandex-browser "$YB_ENV"; cp "$TMP/sh.out" "$TMP/yb.shout"
+rm -rf "$TMP/home"; mkdir -p "$TMP/home"
+run_c_env yandex-browser "$YB_ENV"
+compare "yandex-browser: no .desktop anywhere, both tiers"
+assert_contains "$TMP/c.out" 'low-RAM flags are not applied' \
+    "yandex-browser: and both say why"
+rm -f "$BIN/yandex-browser"
+
+# --- 6c. mirrors: the honest no-op on a manager with no in-tree ranker -------
+# The pacman and dnf branches WRITE /etc, so only this one is safe to run
+# outside a sandbox; modules/mirrors.c's own /etc knobs are exercised in
+# test/unit/mirrors_module.sh.
+stub dpkg 1; stub apt-get 0
+run_sh mirrors; run_c mirrors
+if [ ! -s "$TMP/sh.log" ] && [ ! -s "$TMP/c.log" ]; then
+    ok "mirrors: apt has no ranker, so neither tier touches the box"
+else
+    fail "mirrors: apt has no ranker, so neither tier touches the box"
+    diff -u "$TMP/sh.log" "$TMP/c.log" >&2 || :
+fi
+assert_eq "$(cat "$TMP/sh.out")" "$(cat "$TMP/c.out")" \
+    "mirrors: and both give the same reason"
+
+# --- 6d. benchmark: workload, optional cross-checks, sensor drivers ----------
+# modprobe and sensors-detect are absent from the stub PATH, which is the
+# machine this is really about: every sensor step degrades to a note and the
+# module still succeeds.
+# ...through the _env runners, because install_layer is lib/config.sh's and the
+# plain run_sh does not source it -- without that the sh side "fails" the
+# persist step for a reason that has nothing to do with the module.
+stub dpkg 1; stub apt-get 0
+run_sh_env benchmark ""; run_c_env benchmark ""
+compare "benchmark: same workload install and the same sensor probing"
+assert_contains "$TMP/c.log" "apt-get install -y -q -o Dpkg::Use-Pty=0 stress-ng" \
+    "benchmark: the workload is installed first"
+assert_contains "$TMP/c.out" "not available - not required" \
+    "benchmark: an absent kernel module is a note, not a failure"
 
 # --- 7. the live step window, on a real terminal -----------------------------
 # Everything above runs with OSR_VERBOSE set, which takes the plain streamed

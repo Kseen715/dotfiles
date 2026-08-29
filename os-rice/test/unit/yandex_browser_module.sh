@@ -1,8 +1,13 @@
 #!/bin/sh
-# Proves modules/yandex-browser.sh: the per-distro install route (apt -> vendor
+# Proves modules/yandex-browser.c: the per-distro install route (apt -> vendor
 # repo builder, pacman -> AUR) and the low-RAM flags layer — dotfiles-owned
 # switches stamped into a user-level copy of every launcher, before %U, on every
-# Exec= line. Hermetic (no net/root; pkg_install is stubbed).
+# Exec= line. Hermetic (no net/root).
+#
+# The routing half is a pkgmap question and is asked of lib/pkg.sh's _pkgmap_one
+# directly; the flags half is the module, which is C now and so runs through the
+# core with a `yandex-browser` already on PATH — that is the source: provider's
+# own §2 probe, and it is what keeps this test from building a browser.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -61,9 +66,31 @@ EOF
 
 cp "$SYS/ru.yandex.desktop.browser.desktop" "$SYS/yandex-browser.desktop"
 
-. "$OSR_ROOT/modules/yandex-browser.sh"
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip yandex_browser_module: %s is not built\n' "$OSR_BIN"
+    finish
+fi
+BIN=$(mktemp -d)
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          chmod cut tr head sort wc dirname basename; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$BIN/$_t" ;; esac
+done
+# The browser itself: present, so the source: provider skips the build (§2).
+printf '#!/bin/sh\nexit 0\n' >"$BIN/yandex-browser"; chmod +x "$BIN/yandex-browser"
 
-assert_contains "$OUT" 'PKG yandex-browser' "installs yandex-browser via pkg_install"
+run_module() {
+    env -i PATH="$BIN" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+        OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=apt OSR_ARCH=x86_64 \
+        OSR_DISTRO=ubuntu OSR_CODENAME=noble OSR_INIT=systemd \
+        OSR_USER="$OSR_USER" OSR_HOME="$OSR_HOME" HOME="$OSR_HOME" \
+        OSR_DESKTOP_DIRS="$OSR_DESKTOP_DIRS" NO_COLOR=1 TERM=dumb \
+        "$OSR_BIN" module run yandex-browser
+}
+
+run_module >"$OUT" 2>&1 || :
+
 for _e in ru.yandex.desktop.browser yandex-browser; do
     DST="$OSR_HOME/.local/share/applications/$_e.desktop"
     assert_contains "$DST" '^Exec=/usr/bin/yandex-browser-stable --process-per-site .* %U$' \
@@ -77,8 +104,8 @@ done
 # A machine where the browser has no launcher yet: warn, never fail.
 rm -f "$SYS"/*.desktop
 ERR=$(mktemp)
-. "$OSR_ROOT/modules/yandex-browser.sh" 2>"$ERR"
+run_module >/dev/null 2>"$ERR" || :
 assert_contains "$ERR" 'low-RAM flags are not applied' "a missing .desktop warns instead of silently skipping"
 
-rm -rf "$OSR_HOME" "$SYS"; rm -f "$OUT" "$ERR"
+rm -rf "$OSR_HOME" "$SYS" "$BIN"; rm -f "$OUT" "$ERR"
 finish

@@ -272,18 +272,25 @@ static int first_value(Str *out, const char *manifest, const char *key) {
     return found;
 }
 
+/* osr_theme_meta -- the same lookup for a caller inside this process, where
+ * the shell tier spent a fork on `osr theme meta`. Appends nothing when the
+ * theme does not define the key, which is what `$(...)` handed sh as "". */
+void osr_theme_meta(Str *out, const char *name, const char *key) {
+    Str manifest;
+    str_init(&manifest);
+    path_of(&manifest, "themes", name, "theme.list");
+    (void)first_value(out, str_text(&manifest), key);
+    str_free(&manifest);
+}
+
 /* cmd_meta -- osr_theme_meta: a single-valued field, "" when absent. No
  * trailing newline: the sh version ended with `printf '%s'`. */
 static int cmd_meta(const char *name, const char *key) {
-    Str manifest;
     Str out;
-    str_init(&manifest);
-    path_of(&manifest, "themes", name, "theme.list");
     str_init(&out);
-    (void)first_value(&out, str_text(&manifest), key);
+    osr_theme_meta(&out, name, key);
     out_flush(&out);
     str_free(&out);
-    str_free(&manifest);
     return 0;
 }
 

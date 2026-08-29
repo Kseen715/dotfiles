@@ -539,7 +539,17 @@ static int provide_yazi_bin(void) {
  * off ...`, and --probe landed in chafa 1.16.0. An older chafa exits on the
  * unrecognized option, so the preview pane just stays blank -- no error in the
  * UI, nothing in the log. Version, not presence, is the thing to test. */
-#define CHAFA_MIN "1.16"
+#define CHAFA_MIN OSR_CHAFA_MIN
+
+/* osr_chafa_ok -- _chafa_ok: is the chafa on PATH new enough for yazi? */
+int osr_chafa_ok(void) {
+    Str have;
+    int ok;
+    str_init(&have);
+    ok = tool_version_2(&have, "chafa") && version_ge(str_text(&have), CHAFA_MIN);
+    str_free(&have);
+    return ok;
+}
 
 /* provide_chafa -- build chafa from the upstream release tarball, for the
  * targets whose archive is older than CHAFA_MIN (the table in apt.map).
@@ -1315,7 +1325,17 @@ static int provide_lsd_tarball(void) {
  * it prints `unknown option: --gutter` and exits, so the key answers with an
  * error line instead of a history window. Version, not presence, is the thing
  * to test. */
-#define FZF_MIN "0.66"
+#define FZF_MIN OSR_FZF_MIN
+
+/* osr_fzf_ok -- _fzf_ok: is the fzf on PATH new enough for the ↑ history picker? */
+int osr_fzf_ok(void) {
+    Str have;
+    int ok;
+    str_init(&have);
+    ok = tool_version_2(&have, "fzf") && version_ge(str_text(&have), FZF_MIN);
+    str_free(&have);
+    return ok;
+}
 
 /* provide_fzf -- fzf from its upstream release tarball, for the releases whose
  * archive is older than FZF_MIN (the tables in apt.map/dnf.map). One static Go

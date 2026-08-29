@@ -1,6 +1,13 @@
+# test/ref/firefox_sh_ref.sh — the sh implementation of modules/firefox.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/firefox.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/firefox.sh — Firefox + a low-RAM prefs layer + the rice's colors.
 #
 # Config split (§5), realized through Mozilla's two profile-level hooks:

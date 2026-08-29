@@ -134,35 +134,49 @@ for _pm in pacman xbps portage; do
     assert_eq "fzf" "$(_pkgmap_one fzf)" "$_pm keeps fzf native"
 done
 
-# --- modules/zsh.sh wiring: the repair path for an ALREADY-installed old fzf --
+# --- modules/zsh.c wiring: the repair path for an ALREADY-installed old fzf ---
 # The case that started this: pkg_install's presence probe is satisfied by the
-# distro's 0.60, so without this guard ↑ stays broken forever.
-run_step()            { shift; "$@"; }
-install_layer()       { :; }
-install_theme_layer()  { :; }
-seed_once()           { :; }
-seed_empty()          { :; }
-install_omz()         { :; }
-install_zsh_plugin()  { :; }
-install_zsh_loader()  { :; }
-install_zsh_zshenv()  { :; }
-migrate_replace()     { return 1; }
-migrate_append()      { cat >/dev/null; }
-migrate_stale()       { :; }
-as_user()             { :; }
-osr_shell_is()        { return 0; }   # already zsh -> no chsh path
-provide_fzf()         { echo "GET-FZF" >>"$OUT"; }
+# distro's 0.60, so without this guard the up-arrow picker stays broken forever.
+#
+# The module is C, so it runs through the core in its own stub bin/ and what is
+# observed is the STEP it announces - reaching `Installing fzf >= ...` is the
+# decision under test; whether the download then succeeds is provide_fzf's own
+# business and is asserted above.
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip fzf_provider module wiring: %s is not built\n' "$OSR_BIN"
+    finish
+fi
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES
-OSR_HOME="$TMP/home"; export OSR_HOME OSR_USER=tester
-OSR_THEME_DIR=''
+OSR_HOME="$TMP/home"; export OSR_HOME
+MBIN="$TMP/mbin"; mkdir -p "$MBIN"
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod cut tr head sort wc dirname basename git; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$MBIN/$_t" ;; esac
+done
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$MBIN/sudo"
+printf '#!/bin/sh\n[ "$1" = "-Q" ] && exit 1\nexit 0\n' >"$MBIN/pacman"
+chmod +x "$MBIN/sudo" "$MBIN/pacman"
 
-: >"$OUT"; fake_fzf "0.60 (devel)"
-. "$OSR_ROOT/modules/zsh.sh" >/dev/null 2>&1
-assert_contains "$OUT" "GET-FZF" "module: repairs a pre-existing fzf 0.60 (Debian 13)"
-assert_contains "$OUT" "PKG zsh git curl lsd fzf" "module: still installs zsh + tools normally"
+# run_zsh <fzf-version> — the module with that fzf on PATH. The steps after the
+# guard (oh-my-zsh, the plugins) need the network and are expected to fail; the
+# run is read for the line the guard prints, which comes first.
+run_zsh() {
+    printf '#!/bin/sh\nprintf "%s\\n"\n' "$1" >"$MBIN/fzf"
+    chmod +x "$MBIN/fzf"
+    env -i PATH="$MBIN" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+        OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=pacman OSR_ARCH=x86_64 \
+        OSR_DISTRO=arch OSR_INIT=systemd OSR_USER=tester \
+        OSR_HOME="$OSR_HOME" HOME="$OSR_HOME" NO_COLOR=1 TERM=dumb \
+        OSR_VERBOSE=1 "$OSR_BIN" module run zsh >"$OUT" 2>&1 || :
+}
 
-: >"$OUT"; fake_fzf "0.74.3 (15f64c49)"
-. "$OSR_ROOT/modules/zsh.sh" >/dev/null 2>&1
-refute_contains "$OUT" "GET-FZF" "module: leaves a new-enough fzf alone (§2)"
+run_zsh "0.60 (devel)"
+assert_contains "$OUT" "Installing fzf >=" "module: repairs a pre-existing fzf 0.60 (Debian 13)"
+assert_contains "$OUT" "Installing zsh and tools" "module: still installs zsh + tools normally"
+
+run_zsh "0.74.3 (15f64c49)"
+refute_contains "$OUT" "Installing fzf >=" "module: leaves a new-enough fzf alone (§2)"
 
 finish

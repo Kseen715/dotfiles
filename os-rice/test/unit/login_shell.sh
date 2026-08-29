@@ -157,33 +157,78 @@ else
     ok "unknown user: reports failure instead of pretending"
 fi
 
-# --- 7. modules/zsh.sh wiring: guard, call, and the non-fatal failure --------
-run_step() { shift; "$@"; }
-# Every helper zsh.sh calls that is not the login-shell path under test. It
-# sources lib/user.sh only, so anything from config.sh/migrate.sh is a stub:
-# without one the source dies at 127 and the login-shell assertions below never
-# run (which is how install_theme_layer/install_zsh_zshenv/migrate_* got here -
-# each was a call the module grew after this list was written).
-for _f in pkg_install install_omz install_zsh_plugin seed_once install_layer \
-          seed_empty install_zsh_loader install_theme_layer install_zsh_zshenv \
-          migrate_replace migrate_append migrate_stale; do
-    eval "$_f() { :; }"
+# --- 7. modules/zsh.c wiring: guard, call, and the non-fatal failure ---------
+# The module is C now, so the login-shell decision is observed where it lands -
+# the sandbox /etc/passwd - rather than by stubbing the shell function it used
+# to call. Everything else the module does is kept out of the way by a stub
+# PATH: apt says every package is installed, git and zsh are no-ops, and the
+# rc.d layers land in a throwaway $OSR_HOME.
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip login_shell module wiring: %s is not built\n' "$OSR_BIN"
+    finish
+fi
+OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
+MBIN="$TMP/mbin"; mkdir -p "$MBIN" "$TMP/mhome"
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod cut tr head sort wc dirname basename awk; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$MBIN/$_t" ;; esac
 done
-OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES
-OSR_HOME="$TMP/home"; export OSR_HOME OSR_USER=tester
-STUB_SETSHELL=1
+printf '#!/bin/sh\nexit 0\n' >"$MBIN/dpkg"
+printf '#!/bin/sh\nexit 0\n' >"$MBIN/git"
+printf '#!/bin/sh\nexit 0\n' >"$MBIN/zsh"
+printf '#!/bin/sh\nprintf "0.74.3 (15f64c49)\\n"\n' >"$MBIN/fzf"
+# sudo runs the command: chsh below is the fake that rewrites the sandbox
+# passwd, and that rewrite is the whole observation.
+cat >"$MBIN/sudo" <<'EOF'
+#!/bin/sh
+[ "$1" = "-u" ] && shift 2
+exec "$@"
+EOF
+chmod +x "$MBIN/dpkg" "$MBIN/git" "$MBIN/zsh" "$MBIN/fzf" "$MBIN/sudo"
 
-scenario /bin/sh
-PATH="$BIN:$PATH" . "$OSR_ROOT/modules/zsh.sh" >>"$OUT" 2>&1
-assert_contains "$OUT" "SETSHELL tester $BIN/zsh" "module: sets the login shell when it is /bin/sh"
+# module_scenario <passwd-shell> [--no-chsh] — a fresh sandbox, then the module.
+module_scenario() {
+    if [ -n "${NO_TARGET_USER:-}" ]; then
+        printf 'root:x:0:0:root:/root:/bin/sh\n' >"$PASSWD"
+    else
+        printf 'root:x:0:0:root:/root:/bin/sh\ntester:x:1000:1000::%s:%s\n' \
+            "$TMP/mhome" "$1" >"$PASSWD"
+    fi
+    printf '/bin/sh\n/bin/bash\n' >"$SHELLS"
+    rm -f "$MBIN/chsh"
+    [ "${2:-}" = --no-chsh ] || cp "$TMP/chsh.impl" "$MBIN/chsh"
+    rm -rf "$TMP/mhome"; mkdir -p "$TMP/mhome"
+    # oh-my-zsh and its plugins already in place: those steps are fatal on
+    # failure and need the network, and none of them is what this is about.
+    mkdir -p "$TMP/mhome/.oh-my-zsh/custom/plugins"
+    : >"$TMP/mhome/.oh-my-zsh/oh-my-zsh.sh"
+    for _p in zsh-autosuggestions zsh-syntax-highlighting zsh-autocomplete; do
+        mkdir -p "$TMP/mhome/.oh-my-zsh/custom/plugins/$_p/.git"
+    done
+    env -i PATH="$MBIN" FAKE_PASSWD="$PASSWD" OSR_ROOT="$OSR_ROOT" \
+        OSR_LIB="$OSR_LIB" OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=apt \
+        OSR_ARCH=x86_64 OSR_DISTRO=ubuntu OSR_CODENAME=noble OSR_INIT=systemd \
+        OSR_USER=tester OSR_HOME="$TMP/mhome" HOME="$TMP/mhome" \
+        OSR_PASSWD_FILE="$PASSWD" OSR_SHELLS_FILE="$SHELLS" \
+        NO_COLOR=1 TERM=dumb OSR_VERBOSE=1 \
+        "$OSR_BIN" module run zsh >"$OUT" 2>&1 || :
+}
 
-scenario "$BIN/zsh"
-PATH="$BIN:$PATH" . "$OSR_ROOT/modules/zsh.sh" >>"$OUT" 2>&1
-refute_contains "$OUT" "SETSHELL" "module: skips when the shell is already zsh (§2)"
+module_scenario /bin/sh
+assert_contains "$PASSWD" "^tester:.*:$MBIN/zsh\$" \
+    "module: sets the login shell when it is /bin/sh"
+assert_contains "$SHELLS" "^$MBIN/zsh\$" "module: registers zsh in /etc/shells first"
 
-scenario /bin/sh
-SETSHELL_RC=1
-PATH="$BIN:$PATH" . "$OSR_ROOT/modules/zsh.sh" >>"$OUT" 2>&1
-assert_contains "$OUT" "could not set the login shell" "module: warns (not fatal) when no mechanism works"
+module_scenario "$MBIN/zsh"
+refute_contains "$OUT" "Setting default shell" \
+    "module: skips when the shell is already zsh (§2)"
+
+# Nothing that can change it: no chsh, no usermod, and a target user the passwd
+# file does not carry. The module warns and the run survives.
+NO_TARGET_USER=1 module_scenario /bin/sh --no-chsh
+assert_contains "$OUT" "could not set the login shell" \
+    "module: warns (not fatal) when no mechanism works"
 
 finish

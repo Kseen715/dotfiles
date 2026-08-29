@@ -21,12 +21,30 @@ int osr_state_main(int argc, char **argv);    /* lib/state.sh */
 void osr_state_get(Str *out, const char *key);
 int osr_state_set(const char *key, const char *value);
 int osr_user_main(int argc, char **argv);     /* lib/user.sh */
+
+/* The login-shell half of lib/user.sh, for a caller inside this process. They
+ * write, which is why they were the last of that lib to stay in sh: as_root
+ * was a shell function, and osr_run_root is the same escalation without one.
+ * osr_set_login_shell returns 1 only when the account really ends up with that
+ * shell -- chsh, usermod and a direct /etc/passwd rewrite, each verified. */
+int osr_user_shell_is(const char *user, const char *shell);
+int osr_register_shell(const char *shell);
+int osr_set_login_shell(const char *user, const char *shell);
 int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
+
+/* osr_theme_meta -- a theme's single-valued `key: value` field, appended to
+ * out and left empty when the theme does not define it (osr_theme_meta). */
+void osr_theme_meta(Str *out, const char *theme, const char *key);
 
 /* osr_theme_read_lines -- a manifest's directive lines, as a `while IFS= read`
  * loop over `osr theme lines` would have seen them (lib/theme.c). */
 void osr_theme_read_lines(Str *out, const char *path);
 int osr_detect_main(int argc, char **argv);   /* lib/detect.sh */
+
+/* osr_gpu_chip -- the chip codename of the first GPU of that vendor, out of
+ * the OSR_GPU_DEVICES osr_detect exported. 0 when this box has no such GPU,
+ * which is different from one whose codename lspci could not name. */
+int osr_gpu_chip(Str *out, const char *vendor);
 int osr_install_main(int argc, char **argv);  /* install.sh */
 int osr_module_main(int argc, char **argv);   /* the Linux C modules */
 int osr_pkg_main(int argc, char **argv);      /* lib/pkg.sh */

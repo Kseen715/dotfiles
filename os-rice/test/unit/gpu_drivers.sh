@@ -1,8 +1,13 @@
 #!/bin/sh
-# Proves modules/gpu-drivers.sh picks the right driver stack per GPU generation:
+# Proves modules/gpu-drivers.c picks the right driver stack per GPU generation:
 # the chip codename from detect.sh (OSR_GPU_DEVICES) routes each vendor to a
 # family, and the family to a package set. Hermetic — lspci is a PATH mock and
-# pkg_install is stubbed, so no GPU and no packages are touched.
+# `sudo` logs the install command without running it, so no GPU and no packages
+# are touched.
+#
+# The module is C now, so it runs through the core with the facts osr_detect_gpu
+# just produced handed to it in the environment; what is observed is the package
+# manager command the escalation log recorded.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -14,15 +19,56 @@ NO_COLOR=1; OSR_ARCH=$(uname -m); export OSR_ARCH
 BIN=$(mktemp -d); PATH="$BIN:$PATH"; export PATH
 mkfake() { printf '#!/bin/sh\n%s\n' "$2" > "$BIN/$1"; chmod +x "$BIN/$1"; }
 OUT=$(mktemp)
-run_step() { shift; "$@"; }
-pkg_install() { echo "PKG $*" >>"$OUT"; }
+
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip gpu_drivers: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+
+# The stub bin the module runs inside. `sudo` records the install command and
+# stops there, which is the whole observation: which package set was chosen.
+MBIN=$(mktemp -d)
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod cut tr head sort wc dirname basename; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$MBIN/$_t" ;; esac
+done
+cat >"$MBIN/sudo" <<'EOF'
+#!/bin/sh
+printf 'PKG %s\n' "$*" >>"$OUT"
+exit 0
+EOF
+printf '#!/bin/sh\n[ "$1" = "-Q" ] && exit 1\nexit 0\n' >"$MBIN/pacman"
+# The legacy NVIDIA branches are `aur:` rows, and an AUR install runs as the
+# user rather than through sudo - so the helper logs for itself.
+cat >"$MBIN/paru" <<'EOF'
+#!/bin/sh
+printf 'PKG %s\n' "$*" >>"$OUT"
+exit 0
+EOF
+chmod +x "$MBIN/paru"
+printf '#!/bin/sh\nexit 1\n' >"$MBIN/dpkg"
+printf '#!/bin/sh\nexit 0\n' >"$MBIN/apt-get"
+chmod +x "$MBIN/sudo" "$MBIN/pacman" "$MBIN/dpkg" "$MBIN/apt-get"
+
+# run_module — the C module, with the facts osr_detect_gpu just produced.
+run_module() {
+    env -i PATH="$MBIN" OUT="$OUT" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+        OSR_PKG="${OSR_PKG:-pacman}" OSR_ARCH="$OSR_ARCH" OSR_DISTRO=arch \
+        OSR_CODENAME= OSR_VERSION_ID= OSR_INIT=systemd OSR_USER=tester \
+        OSR_HOME="$BIN" HOME="$BIN" NO_COLOR=1 TERM=dumb \
+        OSR_GPU_VENDOR="$OSR_GPU_VENDOR" OSR_GPU_DEVICES="$OSR_GPU_DEVICES" \
+        OSR_GPU_COUNT="${OSR_GPU_COUNT:-1}" \
+        "$OSR_BIN" module run gpu-drivers >/dev/null 2>&1 || :
+}
 
 # gpu_case <lspci-device-field> <vendor-field> — detect, then run the module.
 gpu_case() {
     : >"$OUT"
     mkfake lspci "printf '01:00.0 \"VGA compatible controller\" \"%s\" \"%s\" -ra1 \"Sub\" \"Device 1\"\n' '$2' '$1'"
     osr_detect_gpu
-    . "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
+    run_module
 }
 
 # --- chip codename extraction (detect.sh) ------------------------------------
@@ -118,17 +164,21 @@ mkfake lspci 'cat <<EOF
 01:00.0 "3D controller" "NVIDIA Corporation" "AD107M [GeForce RTX 4060 Max-Q]" -ra1 "Sub" "Device 2"
 EOF'
 osr_detect_gpu
-. "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
+run_module
 assert_contains "$OUT" 'vulkan-intel' "hybrid laptop: Intel iGPU served"
 assert_contains "$OUT" 'nvidia-open-dkms' "hybrid laptop: NVIDIA dGPU served"
 
 # --- non-Arch host still installs (names are Arch's, pkgmap absorbs the rest) -
+# The logical names above are Arch's; on apt they resolve to the Debian ones, so
+# what is asserted here is that the module RAN rather than skipped - the whole
+# point of not gating it on the package manager.
 gpu_case 'Navi 33 [Radeon RX 7600]' 'Advanced Micro Devices, Inc. [AMD/ATI]'
 : >"$OUT"
 OSR_PKG=apt
-. "$OSR_ROOT/modules/gpu-drivers.sh" >/dev/null 2>&1
-assert_contains "$OUT" 'vulkan-radeon' "module still runs off Arch instead of skipping"
+run_module
+assert_contains "$OUT" 'mesa-vulkan-drivers' \
+    "module still runs off Arch instead of skipping (apt's name for RADV)"
 OSR_PKG=pacman
 
-rm -rf "$BIN"; rm -f "$OUT"
+rm -rf "$BIN" "$MBIN"; rm -f "$OUT"
 finish

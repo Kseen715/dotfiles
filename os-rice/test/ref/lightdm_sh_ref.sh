@@ -1,6 +1,13 @@
+# test/ref/lightdm_sh_ref.sh — the sh implementation of modules/lightdm.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/lightdm.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/lightdm.sh — LightDM display manager + GTK greeter (i3-sugg §1.4).
 # The lighter alternative to modules/sddm.sh for an X11 rice: no Qt, one config
 # file, and it runs the PAM stack that unlocks the keyring at login (which

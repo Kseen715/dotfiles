@@ -1,6 +1,13 @@
+# test/ref/wezterm_sh_ref.sh — the sh implementation of modules/wezterm.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/wezterm.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/wezterm.sh — WezTerm terminal + JetBrains Mono Nerd Font + layered
 # config. ONE copy, POSIX, distro-agnostic. WezTerm is BUILT FROM SOURCE on every
 # target (any.map -> source:provide_wezterm, upstream's documented route); there

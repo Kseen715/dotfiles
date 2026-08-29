@@ -27,7 +27,11 @@ THEME_USE='OSR_THEME|install_theme_layer|apply_config|install_wallpaper_layer|os
 
 _bad=""
 _n_yes=0
+# The sh module tier is empty now that every module is C (DESIGN §11a), so
+# this loop is vacuous — kept, and guarded against the unmatched glob, because
+# the marker rule still applies the moment a .sh module is added back.
 for _f in "$OSR_ROOT"/modules/*.sh; do
+    [ -f "$_f" ] || continue
     _m=$(basename "$_f" .sh)
     if sed 's/#.*//' "$_f" | grep -qE "$THEME_USE"; then _uses=1; else _uses=0; fi
     if "$OSR_BIN" module themable "$_m"; then _marked=1; else _marked=0; fi
@@ -62,6 +66,7 @@ fi
 # without reading the script. A `# themable:` line further down is prose.
 _late=""
 for _f in "$OSR_ROOT"/modules/*.sh; do
+    [ -f "$_f" ] || continue
     _hdr=$(awk '/^#/ {print; next} {exit}' "$_f" | grep -c '^# themable:' || :)
     _all=$(grep -c '^# themable:' "$_f" || :)
     [ "$_hdr" = "$_all" ] || _late="$_late $(basename "$_f")"

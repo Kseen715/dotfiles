@@ -2,7 +2,7 @@
 # Covers the i3/X11 desktop slice:
 #   1. servicemap @init facets (bluetooth/cups differ on runit only)
 #   2. xbps.map + apt.map rows for the names that actually differ per target
-#   3. modules/i3.sh config layering (§5): base, theme layer, machine-local
+#   3. modules/i3.c config layering (§5): base, theme layer, machine-local
 #   4. the i3-rosemary rice manifest only names modules that exist
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -123,7 +123,7 @@ assert_eq "" "$_apt_unmapped" "every apt-divergent name in the rice has a row"
 OSR_PKG=xbps; OSR_CODENAME=''; OSR_VERSION_ID=''
 export OSR_PKG OSR_CODENAME OSR_VERSION_ID
 
-# --- 3. modules/i3.sh layering ------------------------------------------------
+# --- 3. modules/i3.c layering ------------------------------------------------
 T=$(mktemp -d)
 OSR_HOME="$T/home"; OSR_USER=$(id -un)
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
@@ -135,10 +135,39 @@ mkdir -p "$OSR_HOME"
 as_user()  { "$@"; }
 as_root()  { echo "as_root $*" >> "$T/root-calls"; }
 CALLS="$T/pkg-calls"; : > "$CALLS"
-pkg_install() { echo "$*" >> "$CALLS"; }
-run_step()    { shift; "$@"; }
 
-. "$OSR_ROOT/modules/i3.sh"
+# The module is C, so it runs through the core: PATH is reduced to a stub bin/
+# where `sudo` records the install command and stops there, and xbps-query says
+# nothing is installed so the whole batch is asked for.
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip i3_desktop: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+IBIN="$T/ibin"; mkdir -p "$IBIN"
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod touch install cut tr head sort wc dirname basename; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$IBIN/$_t" ;; esac
+done
+cat >"$IBIN/sudo" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$CALLS"
+# `install` is the one escalation that must NOT run: it targets
+# /usr/local/bin/osr-term, and a failing root step ends the module.
+case "$1" in mkdir|cp|tee|rm|chmod|touch) exec "$@" ;; esac
+exit 0
+EOF
+printf '#!/bin/sh\nexit 1\n' >"$IBIN/xbps-query"
+printf '#!/bin/sh\nexit 0\n' >"$IBIN/xbps-install"
+chmod +x "$IBIN/sudo" "$IBIN/xbps-query" "$IBIN/xbps-install"
+
+env -i PATH="$IBIN" CALLS="$CALLS" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+    OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=xbps OSR_ARCH=x86_64 \
+    OSR_DISTRO=void OSR_INIT=runit OSR_USER="$OSR_USER" \
+    OSR_HOME="$OSR_HOME" HOME="$OSR_HOME" OSR_THEME="$OSR_THEME" \
+    OSR_THEME_DIR="$OSR_THEME_DIR" NO_COLOR=1 TERM=dumb \
+    "$OSR_BIN" module run i3 >/dev/null 2>&1 || :
 
 assert_contains "$CALLS" "i3 i3status dex" "i3 module installs i3 + the companions its config execs"
 # unclutter and unclutter-xfixes are different programs with incompatible flags,
@@ -165,7 +194,7 @@ assert_contains "$OSR_HOME/.config/i3/scripts/osd.sh" "pactl" \
     "osd.sh falls back to pactl when pamixer is absent"
 
 # Idle: the config must PROBE for xidlehook rather than assume either daemon -
-# modules/i3lock.sh installs xidlehook only where a Rust toolchain exists.
+# modules/i3lock.c installs xidlehook only where a Rust toolchain exists.
 assert_contains "$OSR_HOME/.config/i3/config" "xidlehook --not-when-audio" \
     "the idle timer declines to lock over audio/fullscreen when it can"
 assert_contains "$OSR_HOME/.config/i3/config" "xautolock -time 10" \
@@ -258,12 +287,17 @@ org.gnome.evolution.mail no-such-key-in-this-version true
 org.gnome.evolution.shell menubar-visible false
 GSCONF
 
-# The applier is defined by the module, so source it with the side effects mocked.
-( pkg_install() { :; }
-  run_step() { shift; "$@"; }
-  OSR_THEME_DIR=""
-  . "$OSR_ROOT/modules/evolution.sh"
-  osr_gsettings_apply "$T/gs.conf" ) >/dev/null 2>&1
+# The applier is the module's, and the module is C - so it runs through the core
+# with the fixture standing in for dotfiles/evolution/gsettings.conf, and the
+# mock gsettings above is the observation.
+mkdir -p "$T/evodf/evolution"
+cp "$T/gs.conf" "$T/evodf/evolution/gsettings.conf"
+env -i PATH="$GSBIN:$IBIN" GS_LOG="$GS_LOG" CALLS="$T/evo-calls" \
+    OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" OSR_DOTFILES="$T/evodf" \
+    OSR_PKG=xbps OSR_ARCH=x86_64 OSR_DISTRO=void OSR_INIT=runit \
+    OSR_USER="$OSR_USER" OSR_HOME="$T/evohome" HOME="$T/evohome" \
+    NO_COLOR=1 TERM=dumb \
+    "$OSR_BIN" module run evolution >/dev/null 2>&1 || :
 
 assert_contains "$GS_LOG" "citation-color '#d98cae'" \
     "a hex color value survives comment stripping"
@@ -276,15 +310,15 @@ assert_contains "$GS_LOG" "layout 1" "known keys are still applied"
 # GTK3 has no per-app selector, so a global one would restyle every GTK app.
 assert_contains "$OSR_DOTFILES/evolution/gtk.css.tmpl" \
     "resource:///org/gtk/libgtk/theme/Adwaita" "the Evolution theme extends Adwaita rather than replacing it"
-assert_contains "$OSR_ROOT/modules/evolution.sh" "GTK_THEME=osr-evolution" \
+assert_contains "$OSR_ROOT/modules/evolution.c" "GTK_THEME=osr-evolution" \
     "the .desktop override is what scopes the theme to Evolution"
 
 # --- 3e. VS Code is installed but never config-managed ------------------------
 # It has its own Settings Sync; two managers on one settings.json means the last
 # writer wins and the other silently loses edits.
-refute_contains "$OSR_ROOT/modules/vscode.sh" "install_layer" \
+refute_contains "$OSR_ROOT/modules/vscode.c" "osr_install_layer" \
     "vscode module writes no config layer"
-refute_contains "$OSR_ROOT/modules/vscode.sh" "compose_json_config" \
+refute_contains "$OSR_ROOT/modules/vscode.c" "compose_json_config" \
     "vscode module composes no settings.json"
 [ -d "$OSR_ROOT/themes/rosemary/config/vscode" ] \
     && fail "the theme still ships a VS Code palette" \

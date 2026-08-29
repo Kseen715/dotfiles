@@ -1,5 +1,12 @@
+# test/ref/yandex-browser_sh_ref.sh — the sh implementation of modules/yandex-browser.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/yandex-browser.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/yandex-browser.sh — Yandex Browser + a low-RAM flags layer. ONE copy,
 # POSIX (was .../apps/yandex-browser.sh). Available module.
 #

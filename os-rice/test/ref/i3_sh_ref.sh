@@ -1,6 +1,13 @@
+# test/ref/i3_sh_ref.sh — the sh implementation of modules/i3.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/i3.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/i3.sh — i3 window manager (X11) + layered config. ONE copy, POSIX.
 # pacman ships it as i3-wm (pacman.map); Void and Debian call it i3.
 #

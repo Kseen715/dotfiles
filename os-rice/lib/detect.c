@@ -769,24 +769,28 @@ static void emit_npu(Str *out, const Facts *f) {
 /* cmd_gpu_chip -- osr_gpu_chip: the chip codename of the first <vendor> GPU,
  * "" when unknown (no lspci, or a device lspci could not name). Reads
  * OSR_GPU_DEVICES from the environment, where osr_detect exported it. */
-static int cmd_gpu_chip(const char *vendor) {
+int osr_gpu_chip(Str *out, const char *vendor) {
     const char *devices = env_str("OSR_GPU_DEVICES", "");
     size_t len = strlen(devices);
     size_t pos = 0;
     Line line;
-    Str out;
     size_t vlen = strlen(vendor);
     int found = 0;
 
-    str_init(&out);
     while (!found && next_line(devices, len, &pos, &line)) {
         if (line.len >= vlen && strncmp(line.start, vendor, vlen) == 0 && line.start[vlen] == '|') {
-            str_add(&out, line.start + vlen + 1, line.len - vlen - 1);
+            str_add(out, line.start + vlen + 1, line.len - vlen - 1);
             found = 1;
         }
     }
+    return found;
+}
+
+static int cmd_gpu_chip(const char *vendor) {
+    Str out;
+    str_init(&out);
     /* awk's `print` -- and nothing at all when no row matched. */
-    if (found) str_addc(&out, '\n');
+    if (osr_gpu_chip(&out, vendor)) str_addc(&out, '\n');
     out_flush(&out);
     str_free(&out);
     return 0;

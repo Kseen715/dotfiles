@@ -1,6 +1,13 @@
+# test/ref/theming_sh_ref.sh — the sh implementation of modules/theming.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/theming.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/theming.sh — toolkit theming for a WM that has no settings daemon
 # (i3-sugg §4). Under GNOME/KDE something applies your theme; under i3 nothing
 # does, which is why "the theme only works in some apps" is the single most

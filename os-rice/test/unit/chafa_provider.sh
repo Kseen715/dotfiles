@@ -116,24 +116,50 @@ for _pm in pacman xbps; do
     assert_eq "chafa" "$(_pkgmap_one chafa)" "$_pm keeps chafa native (rolling, 1.18.x)"
 done
 
-# --- modules/yazi.sh wiring: the repair path for an ALREADY-installed old chafa
+# --- modules/yazi.c wiring: the repair path for an ALREADY-installed old chafa
 # The case that started this: pkg_install's presence probe is satisfied by the
 # distro's 1.14.5, so without this guard the box stays broken forever.
-run_step()     { shift; "$@"; }
-install_layer() { :; }
-as_user()      { :; }
-provide_chafa() { echo "BUILD-CHAFA" >>"$OUT"; }
+#
+# The module is C, so it runs through the core in its own stub bin/ and what is
+# observed is the STEP it announces - reaching `Building chafa >= ...` is the
+# decision under test; whether the build then succeeds is provide_chafa's own
+# business and is asserted above.
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip chafa_provider module wiring: %s is not built\n' "$OSR_BIN"
+    finish
+fi
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd); export OSR_DOTFILES
-OSR_HOME="$TMP/home"; export OSR_HOME OSR_USER=tester
-OSR_THEME_DIR=''
+OSR_HOME="$TMP/home"; export OSR_HOME
+MBIN="$TMP/mbin"; mkdir -p "$MBIN"
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod cut tr head sort wc dirname basename; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$MBIN/$_t" ;; esac
+done
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$MBIN/sudo"
+printf '#!/bin/sh\n[ "$1" = "-Q" ] && exit 1\nexit 0\n' >"$MBIN/pacman"
+# yazi itself is a source: row everywhere (any.map), so one on PATH keeps this
+# test to the chafa question.
+printf '#!/bin/sh\nexit 0\n' >"$MBIN/yazi"
+chmod +x "$MBIN/sudo" "$MBIN/pacman" "$MBIN/yazi"
 
-: >"$OUT"; fake_chafa 1.14.5
-. "$OSR_ROOT/modules/yazi.sh" >/dev/null 2>&1
-assert_contains "$OUT" "BUILD-CHAFA" "module: repairs a pre-existing chafa 1.14.5 (Debian 13)"
+# run_yazi <chafa-version> — the module with that chafa on PATH.
+run_yazi() {
+    printf '#!/bin/sh\nprintf "Chafa version %s\\n"\n' "$1" >"$MBIN/chafa"
+    chmod +x "$MBIN/chafa"
+    env -i PATH="$MBIN" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+        OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=pacman OSR_ARCH=x86_64 \
+        OSR_DISTRO=arch OSR_INIT=systemd OSR_USER=tester \
+        OSR_HOME="$OSR_HOME" HOME="$OSR_HOME" NO_COLOR=1 TERM=dumb \
+        OSR_VERBOSE=1 "$OSR_BIN" module run yazi >"$OUT" 2>&1 || :
+}
 
-: >"$OUT"; fake_chafa 1.18.2
-. "$OSR_ROOT/modules/yazi.sh" >/dev/null 2>&1
-refute_contains "$OUT" "BUILD-CHAFA" "module: leaves a new-enough chafa alone (§2)"
-assert_contains "$OUT" "PKG yazi chafa" "module: still installs yazi + chafa normally"
+run_yazi 1.14.5
+assert_contains "$OUT" "Building chafa" "module: repairs a pre-existing chafa 1.14.5 (Debian 13)"
+
+run_yazi 1.18.2
+refute_contains "$OUT" "Building chafa" "module: leaves a new-enough chafa alone (§2)"
+assert_contains "$OUT" "Installing Yazi" "module: still installs yazi + chafa normally"
 
 finish

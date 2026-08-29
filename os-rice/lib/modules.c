@@ -1,7 +1,8 @@
 /* lib/modules.c -- the registry of Linux modules written in C.
  *
  * A rice manifest names modules and install.sh runs each one. A module is
- * either a shell script under modules (the ~118 that exist today) or a C
+ * either a shell script under modules (there are none left -- see DESIGN 11a)
+ * or a C
  * function registered here (modules/<name>.c, the POSIX branch of it where
  * the file also has a Windows one). install.sh asks `osr module has <name>`
  * and, when the answer is yes, runs `osr module run <name>` instead of
@@ -45,10 +46,12 @@ int osrm_arandr(void);
 int osrm_archives(void);
 int osrm_audio(void);
 int osrm_avahi(void);
+int osrm_benchmark(void);
 int osrm_blueman(void);
 int osrm_brightnessctl(void);
 int osrm_btop(void);
 int osrm_celluloid(void);
+int osrm_cliphist(void);
 int osrm_codecs(void);
 int osrm_copyq(void);
 int osrm_cpu_microcodes(void);
@@ -61,18 +64,22 @@ int osrm_dnscrypt(void);
 int osrm_docker(void);
 int osrm_dunst(void);
 int osrm_easyeffects(void);
+int osrm_evolution(void);
 int osrm_fastfetch(void);
 int osrm_fcitx5(void);
 int osrm_feh(void);
+int osrm_firefox(void);
 int osrm_flameshot(void);
 int osrm_flatpak(void);
 int osrm_foot(void);
 int osrm_gh(void);
+int osrm_ghostty(void);
 int osrm_git_base(void);
 int osrm_gnome_focus(void);
 int osrm_gnome_overview(void);
 int osrm_go(void);
 int osrm_gpaste(void);
+int osrm_gpu_drivers(void);
 int osrm_gtklock(void);
 int osrm_gvfs(void);
 int osrm_helpers(void);
@@ -84,16 +91,19 @@ int osrm_hyprland(void);
 int osrm_hyprlock(void);
 int osrm_hyprpaper(void);
 int osrm_hyprpicker(void);
+int osrm_i3(void);
 int osrm_i3lock(void);
 int osrm_input(void);
 int osrm_inxi(void);
 int osrm_kate(void);
 int osrm_kdeconnect(void);
 int osrm_keyring(void);
+int osrm_lightdm(void);
 int osrm_loupe(void);
 int osrm_luminance(void);
 int osrm_mako(void);
 int osrm_micro(void);
+int osrm_mirrors(void);
 int osrm_nautilus(void);
 int osrm_ncdu(void);
 int osrm_networkmanager(void);
@@ -120,9 +130,11 @@ int osrm_sddm(void);
 int osrm_serie(void);
 int osrm_starship(void);
 int osrm_steam(void);
+int osrm_swap(void);
 int osrm_swaylock(void);
 int osrm_tcc(void);
 int osrm_telegram(void);
+int osrm_theming(void);
 int osrm_thumbnails(void);
 int osrm_thunar(void);
 int osrm_thunderbird(void);
@@ -136,13 +148,18 @@ int osrm_waybar(void);
 int osrm_waydroid(void);
 int osrm_wayland(void);
 int osrm_waylock(void);
+int osrm_wezterm(void);
 int osrm_wleave(void);
 int osrm_wlogout(void);
 int osrm_wofi(void);
 int osrm_xdg(void);
+int osrm_xorg(void);
+int osrm_yandex_browser(void);
+int osrm_yazi(void);
 int osrm_zen_browser(void);
 int osrm_zig(void);
 int osrm_zip(void);
+int osrm_zsh(void);
 
 static const ModuleRow modules[] = {
     { "alacritty",       "x11+wayland", 1, osrm_alacritty },
@@ -151,10 +168,12 @@ static const ModuleRow modules[] = {
     { "archives",        "x11+wayland", 0, osrm_archives },
     { "audio",           "x11+wayland", 0, osrm_audio },
     { "avahi",           "x11+wayland", 0, osrm_avahi },
+    { "benchmark",       "x11+wayland", 0, osrm_benchmark },
     { "blueman",         "x11+wayland", 0, osrm_blueman },
     { "brightnessctl",   "x11+wayland", 0, osrm_brightnessctl },
     { "btop",            "x11+wayland", 1, osrm_btop },
     { "celluloid",       "x11+wayland", 0, osrm_celluloid },
+    { "cliphist",        "wayland",     1, osrm_cliphist },
     { "codecs",          "x11+wayland", 0, osrm_codecs },
     { "copyq",           "x11",         1, osrm_copyq },
     { "cpu-microcodes",  "x11+wayland", 0, osrm_cpu_microcodes },
@@ -167,18 +186,22 @@ static const ModuleRow modules[] = {
     { "docker",          "x11+wayland", 0, osrm_docker },
     { "dunst",           "x11+wayland", 1, osrm_dunst },
     { "easyeffects",     "x11+wayland", 0, osrm_easyeffects },
+    { "evolution",       "x11+wayland", 1, osrm_evolution },
     { "fastfetch",       "x11+wayland", 1, osrm_fastfetch },
     { "fcitx5",          "x11+wayland", 1, osrm_fcitx5 },
     { "feh",             "x11",         0, osrm_feh },
+    { "firefox",         "x11+wayland", 1, osrm_firefox },
     { "flameshot",       "x11",         0, osrm_flameshot },
     { "flatpak",         "x11+wayland", 0, osrm_flatpak },
     { "foot",            "wayland",     1, osrm_foot },
     { "gh",              "x11+wayland", 0, osrm_gh },
+    { "ghostty",         "x11+wayland", 1, osrm_ghostty },
     { "git-base",        "x11+wayland", 0, osrm_git_base },
     { "gnome-focus",     "wayland",     0, osrm_gnome_focus },
     { "gnome-overview",  "x11+wayland", 0, osrm_gnome_overview },
     { "go",              "x11+wayland", 0, osrm_go },
     { "gpaste",          "x11+wayland", 0, osrm_gpaste },
+    { "gpu-drivers",     "x11+wayland", 0, osrm_gpu_drivers },
     { "gtklock",         "wayland",     1, osrm_gtklock },
     { "gvfs",            "x11+wayland", 0, osrm_gvfs },
     { "helpers",         "x11+wayland", 0, osrm_helpers },
@@ -190,16 +213,19 @@ static const ModuleRow modules[] = {
     { "hyprlock",        "wayland",     1, osrm_hyprlock },
     { "hyprpaper",       "wayland",     1, osrm_hyprpaper },
     { "hyprpicker",      "wayland",     0, osrm_hyprpicker },
+    { "i3",              "x11",         1, osrm_i3 },
     { "i3lock",          "x11",         1, osrm_i3lock },
     { "input",           "x11",         0, osrm_input },
     { "inxi",            "x11+wayland", 0, osrm_inxi },
     { "kate",            "x11+wayland", 1, osrm_kate },
     { "kdeconnect",      "x11+wayland", 0, osrm_kdeconnect },
     { "keyring",         "x11+wayland", 0, osrm_keyring },
+    { "lightdm",         "x11",         1, osrm_lightdm },
     { "loupe",           "x11+wayland", 0, osrm_loupe },
     { "luminance",       "wayland",     0, osrm_luminance },
     { "mako",            "wayland",     1, osrm_mako },
     { "micro",           "x11+wayland", 1, osrm_micro },
+    { "mirrors",         "x11+wayland", 0, osrm_mirrors },
     { "nautilus",        "x11+wayland", 0, osrm_nautilus },
     { "ncdu",            "x11+wayland", 0, osrm_ncdu },
     { "networkmanager",  "x11+wayland", 0, osrm_networkmanager },
@@ -226,9 +252,11 @@ static const ModuleRow modules[] = {
     { "serie",           "x11+wayland", 1, osrm_serie },
     { "starship",        "x11+wayland", 1, osrm_starship },
     { "steam",           "x11+wayland", 0, osrm_steam },
+    { "swap",            "x11+wayland", 0, osrm_swap },
     { "swaylock",        "wayland",     1, osrm_swaylock },
     { "tcc",             "x11+wayland", 0, osrm_tcc },
     { "telegram",        "x11+wayland", 1, osrm_telegram },
+    { "theming",         "x11",         1, osrm_theming },
     { "thumbnails",      "x11+wayland", 0, osrm_thumbnails },
     { "thunar",          "x11+wayland", 0, osrm_thunar },
     { "thunderbird",     "x11+wayland", 1, osrm_thunderbird },
@@ -242,13 +270,18 @@ static const ModuleRow modules[] = {
     { "waydroid",        "wayland",     0, osrm_waydroid },
     { "wayland",         "wayland",     0, osrm_wayland },
     { "waylock",         "wayland",     1, osrm_waylock },
+    { "wezterm",         "x11+wayland", 1, osrm_wezterm },
     { "wleave",          "wayland",     1, osrm_wleave },
     { "wlogout",         "wayland",     1, osrm_wlogout },
     { "wofi",            "wayland",     1, osrm_wofi },
     { "xdg",             "x11+wayland", 0, osrm_xdg },
+    { "xorg",            "x11",         1, osrm_xorg },
+    { "yandex-browser",  "x11+wayland", 0, osrm_yandex_browser },
+    { "yazi",            "x11+wayland", 1, osrm_yazi },
     { "zen-browser",     "x11+wayland", 1, osrm_zen_browser },
     { "zig",             "x11+wayland", 0, osrm_zig },
-    { "zip",             "x11+wayland", 0, osrm_zip }
+    { "zip",             "x11+wayland", 0, osrm_zip },
+    { "zsh",             "x11+wayland", 1, osrm_zsh }
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 

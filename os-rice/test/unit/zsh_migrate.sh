@@ -1,5 +1,5 @@
 #!/bin/sh
-# Proves modules/zsh.sh patches a box that was installed before the current rc.d
+# Proves modules/zsh.c patches a box that was installed before the current rc.d
 # layers existed. §5 keeps 00-env/99-local user-owned and seeded once, so
 # install_layer can never reach them and every fix shipped there would otherwise
 # apply to new machines only.
@@ -8,8 +8,10 @@
 # against text os-rice itself shipped is rewritten, anything the user touched is
 # reported and left exactly as it was. Additive migrations apply either way.
 #
-# Hermetic: OSR_HOME is a sandbox, and everything that would hit the network, the
-# package manager or the login shell is stubbed.
+# Hermetic: OSR_HOME is a sandbox and PATH is reduced to a stub bin/, so nothing
+# reaches the network, the package manager or the login shell. The module is C
+# now, so it runs through the core rather than being sourced; the migrations
+# themselves are lib/migrate.c's and have their own parity test.
 set -eu
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 OSR_ROOT=$(cd -- "$HERE/../.." && pwd)
@@ -27,12 +29,42 @@ NO_COLOR=1; OSR_USER=$(id -un); export OSR_USER   # as_user becomes a no-op
 _fzf_ok() { return 0; }
 . "$HERE/../lib.sh"
 
-run_step() { shift; "$@"; }
-pkg_install()        { :; }
-install_omz()        { :; }
-install_zsh_plugin() { :; }
-install_theme_layer() { return 1; }   # module has `|| :`
-osr_shell_is()       { return 0; }    # already zsh -> no login-shell change
+OSR_BIN=${OSR_BIN:-$OSR_ROOT/build/osr}
+if [ ! -x "$OSR_BIN" ]; then
+    printf '  skip zsh_migrate: %s is not built\n' "$OSR_BIN"
+    exit 0
+fi
+
+BIN=$(mktemp -d)
+trap 'rm -rf "$BIN"' EXIT INT TERM
+for _t in sh env cat grep sed printf id rm mkdir mktemp test true false tee \
+          cp chmod cut tr head sort wc dirname basename; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$BIN/$_t" ;; esac
+done
+# sudo logs nothing and runs nothing: no escalation in this test is wanted.
+printf '#!/bin/sh\nexit 0\n' >"$BIN/sudo"
+# apt says everything is installed, so the package step is a §2 no-op; a `zsh`
+# and a new-enough `fzf` on PATH keep the login-shell and provider paths out of
+# the way, which is what the sh version's osr_shell_is/_fzf_ok stubs did.
+printf '#!/bin/sh\nexit 0\n' >"$BIN/dpkg"
+printf '#!/bin/sh\nexit 0\n' >"$BIN/zsh"
+printf '#!/bin/sh\nprintf "0.74.3 (15f64c49)\\n"\n' >"$BIN/fzf"
+# git: oh-my-zsh and the plugins are cloned with it. A no-op git leaves the
+# module's own §2 probes to decide, and nothing is fetched.
+printf '#!/bin/sh\nexit 0\n' >"$BIN/git"
+chmod +x "$BIN/sudo" "$BIN/dpkg" "$BIN/zsh" "$BIN/fzf" "$BIN/git"
+
+# run_module <log> — the module, with $OSR_HOME as its sandbox.
+run_module() {
+    env -i PATH="$BIN" OSR_ROOT="$OSR_ROOT" OSR_LIB="$OSR_LIB" \
+        OSR_DOTFILES="$OSR_DOTFILES" OSR_PKG=apt OSR_ARCH=x86_64 \
+        OSR_DISTRO=ubuntu OSR_CODENAME=noble OSR_INIT=systemd \
+        OSR_USER="$OSR_USER" OSR_HOME="$OSR_HOME" HOME="$OSR_HOME" \
+        OSR_SHELLS_FILE="$OSR_HOME/.shells" OSR_PASSWD_FILE="$OSR_HOME/.passwd" \
+        NO_COLOR=1 TERM=dumb OSR_VERBOSE=1 \
+        "$OSR_BIN" module run zsh >"$1" 2>&1 || :
+}
 
 # The legacy 99-local.zsh that shells used to carry, verbatim.
 legacy_local() { cat <<'EOF'
@@ -97,7 +129,10 @@ old_install() {
     "$1"          >"$OSR_HOME/.config/osr/zsh/rc.d/00-env.zsh"
     legacy_local  >"$OSR_HOME/.config/osr/zsh/rc.d/99-local.zsh"
     LOG=$(mktemp)
-    . "$OSR_ROOT/modules/zsh.sh" >"$LOG" 2>&1
+    # The account already uses zsh, so the login-shell path is a §2 no-op.
+    printf '%s:x:1000:1000::%s:%s\n' "$OSR_USER" "$OSR_HOME" "$BIN/zsh" >"$OSR_HOME/.passwd"
+    printf '%s\n' "$BIN/zsh" >"$OSR_HOME/.shells"
+    run_module "$LOG"
     RC="$OSR_HOME/.config/osr/zsh/rc.d"
 }
 
@@ -116,7 +151,7 @@ OLD_HOME=$OSR_HOME
 # --- 2: re-running is silent (idempotent) ------------------------------------
 OSR_HOME=$OLD_HOME; export OSR_HOME
 LOG2=$(mktemp)
-. "$OSR_ROOT/modules/zsh.sh" >"$LOG2" 2>&1
+run_module "$LOG2"
 refute_contains "$LOG2" 'migrated'  "second run migrates nothing"
 refute_contains "$LOG2" 'still has' "second run does not warn about its own fix"
 rm -rf "$OLD_HOME"
@@ -135,7 +170,9 @@ legacy_env_v1 | sed 's|eval "$(brew shellenv)"|eval "$(brew shellenv)"  # mine|'
 legacy_local  | sed 's|\$HOME/\.nvm|$HOME/custom-nvm|'                          >"$RC/99-local.zsh"
 BEFORE=$(md5sum <"$RC/99-local.zsh")
 LOG3=$(mktemp)
-. "$OSR_ROOT/modules/zsh.sh" >"$LOG3" 2>&1
+printf '%s:x:1000:1000::%s:%s\n' "$OSR_USER" "$OSR_HOME" "$BIN/zsh" >"$OSR_HOME/.passwd"
+printf '%s\n' "$BIN/zsh" >"$OSR_HOME/.shells"
+run_module "$LOG3"
 assert_contains "$LOG3" 'still has'      "an edited region is reported"
 assert_contains "$RC/00-env.zsh" '# mine' "the user's edit survives untouched"
 assert_eq "$BEFORE" "$(md5sum <"$RC/99-local.zsh")" "an edited 99-local is byte-identical after the run"

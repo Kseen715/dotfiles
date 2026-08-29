@@ -1,5 +1,12 @@
+# test/ref/swap_sh_ref.sh — the sh implementation of modules/swap.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/swap.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/swap.sh — memory: zram first, disk swap only for the rest. ONE copy,
 # POSIX (was .../linux-arch-x86_64-hyprland-glass/setup-swap.sh, which hard-coded
 # a 24G /swapfile regardless of RAM, free disk, or the swap already present).

@@ -1,5 +1,12 @@
+# test/ref/gpu-drivers_sh_ref.sh — the sh implementation of modules/gpu-drivers.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/gpu-drivers.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11+wayland
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/gpu-drivers.sh — GPU drivers + Vulkan/OpenCL/VA-API stack for every
 # detected GPU, across every generation the Arch repos and AUR still carry:
 # NVIDIA Blackwell..Curie, AMD Navi..R100, Intel Xe..gen3, plus the VM vendors.

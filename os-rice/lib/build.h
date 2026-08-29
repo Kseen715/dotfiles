@@ -31,6 +31,20 @@ int osr_build_run(const char *fn);
  * works where a modern zstd .deb cannot (bullseye's dpkg lacks zstd). */
 int osr_install_tarball_bin(const char *url, const char *bin);
 
+/* --- version guards a module makes before calling a builder ----------------
+ *
+ * Two builders exist because PRESENCE IS NOT SUFFICIENCY: an old distro chafa
+ * or fzf satisfies pkg_install's "is it installed" probe and would never be
+ * replaced, and the feature the rice needs (chafa --probe, fzf --gutter) is
+ * missing anyway. The module asks first, so the guard costs one `--version`
+ * run rather than a builder invocation, exactly as the sh modules' `_chafa_ok`
+ * / `_fzf_ok` did. The MIN strings are exported because the modules name them
+ * in the step they print. */
+#define OSR_CHAFA_MIN "1.16"
+#define OSR_FZF_MIN   "0.66"
+int osr_chafa_ok(void);
+int osr_fzf_ok(void);
+
 /* osr_build_zig -- install Zig from ziglang.org as a whole tree, symlinked into
  * /usr/local/bin. want pins an exact version ("0.14.1"); "" or NULL takes the
  * newest stable. Exposed because it is also a PREREQUISITE: the ghostty source

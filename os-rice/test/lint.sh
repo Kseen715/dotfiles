@@ -79,6 +79,15 @@ fi
 # `grep -l '^# session: wayland' modules/*.sh` answers "what breaks if I move
 # this rice to X11" without reading 97 files. Enforced, because a marker that is
 # only usually there is not something a rice author can rely on.
+# sh_module_count -- how many .sh modules are left. Zero since the port finished
+# (DESIGN §11a), and an unmatched glob must count as zero rather than print an
+# `ls` error: these two checks are what would catch a .sh module coming back.
+sh_module_count() {
+    _n=0
+    for _f in "$OSR_ROOT"/modules/*.sh; do [ -f "$_f" ] && _n=$((_n + 1)); done
+    printf '%s' "$_n"
+}
+
 sec "module session markers (# session: x11 | wayland | x11+wayland):"
 _marker_bad=""
 for f in "$OSR_ROOT"/modules/*.sh; do
@@ -92,7 +101,7 @@ if [ -n "$_marker_bad" ]; then
     for f in $_marker_bad; do p_fail "$f: missing or invalid '# session:' first line"; done
     FAILED=1
 else
-    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') modules declare a session)"
+    p_ok "(all $(sh_module_count) modules declare a session)"
 fi
 
 # Every shell module is legacy: the C tier (modules/<name>.c + lib/modules.c) is
@@ -113,7 +122,7 @@ if [ -n "$_legacy_bad" ]; then
     for f in $_legacy_bad; do p_fail "$f: missing '# legacy: sh' marker (DESIGN §11a)"; done
     FAILED=1
 else
-    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') shell modules marked legacy)"
+    p_ok "(all $(sh_module_count) shell modules marked legacy)"
 fi
 
 # The converse: a module that HAS been ported must not leave the .sh behind, or

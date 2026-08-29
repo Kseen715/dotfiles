@@ -1,6 +1,13 @@
+# test/ref/xorg_sh_ref.sh — the sh implementation of modules/xorg.sh, FROZEN.
+#
+# The last pure-sh version, kept as the specification of what the C module
+# (modules/xorg.c) must do: test/unit/module_c_parity.sh runs both under
+# stubbed package tooling and diffs what they did. Nothing installs it.
+#
+# --- original -----------------------------------------------------------------
+#
 # session: x11
 # themable: yes
-# legacy: sh  — port to C (modules/<name>.c + lib/modules.c); see DESIGN §11a
 # modules/xorg.sh — the X11 session core, the X sibling of modules/wayland.sh
 # (i3-sugg §1, §13). ONE copy, POSIX, distro-agnostic: logical names carry Arch's
 # `xorg-*` spelling and pkgmap translates (Void drops the prefix, Debian bundles
