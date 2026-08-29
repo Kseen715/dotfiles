@@ -145,8 +145,17 @@ int main(void) {
                                     "distro:debian", "init:runit",
                                     (const char *)NULL) != 0,
                     "a run with an unmet predicate fails");
-    osr_assert_err(&sb, "distro:debian",
+    osr_assert_err(&sb, "rice needs 'distro:debian'",
                    "and it names the predicate that was not met");
+
+    /* An unmet ALTERNATION reports the whole predicate rather than one
+     * arbitrary branch, so the log says what the rice actually asked for. */
+    osr_sb_reset(&sb);
+    osr_assert_true(osr_sb_run_core(&sb, "preflight", "distro:debian|ubuntu",
+                                    (const char *)NULL) != 0,
+                    "a run with an unmet alternation fails");
+    osr_assert_err(&sb, "rice needs 'distro:debian|ubuntu'",
+                   "an unmet alternation reports every branch it tried");
 
     osr_sb_reset(&sb);
     osr_assert_rc(osr_sb_run_core(&sb, "preflight", "", "distro:void",

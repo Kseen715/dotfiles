@@ -335,7 +335,7 @@ static const char *posix_test_names[] = {
      * box -- which is why they belong here rather than with the tests that
      * link the lib objects: a black-box test of what a unit must do should
      * not break when the unit is renamed or split. */
-    "service_test", "preflight_test", "apply_test"
+    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 

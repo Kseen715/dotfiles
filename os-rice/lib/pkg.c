@@ -419,6 +419,28 @@ static int native_held(const char *pkg) {
         argv[0] = (char *)"grep"; argv[1] = (char *)"-rhw"; argv[2] = (char *)pkg;
         argv[3] = (char *)"/etc/portage/package.mask"; argv[4] = NULL;
         if (osr_run_capture(argv, &out)) held = uncommented(str_text(&out));
+    } else if (strcmp(mgr, "xbps") == 0) {
+        /* Void states a hold as `ignorepkg=<name>` in /etc/xbps.d (the
+         * admin's files) or /usr/share/xbps.d (the distribution's defaults).
+         *
+         * This branch is not symmetrical with the others in why it matters.
+         * Elsewhere a hold only makes an install skip a package the user
+         * pinned; on xbps it is the fence around xbps_clear_conflicts, the one
+         * place os-rice REMOVES a package the user may have installed. Without
+         * it, a held package that blocks a transaction is deleted -- exactly
+         * what G2 forbids, and what that function's own comment promises it
+         * will not do.
+         *
+         * It was missing until the tests stopped asking lib/pkg.sh what the
+         * answer should be: the shell had no xbps branch either, and the sh
+         * test that claimed to cover the case redefined _native_held, so both
+         * sides agreed about a fence neither of them had. */
+        char *argv[6];
+        argv[0] = (char *)"grep"; argv[1] = (char *)"-rhE";
+        argv[2] = (char *)"^[[:space:]]*ignorepkg=";
+        argv[3] = (char *)"/etc/xbps.d"; argv[4] = (char *)"/usr/share/xbps.d";
+        argv[5] = NULL;
+        if (osr_run_capture(argv, &out)) held = word_match(str_text(&out), pkg);
     }
     str_free(&out);
     return held;
@@ -497,7 +519,17 @@ static void prune_one(const char *ours) {
     str_init(&hits);
     argv[0] = (char *)"grep"; argv[1] = (char *)"-rlF"; argv[2] = uri.p;
     argv[3] = parent.p; argv[4] = dir.p; argv[5] = NULL;
-    if (osr_run_capture(argv, &hits)) {
+    /* The exit status is deliberately ignored, and this is the one place in
+     * the file where that is not laziness. grep is handed two paths, and on a
+     * modern Debian or Ubuntu the first of them -- /etc/apt/sources.list -- is
+     * routinely ABSENT, because the deb822 migration moved every stock entry
+     * into sources.list.d/. grep then exits 2 for the missing file even though
+     * it matched in the directory, so gating on the status turns the repair
+     * off on exactly the apt-3.0 boxes it exists to protect. lib/pkg.sh ran
+     * this as a pipeline into `head`, so it never saw grep's status at all;
+     * what matters is the lines, and they are checked below. */
+    (void)osr_run_capture(argv, &hits);
+    {
         while (!other && next_line(str_text(&hits), hits.len, &pos, &line)) {
             if (line.len == 0) continue;
             if (line.len == strlen(ours) && memcmp(line.start, ours, line.len) == 0) continue;
