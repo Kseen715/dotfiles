@@ -42,44 +42,76 @@
 #   osr test                                         run the test suite
 #
 # switch and install share one idempotent engine (`osr install run`, which
-# install.sh is a shim over): because installs never uninstall and install_layer
+# install.sh is a shim over -- it delegates here): because installs never uninstall and install_layer
 # overwrites only os-rice-owned layers, "move A -> B" is just applying B on top
 # of A. `theme` is the same engine again with every mutating verb neutralized
 # (osr_theme_only, lib/module.h) - one code path, three verbs.
 set -eu
 
 OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+
+# --- the harness core --------------------------------------------------------
+#
+# The one piece of bootstrap left in the shell tier, and the reason it cannot
+# be in the binary: a script cannot exec the program that tells it where the
+# program is. install.sh and wallpaper.sh delegate here rather than repeat it,
+# so this block exists exactly once.
+#
+# Everything ui.sh used to set up around it -- the exported palette, $OSR_LOG,
+# the step counters -- is the core's own startup now (osr.c's startup_env), so
+# what is left is a path and a build.
+OSR_ROOT=$OSR_SELF_DIR
+OSR_LIB="$OSR_ROOT/lib"
+# The dotfiles repo root is the parent of os-rice/ -- configs live there.
+OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
+OSR_BIN="$OSR_ROOT/build/osr"
+export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN
+
+if [ ! -x "$OSR_BIN" ]; then
+    # nob.c is the build system (its header comment has the one-time bootstrap
+    # line); osr.ps1 does the same thing on Windows. Building here is what
+    # makes a fresh checkout work before anyone has built anything.
+    if [ ! -x "$OSR_ROOT/build/nob" ]; then
+        mkdir -p "$OSR_ROOT/build" 2>/dev/null || :
+        # shellcheck disable=SC2086  # $CC is a command line ("zig cc"), not one word
+        ${CC:-cc} -o "$OSR_ROOT/build/nob" "$OSR_ROOT/nob.c" || {
+            printf '[ERROR] osr: cannot bootstrap nob with %s\n' "${CC:-cc}" >&2
+            exit 1
+        }
+    fi
+    ( cd -- "$OSR_ROOT" && ./build/nob ) >/dev/null || {
+        printf '[ERROR] osr: nob could not build %s\n' "$OSR_BIN" >&2
+        ( cd -- "$OSR_ROOT" && ./build/nob ) >&2
+        exit 1
+    }
+fi
+
 _cmd=${1:-}
 [ $# -gt 0 ] && shift
 
 case "$_cmd" in
-    install) exec "$OSR_SELF_DIR/install.sh" "$@" ;;
-    switch)  OSR_MODE=switch; export OSR_MODE; exec "$OSR_SELF_DIR/install.sh" "$@" ;;
-    module)  exec "$OSR_SELF_DIR/install.sh" --module "$@" ;;
+    install) exec "$OSR_BIN" install run "$@" ;;
+    switch)  OSR_MODE=switch; export OSR_MODE; exec "$OSR_BIN" install run "$@" ;;
+    module)  exec "$OSR_BIN" install run --module "$@" ;;
     theme)
         # `osr theme` with no name is a question, not a command.
         case "${1:-}" in
             ""|--*)
-                # ui.sh for the OSR_BIN it resolves, and nothing else: the
-                # state file is the core's (lib/state.c), and lib/state.sh was
-                # the first shim to go.
-                . "$OSR_SELF_DIR/lib/ui.sh"
                 _cur=$("$OSR_BIN" state get theme)
                 printf '%s\n' "${_cur:-(none applied)}"
                 exit 0
                 ;;
         esac
         _theme=$1; shift
-        exec "$OSR_SELF_DIR/install.sh" --theme-only --theme "$_theme" "$@"
+        exec "$OSR_BIN" install run --theme-only --theme "$_theme" "$@"
         ;;
-    wallpaper) exec "$OSR_SELF_DIR/wallpaper.sh" "$@" ;;
+    wallpaper) exec "$OSR_BIN" wallpaper "$@" ;;
     benchmark)
         # Dependency installs happen through the installer rather than inside
         # the benchmark: pulling packages is the module machinery's job, and
         # `osr module benchmark` is how you ask for it. The binary decides WHAT
         # is required -- it exits 3 when the workload is missing -- and this arm
         # gets it, then runs the benchmark again.
-        . "$OSR_SELF_DIR/lib/ui.sh"
         _forced=0
         for _a in "$@"; do
             if [ "$_a" = "--install-deps" ]; then _forced=1; break; fi
@@ -88,7 +120,7 @@ case "$_cmd" in
         # AND-OR list is itself a failing command, so the short form would exit
         # the script whenever --install-deps was absent.
         if [ "$_forced" = 1 ]; then
-            "$OSR_SELF_DIR/install.sh" --module benchmark
+            "$OSR_BIN" install run --module benchmark
         fi
 
         _rc=0
@@ -96,7 +128,7 @@ case "$_cmd" in
         # Exactly one retry: if the install did not actually supply the tool,
         # a second failure must surface rather than loop.
         if [ "$_rc" = 3 ] && [ "$_forced" = 0 ]; then
-            "$OSR_SELF_DIR/install.sh" --module benchmark
+            "$OSR_BIN" install run --module benchmark
             _rc=0
             "$OSR_BIN" benchmark "$@" || _rc=$?
         fi
@@ -113,21 +145,12 @@ case "$_cmd" in
         exit $_rc
         ;;
     undervolt)
-        # Straight through to the core: unlike install/switch/theme there is no
-        # sh tier here at all, so ui.sh is sourced only to resolve $OSR_BIN
-        # (and build it if this is a fresh checkout).
-        . "$OSR_SELF_DIR/lib/ui.sh"
         "$OSR_BIN" undervolt "$@"
         ;;
-    list)    exec "$OSR_SELF_DIR/install.sh" --list ;;
-    themes)  exec "$OSR_SELF_DIR/install.sh" --list-themes ;;
-    modules) exec "$OSR_SELF_DIR/install.sh" --list-modules ;;
+    list)    exec "$OSR_BIN" install run --list ;;
+    themes)  exec "$OSR_BIN" install run --list-themes ;;
+    modules) exec "$OSR_BIN" install run --list-modules ;;
     test)
-        # The runner is part of the harness core now; ui.sh is sourced only to
-        # resolve (and if needed build) it.
-        . "$OSR_SELF_DIR/lib/ui.sh"
-        # Not `exec`: that would drop ui.sh's EXIT trap, which is what gives
-        # the cursor back on a terminal.
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")

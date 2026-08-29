@@ -329,7 +329,13 @@ static const char *test_names[] = {
  * static helpers the header does not export.
  */
 static const char *posix_test_names[] = {
-    "uv_journal_test", "bench_test"
+    "uv_journal_test", "bench_test",
+    /* The behaviour tests (test/harness.c). They link nothing at all -- they
+     * drive build/osr as a subprocess and assert what it did to a sandboxed
+     * box -- which is why they belong here rather than with the tests that
+     * link the lib objects: a black-box test of what a unit must do should
+     * not break when the unit is renamed or split. */
+    "service_test", "preflight_test", "apply_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 
@@ -648,16 +654,40 @@ static bool collect_dep(Nob_Walk_Entry entry) {
     return true;
 }
 
+/* unity_srcs -- .c files that are #included by another translation unit
+ * rather than compiled on their own.
+ *
+ * They have to be listed because collect_dep only registers .h files, and for
+ * dependency purposes an #included .c IS a header: nothing else records that
+ * test/unit_c/uv_journal_test.c is rebuilt when lib/uv/journal.c changes. The
+ * failure this prevents is the bad direction -- editing the unit under test
+ * and running a test binary compiled from the version before the edit, which
+ * reports green about code that no longer exists.
+ *
+ * Explicit rather than derived by scanning every source for its includes: the
+ * set changes about once a year, and a list beside the lists of what IS
+ * compiled is the obvious place to look when it does.
+ */
+static const char *unity_srcs[] = {
+    "test/harness.c",       /* every test that #includes the harness */
+    "lib/common.c",         /* uv_journal_test, bench_test */
+    "lib/uv/journal.c", "lib/uv/backend.c", "lib/uv/generic_opp.c",
+    "lib/bench/cpu.c", "lib/bench/power.c", "lib/bench/util.c",
+};
+#define UNITY_SRCS_COUNT (sizeof(unity_srcs) / sizeof(unity_srcs[0]))
+
 /* collect_deps -- walk the tree once per run for headers. If the walk
  * fails (an unreadable directory, say) deps_usable stays false and every
  * timestamp check below answers "rebuild": without the full header list
  * we cannot prove anything is up to date, and guessing wrong ships a
  * stale binary. */
 static void collect_deps(void) {
+    size_t i;
     if (deps_collected) return;
     deps_collected = true;
     deps_usable = nob_walk_dir(".", collect_dep);
     nob_da_append(&deps, "nob.c");
+    for (i = 0; i < UNITY_SRCS_COUNT; i++) nob_da_append(&deps, unity_srcs[i]);
 }
 
 /* needs_compile -- is src's object missing, older than src, or older than

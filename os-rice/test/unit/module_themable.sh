@@ -104,7 +104,10 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 mkdir -p "$TMP/lib" "$TMP/modules" "$TMP/rices" "$TMP/home" "$TMP/bin"
 ln -sfn "$OSR_ROOT/build" "$TMP/build"
 ln -sfn "$OSR_ROOT/themes" "$TMP/themes"
+# install.sh/wallpaper.sh delegate to ./osr, which is where the one
+# build/osr resolution lives, so the fixture needs that file too.
 cp "$OSR_ROOT/install.sh" "$TMP/install.sh"
+cp "$OSR_ROOT/osr" "$TMP/osr"
 for _f in "$OSR_LIB"/*.sh; do ln -sfn "$_f" "$TMP/lib/$(basename "$_f")"; done
 for _t in sh env cat grep sed awk printf id rm mkdir mktemp test true false tee \
           cp chmod touch cut tr head sort wc dirname basename find date uname od; do

@@ -46,14 +46,14 @@ os-rice/
                        links from the lib/ units, the same way install.c +
                        lib/*.c make the Windows core
   lib/
-    ui.sh log.sh       the shell-callable surface: run_step's fork,
-    user.sh            error()'s exit, as_user/as_root, and the shims that
-    detect.sh theme.sh eval the facts the core prints, for modules to read
-    ui.c log.c state.c what those shims call - one unit per <name>.sh:
+    ui.c log.c state.c one unit per shell file that used to be here:
     user.c detect.c    `osr ui`, `osr log`, `osr state`, `osr user`,
     theme.c install.c  `osr detect`, `osr theme`, `osr install`,
-    testrun.c          `osr test-run`. state.c owns its writes outright:
-                       there is no state.sh
+    testrun.c          `osr test-run`
+    <name>.sh          the shell originals. NOTHING in the shipped tree
+                       sources or calls them - they are the oracles the
+                       parity tests are recorded against, and they go when
+                       the last test that executes one does (DESIGN 13)
     module.h/.c        the API a POSIX module written in C may call
     modules.c          the registry of those modules (`osr module`)
     common.h/.c        buffer, printf %b, the log line
@@ -178,11 +178,9 @@ packages (`osr_pkg_install`, resolved through `lib/pkgmap/` exactly as
 function of your own — the thing the shell tier could not do), services,
 `as_root`/`as_user` execs, the config-file primitives, and the detected facts.
 
-**Ported so far:** `flameshot`, `docker`, `fastfetch`, `tcc`, and `helpers`
-(POSIX), plus `wezterm`, `pwsh`, `oh-my-posh` and the three `win-*` passes
-(Windows). Each shell original is frozen under `test/ref/`, and
-`test/unit/module_c_parity.sh` runs both against stubbed package tooling and
-diffs every command they issue. `helpers.c` never had a `.sh` form, so its
+**Ported so far:** every one of them. Each shell original is frozen under
+`test/ref/`, and `test/unit/module_c_parity.sh` runs both against stubbed
+package tooling and diffs every command they issue. `helpers.c` never had a `.sh` form, so its
 scenario asserts behaviour directly instead.
 
 > [!warning] Provider-tagged packages block a port

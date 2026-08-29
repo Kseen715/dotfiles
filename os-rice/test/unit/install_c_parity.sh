@@ -92,6 +92,9 @@ EOF
 ln -sfn "$OSR_ROOT/build" "$ROOT/build"
 ln -sfn "$OSR_ROOT/themes" "$ROOT/themes"
 cp "$OSR_ROOT/install.sh" "$ROOT/install.sh"
+# install.sh delegates to ./osr (which is where the one build/osr resolution
+# lives), so the fixture needs that file too or the shim execs into nothing.
+cp "$OSR_ROOT/osr" "$ROOT/osr"
 cp "$OSR_ROOT/test/ref/install_sh_ref.sh" "$ROOT/install_ref.sh"
 
 # Everything the manifest parser has to survive: comments (whole-line, trailing,

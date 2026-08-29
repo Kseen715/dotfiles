@@ -1,6 +1,8 @@
 /* lib/testrun.c -- the C behind what used to be test/run.sh: the fast, no-container test suite.
  *
  *   <lint>            test/lint.sh, run first, failure is not fatal
+ *   C unit tests:     ./build/nob test -- every test under test/unit_c/,
+ *                     built and run by the build system that owns them
  *   Unit tests:       every unit test under test/unit/, each named as it runs
  *   ALL GREEN         or SOME FAILED, and the exit status to match
  *
@@ -48,6 +50,27 @@ static void colored(const char *color_env, const char *text) {
         if (!expand_b(&out, color("OSR_NC"))) str_addc(&out, '\n');
     }
     emit(&out);
+}
+
+/* run_prog -- fork/exec a program with an argument, returning its exit
+ * status. Same shape as run_sh and for the same reason: no shell in the
+ * middle whose own diagnostics could reach the output. */
+static int run_prog(const char *prog, const char *arg, const char *dir) {
+    pid_t pid;
+    int status;
+
+    fflush(stdout);
+    fflush(stderr);
+    pid = fork();
+    if (pid < 0) return 1;
+    if (pid == 0) {
+        if (dir != NULL && chdir(dir) != 0) _exit(127);
+        execl(prog, prog, arg, (char *)NULL);
+        _exit(127);
+    }
+    if (waitpid(pid, &status, 0) < 0) return 1;
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return 1;
 }
 
 /* run_sh -- `sh <path>`, returning its exit status. Not system(): that would
@@ -101,6 +124,43 @@ int osr_testrun_main(int argc, char **argv) {
     str_addz(&path, here);
     str_addz(&path, "/lint.sh");
     if (run_sh(str_text(&path)) != 0) rc = 1;
+    str_free(&path);
+
+    /* The C unit tests, built and run by nob.c -- it owns the compiler
+     * choice and the dependency tracking, and duplicating either here to
+     * save one fork would put two answers to "is this test up to date" in
+     * the tree. `here` is <root>/test, so the root is its parent.
+     *
+     * Silent when there is no build system to ask, header included. The
+     * runner is pointed at a tree of fixture tests by its own parity test,
+     * and a tree with no nob.c has no C tests to run -- announcing an empty
+     * section there would be noise, and treating it as a failure would make
+     * "can this runner run a directory of tests" depend on the directory
+     * being a whole project. */
+    str_init(&path);
+    str_addz(&path, here);
+    str_addz(&path, "/..");
+    {
+        Str nob;
+        Str nobsrc;
+        str_init(&nob);
+        str_addz(&nob, str_text(&path));
+        str_addz(&nob, "/build/nob");
+        str_init(&nobsrc);
+        str_addz(&nobsrc, str_text(&path));
+        str_addz(&nobsrc, "/nob.c");
+        /* Both, and nob.c is the one that matters: the fixture tree symlinks
+         * build/ to the real one, so the binary is there while the sources
+         * it builds from are not. nob.c present is what "this is a project
+         * with C tests" actually means. */
+        if (access(str_text(&nobsrc), R_OK) == 0 && access(str_text(&nob), X_OK) == 0) {
+            fputc('\n', stdout);
+            colored("OSR_CYAN", "C unit tests:");
+            if (run_prog(str_text(&nob), "test", str_text(&path)) != 0) rc = 1;
+        }
+        str_free(&nob);
+        str_free(&nobsrc);
+    }
     str_free(&path);
 
     fputc('\n', stdout);

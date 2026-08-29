@@ -10,29 +10,24 @@
 #   install.sh --list                  list available rices
 #   install.sh --list-modules          list available modules
 #
-# This file is a shim. The installer itself is `osr install run` in the harness
-# core (lib/install.c): the option loop, the manifest, the detected-facts
-# report, the theme resolution, the module loop and the closing line.
+# This file is a shim over `osr install`, which is a shim over `osr install
+# run` -- the installer itself, in the harness core (lib/install.c): the option
+# loop, the manifest, the detected-facts report, the theme resolution, the
+# module loop and the closing line.
 #
 # It was the last unit to stay shell, and for one reason: it SOURCED each
 # module, and only a shell can source a shell script into itself. No module is
 # a shell script any more (DESIGN §11a), so the orchestration moved into the
 # core and what is left here is the entry point people and scripts already
-# type. Byte-for-byte the sh original, frozen at test/ref/install_sh_ref.sh and
-# diffed by test/unit/install_c_parity.sh.
+# type.
 #
 # A `.sh` module that appears again still runs: the core hands it to a shell
 # with the libs sourced around it, which is the same command this file ran.
 set -eu
 
-OSR_ROOT=$(cd -- "$(dirname -- "$0")" && pwd)
-OSR_LIB="$OSR_ROOT/lib"
-# The dotfiles repo root is the parent of os-rice/ — configs live there.
-OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
-export OSR_ROOT OSR_LIB OSR_DOTFILES
-
-# ui.sh is sourced for one line: the OSR_BIN it resolves (and builds, on a
-# checkout that has never been built). Everything after that is the binary.
-. "$OSR_LIB/ui.sh"
-
-exec "$OSR_BIN" install run "$@"
+# Delegates to ./osr rather than resolving the binary itself. Locating (and on
+# a fresh checkout building) build/osr is the one thing the shell tier still
+# has to do, and it is worth doing in exactly one file -- `osr install` is the
+# same engine this entry point named, so this stays a name people can type
+# without becoming a second copy of the bootstrap.
+exec "$(cd -- "$(dirname -- "$0")" && pwd)/osr" install "$@"

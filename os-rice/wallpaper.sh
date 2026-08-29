@@ -14,18 +14,9 @@
 # current-theme resolution and the four actions are `osr wallpaper` in the
 # harness core (lib/wallpaper_front.c), over the wallpaper family that had
 # already moved into lib/config.c. It stays sh because it is the entry point
-# people, pickers and hotkeys already type. Byte-for-byte the sh original,
-# frozen at test/ref/wallpaper_sh_ref.sh and diffed by
-# test/unit/wallpaper_c_parity.sh.
+# people, pickers and hotkeys already type.
 set -eu
 
-OSR_ROOT=$(cd -- "$(dirname -- "$0")" && pwd)
-OSR_LIB="$OSR_ROOT/lib"
-OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
-export OSR_ROOT OSR_LIB OSR_DOTFILES
-
-# ui.sh is sourced for one line: the OSR_BIN it resolves (and builds, on a
-# checkout that has never been built). Everything after that is the binary.
-. "$OSR_LIB/ui.sh"
-
-exec "$OSR_BIN" wallpaper "$@"
+# Delegates to ./osr for the same reason install.sh does: locating (and on a
+# fresh checkout building) build/osr lives in exactly one file.
+exec "$(cd -- "$(dirname -- "$0")" && pwd)/osr" wallpaper "$@"

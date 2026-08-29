@@ -80,7 +80,10 @@ mkdir -p "$ROOT/lib" "$ROOT/themes/nord/wallpapers" "$ROOT/themes/bare/wallpaper
          "$TMP/extra"
 for _f in "$OSR_LIB"/*.sh; do ln -sfn "$_f" "$ROOT/lib/$(basename "$_f")"; done
 ln -sfn "$OSR_ROOT/build" "$ROOT/build"
+# install.sh/wallpaper.sh delegate to ./osr, which is where the one
+# build/osr resolution lives, so the fixture needs that file too.
 cp "$OSR_ROOT/wallpaper.sh" "$ROOT/wallpaper.sh"
+cp "$OSR_ROOT/osr" "$ROOT/osr"
 cp "$OSR_ROOT/test/ref/wallpaper_sh_ref.sh" "$ROOT/wallpaper_ref.sh"
 
 # Two themes: one with images, one whose wallpapers/ holds only a placeholder.
