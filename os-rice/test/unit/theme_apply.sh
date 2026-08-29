@@ -1,11 +1,11 @@
 #!/bin/sh
-# Proves the theme-only apply path (§6a, lib/apply.sh) - the one bound to a
+# Proves the theme-only apply path (§6a, lib/apply.c) - the one bound to a
 # hotkey, so its contract is as much about what it does NOT do:
 #
 #   1. every mutating verb in the install/build/download/service libs is
 #      neutralized, derived from the sources so a new provider is inert for free
 #   2. read-only queries survive (modules branch on them)
-#   3. the layer set is the installed rice's modules, not all 113
+#   3. the layer set is the installed rice's modules, not all 120
 #   4. a real end-to-end apply rewrites the 90-* layers and touches no package
 #   5. re-applying is idempotent, and switching back and forth is symmetric
 #   6. as_root is skipped without a sudo ticket instead of blocking on a prompt
@@ -125,25 +125,22 @@ trap 'rm -rf "$T"' EXIT
 HOME_DIR="$T/home"
 mkdir -p "$HOME_DIR"
 
-# osr_apply_theme is driven directly, NEVER `install.sh --theme-only`: install.sh
-# resolves OSR_HOME from passwd, so running it here would apply the theme to the
-# real home of whoever runs the suite. OSR_HOME is set after user.sh is sourced,
-# which is the same seam every other unit test uses.
+# `osr apply theme` is driven directly, NEVER `install.sh --theme-only`: the
+# runner resolves OSR_HOME from passwd, so running it here would apply the theme
+# to the real home of whoever runs the suite. This entry point takes OSR_HOME
+# from the environment, which is the seam every other unit test uses -- and is
+# why osr_apply_theme lives in a lib rather than inline in the runner.
 run_apply() {
     (
         OSR_HOME="$HOME_DIR"; OSR_USER=$(id -un); export OSR_HOME OSR_USER
         OSR_LOG="$T/apply.log"; export OSR_LOG
         NO_COLOR=1; export NO_COLOR
-        . "$OSR_LIB/ui.sh"; . "$OSR_LIB/log.sh"; . "$OSR_LIB/detect.sh"
-        . "$OSR_LIB/user.sh"; . "$OSR_LIB/net.sh"; . "$OSR_LIB/pkg.sh"; . "$OSR_LIB/git.sh"
-        . "$OSR_LIB/service.sh"; . "$OSR_LIB/config.sh"; . "$OSR_LIB/theme.sh"
-        . "$OSR_LIB/apply.sh"; . "$OSR_LIB/fonts.sh"
-        . "$OSR_LIB/build.sh"
+        . "$OSR_LIB/ui.sh"; . "$OSR_LIB/detect.sh"
         osr_detect >/dev/null 2>&1
-        # OSR_HOME must survive everything above: if a lib ever resolves it from
+        # OSR_HOME must survive detection: if anything ever resolves it from
         # passwd again, this assert fires here instead of in someone's dotfiles.
         [ "$OSR_HOME" = "$HOME_DIR" ] || { echo "SANDBOX ESCAPE: OSR_HOME=$OSR_HOME"; exit 9; }
-        osr_apply_theme "$1"
+        "$OSR_BIN" apply theme "$1"
     ) 2>&1
 }
 

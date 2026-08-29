@@ -546,16 +546,24 @@ void osr_apt_prune_bootstrap_lists(void) {
     }
 }
 
-/* pkg_refresh -- once per process, lazily, right before the first install:
- * a fresh container has no package lists yet. */
+/* pkg_refresh -- bring the package index up to date. ALWAYS refreshes: this is
+ * the verb a module calls after changing what the index covers (enabling a
+ * repository), and a guard here would make that call a silent no-op.
+ *
+ * The once-per-run guard belongs to the INSTALL path instead -- refresh_once
+ * below -- exactly where lib/pkg.sh put it (`_OSR_REFRESHED`). The two were
+ * folded together while every module ran in its own process, where the
+ * difference could not show; the runner is one process now, and it can. */
 static int refreshed = 0;
 
 void osr_pkg_refresh(void) {
-    if (osr_theme_only()) { (void)osr_theme_only_skip("pkg_refresh"); return; }
-    const char *mgr = osr_mod_pkg();
+    const char *mgr;
     char *argv[8];
 
-    if (refreshed) return;
+    if (osr_theme_only()) { (void)osr_theme_only_skip("pkg_refresh"); return; }
+    mgr = osr_mod_pkg();
+    /* An explicit refresh satisfies the lazy one too: lib/pkg.sh's callers set
+     * `_OSR_REFRESHED=1` by hand right after calling it, for the same reason. */
     refreshed = 1;
     if (strcmp(mgr, "apt") == 0) {
         osr_apt_prune_bootstrap_lists();
@@ -591,6 +599,15 @@ void osr_pkg_refresh(void) {
         return;
     }
     if (osr_run_root(argv) != 0) osr_warn("package index refresh failed - continuing");
+}
+
+/* refresh_once -- the install path's lazy guard: refresh right before the first
+ * install of a run, because a fresh container has no package lists yet, and
+ * never again. */
+static void refresh_once(void) {
+    if (refreshed) return;
+    osr_pkg_refresh();
+    refreshed = 1;
 }
 
 /* --- the provider methods (§4) ---------------------------------------------
@@ -1004,7 +1021,7 @@ static int via_native(const char *const names[]) {
     }
     if (todo.len == 0) { str_free(&todo); return 1; }
 
-    osr_pkg_refresh();
+    refresh_once();
 
     /* Clear anything that would abort the whole xbps transaction before running
      * it, so one conflicting package cannot take the other N down with it. */

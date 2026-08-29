@@ -299,6 +299,32 @@ static const ModuleRow *find(const char *name);
  * rather than inferred: test/unit/module_themable.sh diffs every marker against
  * what the script actually references, so a module that grows a theme layer and
  * forgets the header fails the suite instead of silently losing its paint. */
+/* osr_module_has -- does this tier own that name? */
+int osr_module_has(const char *name) { return find(name) != NULL; }
+
+/* osr_module_run -- run one module, in this process.
+ *
+ * theme_only is the §6a pass: everything that installs, downloads, builds or
+ * starts becomes a no-op for the rest of this process, so what the module does
+ * is its file copying -- which is what a theme is. The sh tier spelled the same
+ * thing osr_apply_stub_mutators (lib/apply.sh); see lib/module.h on why one is
+ * derived and one is enumerated.
+ *
+ * Returns 1 for success. A failing module is reported and the caller decides
+ * whether to continue -- one broken module must not abort a whole rice install,
+ * same contract the sh run_module had. */
+int osr_module_run(const char *name, int theme_only) {
+    const ModuleRow *m;
+
+    if (theme_only) osr_set_theme_only(1);
+    m = find(name);
+    if (m == NULL) {
+        osr_warn("no such C module");
+        return 0;
+    }
+    return m->run();
+}
+
 int osr_module_themable(const char *name) {
     Str path;
     char *buf;
@@ -399,26 +425,9 @@ int osr_module_main(int argc, char **argv) {
         return osr_module_themable(argv[2]) ? 0 : 1;
     }
     if (strcmp(argv[1], "run") == 0 && (argc == 3 || argc == 4)) {
-        const ModuleRow *m;
         int theme_only = argc == 4;
-
-        /* `run --theme-only <name>`: the §6a pass. Everything that installs,
-         * downloads, builds or starts becomes a no-op for the rest of this
-         * process, so what the module does is its file copying -- which is what
-         * a theme is. The sh tier spells the same thing osr_apply_stub_mutators
-         * (lib/apply.sh); see lib/module.h on why one is derived and one is
-         * enumerated. */
         if (theme_only && strcmp(argv[2], "--theme-only") != 0) return usage();
-        if (theme_only) osr_set_theme_only(1);
-        m = find(argv[theme_only ? 3 : 2]);
-        if (m == NULL) {
-            osr_warn("no such C module");
-            return 1;
-        }
-        /* A failing module is reported and the run continues -- one broken
-         * module must not abort a whole rice install, same contract the sh
-         * run_module has. */
-        return m->run() ? 0 : 1;
+        return osr_module_run(argv[theme_only ? 3 : 2], theme_only) ? 0 : 1;
     }
     return usage();
 }

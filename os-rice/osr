@@ -41,10 +41,11 @@
 #                                                    be undervolted at all.
 #   osr test                                         run the test suite
 #
-# switch and install share one idempotent engine (install.sh): because installs
-# never uninstall and install_layer overwrites only os-rice-owned layers, "move
-# A -> B" is just applying B on top of A. `theme` is the same engine again with
-# every mutating verb stubbed out (lib/apply.sh) - one code path, three verbs.
+# switch and install share one idempotent engine (`osr install run`, which
+# install.sh is a shim over): because installs never uninstall and install_layer
+# overwrites only os-rice-owned layers, "move A -> B" is just applying B on top
+# of A. `theme` is the same engine again with every mutating verb neutralized
+# (osr_theme_only, lib/module.h) - one code path, three verbs.
 set -eu
 
 OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
@@ -59,9 +60,10 @@ case "$_cmd" in
         # `osr theme` with no name is a question, not a command.
         case "${1:-}" in
             ""|--*)
+                # ui.sh for the OSR_BIN it resolves, and nothing else: the
+                # state file is the core's (lib/state.c), and lib/state.sh was
+                # the first shim to go.
                 . "$OSR_SELF_DIR/lib/ui.sh"
-                . "$OSR_SELF_DIR/lib/log.sh"
-                . "$OSR_SELF_DIR/lib/state.sh"
                 _cur=$("$OSR_BIN" state get theme)
                 printf '%s\n' "${_cur:-(none applied)}"
                 exit 0
@@ -72,11 +74,11 @@ case "$_cmd" in
         ;;
     wallpaper) exec "$OSR_SELF_DIR/wallpaper.sh" "$@" ;;
     benchmark)
-        # Dependency installs happen here rather than in the binary: pulling
-        # packages is install.sh's job and needs the module machinery (and the
-        # privilege escalation) that only the sh tier has. The binary decides
-        # WHAT is required -- it exits 3 when the workload is missing -- and
-        # this arm gets it, then runs the benchmark again.
+        # Dependency installs happen through the installer rather than inside
+        # the benchmark: pulling packages is the module machinery's job, and
+        # `osr module benchmark` is how you ask for it. The binary decides WHAT
+        # is required -- it exits 3 when the workload is missing -- and this arm
+        # gets it, then runs the benchmark again.
         . "$OSR_SELF_DIR/lib/ui.sh"
         _forced=0
         for _a in "$@"; do

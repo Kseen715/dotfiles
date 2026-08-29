@@ -180,36 +180,50 @@ static int cmd_shell_is(const char *user, const char *shell) {
 /* cmd_resolve -- osr_resolve_user: which account is being riced, and where it
  * lives. Order (§8): --user > $SUDO_USER (when invoked via sudo) > $USER >
  * whoever we are. */
-static int cmd_resolve(const char *explicit_user) {
-    Str user;
-    Str home;
-    Str out;
+/* resolve_user -- who is being riced, and where they live. Order (§8):
+ * --user > $SUDO_USER (when invoked via sudo) > $USER > whoever we are. */
+static void resolve_user(Str *user, Str *home, const char *explicit_user) {
     const char *sudo_user;
 
-    str_init(&user);
     if (explicit_user != NULL && *explicit_user != '\0') {
-        str_addz(&user, explicit_user);
+        str_addz(user, explicit_user);
     } else if ((sudo_user = env_str("SUDO_USER", NULL)) != NULL && strcmp(sudo_user, "root") != 0) {
-        str_addz(&user, sudo_user);
+        str_addz(user, sudo_user);
     } else if (env_str("USER", NULL) != NULL) {
-        str_addz(&user, env_str("USER", ""));
+        str_addz(user, env_str("USER", ""));
     } else {
         struct passwd *pw = nss_allowed() ? getpwuid(getuid()) : NULL; /* sh: id -un */
-        str_addz(&user, (pw != NULL && pw->pw_name != NULL) ? pw->pw_name : "root");
+        str_addz(user, (pw != NULL && pw->pw_name != NULL) ? pw->pw_name : "root");
     }
 
     /* The real home (field 6); handles /root and non-standard homes. */
-    str_init(&home);
-    passwd_field(&home, str_text(&user), 6);
-    if (home.len == 0) {
-        if (strcmp(str_text(&user), "root") == 0) {
-            str_addz(&home, "/root");
+    passwd_field(home, str_text(user), 6);
+    if (home->len == 0) {
+        if (strcmp(str_text(user), "root") == 0) {
+            str_addz(home, "/root");
         } else {
-            str_addz(&home, "/home/");
-            str_addz(&home, str_text(&user));
+            str_addz(home, "/home/");
+            str_addz(home, str_text(user));
         }
     }
+}
 
+/* osr_resolve_user -- the same, into this process's environment, for the runner
+ * and every child it forks. `export` is what the shim bought; setenv is that. */
+void osr_resolve_user(const char *explicit_user) {
+    Str user, home;
+    str_init(&user); str_init(&home);
+    resolve_user(&user, &home, explicit_user);
+    setenv("OSR_USER", str_text(&user), 1);
+    setenv("OSR_HOME", str_text(&home), 1);
+    str_free(&user); str_free(&home);
+}
+
+static int cmd_resolve(const char *explicit_user) {
+    Str user, home, out;
+
+    str_init(&user); str_init(&home);
+    resolve_user(&user, &home, explicit_user);
     str_init(&out);
     sh_assign(&out, "OSR_USER", str_text(&user));
     sh_assign(&out, "OSR_HOME", str_text(&home));

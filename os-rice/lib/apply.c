@@ -5,14 +5,19 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "module.h"
 
 #include "apply.h"
 #include "cmds.h"
+#include "config.h"
 
 /* Libs whose functions all mutate the system: neutralized wholesale. */
 static const char *const MUTATING_LIBS[] = {
@@ -137,6 +142,127 @@ static void module_path(Str *out, const char *name) {
     str_addz(out, ".sh");
 }
 
+/* --- the apply itself ------------------------------------------------------
+ *
+ * lib/apply.sh's osr_apply_theme, in process. It lived in a lib rather than
+ * inline in install.sh so it could be driven against a throwaway HOME, and that
+ * is not a testing nicety: the runner resolves OSR_HOME from passwd, so a test
+ * that sets OSR_HOME and then runs the runner writes to the REAL home of
+ * whoever runs the suite. This entry point is what lets a test exercise the
+ * path without that being possible.
+ */
+
+/* run_layer -- one module's theme pass, with its output on the run log.
+ *
+ * A single broken module must not abort a theme switch and leave the desktop
+ * half-painted, so this forks: a module's osr_die kills only its layer. Its
+ * chatter goes to $OSR_LOG rather than the terminal, because the interesting
+ * output of a theme apply is the one success line. */
+static int run_layer(const char *name) {
+    pid_t pid;
+    int status;
+
+    fflush(stdout);
+    fflush(stderr);
+    pid = fork();
+    if (pid < 0) return 0;
+    if (pid == 0) {
+        int fd = open(env_str("OSR_LOG", "/dev/null"), O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd >= 0) {
+            (void)dup2(fd, 1);
+            (void)dup2(fd, 2);
+            if (fd > 2) close(fd);
+        }
+        _exit(osr_module_run(name, 1) ? 0 : 1);
+    }
+    if (waitpid(pid, &status, 0) < 0) return 0;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+int osr_apply_theme(const char *name) {
+    Str rice, mods, msg;
+    size_t pos = 0;
+    size_t total = 0, n = 0;
+    Line line;
+    char num[32];
+
+    osr_resolve_theme(name);
+
+    /* Neutralize every install/build/download/service verb for the rest of this
+     * process, then run the same modules a rice install runs. What is left of
+     * them is the file copying. */
+    osr_set_theme_only(1);
+
+    str_init(&rice);
+    osr_state_get(&rice, "rice");
+    setenv("OSR_RICE", str_text(&rice), 1);
+    if (rice.len > 0) {
+        Str dir;
+        str_init(&dir);
+        str_addz(&dir, env_str("OSR_ROOT", "."));
+        str_addz(&dir, "/rices/");
+        str_addz(&dir, str_text(&rice));
+        setenv("OSR_RICE_DIR", str_text(&dir), 1);
+        str_free(&dir);
+    }
+
+    str_init(&mods);
+    osr_theme_modules(&mods, str_text(&rice));
+    while (next_line(str_text(&mods), mods.len, &pos, &line))
+        if (line.len > 0) total++;
+
+    sprintf(num, "%lu", (unsigned long)total);
+    setenv("OSR_STEP_TOTAL", num, 1);
+    setenv("OSR_STEP_N", "0", 1);
+
+    str_init(&msg);
+    str_addz(&msg, "applying theme '");
+    str_addz(&msg, env_str("OSR_THEME", ""));
+    str_addc(&msg, '\'');
+    if (rice.len > 0) {
+        str_addz(&msg, " over rice '");
+        str_addz(&msg, str_text(&rice));
+        str_addc(&msg, '\'');
+    }
+    str_addz(&msg, " (");
+    str_addl(&msg, (long)total);
+    str_addz(&msg, " layers)");
+    osr_info(str_text(&msg));
+    str_free(&msg);
+
+    pos = 0;
+    while (next_line(str_text(&mods), mods.len, &pos, &line)) {
+        Str mod;
+        if (line.len == 0) continue;
+        n++;
+        sprintf(num, "%lu", (unsigned long)n);
+        setenv("OSR_STEP_N", num, 1);
+        str_init(&mod);
+        str_add(&mod, line.start, line.len);
+        {
+            char prefix[32];
+            osr_debugf("%slayer: %s", osr_step_prefix(prefix, sizeof(prefix)),
+                       str_text(&mod));
+        }
+        if (!run_layer(str_text(&mod)))
+            osr_warnf("layer '%s' failed - skipped (see %s)",
+                      str_text(&mod), env_str("OSR_LOG", "the run log"));
+        str_free(&mod);
+    }
+    str_free(&mods);
+
+    (void)osr_apply_theme_configs();
+    (void)osr_apply_wallpaper();
+    (void)osr_state_set("theme", env_str("OSR_THEME", ""));
+    {
+        char stamp[32];
+        sprintf(stamp, "%ld", (long)time(NULL));
+        (void)osr_state_set("applied", stamp);
+    }
+    str_free(&rice);
+    return 1;
+}
+
 void osr_theme_modules(Str *out, const char *rice) {
     Str list;
     char *buf = NULL;
@@ -253,6 +379,7 @@ static int apply_usage(void) {
     fputs("usage: osr apply <subcommand> [args]\n\n", stderr);
     fputs("  verbs               every mutating verb a theme apply neutralizes\n", stderr);
     fputs("  modules [rice]      the modules that carry a theme layer\n", stderr);
+    fputs("  theme [name]        apply a theme only (§6a): layers, no packages\n", stderr);
     return 2;
 }
 
@@ -266,6 +393,11 @@ int osr_apply_main(int argc, char **argv) {
         osr_apply_verbs(&out);
     } else if (strcmp(argv[1], "modules") == 0 && argc <= 3) {
         osr_theme_modules(&out, argc == 3 ? argv[2] : "");
+    } else if (strcmp(argv[1], "theme") == 0 && argc <= 3) {
+        /* The whole §6a apply. `osr theme <name>` is this, and so is the
+         * runner's --theme-only path. */
+        str_free(&out);
+        return osr_apply_theme(argc == 3 ? argv[2] : "") ? 0 : 1;
     } else {
         str_free(&out);
         return apply_usage();

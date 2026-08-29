@@ -87,67 +87,61 @@ ok "an unknown module reports not themable"
 
 # --- the behaviour the marker exists for --------------------------------------
 #
-# A tree small enough to run install.sh in module mode for real: the libs are
-# stubs, so what is being observed is only which of the two theme paths the
-# module set selected. `osr module themable` runs against THIS tree, so the
-# fixture modules' own markers are what decide it.
+# A tree small enough to run the installer in module mode for real. The runner
+# is C now (`osr install run`, which install.sh is a shim over), so the theme
+# path it took is read where it announces itself rather than out of a stubbed
+# shell function:
+#
+#   themable set        -> "theme: <name>"
+#   non-themable set    -> neither line; nothing is asked and nothing resolved
+#   nothing recorded    -> the picker, which with no TTY says so and takes the
+#                          default theme
+#   a theme recorded    -> that one, with no picker line
+#
+# PATH is reduced to a stub bin so the fixture modules are all that runs.
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT INT TERM
-mkdir -p "$TMP/lib" "$TMP/modules" "$TMP/rices" "$TMP/home"
+mkdir -p "$TMP/lib" "$TMP/modules" "$TMP/rices" "$TMP/home" "$TMP/bin"
 ln -sfn "$OSR_ROOT/build" "$TMP/build"
 ln -sfn "$OSR_ROOT/themes" "$TMP/themes"
 cp "$OSR_ROOT/install.sh" "$TMP/install.sh"
-for _l in common log ui state net git config apply migrate fonts gnome build service; do
-    cp "$OSR_LIB/$_l.sh" "$TMP/lib/$_l.sh" 2>/dev/null || :
+for _f in "$OSR_LIB"/*.sh; do ln -sfn "$_f" "$TMP/lib/$(basename "$_f")"; done
+for _t in sh env cat grep sed awk printf id rm mkdir mktemp test true false tee \
+          cp chmod touch cut tr head sort wc dirname basename find date uname od; do
+    _p=$(command -v "$_t" 2>/dev/null) || :
+    case "$_p" in /*) ln -sf "$_p" "$TMP/bin/$_t" ;; esac
 done
-cat >"$TMP/lib/detect.sh" <<'EOF'
-osr_detect() { :; }
-osr_detect_ram() { :; }
-EOF
-cat >"$TMP/lib/user.sh" <<'EOF'
-osr_resolve_user() { :; }
-as_user() { "$@"; }
-as_root() { "$@"; }
-EOF
-cat >"$TMP/lib/pkg.sh" <<'EOF'
-pkg_install() { :; }
-EOF
-cat >"$TMP/lib/preflight.sh" <<'EOF'
-osr_preflight() { :; }
-EOF
-cat >"$TMP/lib/reload.sh" <<'EOF'
-osr_reload_all() { :; }
-EOF
-# The two paths, each announcing itself. osr_resolve_theme standing in for the
-# picker is the point: reaching it at all is the bug.
-cat >"$TMP/lib/theme.sh" <<'EOF'
-osr_resolve_theme() { printf 'RESOLVED[%s]\n' "${1:-}"; OSR_THEME=${1:-nord}; OSR_THEME_DIR=""; export OSR_THEME OSR_THEME_DIR; }
-osr_unset_theme() { printf 'NOTHEME\n'; OSR_THEME=""; OSR_THEME_DIR=""; export OSR_THEME OSR_THEME_DIR; }
-osr_apply_theme_configs() { :; }
-osr_rice_default_theme() { printf 'nord'; }
-EOF
-printf '# session: x11\n# themable: yes\n' >"$TMP/modules/painted.sh"
-printf '# session: x11\n' >"$TMP/modules/plain.sh"
+printf '#!/bin/sh\n[ "$1" = "-u" ] && shift 2\nexec "$@"\n' >"$TMP/bin/sudo"
+chmod +x "$TMP/bin/sudo"
 
-_run() { env NO_COLOR=1 TERM=dumb OSR_HOME="$TMP/home" OSR_USER=nobody \
-    sh "$TMP/install.sh" --module "$@" </dev/null 2>&1 || :; }
+# The two fixture modules: one declares a theme layer, one does not. They are
+# .sh modules, which also keeps the runner's coexistence path exercised.
+printf '# session: x11\n# themable: yes\n:\n' >"$TMP/modules/painted.sh"
+printf '# session: x11\n:\n' >"$TMP/modules/plain.sh"
+printf 'tester:x:1000:1000::%s:/bin/sh\n' "$TMP/home" >"$TMP/passwd"
+
+_run() {
+    env -i PATH="$TMP/bin" NO_COLOR=1 TERM=dumb USER=tester \
+        HOME="$TMP/home" OSR_PASSWD_FILE="$TMP/passwd" \
+        sh "$TMP/install.sh" --module "$@" </dev/null 2>&1 || :
+}
 
 case "$(_run plain)" in
-    *NOTHEME*) ok "a module set that reads no theme resolves none" ;;
-    *) fail "installing a non-themable module still resolved a theme: $(_run plain)" ;;
+    *"theme: "*) fail "installing a non-themable module still resolved a theme" ;;
+    *) ok "a module set that reads no theme resolves none" ;;
 esac
 case "$(_run painted)" in
-    *RESOLVED*) ok "a themable module still resolves a theme" ;;
+    *"theme: "*) ok "a themable module still resolves a theme" ;;
     *) fail "installing a themable module skipped theme resolution" ;;
 esac
 case "$(_run plain painted)" in
-    *RESOLVED*) ok "one themable module in the set is enough to resolve" ;;
+    *"theme: "*) ok "one themable module in the set is enough to resolve" ;;
     *) fail "a mixed module set skipped theme resolution" ;;
 esac
 # With nothing recorded yet there is no answer to reuse, so the picker path is
-# reached with an empty name - that is what makes it ask.
+# reached - and with no TTY it says so before taking the default.
 case "$(_run painted)" in
-    *"RESOLVED[]"*) ok "no theme applied yet: resolution is left to the picker" ;;
+    *"no interactive terminal"*) ok "no theme applied yet: resolution is left to the picker" ;;
     *) fail "a box with no recorded theme did not reach the picker: $(_run painted)" ;;
 esac
 # ...but once a theme IS applied, it is the answer the picker would ask for, so
@@ -155,23 +149,23 @@ esac
 mkdir -p "$TMP/home/.config/osr"
 printf 'rice=demo\ntheme=nord\n' >"$TMP/home/.config/osr/state"
 case "$(_run painted)" in
-    *"RESOLVED[nord]"*) ok "the theme already applied is used without asking" ;;
+    *"no interactive terminal"*) fail "the recorded theme was ignored: $(_run painted)" ;;
+    *"theme: nord"*) ok "the theme already applied is used without asking" ;;
     *) fail "the recorded theme was ignored: $(_run painted)" ;;
 esac
 # A recorded theme that has since been removed from themes/ is not an answer any
 # more: back to asking, rather than aborting the run over stale state.
 printf 'rice=demo\ntheme=deleted-theme\n' >"$TMP/home/.config/osr/state"
 case "$(_run painted)" in
-    *"RESOLVED[]"*) ok "a recorded theme that no longer exists falls back to asking" ;;
+    *"no interactive terminal"*) ok "a recorded theme that no longer exists falls back to asking" ;;
     *) fail "a stale recorded theme was used: $(_run painted)" ;;
 esac
 rm -f "$TMP/home/.config/osr/state"
 
 # An explicit --theme is an instruction, not a question, so it is honoured even
 # where nothing will read it.
-case "$(env NO_COLOR=1 TERM=dumb OSR_HOME="$TMP/home" OSR_USER=nobody \
-        sh "$TMP/install.sh" --module --theme nord plain </dev/null 2>&1 || :)" in
-    *"RESOLVED[nord]"*) ok "an explicit --theme is honoured for any module set" ;;
+case "$(_run --theme nord plain)" in
+    *"theme: nord"*) ok "an explicit --theme is honoured for any module set" ;;
     *) fail "--theme was dropped for a non-themable module set" ;;
 esac
 

@@ -44,4 +44,19 @@ int osr_apply_is_query(const char *name);
  * run, or a hand-built system) it overshoots rather than under-paints. */
 void osr_theme_modules(Str *out, const char *rice);
 
+/* osr_apply_theme -- the whole theme-only apply, for a caller that has already
+ * resolved the target user (OSR_USER/OSR_HOME).
+ *
+ * Resolve the theme, neutralize every mutating verb for the rest of this
+ * process (osr_set_theme_only), run the theme-carrying modules of the installed
+ * rice with their output on the run log, then the theme's whole-dir configs and
+ * the wallpaper, and record what was applied. A layer that fails is warned
+ * about and skipped: a broken module must not leave the desktop half-painted.
+ *
+ * It lives here rather than in the runner so it can be driven against a
+ * throwaway HOME -- the runner resolves OSR_HOME from passwd, so a test that
+ * drove it through the runner would write to the real home of whoever runs the
+ * suite. */
+int osr_apply_theme(const char *name);
+
 #endif /* OSR_APPLY_H */

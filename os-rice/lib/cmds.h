@@ -13,6 +13,12 @@
 
 int osr_ui_main(int argc, char **argv);       /* lib/ui.sh */
 int osr_log_main(int argc, char **argv);      /* lib/log.sh */
+
+/* osr_log_step -- an [INFO] line carrying the "[03/12] " step counter, for a
+ * caller inside this process (the runner, per module). osr_step_prefix is that
+ * counter alone, for a caller composing its own line; buf must hold 32 bytes. */
+void osr_log_step(const char *msg);
+const char *osr_step_prefix(char *buf, size_t buf_sz);
 int osr_state_main(int argc, char **argv);    /* lib/state.sh */
 
 /* osr_state_get / osr_state_set -- the state file from inside this process,
@@ -35,6 +41,23 @@ int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
 /* osr_theme_meta -- a theme's single-valued `key: value` field, appended to
  * out and left empty when the theme does not define it (osr_theme_meta). */
 void osr_theme_meta(Str *out, const char *theme, const char *key);
+
+/* The shell-callable half of lib/theme.sh, in process. The shim existed to set
+ * OSR_THEME/OSR_THEME_DIR for everything downstream; a C caller sets them with
+ * setenv and every child it forks inherits them, which is what `export` bought.
+ *
+ * osr_resolve_theme is fatal on a name that is not a theme -- the user typed
+ * that one, and guessing at it paints the wrong desktop silently. With no name
+ * it asks (the numbered picker on /dev/tty), and with no terminal to ask on it
+ * takes $OSR_DEFAULT_THEME. */
+int osr_theme_exists(const char *name);
+void osr_theme_list(Str *out);
+void osr_theme_menu(Str *out);
+void osr_theme_configs(Str *out, const char *name);
+void osr_rice_default_theme(Str *out, const char *rice);
+void osr_resolve_theme(const char *want);
+void osr_unset_theme(void);
+int osr_apply_theme_configs(void);
 
 /* osr_theme_read_lines -- a manifest's directive lines, as a `while IFS= read`
  * loop over `osr theme lines` would have seen them (lib/theme.c). */
@@ -75,6 +98,12 @@ void osr_module_names(Str *out);
 /* osr_module_themable -- does this module consume the resolved theme? Drives
  * whether install.sh has any reason to ask which theme to use. */
 int osr_module_themable(const char *name);
+
+/* osr_module_has / osr_module_run -- the C module tier, called in process
+ * rather than through `osr module ...`. theme_only is the §6a pass. Run
+ * returns 1 for success; the caller decides whether a failure ends the run. */
+int osr_module_has(const char *name);
+int osr_module_run(const char *name, int theme_only);
 int osr_testrun_main(int argc, char **argv);  /* test/run.sh */
 
 #endif /* OSR_CMDS_H */

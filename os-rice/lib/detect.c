@@ -730,40 +730,120 @@ static void detect_virt(Facts *f) {
 
 /* --- output ---------------------------------------------------------------- */
 
-static void emit_num(Str *out, const char *name, long v) {
+/* --- publishing the facts --------------------------------------------------
+ *
+ * A fact reaches its consumer one of two ways, and both must name the same set:
+ * printed as a shell assignment for `eval` (what lib/detect.sh does), or set in
+ * this process's environment for the runner and every child it forks. So the
+ * emitters take a SINK and the two spellings are one list, not two -- a fact
+ * added to one is added to both, which is the drift this shape exists to
+ * prevent.
+ */
+typedef void (*Sink)(void *ctx, const char *name, const char *value);
+
+static void sh_sink(void *ctx, const char *name, const char *value) {
+    sh_assign((Str *)ctx, name, value);
+}
+static void env_sink(void *ctx, const char *name, const char *value) {
+    (void)ctx;
+    setenv(name, value, 1);
+}
+
+static void emit_num(Sink put, void *ctx, const char *name, long v) {
     Str s;
     str_init(&s);
     str_addl(&s, v);
-    sh_assign(out, name, str_text(&s));
+    put(ctx, name, str_text(&s));
     str_free(&s);
 }
 
-static void emit_cpu(Str *out, const Facts *f) {
-    sh_assign(out, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
-    sh_assign(out, "OSR_CPU_MODEL", str_text(&f->cpu_model));
-    sh_assign(out, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
-    emit_num(out, "OSR_CPU_CORES", f->cpu_cores);
-    emit_num(out, "OSR_CPU_THREADS", f->cpu_threads);
+static void emit_cpu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
+    put(ctx, "OSR_CPU_MODEL", str_text(&f->cpu_model));
+    put(ctx, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
+    emit_num(put, ctx, "OSR_CPU_CORES", f->cpu_cores);
+    emit_num(put, ctx, "OSR_CPU_THREADS", f->cpu_threads);
 }
 
-static void emit_ram(Str *out, const Facts *f) {
-    sh_assign(out, "OSR_RAM_TOTAL", str_text(&f->ram_total));
-    sh_assign(out, "OSR_RAM_TYPE", str_text(&f->ram_type));
-    sh_assign(out, "OSR_RAM_SPEED", str_text(&f->ram_speed));
-    emit_num(out, "OSR_RAM_STICKS", f->ram_sticks);
-    emit_num(out, "OSR_RAM_CHANNELS", f->ram_channels);
+static void emit_ram(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_RAM_TOTAL", str_text(&f->ram_total));
+    put(ctx, "OSR_RAM_TYPE", str_text(&f->ram_type));
+    put(ctx, "OSR_RAM_SPEED", str_text(&f->ram_speed));
+    emit_num(put, ctx, "OSR_RAM_STICKS", f->ram_sticks);
+    emit_num(put, ctx, "OSR_RAM_CHANNELS", f->ram_channels);
 }
 
-static void emit_gpu(Str *out, const Facts *f) {
-    sh_assign(out, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
-    sh_assign(out, "OSR_GPU_MODEL", str_text(&f->gpu_model));
-    emit_num(out, "OSR_GPU_COUNT", f->gpu_count);
-    sh_assign(out, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
+static void emit_gpu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
+    put(ctx, "OSR_GPU_MODEL", str_text(&f->gpu_model));
+    emit_num(put, ctx, "OSR_GPU_COUNT", f->gpu_count);
+    put(ctx, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
 }
 
-static void emit_npu(Str *out, const Facts *f) {
-    sh_assign(out, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
-    emit_num(out, "OSR_NPU_COUNT", f->npu_count);
+static void emit_npu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
+    emit_num(put, ctx, "OSR_NPU_COUNT", f->npu_count);
+}
+
+/* emit_release -- the ten os-release/arch facets, which `all` alone publishes. */
+static void emit_release(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_DISTRO", str_text(&f->distro));
+    put(ctx, "OSR_PKG", str_text(&f->pkg));
+    put(ctx, "OSR_INIT", str_text(&f->init));
+    put(ctx, "OSR_CODENAME", str_text(&f->codename));
+    put(ctx, "OSR_VERSION_ID", str_text(&f->version_id));
+    put(ctx, "OSR_VERSION", str_text(&f->version));
+    put(ctx, "OSR_ID_LIKE", str_text(&f->id_like));
+    put(ctx, "OSR_ARCH", str_text(&f->arch));
+    put(ctx, "OSR_ARCH_DEB", str_text(&f->arch_deb));
+    put(ctx, "OSR_ETC_DEFAULT", str_text(&f->etc_default));
+}
+
+/* detect_all -- every probe, in the order `osr detect all` runs them, published
+ * through `put`. Returns 0 when no package manager was found, which is the one
+ * line osr_detect printed. */
+static int detect_all(Sink put, void *ctx, Facts *f) {
+    detect_release(f);
+    detect_arch(f);
+    detect_pkg(f);
+    detect_init(f);
+    emit_release(put, ctx, f);
+    detect_cpu(f);
+    emit_cpu(put, ctx, f);
+    detect_ram(f);
+    emit_ram(put, ctx, f);
+    detect_gpu(f);
+    emit_gpu(put, ctx, f);
+    detect_npu(f);
+    emit_npu(put, ctx, f);
+    detect_virt(f);
+    put(ctx, "OSR_VIRT", str_text(&f->virt));
+    return f->pkg.len != 0;
+}
+
+/* osr_detect_export -- osr_detect, straight into this process's environment.
+ * `what` is "all" or one probe's name ("ram", the one the runner re-runs after
+ * warming a sudo ticket, because the DMI half of it needs root). */
+void osr_detect_export(const char *what) {
+    Facts f;
+
+    facts_init(&f);
+    if (strcmp(what, "all") == 0) {
+        if (!detect_all(env_sink, NULL, &f))
+            osr_warnf("could not detect a package manager (OSR_DISTRO='%s')",
+                      str_text(&f.distro));
+    } else if (strcmp(what, "cpu") == 0) {
+        detect_arch(&f); detect_cpu(&f); emit_cpu(env_sink, NULL, &f);
+    } else if (strcmp(what, "ram") == 0) {
+        detect_ram(&f); emit_ram(env_sink, NULL, &f);
+    } else if (strcmp(what, "gpu") == 0) {
+        detect_gpu(&f); emit_gpu(env_sink, NULL, &f);
+    } else if (strcmp(what, "npu") == 0) {
+        detect_npu(&f); emit_npu(env_sink, NULL, &f);
+    } else if (strcmp(what, "virt") == 0) {
+        detect_virt(&f);
+        setenv("OSR_VIRT", str_text(&f.virt), 1);
+    }
 }
 
 /* cmd_gpu_chip -- osr_gpu_chip: the chip codename of the first <vendor> GPU,
@@ -817,57 +897,28 @@ int osr_detect_main(int argc, char **argv) {
     str_init(&out);
 
     if (strcmp(what, "all") == 0) {
-        detect_release(&f);
-        detect_arch(&f);
-        detect_pkg(&f);
-        detect_init(&f);
-        sh_assign(&out, "OSR_DISTRO", str_text(&f.distro));
-        sh_assign(&out, "OSR_PKG", str_text(&f.pkg));
-        sh_assign(&out, "OSR_INIT", str_text(&f.init));
-        sh_assign(&out, "OSR_CODENAME", str_text(&f.codename));
-        sh_assign(&out, "OSR_VERSION_ID", str_text(&f.version_id));
-        sh_assign(&out, "OSR_VERSION", str_text(&f.version));
-        sh_assign(&out, "OSR_ID_LIKE", str_text(&f.id_like));
-        sh_assign(&out, "OSR_ARCH", str_text(&f.arch));
-        sh_assign(&out, "OSR_ARCH_DEB", str_text(&f.arch_deb));
-        sh_assign(&out, "OSR_ETC_DEFAULT", str_text(&f.etc_default));
-        detect_cpu(&f);
-        emit_cpu(&out, &f);
-        detect_ram(&f);
-        emit_ram(&out, &f);
-        detect_gpu(&f);
-        emit_gpu(&out, &f);
-        detect_npu(&f);
-        emit_npu(&out, &f);
-        detect_virt(&f);
-        sh_assign(&out, "OSR_VIRT", str_text(&f.virt));
+        int found = detect_all(sh_sink, &out, &f);
         out_flush(&out);
         str_free(&out);
         /* `[ -n "$OSR_PKG" ] || warn ...` -- the one line osr_detect printed. */
-        if (f.pkg.len == 0) {
-            Str msg;
-            str_init(&msg);
-            str_addz(&msg, "could not detect a package manager (OSR_DISTRO='");
-            str_addz(&msg, str_text(&f.distro));
-            str_addz(&msg, "')");
-            osr_warn(str_text(&msg));
-            str_free(&msg);
-        }
+        if (!found)
+            osr_warnf("could not detect a package manager (OSR_DISTRO='%s')",
+                      str_text(&f.distro));
         return 0;
     }
     if (strcmp(what, "cpu") == 0) {
         detect_arch(&f);
         detect_cpu(&f);
-        emit_cpu(&out, &f);
+        emit_cpu(sh_sink, &out, &f);
     } else if (strcmp(what, "ram") == 0) {
         detect_ram(&f);
-        emit_ram(&out, &f);
+        emit_ram(sh_sink, &out, &f);
     } else if (strcmp(what, "gpu") == 0) {
         detect_gpu(&f);
-        emit_gpu(&out, &f);
+        emit_gpu(sh_sink, &out, &f);
     } else if (strcmp(what, "npu") == 0) {
         detect_npu(&f);
-        emit_npu(&out, &f);
+        emit_npu(sh_sink, &out, &f);
     } else if (strcmp(what, "virt") == 0) {
         detect_virt(&f);
         sh_assign(&out, "OSR_VIRT", str_text(&f.virt));
