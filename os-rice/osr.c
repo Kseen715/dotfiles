@@ -19,6 +19,7 @@
  *   osr config …    layered config, owned blocks, composed files
  *   osr benchmark … CPU throughput/power measurement (no .sh ancestor)
  *   osr undervolt … CPU voltage offsets (no .sh ancestor: new here)
+ *   osr wallpaper … set or query the current theme's wallpaper (wallpaper.sh)
  *   osr test-run …  the test suite runner
  *
  * The remaining .sh files (lib/ui.sh, lib/log.sh, lib/state.sh, lib/user.sh,
@@ -64,6 +65,7 @@ static const Command commands[] = {
     { "reload",   osr_reload_main,  "tell the running apps to re-read their config" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
+    { "wallpaper", osr_wallpaper_main, "set or query the current theme's wallpaper" },
     { "test-run", osr_testrun_main, "run the test suite" }
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))

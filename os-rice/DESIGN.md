@@ -901,6 +901,7 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/install.c` (the runner) | `install.sh`'s body | the whole orchestration: detection and identity into this process's environment, the theme-only path, the report, the sudo warm-up, the manifest, the module loop, the state write and the closing line. `install.sh` is a shim over `osr install run` — the reason it could not leave the shell was that it SOURCED each module, and no module is a shell script any more. A `.sh` module that appears again still runs: the core hands it to a shell with the libs sourced around it, which is the same command `install.sh` ran |
 | `lib/theme.c` (the shell half) | `lib/theme.sh` (part) | `osr_resolve_theme` / `osr_unset_theme` / `osr_apply_theme_configs`. The shim existed to `export` OSR_THEME/OSR_THEME_DIR for everything downstream; `setenv` is that, and every child the runner forks inherits it |
 | `lib/apply.c` | `lib/apply.sh` | the whole §6a hotkey path: the two lists it is built out of (the mutating verbs it neutralizes, and the modules that carry a theme layer), and the apply itself — resolve, neutralize every mutating verb for the rest of the process, run the theme-carrying layers with their output on the run log, then the theme's whole-dir configs, the wallpaper and the state write. `osr apply theme <name>` is it, and it stays in a lib rather than in the runner so a test can drive it against a throwaway `$HOME` — the runner resolves `OSR_HOME` from passwd, so a test driving it through the runner would write to the real one |
+| `lib/wallpaper_front.c` | `wallpaper.sh` | the wallpaper front end: the option loop, the current-theme resolution and the four actions (show, `--list`, `--next`, set). The family underneath — resolve, install, record, set-live, library, pick — was already `lib/config.c`'s, so this is the dispatcher around it. Named `wallpaper_front.c` because `lib/wallpaper.c` is the Windows core's own unit. `wallpaper.sh` is a shim over `osr wallpaper`, the same shape `install.sh` has, and stays sh because a picker or a hotkey already names that path |
 
 ### Remaining, in the order the dependencies force
 
@@ -911,8 +912,8 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 | `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers. `lib/config.c` holds the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer and the whole wallpaper family (resolve, install, record, set, library, pick) — i.e. everything a module needs. The file is the tests' reference |
 | `lib/user.sh` | 153 | **the writing half is C now**: `osr_set_login_shell`, `osr_register_shell` and the `/etc/passwd` rewrite live in `lib/user.c`, because `osr_run_root` is `as_root` without a shell. What stays is `as_user`/`as_root` themselves and the thin wrappers around `osr user` — and nothing in the tree calls them any more, so this file is the tests' reference like the three above it |
 | `lib/apply.sh` | 173 | **done**: `osr_apply_theme` is `lib/apply.c`'s. What is left is `osr_apply_stub_mutators`, which redefines shell functions for shell modules sourced next — and there are none, so it protects nothing. Its C counterpart is what actually runs: `osr_theme_only()` (lib/module.h), a flag the mutating entry points of `pkg/build/fetch/git/service/nerdfont` check. The sh list is derived and the C one enumerated; `test/unit/theme_apply.sh` holds them together |
-| `wallpaper.sh` `osr` | 225 | the front end, and **the only real remainder**. Both are dispatchers: `osr` maps a verb to `install.sh`/`wallpaper.sh`, and `wallpaper.sh` maps one to `osr config`. Neither has logic left to port — what they need is an argv table in C and a decision about whether `osr` stays a script people can read |
-| `install.sh` | 38 | **a shim.** Three lines of path setup, one `. lib/ui.sh` for the `OSR_BIN` it resolves, and `exec "$OSR_BIN" install run "$@"`. It stays sh because it is the entry point people and scripts already type |
+| `osr` | 140 | the front end, and **the only real remainder**. It is a dispatcher: a verb maps to `install.sh`/`wallpaper.sh`, or asks the core a question. No logic left to port — what it needs is an argv table in C and a decision about whether `osr` stays a script people can read, being the one file a person opens to find out what the harness can do |
+| `install.sh` `wallpaper.sh` | 38 + 31 | **shims, both.** Three lines of path setup, one `. lib/ui.sh` for the `OSR_BIN` it resolves, and `exec "$OSR_BIN" install run "$@"` / `exec "$OSR_BIN" wallpaper "$@"`. They stay sh because they are the entry points people, scripts, pickers and hotkeys already type |
 | `modules/*.sh` | **0 files, 0 lines** | **all 120 are C**, registered in `lib/modules.c`, each with its sh original frozen at `test/ref/<name>_sh_ref.sh` and diffed by `test/unit/module_c_parity.sh`. See [[#11a. Every `.sh` module is legacy — and there are none left\|11a]] |
 
 > [!note] `bootstrap.sh` is not on this list
@@ -923,8 +924,9 @@ API is `lib/module.h`. What changes is the language the backbone is written in.
 > Byte-for-byte identical output, asserted, or it is not a port.
 
 Every unit's shell original is frozen under `test/ref/` and diffed by
-`test/unit/*_c_parity.sh` — 2385 checks over the libs, the runner and all 120
-modules, and exactly one accepted divergence, asserted rather than hidden. A port
+`test/unit/*_c_parity.sh` — 2385 checks over the libs, the runner, the two front
+ends and all 120 modules, and a handful of accepted divergences, each asserted in
+the test that would otherwise have caught it rather than hidden. A port
 that cannot be diffed this way (`helpers.c`, which never had a `.sh` form)
 asserts its behaviour directly instead.
 

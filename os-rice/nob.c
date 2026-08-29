@@ -169,6 +169,7 @@ static const char *posix_srcs[] = {
     "lib/pkg.c",
     "lib/build.c",
     "lib/config.c",
+    "lib/wallpaper_front.c",
     "lib/git.c",
     "lib/service.c",
     "lib/preflight.c",

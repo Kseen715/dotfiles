@@ -104,6 +104,10 @@ int osr_module_themable(const char *name);
  * returns 1 for success; the caller decides whether a failure ends the run. */
 int osr_module_has(const char *name);
 int osr_module_run(const char *name, int theme_only);
+/* osr_wallpaper_main -- wallpaper.sh: set or query the current theme's
+ * wallpaper. Its own command rather than a mode of `osr install`, the same
+ * separation wallpaper.sh has from install.sh: this is not an install. */
+int osr_wallpaper_main(int argc, char **argv);/* wallpaper.sh */
 int osr_testrun_main(int argc, char **argv);  /* test/run.sh */
 
 #endif /* OSR_CMDS_H */
