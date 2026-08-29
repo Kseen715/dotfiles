@@ -19,7 +19,7 @@ p_warn() { printf '  %bWARN%b %s\n' "$OSR_YELLOW" "$OSR_NC" "$*"; }
 p_fail() { printf '  %bFAIL%b %s\n' "$OSR_RED" "$OSR_NC" "$*" >&2; }
 
 sec "POSIX sh syntax ($SH_CHECKER -n):"
-SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
+SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr"
 SH_FILES="$SH_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" "$OSR_ROOT/test" -name '*.sh' 2>/dev/null)"
 for f in $SH_FILES; do
     if "$SH_CHECKER" -n "$f" 2>/dev/null; then
@@ -61,7 +61,7 @@ fi
 sec "ASCII-only program output (non-comment lines):"
 # Scope: the installer program (lib + modules + runners), not the test harness
 # (matrix.sh legitimately keeps em-dashes in trailing comments).
-ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
+ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr"
 ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" -name '*.sh' 2>/dev/null)"
 # shellcheck disable=SC2086  # intentional word-split into a file list
 _ascii_hits=$(LC_ALL=C awk '

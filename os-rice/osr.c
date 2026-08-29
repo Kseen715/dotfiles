@@ -22,9 +22,10 @@
  *   osr wallpaper … set or query the current theme's wallpaper (wallpaper.sh)
  *   osr test-run …  the test suite runner
  *
- * The remaining .sh files are `osr`, `install.sh`, `wallpaper.sh` and
- * `bootstrap.sh` -- entry points people, scripts, pickers and hotkeys already
- * type, plus the one file that runs before a compiler is a given. Nothing in
+ * The remaining .sh files are `osr`, `install.sh` and `wallpaper.sh` -- entry
+ * points people, scripts, pickers and hotkeys already type. `osr` is also the
+ * one file that runs before a compiler is a given: its self-bootstrap block is
+ * what `bootstrap.sh` used to be. Nothing in
  * lib/ is sourced by any of them any more: `startup_env` below is what
  * lib/ui.sh's shell-level state became, and it belongs here because the
  * process that has to make those decisions once, for every child it forks,

@@ -87,9 +87,8 @@ os-rice/
   themes/<name>/       theme.list + config/ (the 90-* layers) + wallpapers/
   install.sh           the shared runner: sources the libs and the modules
   wallpaper.sh         set/query the wallpaper of the current theme
-  osr                  front-end CLI
+  osr                  front-end CLI, and the `curl | sh` barebone entry
   osr.ps1 / osr.bat    the Windows front end, mirroring it
-  bootstrap.sh         barebone entry: find downloader, clone, hand off
   nob.c                the build script (a C program, not a Makefile)
   test/                lint + hermetic unit tests + docker matrix
     ref/               frozen sh implementations the C ports are diffed at
@@ -133,7 +132,17 @@ build/osr benchmark cpu                # core command; ./osr has no verb for it
 On a barebone box with no clone yet:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/bootstrap.sh | sh -s -- gruvbox
+curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/osr | sh -s -- install gruvbox
+```
+
+`osr` piped from curl has no checkout around it, so it installs git and a C
+compiler, clones the repo to `$OSR_DEST` (default
+`~/.local/share/os-rice-dotfiles`) and re-execs itself from there with the same
+arguments. Run from inside a checkout it does none of that. To see what a box
+is missing without touching it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/osr | sh -s -- --check
 ```
 
 `--verbose` streams command output instead of spinners — automatic when stdout

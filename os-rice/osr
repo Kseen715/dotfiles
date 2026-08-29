@@ -40,6 +40,15 @@
 #                                                    whether this machine can
 #                                                    be undervolted at all.
 #   osr test                                         run the test suite
+#   osr --check                                      report what a barebone box
+#                                                    is missing, then exit
+#
+# It is also the barebone entry point. Piped from curl there is no checkout
+# yet, so it installs git and a compiler, clones the repo and re-execs the
+# copy inside it with the same arguments:
+#
+#   curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/osr \
+#       | sh -s -- install gruvbox
 #
 # switch and install share one idempotent engine (`osr install run`, which
 # install.sh is a shim over -- it delegates here): because installs never uninstall and install_layer
@@ -48,7 +57,156 @@
 # (osr_theme_only, lib/module.h) - one code path, three verbs.
 set -eu
 
-OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+# --- self-bootstrap: the `curl | sh` entry point ------------------------------
+#
+# This is the one file that can run BEFORE the tree it drives exists. Piped
+# from curl, $0 is `sh` and there is no checkout anywhere, so the detached case
+# installs git and a C compiler, clones the repo, and re-execs the copy inside
+# it with the arguments it was given.
+#
+#   sh -s -- --check      report the detected downloader, pkg manager, git, cc
+#
+# Env overrides:
+#   OSR_REPO_URL   git URL of the dotfiles repo (default below)
+#   OSR_DEST       where to clone (default: ~/.local/share/os-rice-dotfiles)
+#
+# It lives here rather than in a bootstrap.sh beside it for the same reason
+# install.sh and wallpaper.sh delegate here: the URL people are told to pipe
+# should be the same program they run afterwards, so there is no second entry
+# point to keep in step with this one. Nothing in this block compiles -- it
+# runs before a toolchain is a given, and its whole job is to make one present
+# (archive-decisions A2).
+
+# Detached when this file is running without the tree it drives around it:
+# piped from curl, or copied somewhere on its own. Two independent signals,
+# because either one alone has a false positive:
+#
+#   $0 is a readable file -- piped from a pipe there is no file at all, $0 is
+#       just the shell's own name ("sh"), so dirname lands on the cwd;
+#   lib/ sits beside it -- a lone copy of this file has a real $0 and a
+#       perfectly good dirname, and still drives nothing.
+#
+# The marker is lib/ rather than a build input like nob.c because the question
+# is whether the rest of THIS script can find what it needs, not whether the
+# directory is a source checkout: the test sandboxes assemble a root out of
+# symlinks with no build inputs in it, and they are checkouts for this purpose.
+# Run from a real one, neither the clone nor the installs below happen.
+OSR_SELF_DIR=$(cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) || OSR_SELF_DIR=
+osr_detached() {
+    [ -n "$OSR_SELF_DIR" ] && [ -f "$0" ] && [ -d "$OSR_SELF_DIR/lib" ] && return 1
+    return 0
+}
+
+_bs_log() { printf '[bootstrap] %s\n' "$*"; }
+_bs_die() { printf '[bootstrap] error: %s\n' "$*" >&2; exit 1; }
+
+# _bs_have_cc -- is there a C compiler? A precondition, not a nicety: the
+# harness-core block further down builds build/osr out of nob.c on a fresh
+# checkout, so a box that got git and nothing else clones fine and then dies
+# one line later.
+_bs_have_cc() {
+    # $CC may be a command line ("zig cc"), so probe its first word.
+    # shellcheck disable=SC2086  # deliberate split, see above
+    set -- ${CC:-cc}
+    command -v "$1" >/dev/null 2>&1 ||
+        command -v cc >/dev/null 2>&1 ||
+        command -v gcc >/dev/null 2>&1 ||
+        command -v clang >/dev/null 2>&1
+}
+
+if osr_detached; then
+    OSR_REPO_URL=${OSR_REPO_URL:-https://github.com/Kseen715/dotfiles.git}
+    OSR_DEST=${OSR_DEST:-"$HOME/.local/share/os-rice-dotfiles"}
+
+    # _bs_downloader -- echo curl | wget | busybox-wget | "" (barebone-first).
+    _bs_downloader() {
+        if command -v curl >/dev/null 2>&1; then
+            echo curl
+        elif command -v wget >/dev/null 2>&1; then
+            echo wget
+        elif command -v busybox >/dev/null 2>&1 && busybox wget --help >/dev/null 2>&1; then
+            echo busybox-wget
+        else
+            echo ""
+        fi
+    }
+
+    # _bs_pkg -- echo the native package manager, for pulling git and cc.
+    _bs_pkg() {
+        for _p in apt-get dnf pacman apk xbps-install emerge; do
+            if command -v "$_p" >/dev/null 2>&1; then
+                case "$_p" in
+                    apt-get) echo apt ;;
+                    xbps-install) echo xbps ;;
+                    emerge) echo portage ;;
+                    *) echo "$_p" ;;
+                esac
+                return 0
+            fi
+        done
+        echo ""
+    }
+
+    _bs_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi; }
+
+    # _bs_add <apt> <dnf> <pacman> <apk> <xbps> <portage> -- one package, named
+    # per manager. Only two things are ever pulled here (git, a compiler), so a
+    # positional row beats a second copy of the case.
+    _bs_add() {
+        case "$(_bs_pkg)" in
+            apt)     _bs_root env DEBIAN_FRONTEND=noninteractive apt-get update -q &&
+                     _bs_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$1" ;;
+            dnf)     _bs_root dnf install -y "$2" ;;
+            pacman)  _bs_root pacman -Sy --needed --noconfirm "$3" ;;
+            apk)     _bs_root apk add "$4" ;;
+            xbps)    _bs_root xbps-install -y "$5" ;;
+            portage) _bs_root emerge --quiet --noreplace --getbinpkg "$6" ;;
+            *)       _bs_die "no package manager found to install $1" ;;
+        esac
+    }
+
+    if [ "${1:-}" = "--check" ]; then
+        _dl=$(_bs_downloader)
+        [ -n "$_dl" ] || _bs_die "no downloader found (need curl, wget, or busybox)"
+        _bs_log "downloader: $_dl"
+        _bs_log "pkg manager: $(_bs_pkg)"
+        if command -v git >/dev/null 2>&1; then _bs_log "git: present"; else _bs_log "git: missing (would install)"; fi
+        if _bs_have_cc; then _bs_log "cc: present"; else _bs_log "cc: missing (would install)"; fi
+        exit 0
+    fi
+
+    [ -n "$(_bs_downloader)" ] || _bs_die "no downloader found (need curl, wget, or busybox)"
+
+    if ! command -v git >/dev/null 2>&1; then
+        _bs_log "git not found - installing via $(_bs_pkg)"
+        _bs_add git git git git git dev-vcs/git
+    fi
+    if ! _bs_have_cc; then
+        _bs_log "no C compiler found - installing via $(_bs_pkg)"
+        _bs_add build-essential gcc base-devel build-base gcc sys-devel/gcc
+    fi
+
+    if [ -d "$OSR_DEST/.git" ]; then
+        _bs_log "updating existing clone at $OSR_DEST"
+        git -C "$OSR_DEST" pull --ff-only
+    else
+        _bs_log "cloning $OSR_REPO_URL -> $OSR_DEST"
+        mkdir -p "$(dirname -- "$OSR_DEST")"
+        git clone --depth 1 "$OSR_REPO_URL" "$OSR_DEST"
+    fi
+
+    _bs_log "handing off to $OSR_DEST/os-rice/osr"
+    exec sh "$OSR_DEST/os-rice/osr" "$@"
+fi
+
+# --check inside a checkout is the same question, answered by the same code
+# path -- re-exec nothing, just report and leave.
+if [ "${1:-}" = "--check" ]; then
+    _bs_log "checkout: $OSR_SELF_DIR"
+    if command -v git >/dev/null 2>&1; then _bs_log "git: present"; else _bs_log "git: missing"; fi
+    if _bs_have_cc; then _bs_log "cc: present"; else _bs_log "cc: missing"; fi
+    exit 0
+fi
 
 # --- the harness core --------------------------------------------------------
 #
@@ -154,7 +312,7 @@ case "$_cmd" in
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")
-        sed -n '2,41p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,51p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, benchmark, undervolt, list, themes, modules, test)" >&2

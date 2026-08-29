@@ -114,9 +114,13 @@ diffed against, run side by side under stubbed tooling. The seventeenth,
 `lib/ui.sh`, is the one with a real caller, and for one line — it resolves
 `$OSR_BIN` and builds it if the checkout never has been. See [[#13. The port, and what is left of it|§13]].
 
-> [!important] `bootstrap.sh` compiles nothing
-> It runs before a toolchain is a given and stays pure sh. Past that point the
-> tool assumes a C compiler. See [[archive-decisions#A2|A2]].
+> [!important] `osr`'s self-bootstrap compiles nothing
+> The block at the top of `osr` — the `curl | sh` path that installs git and a
+> compiler, clones the repo and re-execs from the clone — runs before a
+> toolchain is a given and stays pure sh. Past that point the tool assumes a C
+> compiler, which is why that block's job is to make one present. It was
+> `bootstrap.sh` until it moved into `osr`, so that the URL people pipe is the
+> same program they run afterwards. See [[archive-decisions#A2|A2]].
 
 **Contract:** byte-for-byte identical output. The sh version is frozen under
 `test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 2385
@@ -882,7 +886,7 @@ loop is also where peak temperature and peak clock come from.
 ## 13. The port, and what is left of it
 
 The target is one binary, reached by three entry-point shims and put on disk by
-`bootstrap.sh`. **`bootstrap.sh` + `osr` + `install.sh` + `wallpaper.sh` is the
+`osr` itself. **`osr` + `install.sh` + `wallpaper.sh` is the
 complete set of `.sh` files the finished tree contains** — everything else is C.
 Nothing about the design changes to get there: the libs keep their
 responsibilities, the manifests keep their format, the module API is
@@ -915,7 +919,7 @@ responsibilities, the manifests keep their format, the module API is
 
 ### Remaining
 
-**The target is `bootstrap.sh` plus the three shims, and nothing else in sh.**
+**The target is `osr` plus the two shims, and nothing else in sh.**
 Against that target the *program* is finished: **no `.sh` file under `lib/` is
 sourced or called by anything in the shipped tree.** `osr`, `install.sh`,
 `wallpaper.sh`, `lib/*.c` and `modules/*.c` between them reference none of
@@ -926,9 +930,8 @@ and it goes when the tests that execute it do.
 
 | what | lines | why it is sh |
 | --- | --- | --- |
-| `bootstrap.sh` | 96 | runs before a compiler is a given, and stays sh forever |
-| `osr` | 163 | the front end, and the one file that still does something: it resolves `$OSR_BIN`, **builds it with `nob.c` if the checkout has never been built**, and dispatches. That bootstrap cannot move into the binary — a script cannot exec the program that tells it where the program is — so it lives here, once |
-| `install.sh` `wallpaper.sh` | 33 + 22, of which 2 each is code | one `exec "$(dirname $0)/osr" install "$@"` each. They **delegate rather than resolve**, so the bootstrap is not copied three times, and they stay sh because people, scripts, pickers and hotkeys already type these paths |
+| `osr` | 300 | the front end, and the one file that still does something. Two bootstraps, neither of which can move into the binary: it **self-bootstraps** — piped from curl there is no checkout, so it installs git and a compiler, clones to `$OSR_DEST` and re-execs itself from the clone — and then resolves `$OSR_BIN`, **building it with `nob.c` if the checkout has never been built**. A script cannot exec the program that tells it where the program is, so both live here, once. The first half was `bootstrap.sh`; it merged in so the URL people pipe is the same program they run afterwards, rather than a second entry point to keep in step |
+| `install.sh` `wallpaper.sh` | 33 + 22, of which 2 each is code | one `exec "$(dirname $0)/osr" install "$@"` each. They **delegate rather than resolve**, so the bootstraps are not copied three times, and they stay sh because people, scripts, pickers and hotkeys already type these paths |
 
 Everything `lib/ui.sh` used to establish around those shims — the exported
 palette, `$OSR_LOG`, the step counters — is `osr.c`'s `startup_env()` now. It
