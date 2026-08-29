@@ -28,7 +28,7 @@
 /* The two root-owned drop-ins this module writes, verbatim. */
 static const char *const XINITRC =
     "#!/bin/sh\n"
-    "# Seeded once by os-rice (modules/xorg.sh) — yours to edit, never rewritten.\n"
+    "# Seeded once by os-rice (modules/xorg.c) - yours to edit, never rewritten.\n"
     "[ -r \"$HOME/.xprofile\" ] && . \"$HOME/.xprofile\"\n"
     "[ -r /etc/X11/xinit/xinitrc.d ] && for f in /etc/X11/xinit/xinitrc.d/*.sh; do\n"
     "    [ -r \"$f\" ] && . \"$f\"\n"

@@ -431,6 +431,19 @@ void osr_sb_reset(OsrSandbox *sb) {
  * sandbox environment and nothing else. Returns the exit status; a program
  * that could not be started is 127, which is what a shell would have said.
  */
+/* h_stdin_path -- the file the next run reads as stdin, or "" for /dev/null.
+ * Set by osr_sb_stdin and cleared after one run, so a verb that reads stdin is
+ * fed deliberately and nothing else inherits the terminal. */
+static HStr h_stdin_file;
+static int h_stdin_ready = 0;
+
+void osr_sb_stdin(OsrSandbox *sb, const char *text) {
+    if (!h_stdin_ready) { hs_init(&h_stdin_file); h_stdin_ready = 1; }
+    osr_sb_write(sb, ".stdin", text, 0644);
+    hs_reset(&h_stdin_file);
+    hs_path(&h_stdin_file, hs_text(&sb->root), ".stdin");
+}
+
 static int h_run(OsrSandbox *sb, char **argv) {
     pid_t pid;
     int status;
@@ -443,10 +456,18 @@ static int h_run(OsrSandbox *sb, char **argv) {
          * line went to is itself part of what is being frozen. */
         if (freopen(hs_text(&sb->out), "wb", stdout) == NULL) _exit(127);
         if (freopen(hs_text(&sb->err), "wb", stderr) == NULL) _exit(127);
+        /* stdin is /dev/null unless the scenario fed something in: a verb that
+         * reads stdin must never reach the terminal running the suite. */
+        if (h_stdin_ready && hs_text(&h_stdin_file)[0] != '\0') {
+            if (freopen(hs_text(&h_stdin_file), "rb", stdin) == NULL) _exit(127);
+        } else {
+            if (freopen("/dev/null", "rb", stdin) == NULL) _exit(127);
+        }
         execve(argv[0], argv, sb->env);
         _exit(127);
     }
     if (waitpid(pid, &status, 0) < 0) h_die("waitpid");
+    if (h_stdin_ready) hs_reset(&h_stdin_file);   /* one run, one feeding */
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return 1;
 }
@@ -857,6 +878,16 @@ static void h_cmp(const char *expected, const char *actual, const char *label) {
             fprintf(stderr, "       line %d\n", line);
             fprintf(stderr, "       expected: %.*s\n", (int)an, a);
             fprintf(stderr, "       actual:   %.*s\n", (int)bn, b);
+            /* OSR_TEST_DUMP -- print the whole actual text, not just the
+             * first line that differed. The one line is what you want when a
+             * known-good expectation breaks; the whole thing is what you want
+             * when you are WRITING the expectation and need to see what the
+             * run really did. Off by default so a CI failure stays readable. */
+            if (getenv("OSR_TEST_DUMP") != NULL) {
+                fprintf(stderr, "       --- actual, in full ---\n");
+                fprintf(stderr, "%s", actual);
+                fprintf(stderr, "       --- end ---\n");
+            }
             fflush(stderr);
             return;
         }

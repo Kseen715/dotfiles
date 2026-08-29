@@ -53,26 +53,72 @@ else
     p_warn "shellcheck: not installed - skipping"
 fi
 
-# ASCII-only program output (§3): every byte the installer writes to the
+# ASCII-only program output (D-2): every byte the installer writes to the
 # terminal must be 7-bit ASCII so barebone TERM/locales never mangle it into
-# mojibake. Comments are exempt (prose may use §/em-dashes), so skip comment
-# lines; flag any high byte (0x80-0xFF) on a code line. LC_ALL=C keeps the byte
-# class portable across gawk/mawk/busybox awk.
+# mojibake. Comments are exempt (prose may use section signs and em-dashes), so
+# comment lines are skipped and any high byte (0x80-0xFF) on a code line is
+# flagged. LC_ALL=C keeps the byte class portable across gawk/mawk/busybox awk.
+#
+# The C tier is scanned too, and that is not symmetry for its own sake: the
+# program IS C now, and while this check covered only .sh files
+# lib/wallpaper_front.c printed an em dash and a section sign in its help text
+# for as long as it existed. A rule enforced over the tier the code left is not
+# enforced at all.
+#
+# For C, `//`-comments and whole-line block comments are skipped the same way;
+# an escaped high byte inside a string (\342\200\224) is caught by the octal
+# check below, because that is how a port carries one across without ever
+# typing a non-ASCII character.
 sec "ASCII-only program output (non-comment lines):"
 # Scope: the installer program (lib + modules + runners), not the test harness
 # (matrix.sh legitimately keeps em-dashes in trailing comments).
-ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr"
-ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" -name '*.sh' 2>/dev/null)"
+ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/wallpaper.sh"
+ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" \
+    \( -name '*.sh' -o -name '*.c' -o -name '*.h' \) 2>/dev/null)"
+ASCII_FILES="$ASCII_FILES $OSR_ROOT/osr.c $OSR_ROOT/install.c"
 # shellcheck disable=SC2086  # intentional word-split into a file list
-_ascii_hits=$(LC_ALL=C awk '
-    /^[[:space:]]*#/ { next }
-    /[\200-\377]/    { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0 }
-' $ASCII_FILES 2>/dev/null)
-if [ -n "$_ascii_hits" ]; then
-    printf '%s\n' "$_ascii_hits" >&2
+# What is scanned is the STRING LITERALS, not the whole line. Most of the high
+# bytes in this tree are section signs in a trailing `/* ... */` after real
+# code, and those are prose -- D-2 governs what the program writes, not what it
+# documents. A quoted string is where terminal output actually comes from, and
+# looking only inside quotes needs no cross-line comment state to get right.
+_ascii_awk='
+function quoted(line,   out, i, c, n, instr) {
+    out = ""; instr = 0; i = 1; n = length(line)
+    while (i <= n) {
+        c = substr(line, i, 1)
+        if (instr) {
+            if (c == "\\") { out = out substr(line, i, 2); i += 2; continue }
+            if (c == "\"") { instr = 0; i++; continue }
+            out = out c; i++
+            continue
+        }
+        if (c == "\"") { instr = 1 }
+        i++
+    }
+    return out
+}
+/^[[:space:]]*#/ { next }
+{
+    lit = quoted($0)
+    if (lit ~ /[\200-\377]/) { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0; next }
+    # ...and the escaped form: a high byte written as an octal escape reaches
+    # the terminal exactly as if it had been typed, which is how a port carries
+    # one across without anyone typing a non-ASCII character. ESC and SUB are
+    # ASCII, and are what the palette and a PNG magic legitimately use.
+    gsub(/\\033/, "", lit)
+    gsub(/\\032/, "", lit)
+    if (lit ~ /\\3[0-7][0-7]/) printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0
+}'
+# shellcheck disable=SC2086  # intentional word-split into a file list
+_ascii_hits=$(LC_ALL=C awk "$_ascii_awk" $ASCII_FILES 2>/dev/null)
+_ascii_esc=
+if [ -n "$_ascii_hits$_ascii_esc" ]; then
+    [ -z "$_ascii_hits" ] || printf '%s\n' "$_ascii_hits" >&2
+    [ -z "$_ascii_esc" ]  || printf '%s\n' "$_ascii_esc" >&2
     FAILED=1
 else
-    p_ok "(no non-ASCII bytes in program output)"
+    p_ok "(no non-ASCII bytes in program output, shell or C)"
 fi
 
 # Every module declares which display server it supports on its first line, so

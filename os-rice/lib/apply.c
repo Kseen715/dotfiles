@@ -379,7 +379,7 @@ static int apply_usage(void) {
     fputs("usage: osr apply <subcommand> [args]\n\n", stderr);
     fputs("  verbs               every mutating verb a theme apply neutralizes\n", stderr);
     fputs("  modules [rice]      the modules that carry a theme layer\n", stderr);
-    fputs("  theme [name]        apply a theme only (§6a): layers, no packages\n", stderr);
+    fputs("  theme [name]        apply a theme only (SS6a): layers, no packages\n", stderr);
     return 2;
 }
 

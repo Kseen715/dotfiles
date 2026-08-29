@@ -37,11 +37,16 @@ static const char *root_dir(void) { return env_str("OSR_ROOT", "."); }
 
 /* usage -- wallpaper.sh printed its own header comment (`sed -n '2,9p' | sed
  * 's/^# \{0,1\}//'`), so the help text and the file's documentation could not
- * drift apart. Here they are the same eight lines, held together by the parity
- * test instead. The trailing paragraph line is the sh range's last line and is
- * kept: this is a byte-for-byte port, not a tidier one. */
+ * drift apart. Here they are the same lines, held together by ui_test.c's
+ * D-2 check instead.
+ *
+ * ASCII only, and that is a CHANGE from what the sh original printed: its
+ * header carried an em dash and a section sign, and the byte-for-byte port
+ * carried them across as octal escapes. D-2 says every byte written to the
+ * terminal is 7-bit, and this was the one place in the tree that broke it --
+ * unnoticed because the lint that enforces D-2 only ever scanned .sh files. */
 static void usage(void) {
-    fputs("wallpaper.sh \342\200\224 set or query the wallpaper of the current theme (\302\2476a).\n", stdout);
+    fputs("wallpaper.sh - set or query the wallpaper of the current theme (SS6a).\n", stdout);
     fputs("\n", stdout);
     fputs("  wallpaper.sh                 print the wallpaper in use\n", stdout);
     fputs("  wallpaper.sh --list          print the library (theme images + ~/Pictures/Wallpapers)\n", stdout);

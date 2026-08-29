@@ -206,6 +206,14 @@ void osr_compose_block(Str *out, const char *path, const char *name, const char 
             }
         } else {
             str_add(out, buf, len);
+            /* A file whose last line has no newline is common -- an editor
+             * without the setting, a `printf` without the \n, a heredoc the
+             * user trimmed. Appending the begin marker straight onto it welds
+             * two things together and breaks both: the user's last line stops
+             * being that line, and the marker stops being a marker, so the
+             * NEXT run does not recognise its own block and appends a second
+             * one. One newline, added only when it is missing. */
+            if (len > 0 && buf[len - 1] != '\n') str_addc(out, '\n');
         }
         free(buf);
     }

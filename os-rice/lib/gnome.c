@@ -72,8 +72,19 @@ static void field2(Str *out, const Line *line) {
     const char *start;
 
     while (p < end && *p != ' ') p++;
-    if (p >= end) {                       /* no delimiter: the whole line */
-        str_add(out, line->start, line->len);
+    if (p >= end) {
+        /* No delimiter, so this is not a `<schema> <key> <value>` triple at
+         * all -- it is a continuation of a listing gsettings wrapped, and it
+         * carries a value with no key in front of it. There is no key here to
+         * return, and returning the whole line would name the VALUE as the key
+         * and issue `gsettings set <schema> "['<Super>r']" []`.
+         *
+         * That was harmless only by luck: gsettings rejects the unknown key,
+         * and the caller ignores the status because a read-only key must not
+         * end a run. lib/gnome.sh did the same thing, and the parity test that
+         * compared them agreed with itself -- while its own comment said "a
+         * line with no key name sets nothing", which is the behaviour meant
+         * and now the behaviour implemented. */
         return;
     }
     p++;

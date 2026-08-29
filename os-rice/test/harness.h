@@ -166,6 +166,11 @@ void osr_sb_symlink(OsrSandbox *sb, const char *target_rel, const char *rel);
 /* osr_sb_rm -- remove a path under the sandbox, recursively. */
 void osr_sb_rm(OsrSandbox *sb, const char *rel);
 
+/* osr_sb_stdin -- what the NEXT run reads on stdin. Cleared after that one
+ * run, so feeding is always deliberate. With nothing fed, stdin is /dev/null:
+ * a verb that reads it must never reach the terminal running the suite. */
+void osr_sb_stdin(OsrSandbox *sb, const char *text);
+
 /* osr_sb_reset -- truncate the argv log. Call it before the run you are
  * about to assert on. */
 void osr_sb_reset(OsrSandbox *sb);
