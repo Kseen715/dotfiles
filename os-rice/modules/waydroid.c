@@ -3,8 +3,8 @@
  * Needs a real kernel (binder), systemd, and network -> validated on hardware,
  * not CI (§9). Available module (not in the default rice.list).
  *
- * Port of modules/waydroid.sh, kept as the reference at
- * test/ref/waydroid_sh_ref.sh. C89.
+ * Was modules/waydroid.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

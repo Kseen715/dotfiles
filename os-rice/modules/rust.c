@@ -20,8 +20,8 @@
  * Runs on every pass: internally idempotent, and it is what makes the cargo:
  * provider (lib/pkg.sh) prefer binstall over a source build.
  *
- * Port of modules/rust.sh, kept as the reference at
- * test/ref/rust_sh_ref.sh. C89.
+ * Was modules/rust.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

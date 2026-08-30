@@ -16,8 +16,8 @@
  * support -- so chafa is the headless safety net and Ueberzug++ is what makes
  * previews work on a desktop.
  *
- * Port of modules/yazi.sh, kept as the reference at
- * test/ref/yazi_sh_ref.sh. C89.
+ * Was modules/yazi.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -13,8 +13,8 @@
  *
  * No package: mutter is the GNOME session. Inert outside GNOME.
  *
- * Port of modules/gnome-overview.sh, kept as the reference at
- * test/ref/gnome-overview_sh_ref.sh. C89.
+ * Was modules/gnome-overview.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

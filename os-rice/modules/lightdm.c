@@ -14,8 +14,8 @@
  *   2. /etc/lightdm/lightdm.conf.d/10-osr.conf      (WHICH vt, WHICH session)
  *   3. the greeter theme: conf + user CSS           (§6b, palette-driven)
  *
- * Port of modules/lightdm.sh, kept as the reference at
- * test/ref/lightdm_sh_ref.sh. C89.
+ * Was modules/lightdm.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

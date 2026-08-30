@@ -1,8 +1,8 @@
 /* modules/celluloid.c -- Celluloid (mpv GTK frontend). ONE copy, POSIX
  * (was .../apps/celluloid.sh). Native, no config.
  *
- * Port of modules/celluloid.sh, kept as the reference at
- * test/ref/celluloid_sh_ref.sh. C89.
+ * Was modules/celluloid.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

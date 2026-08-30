@@ -18,14 +18,14 @@ tags:
 A DRY, declarative, POSIX-portable installer for unix-like apps, configs, and
 whole rices.
 
-> [!important] Direction: the backbone becomes C
-> The shell tier works and is not going anywhere tomorrow, but it is **not
-> the destination**. Every part of the backbone — the libs, the runner, the
-> front end, and the modules (all 120 of which are C now) — is being rewritten as C
-> translation units linked into one binary (`build/osr`), the same shape the
-> Windows core already has. Sections [[#D-3. The C harness|D-3]],
+> [!success] The backbone is C
+> Every part of it — the libs, the runner, the front end, the test runner and
+> all 120 modules — is a C translation unit linked into one binary
+> (`build/osr`), the same shape the Windows core already had. `osr`,
+> `install.sh` and `wallpaper.sh` are the only `.sh` files the harness
+> contains, and the last two are shims over that binary. Sections [[#D-3. The C harness|D-3]],
 > [[#D-4. A module may be a C unit instead of a script|D-4]] and
-> [[#13. The port, and what is left of it|13]] are the plan and the score.
+> [[#13. The port, and what it left behind|13]] are the design and the record.
 
 > [!abstract] Problem
 > Describe a whole rice (apps + modules + configs) as one readable list, and
@@ -98,9 +98,8 @@ single binary, `build/osr`.
 | `install.sh` | `lib/install.c` | `osr install` | help, listings, option loop, manifest, report |
 | `test/run.sh` | `lib/testrun.c` | `osr test-run` | the suite runner |
 
-Seventeen `.sh` files are still in `lib/`. They are **not** implementations —
-they are the shell-callable surface of units that are now C, and every reason
-that surface existed has expired:
+`lib/` holds no `.sh` files at all any more. Every reason a shell-callable
+surface existed has expired:
 
 - `run_step`'s arguments were shell **functions** (`pkg_install`, `as_root`), so only a shell could fork them — but nothing forks a shell function any more;
 - `error` had to `exit` the running shell — the runner is not one;
@@ -108,11 +107,18 @@ that surface existed has expired:
 - `osr_detect`/`osr_resolve_theme` set the variables the runner branched on — the core prints assignments for a shell to `eval`, and sets them with `setenv` for itself;
 - `install.sh` **sourced** each module — no module is a shell script (§11a), and `install.sh` is a two-line shim over `osr install run`.
 
-So sixteen of the seventeen have **no caller left in the shipped tree**. What
-keeps them is the test suite: each is the live oracle its C replacement is
-diffed against, run side by side under stubbed tooling. The seventeenth,
-`lib/ui.sh`, is the one with a real caller, and for one line — it resolves
-`$OSR_BIN` and builds it if the checkout never has been. See [[#13. The port, and what is left of it|§13]].
+The last thing keeping them was the test suite, which ran each one as the live
+oracle its C replacement was diffed against. That suite is gone too, replaced
+by behaviour tests that state what each unit must do; see [[#13. The port, and what it left behind|§13]].
+
+> [!note] A `.sh` module still runs, with less around it
+> The runner still hands a `modules/<name>.sh` to a shell — a rice.list never
+> says which tier it wanted. What such a module no longer gets is os-rice's own
+> verbs: `pkg_install` and the rest are C functions, and there are no `.sh`
+> libs to source. It runs with the facts in its environment and plain sh, which
+> is enough for a one-off local module and not enough to write a real one. A
+> module that needs the verbs is written in C and registered in
+> `lib/modules.c`.
 
 > [!important] `osr`'s self-bootstrap compiles nothing
 > The block at the top of `osr` — the `curl | sh` path that installs git and a
@@ -122,13 +128,10 @@ diffed against, run side by side under stubbed tooling. The seventeenth,
 > `bootstrap.sh` until it moved into `osr`, so that the URL people pipe is the
 > same program they run afterwards. See [[archive-decisions#A2|A2]].
 
-**Contract:** byte-for-byte identical output. The sh version is frozen under
-`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 2385
-checks over the units, the runner and all 120 modules. Two divergences are
-accepted and asserted rather than hidden: an option missing its operand (the
-shell's own `${x:?...}` message and exit status became a normal `error` line),
-and one `apt-get update` per run instead of one per module (§13). See
-[[archive-decisions#A2|A2]].
+**Contract:** every unit's behaviour is stated by name in `test/unit_c/` — 1617
+named assertions across 40 test binaries, over the libs, the runner, the two
+front ends and all 120 modules. What replaced the byte-for-byte diff against
+the shell tier, and why, is [[#13. The port, and what it left behind|§13]].
 
 ### D-4. A module may be a C unit instead of a script
 
@@ -151,7 +154,7 @@ What C buys is not speed:
 - **`osr_step` forks a function of the program.** `run_step` could only fork a *shell* function. Nothing forks a shell function any more, so `run_step`/`try_step` have no caller left.
 - **A module is a translation unit, not a sourced fragment.** A `.sh` module runs inside the installer's shell and can clobber any lib variable.
 - **The contract is a header**, not "whatever happens to be defined by the time we source you".
-- **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and the C module side by side under stubbed package tooling and diffs what they did to the box.
+- **It is checkable.** `test/unit_c/modules_test.c` runs a module under stubbed package tooling and asserts the complete list of commands it issued — which, for a module, is the whole of what it does.
 
 What C costs is the property the module system was built for: a module as one
 readable POSIX script anyone can copy and edit. Modules are the **last** stage of the port, not the first: the backbone has to
@@ -208,7 +211,7 @@ dev-headers = libssl-dev      dev-headers = openssl-devel pkgconf
 ```
 
 ```sh
-# lib/pkg.sh -- distro variance is exactly this one case statement.
+# lib/pkg.c's via_native, in the shell it was written as first --
 _via_native() {                     # _via_native build-essential zsh
   case "$OSR_PKG" in
     apt)    apt-get install -y "$@" ;;
@@ -333,7 +336,7 @@ CI / `--verbose` → plain streamed lines, no escape junk in logs.
 > `brew` and `paru` make.
 
 All of it lives in `osr ui` (`lib/ui.c`) — the painting and the fork both, a
-step's argv being a function of the program (§D-4). `lib/ui.sh` keeps neither.
+step's argv being a function of the program (§D-4).
 
 ---
 
@@ -727,9 +730,9 @@ migration incremental rather than a rewrite. The C tier is the target; see
 ### 11a. Every `.sh` module is legacy — and there are none left
 
 There were 115 shell modules; there are now **zero**. Every one is
-`modules/<name>.c`, registered in `lib/modules.c`, with its last pure-sh version
-frozen at `test/ref/<name>_sh_ref.sh` and diffed against the C module by
-`test/unit/module_c_parity.sh`.
+`modules/<name>.c`, registered in `lib/modules.c`, and what each must do is
+stated in `test/unit_c/` rather than diffed against a recording of the script
+it replaced (§13).
 
 The marker that made the remaining work countable was:
 
@@ -769,9 +772,9 @@ exercised without root — `OSR_PACMAN_DIR`/`OSR_DNF_CONF` in `mirrors`, the
 `yandex-browser`. That is the same trick `lib/user.c` uses for `/etc/passwd`,
 and it is the only reason those modules have unit tests at all (§5a).
 
-A brand-new module goes straight to C. `modules/helpers.c` is the first that
-never had a `.sh` form and therefore has no `test/ref` twin; its scenario in
-`module_c_parity.sh` asserts behaviour directly.
+A brand-new module goes straight to C. `modules/helpers.c` was the first
+written that way rather than ported, and is asserted the same way every module
+now is: by what it must do, in `test/unit_c/modules_test.c`.
 
 ---
 
@@ -883,20 +886,20 @@ loop is also where peak temperature and peak clock come from.
 
 ---
 
-## 13. The port, and what is left of it
+## 13. The port, and what it left behind
 
-The target is one binary, reached by three entry-point shims and put on disk by
-`osr` itself. **`osr` + `install.sh` + `wallpaper.sh` is the
-complete set of `.sh` files the finished tree contains** — everything else is C.
-Nothing about the design changes to get there: the libs keep their
-responsibilities, the manifests keep their format, the module API is
-`lib/module.h`. What changes is the language the backbone is written in.
+**Finished.** One binary, reached by three entry-point shims and put on disk by
+`osr` itself. **`osr` + `install.sh` + `wallpaper.sh` is the complete set of
+`.sh` files the harness contains** — everything else is C. Nothing about the
+design changed to get there: the libs kept their responsibilities, the
+manifests kept their format, the module API is still `lib/module.h`. What
+changed is the language the backbone is written in.
 
-### Done
+### What replaced what
 
 | unit | replaced | note |
 | --- | --- | --- |
-| `lib/ui.c` `log.c` `user.c` `detect.c` `theme.c` | `lib/*.sh` | the `.sh` file survives as the tests' oracle only, not as a shim — nothing in the shipped tree calls it (see [[#D-3. The C harness\|D-3]]) |
+| `lib/ui.c` `log.c` `user.c` `detect.c` `theme.c` | `lib/*.sh` | removed |
 | `lib/state.c` | `lib/state.sh` | file removed outright |
 | `lib/install.c` | `install.sh`'s option loop, help, listings, manifest, report | see the runner row below for the rest of it |
 | `lib/testrun.c` | `test/run.sh` | removed outright |
@@ -912,69 +915,28 @@ responsibilities, the manifests keep their format, the module API is
 | `lib/build.c` | `lib/build.sh` | all 26 `source:` builders plus both archive primitives. Every `source:` row in `lib/pkgmap/` resolves to one of them, asserted; `modules/yazi.c` reaches `provide_chafa` through `osr_build_run` |
 | `lib/config.c` | `lib/config.sh` | the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer, and the whole wallpaper family — resolve, install, record, set, library, pick |
 | `modules/*.c` | `modules/*.sh` | all 120 of them, the last sixteen together (§11a). `modules/` holds no `.sh` at all any more |
-| `lib/install.c` (the runner) | `install.sh`'s body | the whole orchestration: detection and identity into this process's environment, the theme-only path, the report, the sudo warm-up, the manifest, the module loop, the state write and the closing line. `install.sh` is a shim over `osr install run` — the reason it could not leave the shell was that it SOURCED each module, and no module is a shell script any more. A `.sh` module that appears again still runs: the core hands it to a shell with the libs sourced around it, which is the same command `install.sh` ran |
+| `lib/install.c` (the runner) | `install.sh`'s body | the whole orchestration: detection and identity into this process's environment, the theme-only path, the report, the sudo warm-up, the manifest, the module loop, the state write and the closing line. `install.sh` is a shim over `osr install run` — the reason it could not leave the shell was that it SOURCED each module, and no module is a shell script any more. A `.sh` module that appears again still runs, though with no os-rice verbs around it (see [[#D-3. The C harness\|D-3]]) |
 | `lib/theme.c` (the shell half) | `lib/theme.sh` (part) | `osr_resolve_theme` / `osr_unset_theme` / `osr_apply_theme_configs`. The shim existed to `export` OSR_THEME/OSR_THEME_DIR for everything downstream; `setenv` is that, and every child the runner forks inherits it |
 | `lib/apply.c` | `lib/apply.sh` | the whole §6a hotkey path: the two lists it is built out of (the mutating verbs it neutralizes, and the modules that carry a theme layer), and the apply itself — resolve, neutralize every mutating verb for the rest of the process, run the theme-carrying layers with their output on the run log, then the theme's whole-dir configs, the wallpaper and the state write. `osr apply theme <name>` is it, and it stays in a lib rather than in the runner so a test can drive it against a throwaway `$HOME` — the runner resolves `OSR_HOME` from passwd, so a test driving it through the runner would write to the real one |
 | `lib/wallpaper_front.c` | `wallpaper.sh` | the wallpaper front end: the option loop, the current-theme resolution and the four actions (show, `--list`, `--next`, set). The family underneath — resolve, install, record, set-live, library, pick — was already `lib/config.c`'s, so this is the dispatcher around it. Named `wallpaper_front.c` because `lib/wallpaper.c` is the Windows core's own unit. `wallpaper.sh` is a shim over `osr wallpaper`, the same shape `install.sh` has, and stays sh because a picker or a hotkey already names that path |
 
-### Remaining
-
-**The target is `osr` plus the two shims, and nothing else in sh.**
-Against that target the *program* is finished: **no `.sh` file under `lib/` is
-sourced or called by anything in the shipped tree.** `osr`, `install.sh`,
-`wallpaper.sh`, `lib/*.c` and `modules/*.c` between them reference none of
-them. What is left in `lib/` is not a port. It is a **test-suite dependency**,
-and it goes when the tests that execute it do.
-
-#### The four `.sh` files that ship
-
-| what | lines | why it is sh |
-| --- | --- | --- |
-| `osr` | 300 | the front end, and the one file that still does something. Two bootstraps, neither of which can move into the binary: it **self-bootstraps** — piped from curl there is no checkout, so it installs git and a compiler, clones to `$OSR_DEST` and re-execs itself from the clone — and then resolves `$OSR_BIN`, **building it with `nob.c` if the checkout has never been built**. A script cannot exec the program that tells it where the program is, so both live here, once. The first half was `bootstrap.sh`; it merged in so the URL people pipe is the same program they run afterwards, rather than a second entry point to keep in step |
-| `install.sh` `wallpaper.sh` | 33 + 22, of which 2 each is code | one `exec "$(dirname $0)/osr" install "$@"` each. They **delegate rather than resolve**, so the bootstraps are not copied three times, and they stay sh because people, scripts, pickers and hotkeys already type these paths |
-
-Everything `lib/ui.sh` used to establish around those shims — the exported
-palette, `$OSR_LOG`, the step counters — is `osr.c`'s `startup_env()` now. It
-belongs in the core because the decision has to be made **once, against the
-real terminal, for every child the runner forks**: a module runs with its
-stdout on the step log, so a palette decided per process would come out
-colorless in every module while the runner around it was colored. `ui.sh`
-made that call once and exported it; so does `startup_env`.
-
-#### The seventeen `.sh` files in `lib/`, and what holds them
-
-Nothing calls them, and — since the tests stopped comparing against them (see
-below) — nothing needs them to be correct either. They are dead code that the
-remaining sh tests happen to **source**, and that is the whole of it.
-
-| what | lines | sourced by |
-| --- | --- | --- |
-| `build.sh` `config.sh` `pkg.sh` `user.sh` | 2670 | the four biggest; `module_c_parity.sh` sources three of them around every frozen `test/ref/<name>_sh_ref.sh` |
-| `ui.sh` `log.sh` | 199 | nearly every sh unit test, for `$OSR_BIN` and for `info`/`error` **inside the test bodies** — test scaffolding, not code under test |
-| `net.sh` `theme.sh` `reload.sh` `migrate.sh` `gnome.sh` `git.sh` `service.sh` `apply.sh` `preflight.sh` `fonts.sh` `detect.sh` | 1162 | one file per remaining `*_c_parity.sh` |
-
 ### The tests: the C tier is the ground truth
 
-The sh suite compared two live implementations — it ran `lib/pkg.sh` to
-produce an expected argv log and `lib/pkg.c` to produce the actual one, and
-diffed them. That answers **"did the rewrite change behaviour?"**, which is a
-migration question, and it expired when the migration did.
+This is the part worth reading, because it is the part that was not obvious.
+
+The port was driven by PARITY tests. Each shell original was frozen under
+`test/ref/`, and a `*_c_parity.sh` ran it side by side with its C replacement
+under stubbed tooling and diffed the argv logs. That answers **"did the rewrite
+change behaviour?"**, which is a migration question — and it expired the moment
+the migration did.
 
 It never answered **"is this behaviour correct?"** The shell tier had no tests
 of its own. Comparing against it froze whatever it happened to do, defects
-included — and two of those surfaced during the port:
+included, and it froze them in a form nobody could read: a diff of two
+recordings tells you that something changed, never what promise broke.
 
-- `preflight_c_parity.sh` meant to compare the exit status of every predicate
-  and never did. Its `sh_pf` ran the shell under `set -e` and appended `rc=$?`
-  *after* it, so on an unmet predicate the subshell died before the `rc` line
-  was reached — **on both sides**. It compared two empty strings and called it
-  parity.
-- Underneath it, a real divergence: the shell's `cmd:` branch was
-  `command -v "$v"`, and dash answers a missing command with **127** where
-  `lib/preflight.c` answers 1. Nothing reads the number, so nothing broke —
-  but a comparison-based test had frozen dash's quirk as the specification.
-
-So the tests state what the core is **supposed to do**, in the test, by name:
+So every one of those tests was replaced by a behaviour test that states, in
+the test, by name, what the unit is supposed to do:
 
 ```c
 osr_assert_log_is(&sb,
@@ -985,6 +947,32 @@ osr_assert_log_is(&sb,
     "openrc: adds to the default runlevel, then starts");
 ```
 
+When that fails you are told which promise broke. When you change the
+behaviour on purpose you edit a line that says what the behaviour is, rather
+than re-recording a blob and hoping the diff was the one you meant.
+
+#### What the reversal cost, and what it found
+
+70 shell test files (11,700 lines) became 40 C test binaries carrying **1617
+named assertions**. Writing the expectations out by hand surfaced seven real
+defects that the parity tests could not have caught, because in every case the
+two tiers agreed with each other about something wrong:
+
+| what | why parity missed it |
+| --- | --- |
+| `lib/pkg.c`'s apt source-list repair never fired on a deb822 box — it gated on `grep`'s exit status, and `/etc/apt/sources.list` is absent on modern Debian/Ubuntu, so grep exits 2 despite matching | a port regression (the shell ran it as a pipeline into `head` and never saw the status), and `apt_sources_conflict.sh` only ever drove the shell side |
+| `native_held` had no xbps branch, so the G2 fence around the only package removal os-rice performs did not exist | neither tier had one, and the test that "covered" it redefined `_native_held` |
+| a wrapped `gsettings list-recursively` line yielded the VALUE as a key name | both tiers did the same wrong thing; the sh test's own comment said "sets nothing" |
+| `compose_block` welded its marker onto a file with no trailing newline, corrupting the user's last line AND the marker | never exercised |
+| `lib/wallpaper_front.c` and `lib/apply.c` printed non-ASCII, violating D-2 | the lint that enforces D-2 only ever scanned `.sh` files, so the rule stopped being enforced the moment the code became C |
+| `provide_datagrip` lost its `OSR_DATAGRIP_PREFIX` override and staged into a hard-coded `/opt` | the shell original made those paths overridable precisely to be testable; the port dropped it, and the parity test worked around it |
+| a missing template role sharing a line with `{{WALLPAPER_PATH}}` was never reported | the shell skipped the whole line (`grep -v`), so the warning that exists to make such a gap obvious stayed silent |
+
+Two of those (the apt repair, the D-2 lint) had been broken in production for
+as long as the C tier had existed.
+
+#### How a behaviour test is written
+
 `test/harness.c` is the sandbox: `$PATH` reduced to stubs that log their own
 argv, an environment built from nothing, stdout and stderr kept apart, and
 assertions over the complete command list, the output, and the directory a run
@@ -992,90 +980,29 @@ left behind. A test links no lib object and drives `build/osr` as a
 subprocess, so it survives the unit under it being renamed or split.
 
 **Asserting the COMPLETE command list is the default**, not a substring: what a
-verb did to a box is the whole of what it ran, so an extra command is as much
-a defect as a missing one.
+verb did to a box is the whole of what it ran, so an extra command is as much a
+defect as a missing one.
 
-> [!note] What this bought immediately
-> Writing the expectations out by hand caught that `systemctl enable --now` is
-> one command where the sh test had assumed enable-then-start — the C is
-> better (no window in which a unit is enabled but not running) and nothing
-> had ever said so. A diff against a recording would have agreed with itself
-> and taught nobody anything.
+Where no fixed expectation is possible the test asserts **properties** instead.
+`modules_test.c`'s sweep is the clearest example and the single most valuable
+assertion in the suite: on a box where every package is already installed, it
+runs all 120 modules and asserts that not one of them invokes a package
+manager. No per-module scenario would have made that assertion, and one module
+forgetting its probe would add minutes to every rerun of every rice it is in.
 
-Where no fixed expectation is possible the test asserts **properties** instead:
-`apply_test.c` reads two lists derived from the live tree, so it asserts that
-the list is the real one and not a stub, that it holds the verbs it must, that
-it is sorted, that every name in it is a module, and that the per-rice list is
-a subset of the whole-tree scan. Those hold no matter what the tree contains.
+#### Two behaviours that improved on what they replaced
 
-### Consequence: `lib/<x>.sh` has no remaining role
+Both were divergences the parity tests had to accept and assert; they are now
+simply the behaviour, and the test says why:
 
-With nothing to compare against, the seventeen shell files in `lib/` are not
-oracles either. They are dead code that the remaining sh tests happen to
-source. **Each one goes as soon as the last test that sources it is ported** —
-no recording step, no ordering constraint beyond that, no ceremony.
-
-### Ported so far
-
-| C test | replaced | |
-| --- | --- | --- |
-| `service_test.c` | `service_c_parity.sh` (175 lines) | 30 named assertions over four inits and the servicemap lookup |
-| `preflight_test.c` | `preflight_c_parity.sh` (105) | 30 named assertions over every require: predicate |
-| `apply_test.c` | `apply_c_parity.sh` (100) | 24 property assertions |
-
-`osr test` runs both suites: lint, then `./build/nob test` (every
-`test/unit_c/*`), then the remaining `test/unit/*.sh`. The C step is silent
-when there is no `nob.c` to build from, which is what keeps the runner's own
-parity test — it drives the runner against a fixture tree — honest.
-
-`nob.c` also grew a `unity_srcs` list. A `.c` file that is `#include`d by
-another translation unit is, for dependency purposes, a header, and nothing
-recorded that — so editing `lib/uv/journal.c` did not rebuild
-`uv_journal_test`, and the test binary reported green about code that no
-longer existed. That hole predated this work and was failing in the dangerous
-direction.
-
-### Still to port
-
-19 parity tests (`build`, `config`, `detect`, `fonts`, `git`, `gnome`,
-`install`, `log`, `migrate`, `module`, `net`, `pkg`, `reload`, `state`,
-`testrun`, `theme`, `ui`, `user`, `wallpaper`) and 51 other sh unit tests —
-70 files under `test/unit/`.
-
-`ls modules/*.sh | wc -l` and `ls lib/*.sh | wc -l` are the remaining-work
-count. Both only go down; the first has reached zero. The second number is 17,
-and the only thing that moves it is how many sh tests still source each file.
-
-### The rule the port runs under
-
-> Byte-for-byte identical output, asserted, or it is not a port.
-
-Every unit's shell original is frozen under `test/ref/` and diffed by
-`test/unit/*_c_parity.sh` — 2385 checks over the libs, the runner, the two front
-ends and all 120 modules, and a handful of accepted divergences, each asserted in
-the test that would otherwise have caught it rather than hidden. A port
-that cannot be diffed this way (`helpers.c`, which never had a `.sh` form)
-asserts its behaviour directly instead.
-
-Two collapsings are allowed in that diff, both documented in
-`module_c_parity.sh`'s `normalize`: a staging file's random suffix (`mktemp` and
-`mkdtemp` pick different numbers of characters) and the pid inside a generated
-name. Neither names a decision the module made about the box — the only thing
-that reaches `$HOME` is what `cp` put there.
-
-The second accepted divergence arrived with the runner: **the package index is
-refreshed once per run**, where the shell runner refreshed once per module
-*process* — it spawned one `osr module run` per module and each carried its own
-once-per-process guard. One process now, one refresh. It is asserted in
-`install_c_parity.sh`, and it came with a fix rather than a shrug: the guard now
-lives in the install path (`refresh_once`) exactly where `lib/pkg.sh` put it, so
-a module that enables a repository and calls `pkg_refresh` still gets a real
-refresh instead of a silent no-op.
-
-The second number is 17, and the only thing that moves it is how many parity
-tests still *run* the sh side rather than diffing a recorded log.
-
----
+- **an option missing its operand.** The shell died inside its own
+  `${x:?...}` expansion and exited 2, which told the user nothing. The core
+  prints a normal error line naming the option, and exits 1.
+- **one `apt-get update` per run**, not per module. The shell runner spawned a
+  process per module and each carried its own once-per-process guard. One
+  process now, one refresh — and the guard lives in the install path
+  (`refresh_once`) exactly where `lib/pkg.sh` put it, so a module that enables
+  a repository and calls `pkg_refresh` still gets a real one.
 
 ## Not doing (and why)
 

@@ -8,8 +8,8 @@
  * User dirs the session expects (idempotent; owned by OSR_USER via as_user).
  * Rice-owned config: main hyprland.conf, autostart scripts, and the qt6ct theme.
  *
- * Port of modules/hyprland.sh, kept as the reference at
- * test/ref/hyprland_sh_ref.sh. C89.
+ * Was modules/hyprland.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

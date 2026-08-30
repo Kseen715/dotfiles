@@ -16,8 +16,8 @@
  * rule -- and the same override knobs (OSR_MEMINFO, OSR_DRM, OSR_ACCEL), which
  * is what makes any of it testable.
  *
- * Byte-for-byte with the sh original, frozen at test/ref/detect_sh_ref.sh and
- * diffed by test/unit/detect_c_parity.sh.
+ * What every probe must answer, and what each fallback is for, is stated in
+ * test/unit_c/detect_test.c.
  *
  * C89 + POSIX.
  */

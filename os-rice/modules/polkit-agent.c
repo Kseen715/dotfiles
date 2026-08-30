@@ -9,8 +9,8 @@
  * The agent lives at a different path per distro; report the resolved one so a
  * wrong `exec` line in the i3 config is obvious instead of mysterious.
  *
- * Port of modules/polkit-agent.sh, kept as the reference at
- * test/ref/polkit-agent_sh_ref.sh. C89.
+ * Was modules/polkit-agent.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

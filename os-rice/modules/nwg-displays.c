@@ -1,8 +1,8 @@
 /* modules/nwg-displays.c -- nwg-displays monitor layout tool. ONE copy, POSIX
  * (was .../modules/nwg-displays.sh). Native, no config.
  *
- * Port of modules/nwg-displays.sh, kept as the reference at
- * test/ref/nwg-displays_sh_ref.sh. C89.
+ * Was modules/nwg-displays.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

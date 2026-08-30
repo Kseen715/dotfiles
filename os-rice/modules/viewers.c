@@ -13,8 +13,8 @@
  * `set option value` list, so the rice ships the color half as a layer that the
  * base rc includes.
  *
- * Port of modules/viewers.sh, kept as the reference at
- * test/ref/viewers_sh_ref.sh. C89.
+ * Was modules/viewers.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

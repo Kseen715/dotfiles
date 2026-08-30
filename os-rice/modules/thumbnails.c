@@ -8,8 +8,8 @@
  * gdk-pixbuf keeps a cache of installed loaders; a package manager usually
  * regenerates it, but a from-source loader would not (best-effort, §9).
  *
- * Port of modules/thumbnails.sh, kept as the reference at
- * test/ref/thumbnails_sh_ref.sh. C89.
+ * Was modules/thumbnails.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

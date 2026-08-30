@@ -2,8 +2,8 @@
  * POSIX (was .../apps/vscode-insiders.sh). Maps vscode-insiders ->
  * aur:visual-studio-code-insiders-bin.
  *
- * Port of modules/vscode-insiders.sh, kept as the reference at
- * test/ref/vscode-insiders_sh_ref.sh. C89.
+ * Was modules/vscode-insiders.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

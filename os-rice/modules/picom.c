@@ -12,8 +12,8 @@
  * which under i3 is not a cosmetic loss (opaque rofi corners, dead terminal
  * transparency, no shadows). See picom/launch.sh.
  *
- * Port of modules/picom.sh, kept as the reference at
- * test/ref/picom_sh_ref.sh. C89.
+ * Was modules/picom.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

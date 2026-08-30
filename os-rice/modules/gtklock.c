@@ -3,8 +3,8 @@
  * placeholder the legacy sed-substituted at install; we resolve it to the rice's
  * wallpaper. .face (lockscreen avatar) is seeded once and then left to the user.
  *
- * Port of modules/gtklock.sh, kept as the reference at
- * test/ref/gtklock_sh_ref.sh. C89.
+ * Was modules/gtklock.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

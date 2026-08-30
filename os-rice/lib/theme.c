@@ -30,8 +30,8 @@
  * a shell function) and osr_resolve_theme's orchestration (it must set shell
  * variables, and it ends the run through error()).
  *
- * Byte-for-byte with the sh original, frozen at test/ref/theme_sh_ref.sh and
- * diffed by test/unit/theme_c_parity.sh.
+ * What the parser must accept, and what it must refuse, is stated in
+ * test/unit_c/theme_test.c.
  *
  * C89 + POSIX.
  */

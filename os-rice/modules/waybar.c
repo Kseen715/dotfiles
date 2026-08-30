@@ -2,8 +2,8 @@
  * (was .../modules/waybar.sh). gsimplecal (calendar popup) and ddcutil (monitor
  * brightness via the custom ddc module) are companions the config invokes.
  *
- * Port of modules/waybar.sh, kept as the reference at
- * test/ref/waybar_sh_ref.sh. C89.
+ * Was modules/waybar.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

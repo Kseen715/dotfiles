@@ -2,8 +2,8 @@
  * copy, POSIX (was .../modules/wlogout.sh). Not in the default rice.list (wleave
  * is used), kept as an available alternative module.
  *
- * Port of modules/wlogout.sh, kept as the reference at
- * test/ref/wlogout_sh_ref.sh. C89.
+ * Was modules/wlogout.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

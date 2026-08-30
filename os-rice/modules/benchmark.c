@@ -21,8 +21,8 @@
  * throughput-only; it must never fail the module, because the throughput numbers
  * are useful on their own and are the reason most people run this.
  *
- * Port of modules/benchmark.sh, kept as the reference at
- * test/ref/benchmark_sh_ref.sh. C89.
+ * Was modules/benchmark.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

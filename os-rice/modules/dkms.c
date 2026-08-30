@@ -3,8 +3,8 @@
  * so this is validated on hardware, not in CI (§9). Arch-only (kernel package
  * names are pacman's); no-op elsewhere.
  *
- * Port of modules/dkms.sh, kept as the reference at
- * test/ref/dkms_sh_ref.sh. C89.
+ * Was modules/dkms.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

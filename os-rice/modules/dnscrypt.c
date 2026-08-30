@@ -14,8 +14,8 @@
  *
  * openresolv is what keeps a VPN from stomping that file.
  *
- * Port of modules/dnscrypt.sh, kept as the reference at
- * test/ref/dnscrypt_sh_ref.sh. C89.
+ * Was modules/dnscrypt.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

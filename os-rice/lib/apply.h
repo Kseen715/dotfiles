@@ -19,18 +19,18 @@
 #ifndef OSR_APPLY_H
 #define OSR_APPLY_H
 
-/* osr_apply_verbs -- every function name defined by the libs whose functions
- * all mutate the system (pkg build net git service fonts), one per line. Read
- * out of the sources rather than a hand-kept list so it cannot drift: a new
- * provider added to lib/build.sh is inert in a theme apply the day it is
- * written, with no edit to any list. */
+/* osr_apply_verbs -- every verb a theme apply neutralizes, one per line.
+ *
+ * Derived from the sources rather than kept by hand, and derived from the code
+ * that DOES the neutralizing: a function is in this list exactly when it asks
+ * osr_theme_only() before acting. So the list cannot drift from the behaviour
+ * -- a new mutating verb that remembers the check appears here the day it is
+ * written, and one that forgets it is visibly absent.
+ *
+ * (The shell tier had no such check, so this was a scan for every function
+ * defined by a lib that was mutating wholesale, plus a hand-kept list of
+ * read-only exceptions. Per-function is both narrower and self-checking.) */
 void osr_apply_verbs(Str *out);
-
-/* osr_apply_query_ok -- the read-only exceptions to that set: queries with no
- * side effect that modules branch on. Removing a query from this list is safe
- * (the branch just takes its unknown path); adding a mutating verb to it is
- * not. */
-int osr_apply_is_query(const char *name);
 
 /* osr_theme_modules -- the modules that carry a theme layer, one per line, in
  * manifest order when the installed rice is known.

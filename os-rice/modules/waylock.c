@@ -1,8 +1,8 @@
 /* modules/waylock.c -- waylock minimal screen locker + rice-owned config. ONE
  * copy, POSIX (was .../modules/waylock.sh). Alternative locker; available module.
  *
- * Port of modules/waylock.sh, kept as the reference at
- * test/ref/waylock_sh_ref.sh. C89.
+ * Was modules/waylock.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

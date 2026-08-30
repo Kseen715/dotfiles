@@ -16,8 +16,8 @@
  * colors and the code in stock Breeze. katerc selects both by the same name,
  * `os-rice`: the KDE scheme's file id, this one's metadata name.
  *
- * Port of modules/kate.sh, kept as the reference at
- * test/ref/kate_sh_ref.sh. C89.
+ * Was modules/kate.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -8,8 +8,8 @@
  * console's PAM stacks only if absent (idempotent, §2).
  * PAM wiring. `optional` on purpose: a broken keyring must never lock you out.
  *
- * Port of modules/keyring.sh, kept as the reference at
- * test/ref/keyring_sh_ref.sh. C89.
+ * Was modules/keyring.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

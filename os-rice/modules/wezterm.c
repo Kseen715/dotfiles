@@ -55,7 +55,8 @@ int osrm_wezterm(const char *repo_root, const char *themes_root, const char *map
 
 #else /* !_WIN32 */
 
-/* The POSIX branch: modules/wezterm.sh, frozen at test/ref/wezterm_sh_ref.sh.
+/* The POSIX branch, once modules/wezterm.sh. What it must install and
+ * configure is stated in test/unit_c/terminals_test.c.
  *
  * WezTerm is BUILT FROM SOURCE on every target (any.map -> source:provide_wezterm,
  * upstream's documented route); there is no AppImage/flatpak path. The build

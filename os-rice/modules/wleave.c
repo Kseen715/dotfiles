@@ -2,8 +2,8 @@
  * POSIX (was .../modules/wleave.sh). scdoc is a native build/man dep. The config
  * dir (layout, style.css, icons) is rice-owned (§6), copied whole.
  *
- * Port of modules/wleave.sh, kept as the reference at
- * test/ref/wleave_sh_ref.sh. C89.
+ * Was modules/wleave.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

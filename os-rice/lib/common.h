@@ -18,9 +18,9 @@
  *                escape strings it hands out
  *   sh_quote     values handed back to a shell to eval
  *
- * The contract for the whole rewrite is byte-for-byte identical output: each
- * sh original is frozen under test/ref/ and diffed against its C replacement
- * by a unit test, so these helpers reproduce sh's quirks on purpose.
+ * These helpers reproduce a few of sh's behaviours on purpose -- word
+ * splitting, `printf %b`, the way a missing value reads as empty -- because
+ * the formats and manifests they parse were written against sh's rules.
  *
  * C89 + POSIX.
  */

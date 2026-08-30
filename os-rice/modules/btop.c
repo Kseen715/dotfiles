@@ -14,8 +14,8 @@
  * dotfiles default covers a rice that ships no palette. In --module mode
  * OSR_THEME_DIR is whatever rice the theme picker resolved (§6).
  *
- * Port of modules/btop.sh, kept as the reference at
- * test/ref/btop_sh_ref.sh. C89.
+ * Was modules/btop.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

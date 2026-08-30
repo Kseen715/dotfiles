@@ -6,8 +6,8 @@
  * (apply_wallpaper at the end of a rice run) — this module only provides the
  * setter, so nothing here hard-codes a path.
  *
- * Port of modules/feh.sh, kept as the reference at
- * test/ref/feh_sh_ref.sh. C89.
+ * Was modules/feh.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

@@ -14,9 +14,10 @@
  * exactly what wallpaper.sh was -- an option loop, the current-theme
  * resolution, and four small actions over that library.
  *
- * Byte-for-byte with the sh original, frozen at test/ref/wallpaper_sh_ref.sh
- * and diffed by test/unit/wallpaper_c_parity.sh. Two deliberate differences
- * are documented below (missing operand, and --next over paths with spaces).
+ * What this front end must do is stated in test/unit_c/wallpaper_test.c.
+ * Two places where it deliberately improves on the sh original it replaced
+ * are documented below: an option missing its operand, and --next over a
+ * path with a space in it.
  *
  * C89 + POSIX.
  */

@@ -11,15 +11,20 @@ REPO=$(cd -- "$OSR_ROOT/.." && pwd)
 SH_CHECKER=$(command -v dash || command -v sh)
 FAILED=0
 
-# Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR).
-. "$OSR_ROOT/lib/ui.sh"
+# Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR). It
+# comes from the core, which is where that decision lives now; a checkout that
+# has never been built lints in plain text rather than refusing to lint.
+OSR_RED= OSR_GREEN= OSR_YELLOW= OSR_CYAN= OSR_DIM= OSR_NC=
+if [ -x "$OSR_ROOT/build/osr" ]; then
+    eval "$("$OSR_ROOT/build/osr" ui vars 2>/dev/null || :)"
+fi
 sec()    { printf '%b%s%b\n' "$OSR_CYAN" "$*" "$OSR_NC"; }
 p_ok()   { printf '  %bok%b   %s\n' "$OSR_GREEN" "$OSR_NC" "$*"; }
 p_warn() { printf '  %bWARN%b %s\n' "$OSR_YELLOW" "$OSR_NC" "$*"; }
 p_fail() { printf '  %bFAIL%b %s\n' "$OSR_RED" "$OSR_NC" "$*" >&2; }
 
 sec "POSIX sh syntax ($SH_CHECKER -n):"
-SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr"
+SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/wallpaper.sh $OSR_ROOT/osr"
 SH_FILES="$SH_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" "$OSR_ROOT/test" -name '*.sh' 2>/dev/null)"
 for f in $SH_FILES; do
     if "$SH_CHECKER" -n "$f" 2>/dev/null; then

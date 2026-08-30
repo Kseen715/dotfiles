@@ -10,12 +10,10 @@
  * row may need.
  *
  * Providers implemented here: script: (a piped installer), cargo: (a crate,
- * binstall first), aur: (paru/yay). source: is the one that still goes back to
- * lib/pkg.sh, because its builders are lib/build.sh shell functions; when
- * those are ported that branch goes away and nothing else changes.
+ * binstall first), aur: (paru/yay) and source: (a builder in lib/build.c).
  *
  * `osr pkg <verb>` exposes the same verbs as a command, which is what lets
- * test/unit/pkg_c_parity.sh diff this against lib/pkg.sh over a stubbed PATH.
+ * test/unit_c/pkg_test.c drive every one of them over a stubbed PATH.
  *
  * C89 + POSIX.
  */
@@ -839,42 +837,21 @@ static int via_aur(const char *name, const char *pkg) {
     return 1;
 }
 
-/* pkg_install_via_sh -- run lib/pkg.sh's pkg_install for one package, with the
- * libs it needs sourced around it. The facts are already exported, so
- * detect.sh only defines functions here; nothing is re-detected. */
-static int pkg_install_via_sh(const char *name) {
-    Str script;
-    char *argv[6];
-    int rc;
-
-    str_init(&script);
-    str_addz(&script, ". \"$OSR_LIB/ui.sh\"; . \"$OSR_LIB/log.sh\"; ");
-    str_addz(&script, "for l in detect user net pkg git config build; do ");
-    str_addz(&script, "[ -f \"$OSR_LIB/$l.sh\" ] && . \"$OSR_LIB/$l.sh\"; done; ");
-    str_addz(&script, "pkg_install \"$1\"");
-    argv[0] = (char *)"sh";
-    argv[1] = (char *)"-c";
-    argv[2] = script.p;
-    argv[3] = (char *)"_";
-    argv[4] = (char *)name;
-    argv[5] = NULL;
-    rc = osr_run(argv);
-    str_free(&script);
-    if (rc != 0) osr_warnf("provider install failed for %s (exit %d)", name, rc);
-    return rc == 0;
-}
-
-/* via_source -- _via_source: the builder named by the row, with the same
- * `command -v <name>` idempotency probe in front of it (§2, §4). A builder that
- * has been ported runs in this process; anything still living in lib/build.sh
- * goes back through the shell for that one row, which is the last call from the
- * C tier into sh and goes away with the last builder. */
+/* via_source -- the builder named by the row, with the same `command -v <name>`
+ * idempotency probe in front of it (§2, §4).
+ *
+ * A row naming a builder that does not exist is a broken map, not a reason to
+ * carry on: every `source:` row in lib/pkgmap/ resolves to a builder in
+ * lib/build.c, and a typo would otherwise install nothing and report success.
+ * (This is where the last call from the C tier back into sh used to be, for
+ * builders that still lived in lib/build.sh. There are none.) */
 static int via_source(const char *pkg, const char *fn) {
     if (osr_have_cmd(pkg)) {
         osr_infof("%s already present (source) - skipping", pkg);
         return 1;
     }
-    if (!osr_build_has(fn)) return pkg_install_via_sh(pkg);
+    if (!osr_build_has(fn))
+        osr_die("no such builder: %s (from the %s row in lib/pkgmap/)", fn, pkg);
     osr_infof("building %s from source (%s)", pkg, fn);
     if (!osr_build_run(fn)) osr_die("source build failed for %s", pkg);
     return 1;

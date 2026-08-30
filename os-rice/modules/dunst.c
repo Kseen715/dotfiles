@@ -4,8 +4,8 @@
  * ~/.config/dunst/dunstrc.d/90-theme.conf on top (colors, font, frame), which
  * dunst merges in lexical order after the main file.
  *
- * Port of modules/dunst.sh, kept as the reference at
- * test/ref/dunst_sh_ref.sh. C89.
+ * Was modules/dunst.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

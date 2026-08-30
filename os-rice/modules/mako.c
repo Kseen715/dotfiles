@@ -1,8 +1,8 @@
 /* modules/mako.c -- mako notification daemon + rice-owned config. ONE copy, POSIX
  * (was .../modules/mako.sh).
  *
- * Port of modules/mako.sh, kept as the reference at
- * test/ref/mako_sh_ref.sh. C89.
+ * Was modules/mako.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

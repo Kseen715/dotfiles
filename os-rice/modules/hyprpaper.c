@@ -8,8 +8,8 @@
  * install_wallpaper_layer with the same installed path gtklock and hyprland's
  * `env =` line get, so the daemon, the locker and the session agree on one file.
  *
- * Port of modules/hyprpaper.sh, kept as the reference at
- * test/ref/hyprpaper_sh_ref.sh. C89.
+ * Was modules/hyprpaper.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

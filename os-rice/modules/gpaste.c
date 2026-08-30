@@ -14,8 +14,8 @@
  * package is version-mismatched against the Shell and has to be replaced, not
  * configured around.
  *
- * Port of modules/gpaste.sh, kept as the reference at
- * test/ref/gpaste_sh_ref.sh. C89.
+ * Was modules/gpaste.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

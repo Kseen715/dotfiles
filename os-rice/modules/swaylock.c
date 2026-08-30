@@ -2,8 +2,8 @@
  * POSIX (was .../modules/swaylock.sh). Alternative locker (gtklock is default);
  * kept as an available module.
  *
- * Port of modules/swaylock.sh, kept as the reference at
- * test/ref/swaylock_sh_ref.sh. C89.
+ * Was modules/swaylock.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -4,8 +4,8 @@
  * pkg_install builds it from the AUR once and skips on rerun (command -v probe).
  * Arch-only; a no-op elsewhere (nothing maps `paru` on non-pacman hosts).
  *
- * Port of modules/paru.sh, kept as the reference at
- * test/ref/paru_sh_ref.sh. C89.
+ * Was modules/paru.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -12,8 +12,8 @@
  * Canon prints fine without it, so a missing package must degrade to a warning
  * instead of aborting the whole rice (§9). The subshell contains error()'s exit.
  *
- * Port of modules/printer.sh, kept as the reference at
- * test/ref/printer_sh_ref.sh. C89.
+ * Was modules/printer.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

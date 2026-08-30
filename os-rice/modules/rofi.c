@@ -6,8 +6,8 @@
  * dotfiles-owned; colors.rasi is rice-owned and `@import`ed by both, so a rice
  * switch recolors every rofi surface at once.
  *
- * Port of modules/rofi.sh, kept as the reference at
- * test/ref/rofi_sh_ref.sh. C89.
+ * Was modules/rofi.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

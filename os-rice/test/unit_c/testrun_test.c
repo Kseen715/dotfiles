@@ -55,8 +55,9 @@ static void make_tree(const char *kind, int lint_rc) {
         osr_sb_write(&sb, "tree/test/unit/aaa_first.sh",
                      "printf \"  ok   stub one\\n\"\n", 0644);
         /* One stub echoes $OSR_TEST_COLOR: it is the single variable the
-         * runner has to export for test/lib.sh, because a test that decided
-         * colour for itself would be colourless inside a coloured run. */
+         * runner has to export for a test to read, because a test blanks
+         * OSR_* on purpose -- so that the code under test prints plain text --
+         * and would otherwise be colourless inside a coloured run. */
         osr_sb_write(&sb, "tree/test/unit/bbb_color.sh",
                      "printf \"  color=[%s]\\n\" \"$OSR_TEST_COLOR\"\n", 0644);
         osr_sb_write(&sb, "tree/test/unit/ccc_last.sh",
@@ -124,10 +125,10 @@ int main(void) {
             "than at the mercy of directory order");
     }
 
-    /* $OSR_TEST_COLOR is exported by the runner and read by test/lib.sh. The
-     * decision is made once, here, against the real terminal -- a test process
-     * whose stdout is a pipe would otherwise decide "no colour" while the
-     * runner around it was colouring. */
+    /* $OSR_TEST_COLOR is exported by the runner and read by test/harness.c.
+     * The decision is made once, here, against the real terminal -- a test
+     * process whose stdout is a pipe would otherwise decide "no colour" while
+     * the runner around it was colouring. */
     printed("color=[]",
         "the colour decision is exported to every test: piped output makes it "
         "empty, and every test agrees rather than deciding for itself");

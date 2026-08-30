@@ -2,8 +2,8 @@
  * copy, POSIX (was .../modules/cpu-microcodes.sh). Uses OSR_CPU_VENDOR from
  * detect.sh. Hardware-dependent: correct only on the machine it runs on (§9).
  *
- * Port of modules/cpu-microcodes.sh, kept as the reference at
- * test/ref/cpu-microcodes_sh_ref.sh. C89.
+ * Was modules/cpu-microcodes.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -3,8 +3,8 @@
  * the service is enabled through enable_service (§8). DE/display module: installs
  * and lays down files in a container, but only a real display exercises it (§9).
  *
- * Port of modules/sddm.sh, kept as the reference at
- * test/ref/sddm_sh_ref.sh. C89.
+ * Was modules/sddm.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

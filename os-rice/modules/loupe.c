@@ -1,8 +1,8 @@
 /* modules/loupe.c -- Loupe image viewer. ONE copy, POSIX
  * (was .../modules/loupe.sh). Native, no config. Available module.
  *
- * Port of modules/loupe.sh, kept as the reference at
- * test/ref/loupe_sh_ref.sh. C89.
+ * Was modules/loupe.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

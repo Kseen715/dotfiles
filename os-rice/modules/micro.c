@@ -9,8 +9,8 @@
  * the theme, which is also what the settings.json fragment selects, so two
  * themes' schemes coexist in the same colorschemes dir.
  *
- * Port of modules/micro.sh, kept as the reference at
- * test/ref/micro_sh_ref.sh. C89.
+ * Was modules/micro.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

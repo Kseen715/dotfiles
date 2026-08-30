@@ -16,8 +16,8 @@
  * apps (live-reload with `killall -HUP xsettingsd`). Everything below except the
  * packages is rice-owned and swaps on a rice switch (§6).
  *
- * Port of modules/theming.sh, kept as the reference at
- * test/ref/theming_sh_ref.sh. C89.
+ * Was modules/theming.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -7,8 +7,8 @@
  * config runs `autorandr --change` at startup so docking picks the profile up.
  * The udev hotplug hook ships with the package.
  *
- * Port of modules/arandr.sh, kept as the reference at
- * test/ref/arandr_sh_ref.sh. C89.
+ * Was modules/arandr.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

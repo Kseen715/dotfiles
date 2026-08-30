@@ -18,8 +18,8 @@
  * Default applications. Seeded once — which browser opens a link is the user's
  * call, and rewriting it on every rice switch would be obnoxious.
  *
- * Port of modules/xdg.sh, kept as the reference at
- * test/ref/xdg_sh_ref.sh. C89.
+ * Was modules/xdg.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

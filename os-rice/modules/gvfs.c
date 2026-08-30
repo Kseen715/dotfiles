@@ -10,8 +10,8 @@
  * Filesystem drivers (ntfs-3g, exfatprogs, ...) are modules/disks.sh - mounting
  * a device and understanding what is on it are two different failures.
  *
- * Port of modules/gvfs.sh, kept as the reference at
- * test/ref/gvfs_sh_ref.sh. C89.
+ * Was modules/gvfs.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

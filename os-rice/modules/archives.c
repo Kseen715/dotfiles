@@ -7,8 +7,8 @@
  * xarchiver is the light GTK pick; file-roller is the GNOME one and is installed
  * too because it is what many .desktop entries name directly.
  *
- * Port of modules/archives.sh, kept as the reference at
- * test/ref/archives_sh_ref.sh. C89.
+ * Was modules/archives.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

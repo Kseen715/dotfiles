@@ -20,9 +20,9 @@
  * would print them (common.h's log_line), not handed back to the shell,
  * so the palette and the `%-8s` tag stay in exactly one implementation.
  *
- * Byte-for-byte with the sh original, frozen at test/ref/install_sh_ref.sh
- * and diffed by test/unit/install_c_parity.sh. The one deliberate
- * difference is documented at cmd_parse_args.
+ * What the runner must do with an option loop and a manifest is stated in
+ * test/unit_c/install_test.c. One place where it deliberately improves on the
+ * sh original is documented at cmd_parse_args.
  *
  * C89 + POSIX.
  */
@@ -628,16 +628,16 @@ static int cmd_final(const char *module_mode, const char *modules,
  * becomes what `osr` already is: a line that execs the core.
  *
  * The two tiers still coexist by contract: a `.sh` module that appears again is
- * run the only way one can be, by handing it to a shell with the libs sourced
- * around it. That is the same command install.sh ran, spelled once here.
+ * run, by handing it to a shell.
+ *
+ * What it does NOT get any more is os-rice's own verbs. `pkg_install`,
+ * `install_layer` and the rest were shell functions in lib/*.sh; they are C
+ * functions now, and there are no .sh libs left to source. So a shell module
+ * runs with the facts in its environment (every OSR_* variable the runner
+ * exported) and plain sh -- which is enough for a one-off local module, and is
+ * not enough to write a real one. A module that needs the verbs is written in
+ * C, registered in lib/modules.c, and that is the supported way.
  * ------------------------------------------------------------------ */
-
-/* The libs a shell module is sourced into, in install.sh's order. */
-static const char *const SH_MODULE_LIBS =
-    ". \"$OSR_LIB/ui.sh\"; . \"$OSR_LIB/log.sh\"; "
-    "for l in detect user net pkg git service config migrate theme apply reload "
-    "fonts gnome build preflight; do [ -f \"$OSR_LIB/$l.sh\" ] && . \"$OSR_LIB/$l.sh\"; done; "
-    ". \"$1\"";
 
 /* list_themes -- the one listing that was never in the core: it is a query into
  * the theme manifests, not a directory scan (a theme is a dir with a
@@ -720,16 +720,16 @@ static void ram_retry(void) {
     osr_detect_export("ram");
 }
 
-/* run_sh_module -- the coexistence path: hand a `.sh` module to a shell with
- * the libs sourced around it, which is the only way one can run. */
+/* run_sh_module -- the coexistence path: hand a `.sh` module to a shell.
+ *
+ * Nothing is sourced around it (see above): the facts reach it through the
+ * environment, and the verbs no longer exist as shell functions. */
 static int run_sh_module(const char *path) {
-    char *argv[6];
+    char *argv[4];
     argv[0] = (char *)"sh";
-    argv[1] = (char *)"-c";
-    argv[2] = (char *)SH_MODULE_LIBS;
-    argv[3] = (char *)"sh";      /* $0; the path below is the script's $1 */
-    argv[4] = (char *)path;
-    argv[5] = NULL;
+    argv[1] = (char *)path;
+    argv[2] = NULL;
+    argv[3] = NULL;
     return osr_run(argv) == 0;
 }
 

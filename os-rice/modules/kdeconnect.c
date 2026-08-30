@@ -9,8 +9,8 @@
  * `kdeconnect-indicator` is the tray icon that makes it usable without a KDE
  * panel; on Void it ships inside the kdeconnect package.
  *
- * Port of modules/kdeconnect.sh, kept as the reference at
- * test/ref/kdeconnect_sh_ref.sh. C89.
+ * Was modules/kdeconnect.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

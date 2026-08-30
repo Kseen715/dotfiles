@@ -1,8 +1,8 @@
 /* modules/inxi.c -- inxi system information tool. ONE copy, POSIX,
  * distro-agnostic (was linux-debian/modules/inxi.sh). Native on every target.
  *
- * Port of modules/inxi.sh, kept as the reference at
- * test/ref/inxi_sh_ref.sh. C89.
+ * Was modules/inxi.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

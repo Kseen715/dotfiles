@@ -22,8 +22,8 @@
  * the menu/rofi/a mailto handler, i.e. every normal launch. Typing
  * `yandex-browser` in a terminal bypasses the .desktop entry and gets defaults.
  *
- * Port of modules/yandex-browser.sh, kept as the reference at
- * test/ref/yandex-browser_sh_ref.sh. C89.
+ * Was modules/yandex-browser.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

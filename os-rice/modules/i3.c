@@ -26,8 +26,8 @@
  * `-idle 3` and would exit with a usage error nobody sees, leaving the pointer
  * sitting in the middle of the text you are reading.
  *
- * Port of modules/i3.sh, kept as the reference at
- * test/ref/i3_sh_ref.sh. C89.
+ * Was modules/i3.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

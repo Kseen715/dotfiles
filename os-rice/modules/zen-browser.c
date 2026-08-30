@@ -5,8 +5,8 @@
  * under ~/.zen rather than ~/.mozilla/firefox; install_mozilla_layer resolves
  * either from profiles.ini.
  *
- * Port of modules/zen-browser.sh, kept as the reference at
- * test/ref/zen-browser_sh_ref.sh. C89.
+ * Was modules/zen-browser.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

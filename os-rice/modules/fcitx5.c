@@ -15,8 +15,8 @@
  * so without this it is stock grey over a themed desktop - the one piece of UI no
  * GTK/Qt theme reaches.
  *
- * Port of modules/fcitx5.sh, kept as the reference at
- * test/ref/fcitx5_sh_ref.sh. C89.
+ * Was modules/fcitx5.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -11,8 +11,8 @@
  * That includes the theme: pick it in VS Code (or let Settings Sync carry it),
  * not here. The rice ships no VS Code palette on purpose.
  *
- * Port of modules/vscode.sh, kept as the reference at
- * test/ref/vscode_sh_ref.sh. C89.
+ * Was modules/vscode.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

@@ -14,8 +14,8 @@
  * missing one degrades silently to SBC - the headset works, it just sounds worse
  * and nothing says why. Enable the ones you want in WirePlumber's bluez config.
  *
- * Port of modules/audio.sh, kept as the reference at
- * test/ref/audio_sh_ref.sh. C89.
+ * Was modules/audio.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

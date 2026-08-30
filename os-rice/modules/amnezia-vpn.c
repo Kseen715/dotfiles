@@ -2,8 +2,8 @@
  * (was .../apps/amnezia-vpn-client.sh). Maps amneziavpn -> aur:amneziavpn-bin on
  * Arch; on apt -> source:provide_amneziavpn (upstream QtIFW installer, x86_64).
  *
- * Port of modules/amnezia-vpn.sh, kept as the reference at
- * test/ref/amnezia-vpn_sh_ref.sh. C89.
+ * Was modules/amnezia-vpn.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

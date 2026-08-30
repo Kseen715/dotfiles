@@ -3,8 +3,8 @@
  * arch/alpine/void and `gh` on fedora/Debian/Ubuntu (resolved by pkgmap). Only
  * Debian 11 (bullseye) lacks it -> upstream release tarball via an apt.map row.
  *
- * Port of modules/gh.sh, kept as the reference at
- * test/ref/gh_sh_ref.sh. C89.
+ * Was modules/gh.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

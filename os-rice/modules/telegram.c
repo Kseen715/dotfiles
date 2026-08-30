@@ -13,8 +13,8 @@
  * Telegram paints its own widgets, so the GTK and Qt layers do nothing to it -
  * its only theming input is a .tdesktop-palette (§6b, telegram/*.tmpl).
  *
- * Port of modules/telegram.sh, kept as the reference at
- * test/ref/telegram_sh_ref.sh. C89.
+ * Was modules/telegram.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

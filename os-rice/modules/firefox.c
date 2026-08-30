@@ -17,8 +17,8 @@
  * a small machine: the number of content processes, and how many back/forward
  * page states are kept alive in memory. See dotfiles/firefox/user.js.
  *
- * Port of modules/firefox.sh, kept as the reference at
- * test/ref/firefox_sh_ref.sh. C89.
+ * Was modules/firefox.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

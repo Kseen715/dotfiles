@@ -10,8 +10,8 @@
  * laptop), so iterate rather than match one value (mirrors modules/gpu-drivers.sh).
  * shellcheck disable=SC2086  # intentional word-split into a package list
  *
- * Port of modules/codecs.sh, kept as the reference at
- * test/ref/codecs_sh_ref.sh. C89.
+ * Was modules/codecs.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -15,8 +15,8 @@
  * via out-of-tree tooling or a CDN that already does it, so they log and no-op
  * rather than pretending (§9: degrade, never fake it).
  *
- * Port of modules/mirrors.sh, kept as the reference at
- * test/ref/mirrors_sh_ref.sh. C89.
+ * Was modules/mirrors.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

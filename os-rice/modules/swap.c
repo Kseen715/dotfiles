@@ -36,8 +36,8 @@
  * fastest one). That file is capped at half the free space there and rounded up
  * to whole GiB; a deficit under 1G buys nothing, so no file is made.
  *
- * Port of modules/swap.sh, kept as the reference at
- * test/ref/swap_sh_ref.sh. C89.
+ * Was modules/swap.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

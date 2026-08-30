@@ -6,19 +6,17 @@
  *   Unit tests:       every unit test under test/unit/, each named as it runs
  *   ALL GREEN         or SOME FAILED, and the exit status to match
  *
- * Takes the test directory as its one argument, because test/run.sh (the
- * shim) already resolved it from $0 -- and because that makes the whole
+ * Takes the test directory as its one argument, because the shim that used
+ * to call it already resolved that from $0 -- and because it makes the whole
  * runner testable against a tree of fixture tests, which is what
- * test/unit/testrun_c_parity.sh does.
+ * test/unit_c/testrun_test.c does.
  *
- * The palette comes from the environment (test/run.sh sources lib/ui.sh
- * first, which exports it), and OSR_TEST_COLOR is exported from here for the
- * children: the unit tests blank OSR_* on purpose -- they source ui.sh with
- * NO_COLOR=1 so the code under test prints plain text -- so the terminal
- * decision has to be handed to test/lib.sh separately.
- *
- * The line shapes are lib/ui.sh's own printf calls, `%b` and all; see
- * common.h's expand_b for why that matters.
+ * The palette comes from the environment (osr's startup_env decides it once,
+ * against the real terminal), and OSR_TEST_COLOR is exported from here for the
+ * children: a test blanks OSR_* on purpose, so that the code under test prints
+ * plain text and its output can be compared -- which means the terminal
+ * decision has to reach the test harness by a name of its own. test/harness.c
+ * reads it, and colours its own ok/FAIL lines with it.
  *
  * C89 + POSIX.
  */
@@ -163,30 +161,31 @@ int osr_testrun_main(int argc, char **argv) {
     }
     str_free(&path);
 
-    fputc('\n', stdout);
-    colored("OSR_CYAN", "Unit tests:");
-
     str_init(&path);
     str_addz(&path, here);
     str_addz(&path, "/unit/*.sh");
-    /* GLOB_NOCHECK: with no matches sh leaves the pattern itself in the loop
-     * variable (no nullglob in POSIX sh), and the run fails on it -- same
-     * here, rather than silently reporting a green run of nothing. */
-    if (glob(str_text(&path), GLOB_NOCHECK, NULL, &g) != 0) {
-        str_free(&path);
-        return 1;
+    /* The shell tier is OPTIONAL now, and empty: every test is a C behaviour
+     * test under test/unit_c/, run by the step above. So no matches is not a
+     * failure -- but it is not silent either, because "a green run of nothing"
+     * is the one way a test suite lies. Without GLOB_NOCHECK an unmatched
+     * pattern simply yields no paths, and the section prints nothing at all;
+     * a `.sh` test dropped back in is picked up again with no other change. */
+    if (glob(str_text(&path), 0, NULL, &g) == 0) {
+        if (g.gl_pathc > 0) {
+            fputc('\n', stdout);
+            colored("OSR_CYAN", "Unit tests (shell):");
+        }
+        for (i = 0; i < g.gl_pathc; i++) {
+            str_init(&line);
+            str_addz(&line, "- ");
+            str_addz(&line, base_name(g.gl_pathv[i]));
+            colored("OSR_DIM", str_text(&line));
+            str_free(&line);
+            if (run_sh(g.gl_pathv[i]) != 0) rc = 1;
+        }
+        globfree(&g);
     }
     str_free(&path);
-
-    for (i = 0; i < g.gl_pathc; i++) {
-        str_init(&line);
-        str_addz(&line, "- ");
-        str_addz(&line, base_name(g.gl_pathv[i]));
-        colored("OSR_DIM", str_text(&line));
-        str_free(&line);
-        if (run_sh(g.gl_pathv[i]) != 0) rc = 1;
-    }
-    globfree(&g);
 
     fputc('\n', stdout);
     colored(rc == 0 ? "OSR_GREEN" : "OSR_RED", rc == 0 ? "ALL GREEN" : "SOME FAILED");

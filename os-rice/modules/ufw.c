@@ -10,8 +10,8 @@
  * Note: this closes mDNS (5353/udp) and KDE Connect (1714-1764) by default. The
  * commented lines below are the two most people want back.
  *
- * Port of modules/ufw.sh, kept as the reference at
- * test/ref/ufw_sh_ref.sh. C89.
+ * Was modules/ufw.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

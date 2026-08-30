@@ -5,8 +5,8 @@
  * nm-applet is not cosmetic: it is the only thing that shows a wifi/VPN password
  * prompt under a bare WM. nmtui/nmcli ship inside the NetworkManager package.
  *
- * Port of modules/networkmanager.sh, kept as the reference at
- * test/ref/networkmanager_sh_ref.sh. C89.
+ * Was modules/networkmanager.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -1,8 +1,8 @@
 /* modules/hyprpicker.c -- hyprpicker color picker. ONE copy, POSIX
  * (was .../modules/hyprpicker.sh). Native on Arch, no config.
  *
- * Port of modules/hyprpicker.sh, kept as the reference at
- * test/ref/hyprpicker_sh_ref.sh. C89.
+ * Was modules/hyprpicker.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

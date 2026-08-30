@@ -17,8 +17,8 @@
  * independently of the base -- the §5 split applied to a DE config. The '?'
  * keeps a missing palette from being a startup error.
  *
- * Port of modules/ghostty.sh, kept as the reference at
- * test/ref/ghostty_sh_ref.sh. C89.
+ * Was modules/ghostty.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

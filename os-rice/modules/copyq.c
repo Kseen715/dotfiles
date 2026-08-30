@@ -20,8 +20,8 @@
  * append ours. Everything outside that section is user territory - tabs,
  * commands, the tray behaviour - and is carried through untouched.
  *
- * Port of modules/copyq.sh, kept as the reference at
- * test/ref/copyq_sh_ref.sh. C89.
+ * Was modules/copyq.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -39,8 +39,8 @@
  * Prime the blur cache from this rice's wallpaper. Needs X, so it degrades to a
  * note when headless (§9) — betterlockscreen re-caches on first use anyway.
  *
- * Port of modules/i3lock.sh, kept as the reference at
- * test/ref/i3lock_sh_ref.sh. C89.
+ * Was modules/i3lock.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

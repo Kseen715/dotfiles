@@ -17,8 +17,8 @@
  * Compose base + rice palette (§6). Standalone `osr module starship` composes the
  * palette of whichever rice was picked (--theme / interactive / default).
  *
- * Port of modules/starship.sh, kept as the reference at
- * test/ref/starship_sh_ref.sh. C89.
+ * Was modules/starship.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

@@ -8,8 +8,8 @@
  * modules/power.sh; this module is only about the two things you point at a
  * specific device: its backlight and its sensors.
  *
- * Port of modules/brightnessctl.sh, kept as the reference at
- * test/ref/brightnessctl_sh_ref.sh. C89.
+ * Was modules/brightnessctl.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

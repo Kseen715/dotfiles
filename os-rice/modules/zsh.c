@@ -12,8 +12,8 @@
  * it falls back to the plain completion menu rather than breaking the key; it is
  * listed here so that machine does not exist.
  *
- * Port of modules/zsh.sh, kept as the reference at
- * test/ref/zsh_sh_ref.sh. C89.
+ * Was modules/zsh.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/build.h"

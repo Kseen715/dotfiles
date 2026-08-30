@@ -7,8 +7,8 @@
  * a Windows-formatted drive fails with a bare "unknown filesystem type", and
  * udisks gives no hint that a userspace helper is what is missing.
  *
- * Port of modules/disks.sh, kept as the reference at
- * test/ref/disks_sh_ref.sh. C89.
+ * Was modules/disks.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

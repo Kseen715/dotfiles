@@ -21,8 +21,8 @@
  * Hardware-dependent and NOT container-testable (§9); the classifiers are pure
  * functions, so test/unit/gpu_drivers.sh covers the matrix without a GPU.
  *
- * Port of modules/gpu-drivers.sh, kept as the reference at
- * test/ref/gpu-drivers_sh_ref.sh. C89.
+ * Was modules/gpu-drivers.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/cmds.h"

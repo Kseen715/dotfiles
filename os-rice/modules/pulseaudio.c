@@ -6,8 +6,8 @@
  * the Wayland session. Only the PulseAudio/JACK/ALSA replacement shims and the
  * session manager go, which is what actually hands audio back to PulseAudio.
  *
- * Port of modules/pulseaudio.sh, kept as the reference at
- * test/ref/pulseaudio_sh_ref.sh. C89.
+ * Was modules/pulseaudio.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

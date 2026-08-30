@@ -17,8 +17,8 @@
  * Hybrid graphics: switcheroo-control is the D-Bus service GTK apps use for
  * "Launch using Discrete Graphics Card".
  *
- * Port of modules/power.sh, kept as the reference at
- * test/ref/power_sh_ref.sh. C89.
+ * Was modules/power.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

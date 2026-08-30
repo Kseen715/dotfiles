@@ -1,7 +1,7 @@
 /* modules/zip.c -- zip + unzip archivers. ONE copy, POSIX (was .../modules/zip.sh).
  *
- * Port of modules/zip.sh, kept as the reference at
- * test/ref/zip_sh_ref.sh. C89.
+ * Was modules/zip.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

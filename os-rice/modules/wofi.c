@@ -19,8 +19,8 @@
  * `pkill wofi || wofi --show drun` closes the open one instead.
  * ---- wofi config (theme-owned) ----------------------------------------------
  *
- * Port of modules/wofi.sh, kept as the reference at
- * test/ref/wofi_sh_ref.sh. C89.
+ * Was modules/wofi.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

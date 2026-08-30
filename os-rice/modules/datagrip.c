@@ -28,8 +28,8 @@
  * The license is per-user and interactive (JetBrains Account or an activation
  * code), so the first launch will ask; nothing here can pre-seed it.
  *
- * Port of modules/datagrip.sh, kept as the reference at
- * test/ref/datagrip_sh_ref.sh. C89.
+ * Was modules/datagrip.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

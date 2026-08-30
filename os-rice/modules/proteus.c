@@ -22,8 +22,8 @@
  * both. On X11 neither is touched, and the picker still builds and runs on a
  * machine that has neither.
  *
- * Port of modules/proteus.sh, kept as the reference at
- * test/ref/proteus_sh_ref.sh. C89.
+ * Was modules/proteus.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

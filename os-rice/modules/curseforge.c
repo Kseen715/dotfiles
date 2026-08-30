@@ -3,8 +3,8 @@
  * generic aur: provider doesn't carry (--nosign + makepkg --skipchecksums) —
  * hence a direct helper call rather than a pacman.map aur: row. Available module.
  *
- * Port of modules/curseforge.sh, kept as the reference at
- * test/ref/curseforge_sh_ref.sh. C89.
+ * Was modules/curseforge.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

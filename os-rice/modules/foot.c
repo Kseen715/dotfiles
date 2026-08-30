@@ -18,8 +18,8 @@
  * not install_layer: the palette section was renamed in foot 1.26, so the file
  * is adapted to the foot that was just installed.
  *
- * Port of modules/foot.sh, kept as the reference at
- * test/ref/foot_sh_ref.sh. C89.
+ * Was modules/foot.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

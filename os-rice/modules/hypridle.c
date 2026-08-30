@@ -1,8 +1,8 @@
 /* modules/hypridle.c -- hypridle idle daemon + config. ONE copy, POSIX
  * (was .../modules/hypridle.sh).
  *
- * Port of modules/hypridle.sh, kept as the reference at
- * test/ref/hypridle_sh_ref.sh. C89.
+ * Was modules/hypridle.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

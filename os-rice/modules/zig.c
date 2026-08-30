@@ -3,8 +3,8 @@
  * Native-first: native on arch/fedora/alpine/void and recent Ubuntu; Debian and
  * older Ubuntu get the official ziglang.org tarball (source:provide_zig via apt.map).
  *
- * Port of modules/zig.sh, kept as the reference at
- * test/ref/zig_sh_ref.sh. C89.
+ * Was modules/zig.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

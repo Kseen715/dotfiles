@@ -3,8 +3,8 @@
  * Arch-specific by nature; idempotent — the repo is added only once, then the
  * index refreshed. No-op on non-pacman hosts (the rice is Arch-only anyway).
  *
- * Port of modules/pacman-multilib.sh, kept as the reference at
- * test/ref/pacman-multilib_sh_ref.sh. C89.
+ * Was modules/pacman-multilib.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

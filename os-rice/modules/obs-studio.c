@@ -1,7 +1,7 @@
 /* modules/obs-studio.c -- OBS Studio. ONE copy, POSIX (was .../apps/obs-studio.sh).
  *
- * Port of modules/obs-studio.sh, kept as the reference at
- * test/ref/obs-studio_sh_ref.sh. C89.
+ * Was modules/obs-studio.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

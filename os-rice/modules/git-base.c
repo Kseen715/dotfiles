@@ -2,8 +2,8 @@
  * every later module and the user relies on. Native everywhere; ONE copy, POSIX
  * (was linux-arch-x86_64-hyprland-glass/modules/git.sh, bash+pacman).
  *
- * Port of modules/git-base.sh, kept as the reference at
- * test/ref/git-base_sh_ref.sh. C89.
+ * Was modules/git-base.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

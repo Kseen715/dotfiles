@@ -1,8 +1,8 @@
 /* modules/hyprlock.c -- hyprlock screen locker + config. ONE copy, POSIX
  * (was .../modules/hyprlock.sh).
  *
- * Port of modules/hyprlock.sh, kept as the reference at
- * test/ref/hyprlock_sh_ref.sh. C89.
+ * Was modules/hyprlock.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

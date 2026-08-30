@@ -2,8 +2,8 @@
  * ONE copy, POSIX (was .../modules/easyeffects.sh). Two AUR plugins (mda-lv2,
  * libdeep-filter-ladspa) come through the aur: rows in pacman.map.
  *
- * Port of modules/easyeffects.sh, kept as the reference at
- * test/ref/easyeffects_sh_ref.sh. C89.
+ * Was modules/easyeffects.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

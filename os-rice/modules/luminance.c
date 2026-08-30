@@ -1,8 +1,8 @@
 /* modules/luminance.c -- Luminance brightness controller (AUR). ONE copy, POSIX
  * (was .../modules/luminance.sh).
  *
- * Port of modules/luminance.sh, kept as the reference at
- * test/ref/luminance_sh_ref.sh. C89.
+ * Was modules/luminance.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

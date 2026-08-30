@@ -13,8 +13,8 @@
  * Enabling only sticks once the Shell has loaded the new extension; on a live
  * session that means a logout (Wayland) or Alt+F2 r (X11). Best-effort (§9).
  *
- * Port of modules/gnome-focus.sh, kept as the reference at
- * test/ref/gnome-focus_sh_ref.sh. C89.
+ * Was modules/gnome-focus.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

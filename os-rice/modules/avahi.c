@@ -8,8 +8,8 @@
  * has no `mdns` entry. The edit below is idempotent and only touches the hosts:
  * line (§2).
  *
- * Port of modules/avahi.sh, kept as the reference at
- * test/ref/avahi_sh_ref.sh. C89.
+ * Was modules/avahi.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

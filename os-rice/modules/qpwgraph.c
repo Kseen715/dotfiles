@@ -1,8 +1,8 @@
 /* modules/qpwgraph.c -- qpwgraph PipeWire patchbay. ONE copy, POSIX
  * (was .../modules/qpwgraph.sh). Native, no config.
  *
- * Port of modules/qpwgraph.sh, kept as the reference at
- * test/ref/qpwgraph_sh_ref.sh. C89.
+ * Was modules/qpwgraph.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

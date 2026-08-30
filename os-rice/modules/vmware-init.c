@@ -2,8 +2,8 @@
  * hypervisor. POSIX port of .../modules/vmware-init.sh, keyed on OSR_VIRT from
  * detect.sh. Hardware/VM-dependent (§9). Arch-only.
  *
- * Port of modules/vmware-init.sh, kept as the reference at
- * test/ref/vmware-init_sh_ref.sh. C89.
+ * Was modules/vmware-init.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

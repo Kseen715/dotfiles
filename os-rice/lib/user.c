@@ -22,8 +22,8 @@
  * directory that must stay owned by the user being riced. So this composes
  * and decides, lib/user.sh performs.
  *
- * Byte-for-byte with the sh original, frozen at test/ref/user_sh_ref.sh and
- * diffed by test/unit/user_c_parity.sh.
+ * What the user model and the file primitives must do is stated in
+ * test/unit_c/user_test.c.
  *
  * C89 + POSIX.
  */

@@ -6,8 +6,8 @@
  * the Arch packages. Add `enable_service pipewire` if a headless/system-wide
  * setup ever needs it.
  *
- * Port of modules/pipewire.sh, kept as the reference at
- * test/ref/pipewire_sh_ref.sh. C89.
+ * Was modules/pipewire.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

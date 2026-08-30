@@ -2,8 +2,8 @@
  * (was .../modules/hyprcursor.sh). The theme is copied into the user's icon dir;
  * gsettings/flatpak overrides are best-effort (only when those tools exist).
  *
- * Port of modules/hyprcursor.sh, kept as the reference at
- * test/ref/hyprcursor_sh_ref.sh. C89.
+ * Was modules/hyprcursor.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

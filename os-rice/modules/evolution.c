@@ -27,8 +27,8 @@
  *   glib2   ships the `gsettings` binary itself. All the per-distro spellings
  *           are absorbed by pkgmap rows (§1), so this list stays one list.
  *
- * Port of modules/evolution.sh, kept as the reference at
- * test/ref/evolution_sh_ref.sh. C89.
+ * Was modules/evolution.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

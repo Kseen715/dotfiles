@@ -8,8 +8,8 @@
  * blueman menu is greyed out. mpris-proxy (ships inside bluez) is what makes the
  * play/pause button on a headset reach playerctl and the bar.
  *
- * Port of modules/blueman.sh, kept as the reference at
- * test/ref/blueman_sh_ref.sh. C89.
+ * Was modules/blueman.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

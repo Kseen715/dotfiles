@@ -34,8 +34,8 @@
  * Say it here, once, instead of leaving someone hunting for an "Exchange" button
  * that the account wizard is never going to draw.
  *
- * Port of modules/thunderbird.sh, kept as the reference at
- * test/ref/thunderbird_sh_ref.sh. C89.
+ * Was modules/thunderbird.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

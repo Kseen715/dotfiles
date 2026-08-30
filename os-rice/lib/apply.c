@@ -19,76 +19,146 @@
 #include "cmds.h"
 #include "config.h"
 
-/* Libs whose functions all mutate the system: neutralized wholesale. */
-static const char *const MUTATING_LIBS[] = {
-    "pkg", "build", "net", "git", "service", "fonts", NULL
-};
-
-/* The read-only exceptions. _pkgmap_one is a query, and so is everything it
- * calls: the helpers behind the facet ladder (_pkgmap_exact/_pkgmap_range/
- * _pkgmap_rhs/_pkgmap_re and the _ver_* arithmetic) read map files and compare
- * strings, nothing else. Stubbing one of them leaves _pkgmap_one resolving
- * every name to the empty string. */
-static const char *const QUERY_OK[] = {
-    "pkg_installed", "_pkgmap_one", "_pkgmap_exact", "_pkgmap_range",
-    "_pkgmap_rhs", "_pkgmap_re", "_ver_cmp", "_ver_match", "_ver_prefixes",
-    "_spec_method", "_native_installed", "_native_held", "service_resolve",
-    "osr_downloader", "_chafa_version", "_chafa_ok", "_fzf_version",
-    "_fzf_ok", "_osr_pkgconfig_path", "_yb_deb_url", NULL
-};
-
 /* The markers that make a module theme-carrying. */
 static const char *const THEME_MARKERS[] = {
     "OSR_THEME_DIR", "install_theme_layer", "osr_theme_source", NULL
 };
 
-int osr_apply_is_query(const char *name) {
-    size_t i;
-    for (i = 0; QUERY_OK[i] != NULL; i++)
-        if (strcmp(QUERY_OK[i], name) == 0) return 1;
-    return 0;
-}
-
-/* def_name -- the function name a line defines, sh's
- * one-line sed: an unindented lowercase identifier followed immediately by
- * "()". Anything else is not a definition. */
+/* def_name -- the function a C definition line declares.
+ *
+ * The shape every definition in lib/ has: it starts in column 0, and the line
+ * ends in `{`. The name is the identifier immediately before the `(`, which
+ * skips past the return type and any `static`. A prototype ends in `;` and a
+ * call is indented, so neither is mistaken for a definition. */
 static int def_name(Str *out, const Line *line) {
     const char *p = line->start;
     const char *end = line->start + line->len;
-    const char *start = p;
+    const char *open;
+    const char *name_end;
+    const char *name;
 
     if (p >= end) return 0;
-    if (!((*p >= 'a' && *p <= 'z') || *p == '_')) return 0;
-    while (p < end && ((*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') ||
-                       *p == '_')) p++;
-    if (end - p < 2 || p[0] != '(' || p[1] != ')') return 0;
-    str_add(out, start, (size_t)(p - start));
+    if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || *p == '_'))
+        return 0;                                   /* indented: not a definition */
+    while (end > p && is_space(end[-1])) end--;
+    if (end == p) return 0;
+    /* `{` ends a definition; `,` or `)` ends the FIRST line of one whose
+     * parameter list is split across lines, which several here are. A `;`
+     * ends a prototype and is the one shape to refuse. */
+    if (end[-1] != '{' && end[-1] != ',' && end[-1] != ')') return 0;
+
+    open = NULL;
+    for (name_end = p; name_end < end; name_end++)
+        if (*name_end == '(') { open = name_end; break; }
+    if (open == NULL) return 0;
+
+    name_end = open;
+    while (name_end > p && is_space(name_end[-1])) name_end--;
+    name = name_end;
+    while (name > p && ((name[-1] >= 'A' && name[-1] <= 'Z') ||
+                        (name[-1] >= 'a' && name[-1] <= 'z') ||
+                        (name[-1] >= '0' && name[-1] <= '9') ||
+                        name[-1] == '_')) name--;
+    if (name == name_end) return 0;
+    str_add(out, name, (size_t)(name_end - name));
     return 1;
 }
 
-void osr_apply_verbs(Str *out) {
+/* line_has_call -- is `needle` CALLED on this line? The lines are not
+ * NUL-terminated, so strstr is not available -- and a match immediately after
+ * a double quote is the needle inside a string literal, which is how this
+ * very function would otherwise report itself. */
+static int line_has_call(const Line *line, const char *needle) {
+    size_t n = strlen(needle);
     size_t i;
-    for (i = 0; MUTATING_LIBS[i] != NULL; i++) {
-        Str path;
+    if (n > line->len) return 0;
+    for (i = 0; i + n <= line->len; i++) {
+        if (memcmp(line->start + i, needle, n) != 0) continue;
+        if (i > 0 && line->start[i - 1] == '"') continue;
+        return 1;
+    }
+    return 0;
+}
+
+/* cmp_str -- byte order, for the sorted listing below. */
+static int cmp_str(const void *a, const void *b) {
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+void osr_apply_verbs(Str *out) {
+    Str dir;
+    DIR *d;
+    struct dirent *e;
+    char **found = NULL;
+    size_t count = 0;
+    size_t cap = 0;
+    size_t i;
+
+    str_init(&dir);
+    str_addz(&dir, osr_mod_root());
+    str_addz(&dir, "/lib");
+    d = opendir(str_text(&dir));
+    if (d == NULL) { str_free(&dir); return; }
+
+    while ((e = readdir(d)) != NULL) {
+        Str path, current;
         char *buf;
         size_t len = 0;
         size_t pos = 0;
+        size_t nl = strlen(e->d_name);
         Line line;
 
+        if (nl < 3 || strcmp(e->d_name + nl - 2, ".c") != 0) continue;
         str_init(&path);
-        str_addz(&path, osr_mod_root());
-        str_addz(&path, "/lib/");
-        str_addz(&path, MUTATING_LIBS[i]);
-        str_addz(&path, ".sh");
+        str_add(&path, str_text(&dir), dir.len);
+        str_addc(&path, '/');
+        str_addz(&path, e->d_name);
         buf = slurp(str_text(&path), &len);
         str_free(&path);
-        if (buf == NULL) continue;   /* [ -f ... ] || continue */
+        if (buf == NULL) continue;
 
+        str_init(&current);
         while (next_line(buf, len, &pos, &line)) {
-            if (def_name(out, &line)) str_addc(out, '\n');
+            Str name;
+            str_init(&name);
+            if (def_name(&name, &line)) {
+                str_reset(&current);
+                str_add(&current, str_text(&name), name.len);
+            } else if (current.len > 0 &&
+                       line_has_call(&line, "osr_theme_only(")) {
+                /* This function asks before acting, so it is neutralized. */
+                int seen = 0;
+                for (i = 0; i < count && !seen; i++)
+                    if (strcmp(found[i], str_text(&current)) == 0) seen = 1;
+                if (!seen) {
+                    if (count == cap) {
+                        cap = cap ? cap * 2 : 16;
+                        found = (char **)realloc(found, cap * sizeof(char *));
+                        if (found == NULL) osr_die_oom();
+                    }
+                    found[count] = (char *)malloc(current.len + 1);
+                    if (found[count] == NULL) osr_die_oom();
+                    memcpy(found[count], str_text(&current), current.len + 1);
+                    count++;
+                }
+                str_reset(&current);          /* one entry per function */
+            }
+            str_free(&name);
         }
+        str_free(&current);
         free(buf);
     }
+    closedir(d);
+    str_free(&dir);
+
+    /* Sorted, so the listing is the same on every filesystem. */
+    qsort(found, count, sizeof(found[0]), cmp_str);
+    for (i = 0; i < count; i++) {
+        str_addz(out, found[i]);
+        str_addc(out, '\n');
+        free(found[i]);
+    }
+    free(found);
 }
 
 /* is_theme_module -- does this module name one of the markers anywhere? A

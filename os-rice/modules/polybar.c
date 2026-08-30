@@ -11,8 +11,8 @@
  * absolute path, so a bar whose scripts did not land shows empty modules rather
  * than an error - install them with the config, not separately.
  *
- * Port of modules/polybar.sh, kept as the reference at
- * test/ref/polybar_sh_ref.sh. C89.
+ * Was modules/polybar.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

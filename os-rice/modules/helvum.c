@@ -2,8 +2,8 @@
  * (was .../modules/helvum.sh). Native, no config. Available module (qpwgraph is
  * the default patchbay in this rice).
  *
- * Port of modules/helvum.sh, kept as the reference at
- * test/ref/helvum_sh_ref.sh. C89.
+ * Was modules/helvum.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 

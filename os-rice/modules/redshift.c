@@ -7,8 +7,8 @@
  * explicitly rather than relying on geoclue, which needs a D-Bus provider that
  * i3 does not run.
  *
- * Port of modules/redshift.sh, kept as the reference at
- * test/ref/redshift_sh_ref.sh. C89.
+ * Was modules/redshift.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

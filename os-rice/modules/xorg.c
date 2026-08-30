@@ -15,8 +15,8 @@
  * display manager; a DM user simply never reads it. It is user territory after
  * the first write -- os-rice never rewrites it.
  *
- * Port of modules/xorg.sh, kept as the reference at
- * test/ref/xorg_sh_ref.sh. C89.
+ * Was modules/xorg.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"

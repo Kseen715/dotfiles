@@ -16,8 +16,8 @@
  * libinput-gestures needs the user in the `input` group to read /dev/input.
  * keyd is a system daemon with a root-owned config; seeded once, then yours.
  *
- * Port of modules/input.sh, kept as the reference at
- * test/ref/input_sh_ref.sh. C89.
+ * Was modules/input.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 #include "../lib/common.h"
