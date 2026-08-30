@@ -22,8 +22,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define BENCH_DEFAULT_SECONDS 20
-
 /* BENCH_EXIT_DEPS -- "the tools are not here". A distinct status rather than a
  * plain failure, because the front-end script acts on it: it installs the
  * module and runs us again. Installing packages needs the sh tier's module
@@ -254,9 +252,7 @@ static int cmd_cpu(int argc, char **argv) {
     const char *save = NULL, *compare = NULL;
     int json = 0, i;
 
-    opts.seconds = BENCH_DEFAULT_SECONDS;
-    opts.verbose = 0;
-    opts.announce = 0;
+    bench_opts_init(&opts);
 
     for (i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--json") == 0) {
