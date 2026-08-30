@@ -76,15 +76,24 @@ static void unfilled(Str *out, const char *text, size_t len) {
         str_init(&l);
         str_add(&l, line.start, line.len);
         p = str_text(&l);
-        if (strstr(p, "WALLPAPER_PATH") != NULL) { str_free(&l); continue; } /* grep -v */
         while ((p = strstr(p, "{{")) != NULL) {
             const char *name = p + 2;
             const char *q = name;
             while ((*q >= 'A' && *q <= 'Z') || (*q >= 'a' && *q <= 'z') ||
                    (*q >= '0' && *q <= '9') || *q == '_') q++;
             if (q[0] == '}' && q[1] == '}' && q > name) {
-                last_start = name;                 /* greedy `.*`: keep the last */
-                last_len = (size_t)(q - name);
+                size_t n = (size_t)(q - name);
+                /* {{WALLPAPER_PATH}} is not missing, it is DEFERRED: the
+                 * wallpaper layer fills it in a second pass, once there is an
+                 * installed path to fill it with (SS6). So it is skipped --
+                 * but only IT. The shell original skipped the whole line it
+                 * appeared on (`grep -v`), which meant a genuinely missing
+                 * role sharing that line was never reported, and the warning
+                 * that exists to make such a gap obvious stayed silent. */
+                if (!(n == 14 && memcmp(name, "WALLPAPER_PATH", 14) == 0)) {
+                    last_start = name;             /* greedy `.*`: keep the last */
+                    last_len = n;
+                }
             }
             p += 2;
         }
@@ -158,7 +167,7 @@ int osr_render_template(const char *src, const char *dst, const char *theme) {
             Str base;
             str_init(&base);
             base_of(&base, src);
-            osr_warnf("theme '%s' defines no %s- left unsubstituted in %s",
+            osr_warnf("theme '%s' defines no %s - left unsubstituted in %s",
                       theme, str_text(&left), str_text(&base));
             str_free(&base);
         }

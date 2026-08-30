@@ -22,8 +22,8 @@
  * directory that must stay owned by the user being riced. So this composes
  * and decides, lib/user.sh performs.
  *
- * Byte-for-byte with the sh original, frozen at test/ref/user_sh_ref.sh and
- * diffed by test/unit/user_c_parity.sh.
+ * What the user model and the file primitives must do is stated in
+ * test/unit_c/user_test.c.
  *
  * C89 + POSIX.
  */
@@ -32,6 +32,8 @@
 
 #include "common.h"
 #include "cmds.h"
+#include "config.h"
+#include "module.h"
 
 #include <limits.h>
 #include <pwd.h>
@@ -178,36 +180,50 @@ static int cmd_shell_is(const char *user, const char *shell) {
 /* cmd_resolve -- osr_resolve_user: which account is being riced, and where it
  * lives. Order (§8): --user > $SUDO_USER (when invoked via sudo) > $USER >
  * whoever we are. */
-static int cmd_resolve(const char *explicit_user) {
-    Str user;
-    Str home;
-    Str out;
+/* resolve_user -- who is being riced, and where they live. Order (§8):
+ * --user > $SUDO_USER (when invoked via sudo) > $USER > whoever we are. */
+static void resolve_user(Str *user, Str *home, const char *explicit_user) {
     const char *sudo_user;
 
-    str_init(&user);
     if (explicit_user != NULL && *explicit_user != '\0') {
-        str_addz(&user, explicit_user);
+        str_addz(user, explicit_user);
     } else if ((sudo_user = env_str("SUDO_USER", NULL)) != NULL && strcmp(sudo_user, "root") != 0) {
-        str_addz(&user, sudo_user);
+        str_addz(user, sudo_user);
     } else if (env_str("USER", NULL) != NULL) {
-        str_addz(&user, env_str("USER", ""));
+        str_addz(user, env_str("USER", ""));
     } else {
         struct passwd *pw = nss_allowed() ? getpwuid(getuid()) : NULL; /* sh: id -un */
-        str_addz(&user, (pw != NULL && pw->pw_name != NULL) ? pw->pw_name : "root");
+        str_addz(user, (pw != NULL && pw->pw_name != NULL) ? pw->pw_name : "root");
     }
 
     /* The real home (field 6); handles /root and non-standard homes. */
-    str_init(&home);
-    passwd_field(&home, str_text(&user), 6);
-    if (home.len == 0) {
-        if (strcmp(str_text(&user), "root") == 0) {
-            str_addz(&home, "/root");
+    passwd_field(home, str_text(user), 6);
+    if (home->len == 0) {
+        if (strcmp(str_text(user), "root") == 0) {
+            str_addz(home, "/root");
         } else {
-            str_addz(&home, "/home/");
-            str_addz(&home, str_text(&user));
+            str_addz(home, "/home/");
+            str_addz(home, str_text(user));
         }
     }
+}
 
+/* osr_resolve_user -- the same, into this process's environment, for the runner
+ * and every child it forks. `export` is what the shim bought; setenv is that. */
+void osr_resolve_user(const char *explicit_user) {
+    Str user, home;
+    str_init(&user); str_init(&home);
+    resolve_user(&user, &home, explicit_user);
+    setenv("OSR_USER", str_text(&user), 1);
+    setenv("OSR_HOME", str_text(&home), 1);
+    str_free(&user); str_free(&home);
+}
+
+static int cmd_resolve(const char *explicit_user) {
+    Str user, home, out;
+
+    str_init(&user); str_init(&home);
+    resolve_user(&user, &home, explicit_user);
     str_init(&out);
     sh_assign(&out, "OSR_USER", str_text(&user));
     sh_assign(&out, "OSR_HOME", str_text(&home));
@@ -244,19 +260,18 @@ static int cmd_shell_registered(const char *shell) {
  * version's awk -F: -v OFS=:). Exit 1 -- and no output -- when the user does
  * not live in /etc/passwd at all (NSS/LDAP), which is the sh version's
  * `grep -q ... || return 1`. */
-static int cmd_passwd_shell(const char *path, const char *user, const char *shell) {
+static int compose_passwd_shell(Str *out, const char *path, const char *user,
+                                const char *shell) {
     char *buf;
     size_t len;
     size_t pos = 0;
     Line line;
     size_t ulen = strlen(user);
     int found = 0;
-    Str out;
 
     buf = slurp(path, &len);
-    if (buf == NULL) return 1;
+    if (buf == NULL) return 0;
 
-    str_init(&out);
     while (next_line(buf, len, &pos, &line)) {
         if (line.len > ulen && strncmp(line.start, user, ulen) == 0 && line.start[ulen] == ':') {
             /* rewrite the 7th field, keep the first six as they are */
@@ -270,20 +285,115 @@ static int cmd_passwd_shell(const char *path, const char *user, const char *shel
                     if (colons == 6) { cut = i + 1; break; }
                 }
             }
-            str_add(&out, line.start, cut);
-            if (colons == 6) str_addz(&out, shell);
-            str_addc(&out, '\n');
+            str_add(out, line.start, cut);
+            if (colons == 6) str_addz(out, shell);
+            str_addc(out, '\n');
         } else {
-            str_add(&out, line.start, line.len);
-            str_addc(&out, '\n');
+            str_add(out, line.start, line.len);
+            str_addc(out, '\n');
         }
     }
     free(buf);
+    return found;
+}
 
-    if (!found) { str_free(&out); return 1; }
-    out_flush(&out);
+/* cmd_passwd_shell -- the same, to stdout, for lib/user.sh's `osr user
+ * passwd-shell`. Exit 1 -- and no output -- when the user does not live in
+ * /etc/passwd at all. */
+static int cmd_passwd_shell(const char *path, const char *user, const char *shell) {
+    Str out;
+    int found;
+    str_init(&out);
+    found = compose_passwd_shell(&out, path, user, shell);
+    if (found) out_flush(&out);
     str_free(&out);
-    return 0;
+    return found ? 0 : 1;
+}
+
+/* --- the login shell, changed for real ------------------------------------
+ *
+ * lib/user.sh's osr_register_shell / osr_passwd_set_shell / osr_set_login_shell.
+ * They stayed in sh only because they WRITE, and a write had to go through the
+ * as_root shell function; module.h's osr_run_root is that same escalation
+ * without a shell, so a C module can have them. `chsh` is not universal --
+ * busybox has no applet and a minimal Fedora keeps it in util-linux-user -- so
+ * each mechanism is tried and the RESULT verified rather than an exit code
+ * trusted: chsh -> usermod -> a direct /etc/passwd rewrite.
+ */
+
+/* osr_user_shell_is -- cmd_shell_is as a predicate: 1 when the account already
+ * logs in with this shell, canonical paths compared. */
+int osr_user_shell_is(const char *user, const char *shell) {
+    return cmd_shell_is(user, shell) == 0;
+}
+
+/* osr_register_shell -- make sure /etc/shells lists it (idempotent, §2). Not
+ * every distro's zsh package registers itself, and an unlisted shell makes
+ * chsh refuse for non-root. */
+int osr_register_shell(const char *shell) {
+    Str line;
+    int ok;
+
+    if (shell == NULL || *shell == '\0') return 1;
+    if (cmd_shell_registered(shell) == 0) return 1;
+    str_init(&line);
+    str_addz(&line, shell);
+    str_addc(&line, '\n');
+    ok = osr_append_root(shells_path(), str_text(&line));
+    str_free(&line);
+    return ok;
+}
+
+/* osr_passwd_set_shell -- the last resort: rewrite field 7 in /etc/passwd.
+ * Written through `cp -f` onto the existing file, never a rename, so the inode
+ * keeps its mode, owner and SELinux context. */
+static int osr_passwd_set_shell(const char *user, const char *shell) {
+    char tmpl[] = "/tmp/osr-passwd.XXXXXX";
+    Str body;
+    char *argv[5];
+    int fd, ok = 0;
+
+    str_init(&body);
+    if (!compose_passwd_shell(&body, passwd_path(), user, shell) || body.len == 0) {
+        str_free(&body);
+        return 0;
+    }
+    fd = mkstemp(tmpl);
+    if (fd < 0) { str_free(&body); return 0; }
+    if ((size_t)write(fd, str_text(&body), body.len) == body.len) {
+        close(fd);
+        argv[0] = (char *)"cp"; argv[1] = (char *)"-f"; argv[2] = tmpl;
+        argv[3] = (char *)passwd_path(); argv[4] = NULL;
+        ok = osr_run_root(argv) == 0;
+    } else {
+        close(fd);
+    }
+    (void)unlink(tmpl);
+    str_free(&body);
+    return ok;
+}
+
+/* osr_set_login_shell -- set it whatever the box provides, and report whether
+ * it actually took. Returns 0 when the shell still is not <shell> afterwards,
+ * which is the caller's cue to warn rather than claim success. */
+int osr_set_login_shell(const char *user, const char *shell) {
+    char *argv[5];
+
+    (void)osr_register_shell(shell);
+
+    if (osr_have_cmd("chsh")) {
+        argv[0] = (char *)"chsh"; argv[1] = (char *)"-s"; argv[2] = (char *)shell;
+        argv[3] = (char *)user; argv[4] = NULL;
+        (void)osr_run_root(argv);
+    }
+    if (!osr_user_shell_is(user, shell) && osr_have_cmd("usermod")) {
+        argv[0] = (char *)"usermod"; argv[1] = (char *)"-s"; argv[2] = (char *)shell;
+        argv[3] = (char *)user; argv[4] = NULL;
+        (void)osr_run_root(argv);
+    }
+    if (!osr_user_shell_is(user, shell)) (void)osr_passwd_set_shell(user, shell);
+
+    return osr_user_shell_is(user, shell);
 }
 
 /* cmd_needs_line -- ensure_line's test: `[ -f ] && grep -qF -- "$line"`,
@@ -314,82 +424,21 @@ static int cmd_needs_line(const char *path, const char *needle) {
  * between the markers (§5) and keeping every byte outside them. The body
  * arrives on stdin, as it did through the shell's heredoc. */
 static int cmd_compose_block(const char *path, const char *name) {
-    Str begin;
-    Str end;
     Str body;
     Str out;
-    char *buf;
-    size_t len;
     int c;
 
-    str_init(&begin);
-    str_addz(&begin, "# >>> os-rice:");
-    str_addz(&begin, name);
-    str_addz(&begin, " >>>");
-    str_init(&end);
-    str_addz(&end, "# <<< os-rice:");
-    str_addz(&end, name);
-    str_addz(&end, " <<<");
-
-    /* `_eb_body=$(cat)` -- trailing newlines eaten by the substitution. */
+    /* `_eb_body=$(cat)` -- the body arrives on stdin, as it did through the
+     * shell's heredoc. The composition itself lives in lib/config.c, which is
+     * where ensure_block's callers are. */
     str_init(&body);
     while ((c = fgetc(stdin)) != EOF) str_addc(&body, (char)c);
-    str_trim_trailing(&body, '\n');
 
     str_init(&out);
-    buf = slurp(path, &len);
-    if (buf != NULL) {
-        size_t pos = 0;
-        Line line;
-        int has_marker = 0;
-        size_t i;
-        /* `grep -qF "$_eb_begin"` -- a SUBSTRING search, deliberately not the
-         * exact-line test the rewrite below uses. The two disagree on a file
-         * whose last line had no newline when the block was first appended
-         * (the marker ends up glued to it), and reproducing that disagreement
-         * is the point: the sh version's output in that case is what modules
-         * on disk already have. */
-        for (i = 0; i + begin.len <= len && !has_marker; i++) {
-            if (memcmp(buf + i, str_text(&begin), begin.len) == 0) has_marker = 1;
-        }
-        if (has_marker) {
-            /* Replace the existing region: drop the markers and everything
-             * between them, keep the rest verbatim. */
-            int skip = 0;
-            while (next_line(buf, len, &pos, &line)) {
-                if (line.len == begin.len && strncmp(line.start, str_text(&begin), begin.len) == 0) {
-                    skip = 1;
-                    continue;
-                }
-                if (line.len == end.len && strncmp(line.start, str_text(&end), end.len) == 0) {
-                    skip = 0;
-                    continue;
-                }
-                if (!skip) {
-                    str_add(&out, line.start, line.len);
-                    str_addc(&out, '\n');
-                }
-            }
-        } else {
-            /* No region yet: the file as it stands, then the block appended.
-             * `cat` copies it byte for byte, trailing newline or not. */
-            str_add(&out, buf, len);
-        }
-        free(buf);
-    }
-
-    str_add(&out, str_text(&begin), begin.len);
-    str_addc(&out, '\n');
-    str_add(&out, str_text(&body), body.len);
-    str_addc(&out, '\n');
-    str_add(&out, str_text(&end), end.len);
-    str_addc(&out, '\n');
-
+    osr_compose_block(&out, path, name, str_text(&body));
     out_flush(&out);
     str_free(&out);
     str_free(&body);
-    str_free(&begin);
-    str_free(&end);
     return 0;
 }
 

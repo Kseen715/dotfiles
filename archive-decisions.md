@@ -52,7 +52,7 @@ once, write each module once.
 
 **"No compiled C binary (for now)"**
 
-*Status:* superseded for the harness, still binding for `bootstrap.sh`
+*Status:* superseded for the harness, still binding for `osr`'s self-bootstrap block
 *Replaced by:* [[os-rice/DESIGN#D-3. The C harness|DESIGN — the C harness]]
 
 Original ruling, and it was about bootstrap primitives, not speed:
@@ -63,9 +63,12 @@ Original ruling, and it was about bootstrap primitives, not speed:
 
 What changed: the harness itself became C (`osr.c` + `lib/*.c` linked by
 `nob.c` into `build/osr`), one translation unit per shell file it replaced.
-The reasoning above still holds exactly where it was aimed — **`bootstrap.sh`
-stays pure sh and compiles nothing**, because it runs before a toolchain is a
-given. Past that point the tool assumes a C compiler.
+The reasoning above still holds exactly where it was aimed — **the
+self-bootstrap block at the top of `osr` stays pure sh and compiles nothing**,
+because it runs before a toolchain is a given. Past that point the tool assumes
+a C compiler, so that block installs one alongside git before it hands off.
+(It was `bootstrap.sh` until it merged into `osr`: same code, same ruling, one
+fewer entry point.)
 
 Files removed outright by that port, not shrunk: `test/run.sh`,
 `lib/state.sh`, and the build shim. `state.sh` existed only for its

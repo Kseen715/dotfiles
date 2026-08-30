@@ -2,7 +2,7 @@
 title: os-rice — Design
 type: design
 status: past-MVP
-updated: 2026-08-28
+updated: 2026-08-30
 tags:
   - kind/design
   - topic/os-rice
@@ -18,14 +18,15 @@ tags:
 A DRY, declarative, POSIX-portable installer for unix-like apps, configs, and
 whole rices.
 
-> [!important] Direction: the backbone becomes C
-> The shell tier works and is not going anywhere tomorrow, but it is **not
-> the destination**. Every part of the backbone — the libs, the runner, the
-> front end, and eventually the ~115 modules — is being rewritten as C
-> translation units linked into one binary (`build/osr`), the same shape the
-> Windows core already has. Sections [[#D-3. The C harness|D-3]],
+> [!success] The backbone is C
+> Every part of it — the libs, the runner, the front end, the test runner and
+> all 120 modules — is a C translation unit. The default `build/osr` links the
+> complete module set; optional `build/osr-runtime` links only the host and
+> compiles a module when first used. `osr`, `install.sh` and `wallpaper.sh` are
+> the only `.sh` files the harness contains, and the last two are shims over the
+> selected binary. Sections [[#D-3. The C harness|D-3]],
 > [[#D-4. A module may be a C unit instead of a script|D-4]] and
-> [[#13. The port, and what is left of it|13]] are the plan and the score.
+> [[#13. The port, and what it left behind|13]] are the design and the record.
 
 > [!abstract] Problem
 > Describe a whole rice (apps + modules + configs) as one readable list, and
@@ -84,8 +85,9 @@ stays gated on `[ -t 1 ]`.
 ### D-3. The C harness
 
 The POSIX side is C, arranged like the Windows core: `nob.c` links `osr.c` (a
-command dispatcher) with one translation unit per file it replaced into a
-single binary, `build/osr`.
+command dispatcher) with one translation unit per file it replaced. The default
+output, `build/osr`, also links every module. The optional runtime output keeps
+the same core and module registry but loads module objects on demand (D-4).
 
 | shell file | unit | command | what moved |
 | --- | --- | --- | --- |
@@ -98,32 +100,50 @@ single binary, `build/osr`.
 | `install.sh` | `lib/install.c` | `osr install` | help, listings, option loop, manifest, report |
 | `test/run.sh` | `lib/testrun.c` | `osr test-run` | the suite runner |
 
-Five of the ported units keep a shell shim in `lib/` (`ui.sh`, `log.sh`,
-`user.sh`, `detect.sh`, `theme.sh`). They are **not** implementations — they are the
-shell-callable surface, which cannot go away while ~115 modules are shell
-scripts:
+`lib/` holds no `.sh` files at all any more. Every reason a shell-callable
+surface existed has expired:
 
-- `run_step`'s arguments are shell **functions** (`pkg_install`, `as_root`), so only a shell can fork them;
-- `error` must `exit` the running shell;
-- `as_user`/`as_root` are command prefixes wrapping `sudo`;
-- `osr_detect`/`osr_resolve_theme` set the variables modules branch on — the core prints assignments, the shim `eval`s them;
-- `install.sh` **sources** each module.
+- `run_step`'s arguments were shell **functions** (`pkg_install`, `as_root`), so only a shell could fork them — but nothing forks a shell function any more;
+- `error` had to `exit` the running shell — the runner is not one;
+- `as_user`/`as_root` were command prefixes wrapping `sudo` — `osr_run_user`/`osr_run_root` are that escalation without a shell;
+- `osr_detect`/`osr_resolve_theme` set the variables the runner branched on — the core prints assignments for a shell to `eval`, and sets them with `setenv` for itself;
+- `install.sh` **sourced** each module — no module is a shell script (§11a), and `install.sh` is a two-line shim over `osr install run`.
 
-> [!important] `bootstrap.sh` compiles nothing
-> It runs before a toolchain is a given and stays pure sh. Past that point the
-> tool assumes a C compiler. See [[archive-decisions#A2|A2]].
+The last thing keeping them was the test suite, which ran each one as the live
+oracle its C replacement was diffed against. That suite is gone too, replaced
+by behaviour tests that state what each unit must do; see [[#13. The port, and what it left behind|§13]].
 
-**Contract:** byte-for-byte identical output. The sh version is frozen under
-`test/ref/` and diffed against the C one by `test/unit/*_c_parity.sh` — 317
-checks over the eight units. Exactly one divergence is accepted and asserted
-rather than hidden (see [[archive-decisions#A2|A2]]).
+> [!note] A `.sh` module still runs, with less around it
+> The runner still hands a `modules/<name>.sh` to a shell — a rice.list never
+> says which tier it wanted. What such a module no longer gets is os-rice's own
+> verbs: `pkg_install` and the rest are C functions, and there are no `.sh`
+> libs to source. It runs with the facts in its environment and plain sh, which
+> is enough for a one-off local module and not enough to write a real one. A
+> module that needs the verbs is written in C and registered in
+> `lib/modules.c`.
+
+> [!important] `osr`'s self-bootstrap compiles nothing
+> The block at the top of `osr` — the `curl | sh` path that installs git and a
+> compiler, clones the repo and re-execs from the clone — runs before a
+> toolchain is a given and stays pure sh. Past that point the tool assumes a C
+> compiler, which is why that block's job is to make one present. It was
+> `bootstrap.sh` until it moved into `osr`, so that the URL people pipe is the
+> same program they run afterwards. See [[archive-decisions#A2|A2]].
+
+**Contract:** every unit's behaviour is stated by name in `test/unit_c/` — 1617
+named assertions across 40 test binaries, over the libs, the runner, the two
+front ends and all 120 modules. What replaced the byte-for-byte diff against
+the shell tier, and why, is [[#13. The port, and what it left behind|§13]].
 
 ### D-4. A module may be a C unit instead of a script
 
-`modules/<name>.c` registered in `lib/modules.c` against `lib/module.h`, with
-`modules/*.sh` unchanged beside them. `install.sh` asks `osr module has
-`<name>` per manifest entry, so a `rice.list` never says which tier it wants
-and a module can move between them without touching a rice.
+`modules/<name>.c` registered in `lib/modules.c` against `lib/module.h`. The two
+tiers coexisted for the whole port — a `.sh` module sat unchanged beside the C
+ones until its turn came — and the dispatch that made that possible is still
+what runs: the runner asks `osr_module_has(<name>)` per manifest entry, and
+hands anything it does not own to plain sh without the C-only os-rice verbs. A
+`rice.list` never says which tier it wants, and a module can move between them
+without touching a rice.
 
 **One file, not one per OS.** `modules/fastfetch.c` holds both
 implementations — Windows behind `#ifdef _WIN32` (dispatched from
@@ -133,10 +153,10 @@ the object to whichever core the host builds.
 
 What C buys is not speed:
 
-- **`osr_step` forks a function of the program.** `run_step` could only fork a *shell* function — the single reason `lib/ui.sh` still exists.
+- **`osr_step` forks a function of the program.** `run_step` could only fork a *shell* function. Nothing forks a shell function any more, so `run_step`/`try_step` have no caller left.
 - **A module is a translation unit, not a sourced fragment.** A `.sh` module runs inside the installer's shell and can clobber any lib variable.
 - **The contract is a header**, not "whatever happens to be defined by the time we source you".
-- **It is checkable.** `test/unit/module_c_parity.sh` runs the frozen `.sh` and the C module side by side under stubbed package tooling and diffs what they did to the box.
+- **It is checkable.** `test/unit_c/modules_test.c` runs a module under stubbed package tooling and asserts the complete list of commands it issued — which, for a module, is the whole of what it does.
 
 What C costs is the property the module system was built for: a module as one
 readable POSIX script anyone can copy and edit. Modules are the **last** stage of the port, not the first: the backbone has to
@@ -145,11 +165,53 @@ without losing behaviour. Until then a port happens when a module is being
 touched anyway, and preferably one whose logic is real rather than three lines
 of package install.
 
-> [!warning] Providers are not ported
-> `osr_pkg_install` covers the **native** path only and hands a provider row
-> back to `lib/pkg.sh`. `source:` in particular dispatches into
-> `lib/build.sh` (~1250 lines of downloaders and builders). That one call is
-> the only place the C tier calls back into sh.
+### D-4a. Static and runtime module backends
+
+Module dispatch has two build-time backends with one registry and one module
+API:
+
+- `./build/nob static` (also the no-argument default) produces `build/osr`, with
+  every registry function pointer resolved at link time. It requires no compiler
+  when modules run.
+- `./build/nob runtime` produces `build/osr-runtime`, with registry names,
+  session metadata and themable flags but no POSIX module objects. The first run
+  of a registered name compiles its `modules/<name>.c` into a shared object,
+  loads `osrm_<name>` with `dlopen`/`dlsym`, and invokes it through the same
+  return contract. `./build/nob both` produces both outputs.
+
+`OSR_C_MODULE_BACKEND=static|runtime` selects which output the `osr` launcher
+builds and executes; static remains the compatibility default. Runtime module
+compilation selects `OSR_MODULE_CC`, then `CC`, then the first available of
+`cc`, `gcc`, `clang`, and `tcc`, and passes an argv directly rather than constructing a shell command.
+
+The cache is
+`${XDG_CACHE_HOME:-$HOME/.cache}/os-rice/modules/abi-1/`. A key covers source
+content, `lib/module.h`, `lib/common.h`, compiler command, internal ABI version,
+OS and architecture. Compilation happens under a per-key lock, writes a unique
+temporary output, and atomically renames it into place. A failed compile cannot
+become a cache hit. The registry remains the allowlist: arbitrary source names
+and path traversal never reach the compiler, `module has` does not compile, and
+a runtime C-module failure never falls through to a same-name shell file after
+mutations may have started.
+
+Loaded modules call the existing `lib/module.h` host symbols. The runtime host
+exports those symbols with `-rdynamic`, making this an internal host ABI rather
+than a portable plugin ABI. Cache ABI versioning and public-header hashing are
+therefore part of correctness, not optimization. Handles remain loaded for the
+short life of the command so module code cannot outlive its object.
+
+This mode is POSIX/Linux-only. Windows remains static. Runtime compilation is
+not adaptive JIT: it compiles a requested source unit once and reuses the
+content-addressed object. It is also not sandboxing; module source is trusted
+installer code and executes with exactly the privileges available to the host.
+Use `build/osr` for a compiler-free deployment.
+
+> [!note] Providers are ported
+> `osr_pkg_install` covers all five methods — native, `script:`, `cargo:`,
+> `aur:`, `source:` — and `source:` dispatches into `lib/build.c`, which holds
+> all 26 builders plus both archive primitives. Every `source:` row in
+> `lib/pkgmap/` resolves to one of them, asserted. The C tier no longer calls
+> back into sh anywhere.
 
 ### D-5. Rices are declarative manifests
 
@@ -192,7 +254,7 @@ dev-headers = libssl-dev      dev-headers = openssl-devel pkgconf
 ```
 
 ```sh
-# lib/pkg.sh -- distro variance is exactly this one case statement.
+# lib/pkg.c's via_native, in the shell it was written as first --
 _via_native() {                     # _via_native build-essential zsh
   case "$OSR_PKG" in
     apt)    apt-get install -y "$@" ;;
@@ -316,8 +378,8 @@ CI / `--verbose` → plain streamed lines, no escape junk in logs.
 > Mitigated by `--verbose` and the on-failure log dump — the same tradeoff
 > `brew` and `paru` make.
 
-The painting lives in `osr ui` (`lib/ui.c`); `lib/ui.sh` keeps only the fork,
-because a step's argv is a shell function.
+All of it lives in `osr ui` (`lib/ui.c`) — the painting and the fork both, a
+step's argv being a function of the program (§D-4).
 
 ---
 
@@ -359,7 +421,7 @@ not just the install, or the §2 contract breaks.
 | cargo | `cargo install` | `cargo install --list \| grep -q` |
 | script | `curl … \| sh` | `command -v <bin>` |
 | aur | `$AUR_HELPER -S` | `pacman -Q` |
-| source | build fn in `lib/build.sh` | `command -v <bin>` \|\| marker file |
+| source | build fn in `lib/build.c` | `command -v <bin>` \|\| marker file |
 
 **Prerequisites are ordinary manifest lines, in order** — `rust` before any
 `cargo:` row, `paru` before any `aur:` row. Manifest order **is** the
@@ -462,19 +524,20 @@ in `~/.config` and are simply never read — which is why this is safe.
 ```sh
 osr theme <name>:
   run ONLY the modules carrying a theme layer, with every install/build/
-  download/service verb neutralized (lib/apply.sh)
+  download/service verb neutralized (lib/apply.c)
   apply the theme's whole-dir `config:` entries
   set the wallpaper (per-theme choice, remembered)
-  reload the running apps (lib/reload.sh)
+  reload the running apps (lib/reload.c)
 ```
 
 **The engine is the same modules, not a second copy of the mapping.** A module
 already knows where gruvbox's `config/dunst/90-theme.conf` belongs; a
 declarative theme manifest would duplicate that and then drift. So a theme
-apply sources the same module files with `pkg_install`, `enable_service`,
-`provide_*`, `osr_install_nerd_font` and friends replaced by no-ops. The
-neutralized set is **derived from the libs** rather than listed, so a provider
-added to `lib/build.sh` tomorrow is inert here the day it is written.
+apply runs the same modules with `pkg_install`, `enable_service`, `provide_*`,
+`osr_install_nerd_font` and friends turned into no-ops — `osr_theme_only()`
+(`lib/module.h`), a flag the mutating entry points check. The neutralized set is
+**the entry points themselves** rather than a list kept beside them, so a provider
+added to `lib/build.c` tomorrow is inert here the day it is written.
 
 Three properties make it hotkey-safe:
 
@@ -498,7 +561,7 @@ themes/<name>/theme.list    the palette that fills it in
 ```
 
 A template is the app's real config with `{{role}}` where a color goes.
-`render_theme_template` (`lib/config.sh`) substitutes every `color:` role,
+`render_theme_template` (`lib/config.c`, over `lib/render.c`) substitutes every `color:` role,
 every single-valued meta field, and `{{THEME}}`. The whole engine is one
 generated sed script (`_osr_theme_sed`) — no template language, same reason
 `theme.list` is not TOML.
@@ -591,7 +654,7 @@ new list, reuse every module.
 
 ### Universal service control
 
-`lib/service.sh` gives two idempotent verbs. No module calls `systemctl`
+`lib/service.c` gives two idempotent verbs. No module calls `systemctl`
 directly.
 
 ```sh
@@ -677,7 +740,7 @@ The value half may list alternatives with `|` —
 `require: distro:void|debian|ubuntu` — and holds when any branch does. Two
 `require:` lines already mean AND, so `|` is the only combinator needed.
 
-`lib/preflight.sh` dispatches each. Preflight runs on `osr switch` too — you
+`lib/preflight.c` dispatches each. Preflight runs on `osr switch` too — you
 cannot switch into a rice the hardware cannot run.
 
 ### Tier 2 — functional capability probe, as an early module
@@ -707,9 +770,14 @@ rice-specific packages. `require: gpu:vulkan` is sugar meaning "run the
 migration incremental rather than a rewrite. The C tier is the target; see
 [[#D-4. A module may be a C unit instead of a script]] for what it buys.
 
-### 11a. Every `.sh` module is legacy
+### 11a. Every `.sh` module is legacy — and there are none left
 
-All 115 shell modules carry a marker beside `# session:` and `# themable:`:
+There were 115 shell modules; there are now **zero**. Every one is
+`modules/<name>.c`, registered in `lib/modules.c`, and what each must do is
+stated in `test/unit_c/` rather than diffed against a recording of the script
+it replaced (§13).
+
+The marker that made the remaining work countable was:
 
 ```sh
 # session: x11
@@ -717,25 +785,39 @@ All 115 shell modules carry a marker beside `# session:` and `# themable:`:
 # legacy: sh  -- port to C (modules/<name>.c + lib/modules.c); see DESIGN 11a
 ```
 
-Enforced by `test/lint.sh`, for the same reason `# session:` is: a marker only
-usually present answers no question. `grep -c '^# legacy:' modules/*.sh` is
-the remaining-work count, and it only goes down.
+`test/lint.sh` still enforces it, and the count it reports is now `0`. The rule
+it encodes has not gone away: **a `.sh` module that appears again must carry the
+marker**, because it is legacy the day it is written. What changed is that the
+answer to "how much is left" is a constant.
 
-> [!note] "Legacy" means "should be C", not "is broken"
-> A legacy module is fully supported and a rice may depend on it. What it may
-> not be is the pattern a **new** module copies.
+> [!note] "Legacy" meant "should be C", not "is broken"
+> While they existed, legacy modules were fully supported and rices depended on
+> them. What they could not be is the pattern a **new** module copies.
 
-Ports happen when a module is being touched anyway — that is how `flameshot`,
-`docker`, `fastfetch` and `tcc` moved. One blocker is worth knowing up front:
-`osr_pkg_install` implements the **native** path only, so a module whose
-packages resolve to `cargo:`/`source:`/`script:`/`aur:` must stay shell until
-those providers are ported. It fails loudly rather than installing wrongly.
-`modules/i3lock.sh` (`cargo:xidlehook`, `source:provide_betterlockscreen`) is
-the canonical example.
+Ports happened when a module was being touched anyway — that is how `flameshot`,
+`docker`, `fastfetch` and `tcc` moved first. The blocker that shaped the order
+was the package layer: `osr_pkg_install` began as the **native** path only, so a
+module whose packages resolve to `cargo:`/`source:`/`script:`/`aur:` had to stay
+shell until those providers landed. They all have (§4), which is what let the
+last sixteen — `swap` `gpu-drivers` `zsh` `xorg` `lightdm` `benchmark`
+`evolution` `ghostty` `mirrors` `theming` `firefox` `yazi` `i3` `cliphist`
+`yandex-browser` `wezterm` — go over together.
 
-A brand-new module goes straight to C. `modules/helpers.c` is the first that
-never had a `.sh` form and therefore has no `test/ref` twin; its scenario in
-`module_c_parity.sh` asserts behaviour directly.
+Two of those needed something the C tier did not have yet, and both are now part
+of it rather than of the module: `osr_set_login_shell` (lib/user.c, the last
+writing half of the user model, which stayed sh only because `as_root` was a
+shell function) and `osr_theme_meta` / `osr_gpu_chip` (lib/theme.c, lib/detect.c
+— two accessors the shell tier reached through a fork).
+
+A module that writes `/etc` by absolute path carries an override so it can be
+exercised without root — `OSR_PACMAN_DIR`/`OSR_DNF_CONF` in `mirrors`, the
+`OSR_MEMINFO`/`OSR_SWAPFILE`/… set in `swap`, `OSR_DESKTOP_DIRS` in
+`yandex-browser`. That is the same trick `lib/user.c` uses for `/etc/passwd`,
+and it is the only reason those modules have unit tests at all (§5a).
+
+A brand-new module goes straight to C. `modules/helpers.c` was the first
+written that way rather than ported, and is asserted the same way every module
+now is: by what it must do, in `test/unit_c/modules_test.c`.
 
 ---
 
@@ -847,53 +929,123 @@ loop is also where peak temperature and peak clock come from.
 
 ---
 
-## 13. The port, and what is left of it
+## 13. The port, and what it left behind
 
-The target is one binary. Nothing about the design changes to get there — the
-libs keep their responsibilities, the manifests keep their format, the module
-API is `lib/module.h`. What changes is the language the backbone is written in.
+**Finished.** One binary, reached by three entry-point shims and put on disk by
+`osr` itself. **`osr` + `install.sh` + `wallpaper.sh` is the complete set of
+`.sh` files the harness contains** — everything else is C. Nothing about the
+design changed to get there: the libs kept their responsibilities, the
+manifests kept their format, the module API is still `lib/module.h`. What
+changed is the language the backbone is written in.
 
-### Done
+### What replaced what
 
 | unit | replaced | note |
 | --- | --- | --- |
-| `lib/ui.c` `log.c` `user.c` `detect.c` `theme.c` | `lib/*.sh` | the `.sh` file survives as a shim only (see [[#D-3. The C harness\|D-3]]) |
+| `lib/ui.c` `log.c` `user.c` `detect.c` `theme.c` | `lib/*.sh` | removed |
 | `lib/state.c` | `lib/state.sh` | file removed outright |
-| `lib/install.c` | `install.sh`'s option loop, help, listings, manifest, report | `install.sh` remains only because it **sources** modules |
+| `lib/install.c` | `install.sh`'s option loop, help, listings, manifest, report | see the runner row below for the rest of it |
 | `lib/testrun.c` | `test/run.sh` | removed outright |
 | `lib/render.c` | the `{{role}}` sed script | shared with `theme.c` |
 | `lib/manifest.c` `theme_list.c` `theme_render.c` `config_copy.c` `net.c` | — | written for the Windows core, already portable |
+| `lib/fetch.c` `git.c` | `lib/net.sh` `git.sh` | the shell tier's downloader and the git/oh-my-zsh helpers; `lib/net.c` stays the landing spot for a future native fetch backend |
+| `lib/service.c` | `lib/service.sh` | both verbs on all four inits, and the servicemap facet lookup they share |
+| `lib/preflight.c` `nerdfont.c` | `lib/preflight.sh` `fonts.sh` | the require: predicates and the Nerd Font install; `nerdfont.c` is so named because `lib/fonts.c` is the Windows core's |
+| `lib/gnome.c` `migrate.c` | `lib/gnome.sh` `migrate.sh` | GNOME session detection, freeing a chord off the Shell keys and registering a custom keybinding; and the migrations that patch a seeded, user-owned layer in place. `migrate_replace` takes the old and the new region as text rather than the names of two functions that print them — the fork per region bought a C caller nothing |
+| `lib/reload.c` | `lib/reload.sh` | the reload table: probe first, act second, never fatal, never restart what would lose state |
+| `lib/user.c` (the login shell) | `lib/user.sh` (part) | `osr_set_login_shell` / `osr_register_shell` / the `/etc/passwd` rewrite. They stayed sh only because they WRITE and a write went through the `as_root` shell function; `osr_run_root` is that same escalation without a shell, so `modules/zsh.c` can have them. Each mechanism is tried and the RESULT verified rather than an exit code trusted: chsh -> usermod -> /etc/passwd |
+| `lib/pkg.c` | `lib/pkg.sh` | the resolver over `lib/pkgmap/` (facet qualifiers included) and all five install methods — native, `script:`, `cargo:`, `aur:`, `source:`. No provider row routes back to sh any more |
+| `lib/build.c` | `lib/build.sh` | all 26 `source:` builders plus both archive primitives. Every `source:` row in `lib/pkgmap/` resolves to one of them, asserted; `modules/yazi.c` reaches `provide_chafa` through `osr_build_run` |
+| `lib/config.c` | `lib/config.sh` | the seeded layers, the owned blocks (one composition, shared with `user.c`), the JSON/starship composers, the foot and Alacritty version adapters, `apply_config`, the Mozilla layer, and the whole wallpaper family — resolve, install, record, set, library, pick |
+| `modules/*.c` | `modules/*.sh` | all 120 of them, the last sixteen together (§11a). `modules/` holds no `.sh` at all any more |
+| `lib/install.c` (the runner) | `install.sh`'s body | the whole orchestration: detection and identity into this process's environment, the theme-only path, the report, the sudo warm-up, the manifest, the module loop, the state write and the closing line. `install.sh` is a shim over `osr install run` — the reason it could not leave the shell was that it SOURCED each module, and no module is a shell script any more. A `.sh` module that appears again still runs, though with no os-rice verbs around it (see [[#D-3. The C harness\|D-3]]) |
+| `lib/theme.c` (the shell half) | `lib/theme.sh` (part) | `osr_resolve_theme` / `osr_unset_theme` / `osr_apply_theme_configs`. The shim existed to `export` OSR_THEME/OSR_THEME_DIR for everything downstream; `setenv` is that, and every child the runner forks inherits it |
+| `lib/apply.c` | `lib/apply.sh` | the whole §6a hotkey path: the two lists it is built out of (the mutating verbs it neutralizes, and the modules that carry a theme layer), and the apply itself — resolve, neutralize every mutating verb for the rest of the process, run the theme-carrying layers with their output on the run log, then the theme's whole-dir configs, the wallpaper and the state write. `osr apply theme <name>` is it, and it stays in a lib rather than in the runner so a test can drive it against a throwaway `$HOME` — the runner resolves `OSR_HOME` from passwd, so a test driving it through the runner would write to the real one |
+| `lib/wallpaper_front.c` | `wallpaper.sh` | the wallpaper front end: the option loop, the current-theme resolution and the four actions (show, `--list`, `--next`, set). The family underneath — resolve, install, record, set-live, library, pick — was already `lib/config.c`'s, so this is the dispatcher around it. Named `wallpaper_front.c` because `lib/wallpaper.c` is the Windows core's own unit. `wallpaper.sh` is a shim over `osr wallpaper`, the same shape `install.sh` has, and stays sh because a picker or a hotkey already names that path |
 
-### Remaining, in the order the dependencies force
+### The tests: the C tier is the ground truth
 
-| what | lines of sh | why it is where it is in the queue |
-| --- | --- | --- |
-| `lib/pkg.sh` | 551 | **the blocker.** `osr_pkg_install` covers the native path only; every provider (`cargo:` `script:` `aur:` `source:`) still lands back in sh, and that is what pins most modules to the shell tier |
-| `lib/build.sh` | 1387 | the `source:` builders. The Windows half of this shape already exists as `provide/<name>.c` + `provide_module.c`, so the pattern is settled — this is volume, not design |
-| `lib/config.sh` | 576 | layering, templates, `ensure_block`, the Mozilla/JSON composers |
-| `lib/net.sh` `git.sh` | 268 | `lib/net.c` exists but its POSIX branch is a documented stub |
-| `lib/service.sh` `preflight.sh` `fonts.sh` `gnome.sh` `migrate.sh` | 405 | small, mechanical, unblocked — good first ports |
-| `lib/apply.sh` `reload.sh` | 294 | theme-only apply and the reload table. Depend on the module tier's shape, so late |
-| `install.sh` `wallpaper.sh` `osr` | 458 | the runner and the front end. Last: `install.sh` cannot stop being sh while it sources shell modules |
-| `modules/*.sh` | 115 files | see [[#11a. Every `.sh` module is legacy\|11a]] |
+This is the part worth reading, because it is the part that was not obvious.
 
-> [!note] `bootstrap.sh` is not on this list
-> It runs before a compiler is a given, and stays sh forever.
+The port was driven by PARITY tests. Each shell original was frozen under
+`test/ref/`, and a `*_c_parity.sh` ran it side by side with its C replacement
+under stubbed tooling and diffed the argv logs. That answers **"did the rewrite
+change behaviour?"**, which is a migration question — and it expired the moment
+the migration did.
 
-### The rule the port runs under
+It never answered **"is this behaviour correct?"** The shell tier had no tests
+of its own. Comparing against it froze whatever it happened to do, defects
+included, and it froze them in a form nobody could read: a diff of two
+recordings tells you that something changed, never what promise broke.
 
-> Byte-for-byte identical output, asserted, or it is not a port.
+So every one of those tests was replaced by a behaviour test that states, in
+the test, by name, what the unit is supposed to do:
 
-Every unit's shell original is frozen under `test/ref/` and diffed by
-`test/unit/*_c_parity.sh` — 317 checks over the eight done so far, and exactly
-one accepted divergence, asserted rather than hidden. A port that cannot be
-diffed this way (`helpers.c`, which never had a `.sh` form) asserts its
-behaviour directly instead.
+```c
+osr_assert_log_is(&sb,
+    "sudo rc-update add cups default\n"
+    "rc-update add cups default\n"
+    "sudo rc-service cups start\n"
+    "rc-service cups start\n",
+    "openrc: adds to the default runlevel, then starts");
+```
 
-`grep -c '^# legacy:' modules/*.sh` and the table above are the remaining-work
-count. Both only go down.
+When that fails you are told which promise broke. When you change the
+behaviour on purpose you edit a line that says what the behaviour is, rather
+than re-recording a blob and hoping the diff was the one you meant.
 
----
+#### What the reversal cost, and what it found
+
+70 shell test files (11,700 lines) became 40 C test binaries carrying **1617
+named assertions**. Writing the expectations out by hand surfaced seven real
+defects that the parity tests could not have caught, because in every case the
+two tiers agreed with each other about something wrong:
+
+| what | why parity missed it |
+| --- | --- |
+| `lib/pkg.c`'s apt source-list repair never fired on a deb822 box — it gated on `grep`'s exit status, and `/etc/apt/sources.list` is absent on modern Debian/Ubuntu, so grep exits 2 despite matching | a port regression (the shell ran it as a pipeline into `head` and never saw the status), and `apt_sources_conflict.sh` only ever drove the shell side |
+| `native_held` had no xbps branch, so the G2 fence around the only package removal os-rice performs did not exist | neither tier had one, and the test that "covered" it redefined `_native_held` |
+| a wrapped `gsettings list-recursively` line yielded the VALUE as a key name | both tiers did the same wrong thing; the sh test's own comment said "sets nothing" |
+| `compose_block` welded its marker onto a file with no trailing newline, corrupting the user's last line AND the marker | never exercised |
+| `lib/wallpaper_front.c` and `lib/apply.c` printed non-ASCII, violating D-2 | the lint that enforces D-2 only ever scanned `.sh` files, so the rule stopped being enforced the moment the code became C |
+| `provide_datagrip` lost its `OSR_DATAGRIP_PREFIX` override and staged into a hard-coded `/opt` | the shell original made those paths overridable precisely to be testable; the port dropped it, and the parity test worked around it |
+| a missing template role sharing a line with `{{WALLPAPER_PATH}}` was never reported | the shell skipped the whole line (`grep -v`), so the warning that exists to make such a gap obvious stayed silent |
+
+Two of those (the apt repair, the D-2 lint) had been broken in production for
+as long as the C tier had existed.
+
+#### How a behaviour test is written
+
+`test/harness.c` is the sandbox: `$PATH` reduced to stubs that log their own
+argv, an environment built from nothing, stdout and stderr kept apart, and
+assertions over the complete command list, the output, and the directory a run
+left behind. A test links no lib object and drives `build/osr` as a
+subprocess, so it survives the unit under it being renamed or split.
+
+**Asserting the COMPLETE command list is the default**, not a substring: what a
+verb did to a box is the whole of what it ran, so an extra command is as much a
+defect as a missing one.
+
+Where no fixed expectation is possible the test asserts **properties** instead.
+`modules_test.c`'s sweep is the clearest example and the single most valuable
+assertion in the suite: on a box where every package is already installed, it
+runs all 120 modules and asserts that not one of them invokes a package
+manager. No per-module scenario would have made that assertion, and one module
+forgetting its probe would add minutes to every rerun of every rice it is in.
+
+#### Two behaviours that improved on what they replaced
+
+Both were divergences the parity tests had to accept and assert; they are now
+simply the behaviour, and the test says why:
+
+- **an option missing its operand.** The shell died inside its own
+  `${x:?...}` expansion and exited 2, which told the user nothing. The core
+  prints a normal error line naming the option, and exits 1.
+- **one `apt-get update` per run**, not per module. The shell runner spawned a
+  process per module and each carried its own once-per-process guard. One
+  process now, one refresh — and the guard lives in the install path
+  (`refresh_once`) exactly where `lib/pkg.sh` put it, so a module that enables
+  a repository and calls `pkg_refresh` still gets a real one.
 
 ## Not doing (and why)
 

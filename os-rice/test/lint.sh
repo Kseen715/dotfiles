@@ -11,15 +11,20 @@ REPO=$(cd -- "$OSR_ROOT/.." && pwd)
 SH_CHECKER=$(command -v dash || command -v sh)
 FAILED=0
 
-# Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR).
-. "$OSR_ROOT/lib/ui.sh"
+# Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR). It
+# comes from the core, which is where that decision lives now; a checkout that
+# has never been built lints in plain text rather than refusing to lint.
+OSR_RED= OSR_GREEN= OSR_YELLOW= OSR_CYAN= OSR_DIM= OSR_NC=
+if [ -x "$OSR_ROOT/build/osr" ]; then
+    eval "$("$OSR_ROOT/build/osr" ui vars 2>/dev/null || :)"
+fi
 sec()    { printf '%b%s%b\n' "$OSR_CYAN" "$*" "$OSR_NC"; }
 p_ok()   { printf '  %bok%b   %s\n' "$OSR_GREEN" "$OSR_NC" "$*"; }
 p_warn() { printf '  %bWARN%b %s\n' "$OSR_YELLOW" "$OSR_NC" "$*"; }
 p_fail() { printf '  %bFAIL%b %s\n' "$OSR_RED" "$OSR_NC" "$*" >&2; }
 
 sec "POSIX sh syntax ($SH_CHECKER -n):"
-SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
+SH_FILES="$OSR_ROOT/install.sh $OSR_ROOT/wallpaper.sh $OSR_ROOT/osr"
 SH_FILES="$SH_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" "$OSR_ROOT/test" -name '*.sh' 2>/dev/null)"
 for f in $SH_FILES; do
     if "$SH_CHECKER" -n "$f" 2>/dev/null; then
@@ -53,32 +58,87 @@ else
     p_warn "shellcheck: not installed - skipping"
 fi
 
-# ASCII-only program output (§3): every byte the installer writes to the
+# ASCII-only program output (D-2): every byte the installer writes to the
 # terminal must be 7-bit ASCII so barebone TERM/locales never mangle it into
-# mojibake. Comments are exempt (prose may use §/em-dashes), so skip comment
-# lines; flag any high byte (0x80-0xFF) on a code line. LC_ALL=C keeps the byte
-# class portable across gawk/mawk/busybox awk.
+# mojibake. Comments are exempt (prose may use section signs and em-dashes), so
+# comment lines are skipped and any high byte (0x80-0xFF) on a code line is
+# flagged. LC_ALL=C keeps the byte class portable across gawk/mawk/busybox awk.
+#
+# The C tier is scanned too, and that is not symmetry for its own sake: the
+# program IS C now, and while this check covered only .sh files
+# lib/wallpaper_front.c printed an em dash and a section sign in its help text
+# for as long as it existed. A rule enforced over the tier the code left is not
+# enforced at all.
+#
+# For C, `//`-comments and whole-line block comments are skipped the same way;
+# an escaped high byte inside a string (\342\200\224) is caught by the octal
+# check below, because that is how a port carries one across without ever
+# typing a non-ASCII character.
 sec "ASCII-only program output (non-comment lines):"
 # Scope: the installer program (lib + modules + runners), not the test harness
 # (matrix.sh legitimately keeps em-dashes in trailing comments).
-ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/bootstrap.sh"
-ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" -name '*.sh' 2>/dev/null)"
+ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/wallpaper.sh"
+ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" \
+    \( -name '*.sh' -o -name '*.c' -o -name '*.h' \) 2>/dev/null)"
+ASCII_FILES="$ASCII_FILES $OSR_ROOT/osr.c $OSR_ROOT/install.c"
 # shellcheck disable=SC2086  # intentional word-split into a file list
-_ascii_hits=$(LC_ALL=C awk '
-    /^[[:space:]]*#/ { next }
-    /[\200-\377]/    { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0 }
-' $ASCII_FILES 2>/dev/null)
-if [ -n "$_ascii_hits" ]; then
-    printf '%s\n' "$_ascii_hits" >&2
+# What is scanned is the STRING LITERALS, not the whole line. Most of the high
+# bytes in this tree are section signs in a trailing `/* ... */` after real
+# code, and those are prose -- D-2 governs what the program writes, not what it
+# documents. A quoted string is where terminal output actually comes from, and
+# looking only inside quotes needs no cross-line comment state to get right.
+_ascii_awk='
+function quoted(line,   out, i, c, n, instr) {
+    out = ""; instr = 0; i = 1; n = length(line)
+    while (i <= n) {
+        c = substr(line, i, 1)
+        if (instr) {
+            if (c == "\\") { out = out substr(line, i, 2); i += 2; continue }
+            if (c == "\"") { instr = 0; i++; continue }
+            out = out c; i++
+            continue
+        }
+        if (c == "\"") { instr = 1 }
+        i++
+    }
+    return out
+}
+/^[[:space:]]*#/ { next }
+{
+    lit = quoted($0)
+    if (lit ~ /[\200-\377]/) { printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0; next }
+    # ...and the escaped form: a high byte written as an octal escape reaches
+    # the terminal exactly as if it had been typed, which is how a port carries
+    # one across without anyone typing a non-ASCII character. ESC and SUB are
+    # ASCII, and are what the palette and a PNG magic legitimately use.
+    gsub(/\\033/, "", lit)
+    gsub(/\\032/, "", lit)
+    if (lit ~ /\\3[0-7][0-7]/) printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0
+}'
+# shellcheck disable=SC2086  # intentional word-split into a file list
+_ascii_hits=$(LC_ALL=C awk "$_ascii_awk" $ASCII_FILES 2>/dev/null)
+_ascii_esc=
+if [ -n "$_ascii_hits$_ascii_esc" ]; then
+    [ -z "$_ascii_hits" ] || printf '%s\n' "$_ascii_hits" >&2
+    [ -z "$_ascii_esc" ]  || printf '%s\n' "$_ascii_esc" >&2
     FAILED=1
 else
-    p_ok "(no non-ASCII bytes in program output)"
+    p_ok "(no non-ASCII bytes in program output, shell or C)"
 fi
 
 # Every module declares which display server it supports on its first line, so
 # `grep -l '^# session: wayland' modules/*.sh` answers "what breaks if I move
 # this rice to X11" without reading 97 files. Enforced, because a marker that is
 # only usually there is not something a rice author can rely on.
+# sh_module_count -- how many .sh modules are left. Zero since the port finished
+# (DESIGN §11a), and an unmatched glob must count as zero rather than print an
+# `ls` error: these two checks are what would catch a .sh module coming back.
+sh_module_count() {
+    _n=0
+    for _f in "$OSR_ROOT"/modules/*.sh; do [ -f "$_f" ] && _n=$((_n + 1)); done
+    printf '%s' "$_n"
+}
+
 sec "module session markers (# session: x11 | wayland | x11+wayland):"
 _marker_bad=""
 for f in "$OSR_ROOT"/modules/*.sh; do
@@ -92,7 +152,7 @@ if [ -n "$_marker_bad" ]; then
     for f in $_marker_bad; do p_fail "$f: missing or invalid '# session:' first line"; done
     FAILED=1
 else
-    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') modules declare a session)"
+    p_ok "(all $(sh_module_count) modules declare a session)"
 fi
 
 # Every shell module is legacy: the C tier (modules/<name>.c + lib/modules.c) is
@@ -113,7 +173,7 @@ if [ -n "$_legacy_bad" ]; then
     for f in $_legacy_bad; do p_fail "$f: missing '# legacy: sh' marker (DESIGN §11a)"; done
     FAILED=1
 else
-    p_ok "(all $(ls "$OSR_ROOT"/modules/*.sh | wc -l | tr -d ' ') shell modules marked legacy)"
+    p_ok "(all $(sh_module_count) shell modules marked legacy)"
 fi
 
 # The converse: a module that HAS been ported must not leave the .sh behind, or

@@ -19,8 +19,8 @@
  *             theme_only), one row in modules.c's dispatch table. Port of
  *             windows-rice/modules/fastfetch.ps1.
  *   POSIX     osrm_fastfetch(void), one row in lib/modules.c's registry.
- *             Port of modules/fastfetch.sh, frozen as the reference at
- *             test/ref/fastfetch_sh_ref.sh.
+ *             Was modules/fastfetch.sh; the config layering it does is
+ *             stated in test/unit_c/modules_test.c.
  *
  * What they have in common is the reason the module is short on both: the
  * package is whatever the platform's map resolves `fastfetch` to (a bare

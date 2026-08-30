@@ -2,10 +2,9 @@
  * step window (dimmed tail of a step's output + a spinner line), and the
  * step counter. First slice of the sh -> C rewrite on the POSIX side.
  *
- * The contract is BYTE-FOR-BYTE equality with the sh original, which is
- * frozen at test/ref/ui_sh_ref.sh and diffed against this binary by
- * test/unit/ui_c_parity.sh. Every quirk of the sh version is therefore
- * reproduced on purpose, not cleaned up:
+ * What the window must do is stated in test/unit_c/ui_test.c. Several
+ * behaviours below look like quirks and are load-bearing, so they are kept
+ * and explained rather than cleaned up:
  *
  *   - the status line is printed with printf's `%b`, so a description
  *     carrying backslash escapes is expanded (expand_b below); the tailed
@@ -22,8 +21,7 @@
  * filter_line_bytes for CR, tail_window for the cut width, and tag_pad for
  * the tag column, which this file pads out to OSR_TAG_WIDTH so a spinner or
  * [ok] line starts its text where the [INFO] lines around it do. All three
- * are applied to the reference's bytes by ui_c_parity.sh rather than
- * "fixed" in the frozen file.
+ * are asserted where they are decided, in test/unit_c/ui_test.c.
  *
  * Why a helper binary rather than one program that owns the whole run:
  * run_step's arguments are shell FUNCTIONS (pkg_install, as_root, ...), so

@@ -1,7 +1,8 @@
 /* lib/modules.c -- the registry of Linux modules written in C.
  *
  * A rice manifest names modules and install.sh runs each one. A module is
- * either a shell script under modules (the ~118 that exist today) or a C
+ * either a shell script under modules (there are none left -- see DESIGN 11a)
+ * or a C
  * function registered here (modules/<name>.c, the POSIX branch of it where
  * the file also has a Windows one). install.sh asks `osr module has <name>`
  * and, when the answer is yes, runs `osr module run <name>` instead of
@@ -21,6 +22,7 @@
  *   osr module session <name> its session marker
  *   osr module themable <name>  exit 0 when it consumes the theme
  *   osr module run <name>     install it
+ *   osr module run --theme-only <name>   only its theme layer (§6a)
  *
  * C89 + POSIX.
  */
@@ -38,18 +40,257 @@ typedef struct {
     int (*run)(void);
 } ModuleRow;
 
+/* Runtime builds keep this table as the authoritative POSIX module catalog but
+ * do not create references to module objects. Static builds retain the direct
+ * function pointers and therefore still need no compiler at execution time. */
+#ifdef OSR_RUNTIME_MODULES
+#define MODULE_RUN(fn) NULL
+#else
+#define MODULE_RUN(fn) fn
+#endif
+
+int osrm_alacritty(void);
+int osrm_amnezia_vpn(void);
+int osrm_arandr(void);
+int osrm_archives(void);
+int osrm_audio(void);
+int osrm_avahi(void);
+int osrm_benchmark(void);
+int osrm_blueman(void);
+int osrm_brightnessctl(void);
+int osrm_btop(void);
+int osrm_celluloid(void);
+int osrm_cliphist(void);
+int osrm_codecs(void);
+int osrm_copyq(void);
+int osrm_cpu_microcodes(void);
+int osrm_curseforge(void);
+int osrm_datagrip(void);
+int osrm_discord(void);
+int osrm_disks(void);
+int osrm_dkms(void);
+int osrm_dnscrypt(void);
 int osrm_docker(void);
+int osrm_dunst(void);
+int osrm_easyeffects(void);
+int osrm_evolution(void);
 int osrm_fastfetch(void);
+int osrm_fcitx5(void);
+int osrm_feh(void);
+int osrm_firefox(void);
 int osrm_flameshot(void);
+int osrm_flatpak(void);
+int osrm_foot(void);
+int osrm_gh(void);
+int osrm_ghostty(void);
+int osrm_git_base(void);
+int osrm_gnome_focus(void);
+int osrm_gnome_overview(void);
+int osrm_go(void);
+int osrm_gpaste(void);
+int osrm_gpu_drivers(void);
+int osrm_gtklock(void);
+int osrm_gvfs(void);
 int osrm_helpers(void);
+int osrm_helvum(void);
+int osrm_htop(void);
+int osrm_hyprcursor(void);
+int osrm_hypridle(void);
+int osrm_hyprland(void);
+int osrm_hyprlock(void);
+int osrm_hyprpaper(void);
+int osrm_hyprpicker(void);
+int osrm_i3(void);
+int osrm_i3lock(void);
+int osrm_input(void);
+int osrm_inxi(void);
+int osrm_kate(void);
+int osrm_kdeconnect(void);
+int osrm_keyring(void);
+int osrm_lightdm(void);
+int osrm_loupe(void);
+int osrm_luminance(void);
+int osrm_mako(void);
+int osrm_micro(void);
+int osrm_mirrors(void);
+int osrm_nautilus(void);
+int osrm_ncdu(void);
+int osrm_networkmanager(void);
+int osrm_nwg_displays(void);
+int osrm_obs_studio(void);
+int osrm_onlyoffice(void);
+int osrm_openssh(void);
+int osrm_pacman_multilib(void);
+int osrm_paru(void);
+int osrm_picom(void);
+int osrm_pipewire(void);
+int osrm_polkit_agent(void);
+int osrm_polybar(void);
+int osrm_power(void);
+int osrm_printer(void);
+int osrm_proteus(void);
+int osrm_pulseaudio(void);
+int osrm_qbittorrent(void);
+int osrm_qpwgraph(void);
+int osrm_redshift(void);
+int osrm_rofi(void);
+int osrm_rust(void);
+int osrm_sddm(void);
+int osrm_serie(void);
+int osrm_starship(void);
+int osrm_steam(void);
+int osrm_swap(void);
+int osrm_swaylock(void);
 int osrm_tcc(void);
+int osrm_telegram(void);
+int osrm_theming(void);
+int osrm_thumbnails(void);
+int osrm_thunar(void);
+int osrm_thunderbird(void);
+int osrm_ufw(void);
+int osrm_viewers(void);
+int osrm_vlc(void);
+int osrm_vmware_init(void);
+int osrm_vscode(void);
+int osrm_vscode_insiders(void);
+int osrm_waybar(void);
+int osrm_waydroid(void);
+int osrm_wayland(void);
+int osrm_waylock(void);
+int osrm_wezterm(void);
+int osrm_wleave(void);
+int osrm_wlogout(void);
+int osrm_wofi(void);
+int osrm_xdg(void);
+int osrm_xorg(void);
+int osrm_yandex_browser(void);
+int osrm_yazi(void);
+int osrm_zen_browser(void);
+int osrm_zig(void);
+int osrm_zip(void);
+int osrm_zsh(void);
 
 static const ModuleRow modules[] = {
-    { "docker",    "x11+wayland", 0, osrm_docker },
-    { "fastfetch", "x11+wayland", 1, osrm_fastfetch },
-    { "flameshot", "x11",         0, osrm_flameshot },
-    { "helpers",   "x11+wayland", 0, osrm_helpers },
-    { "tcc",       "x11+wayland", 0, osrm_tcc }
+    { "alacritty",       "x11+wayland", 1, MODULE_RUN(osrm_alacritty) },
+    { "amnezia-vpn",     "x11+wayland", 0, MODULE_RUN(osrm_amnezia_vpn) },
+    { "arandr",          "x11",         0, MODULE_RUN(osrm_arandr) },
+    { "archives",        "x11+wayland", 0, MODULE_RUN(osrm_archives) },
+    { "audio",           "x11+wayland", 0, MODULE_RUN(osrm_audio) },
+    { "avahi",           "x11+wayland", 0, MODULE_RUN(osrm_avahi) },
+    { "benchmark",       "x11+wayland", 0, MODULE_RUN(osrm_benchmark) },
+    { "blueman",         "x11+wayland", 0, MODULE_RUN(osrm_blueman) },
+    { "brightnessctl",   "x11+wayland", 0, MODULE_RUN(osrm_brightnessctl) },
+    { "btop",            "x11+wayland", 1, MODULE_RUN(osrm_btop) },
+    { "celluloid",       "x11+wayland", 0, MODULE_RUN(osrm_celluloid) },
+    { "cliphist",        "wayland",     1, MODULE_RUN(osrm_cliphist) },
+    { "codecs",          "x11+wayland", 0, MODULE_RUN(osrm_codecs) },
+    { "copyq",           "x11",         1, MODULE_RUN(osrm_copyq) },
+    { "cpu-microcodes",  "x11+wayland", 0, MODULE_RUN(osrm_cpu_microcodes) },
+    { "curseforge",      "x11+wayland", 0, MODULE_RUN(osrm_curseforge) },
+    { "datagrip",        "x11+wayland", 0, MODULE_RUN(osrm_datagrip) },
+    { "discord",         "x11+wayland", 0, MODULE_RUN(osrm_discord) },
+    { "disks",           "x11+wayland", 0, MODULE_RUN(osrm_disks) },
+    { "dkms",            "x11+wayland", 0, MODULE_RUN(osrm_dkms) },
+    { "dnscrypt",        "x11+wayland", 0, MODULE_RUN(osrm_dnscrypt) },
+    { "docker",          "x11+wayland", 0, MODULE_RUN(osrm_docker) },
+    { "dunst",           "x11+wayland", 1, MODULE_RUN(osrm_dunst) },
+    { "easyeffects",     "x11+wayland", 0, MODULE_RUN(osrm_easyeffects) },
+    { "evolution",       "x11+wayland", 1, MODULE_RUN(osrm_evolution) },
+    { "fastfetch",       "x11+wayland", 1, MODULE_RUN(osrm_fastfetch) },
+    { "fcitx5",          "x11+wayland", 1, MODULE_RUN(osrm_fcitx5) },
+    { "feh",             "x11",         0, MODULE_RUN(osrm_feh) },
+    { "firefox",         "x11+wayland", 1, MODULE_RUN(osrm_firefox) },
+    { "flameshot",       "x11",         0, MODULE_RUN(osrm_flameshot) },
+    { "flatpak",         "x11+wayland", 0, MODULE_RUN(osrm_flatpak) },
+    { "foot",            "wayland",     1, MODULE_RUN(osrm_foot) },
+    { "gh",              "x11+wayland", 0, MODULE_RUN(osrm_gh) },
+    { "ghostty",         "x11+wayland", 1, MODULE_RUN(osrm_ghostty) },
+    { "git-base",        "x11+wayland", 0, MODULE_RUN(osrm_git_base) },
+    { "gnome-focus",     "wayland",     0, MODULE_RUN(osrm_gnome_focus) },
+    { "gnome-overview",  "x11+wayland", 0, MODULE_RUN(osrm_gnome_overview) },
+    { "go",              "x11+wayland", 0, MODULE_RUN(osrm_go) },
+    { "gpaste",          "x11+wayland", 0, MODULE_RUN(osrm_gpaste) },
+    { "gpu-drivers",     "x11+wayland", 0, MODULE_RUN(osrm_gpu_drivers) },
+    { "gtklock",         "wayland",     1, MODULE_RUN(osrm_gtklock) },
+    { "gvfs",            "x11+wayland", 0, MODULE_RUN(osrm_gvfs) },
+    { "helpers",         "x11+wayland", 0, MODULE_RUN(osrm_helpers) },
+    { "helvum",          "x11+wayland", 0, MODULE_RUN(osrm_helvum) },
+    { "htop",            "x11+wayland", 0, MODULE_RUN(osrm_htop) },
+    { "hyprcursor",      "wayland",     0, MODULE_RUN(osrm_hyprcursor) },
+    { "hypridle",        "wayland",     1, MODULE_RUN(osrm_hypridle) },
+    { "hyprland",        "wayland",     1, MODULE_RUN(osrm_hyprland) },
+    { "hyprlock",        "wayland",     1, MODULE_RUN(osrm_hyprlock) },
+    { "hyprpaper",       "wayland",     1, MODULE_RUN(osrm_hyprpaper) },
+    { "hyprpicker",      "wayland",     0, MODULE_RUN(osrm_hyprpicker) },
+    { "i3",              "x11",         1, MODULE_RUN(osrm_i3) },
+    { "i3lock",          "x11",         1, MODULE_RUN(osrm_i3lock) },
+    { "input",           "x11",         0, MODULE_RUN(osrm_input) },
+    { "inxi",            "x11+wayland", 0, MODULE_RUN(osrm_inxi) },
+    { "kate",            "x11+wayland", 1, MODULE_RUN(osrm_kate) },
+    { "kdeconnect",      "x11+wayland", 0, MODULE_RUN(osrm_kdeconnect) },
+    { "keyring",         "x11+wayland", 0, MODULE_RUN(osrm_keyring) },
+    { "lightdm",         "x11",         1, MODULE_RUN(osrm_lightdm) },
+    { "loupe",           "x11+wayland", 0, MODULE_RUN(osrm_loupe) },
+    { "luminance",       "wayland",     0, MODULE_RUN(osrm_luminance) },
+    { "mako",            "wayland",     1, MODULE_RUN(osrm_mako) },
+    { "micro",           "x11+wayland", 1, MODULE_RUN(osrm_micro) },
+    { "mirrors",         "x11+wayland", 0, MODULE_RUN(osrm_mirrors) },
+    { "nautilus",        "x11+wayland", 0, MODULE_RUN(osrm_nautilus) },
+    { "ncdu",            "x11+wayland", 0, MODULE_RUN(osrm_ncdu) },
+    { "networkmanager",  "x11+wayland", 0, MODULE_RUN(osrm_networkmanager) },
+    { "nwg-displays",    "wayland",     0, MODULE_RUN(osrm_nwg_displays) },
+    { "obs-studio",      "x11+wayland", 0, MODULE_RUN(osrm_obs_studio) },
+    { "onlyoffice",      "x11+wayland", 0, MODULE_RUN(osrm_onlyoffice) },
+    { "openssh",         "x11+wayland", 0, MODULE_RUN(osrm_openssh) },
+    { "pacman-multilib", "x11+wayland", 0, MODULE_RUN(osrm_pacman_multilib) },
+    { "paru",            "x11+wayland", 0, MODULE_RUN(osrm_paru) },
+    { "picom",           "x11",         1, MODULE_RUN(osrm_picom) },
+    { "pipewire",        "x11+wayland", 0, MODULE_RUN(osrm_pipewire) },
+    { "polkit-agent",    "x11+wayland", 0, MODULE_RUN(osrm_polkit_agent) },
+    { "polybar",         "x11",         1, MODULE_RUN(osrm_polybar) },
+    { "power",           "x11+wayland", 0, MODULE_RUN(osrm_power) },
+    { "printer",         "x11+wayland", 0, MODULE_RUN(osrm_printer) },
+    { "proteus",         "x11+wayland", 0, MODULE_RUN(osrm_proteus) },
+    { "pulseaudio",      "x11+wayland", 0, MODULE_RUN(osrm_pulseaudio) },
+    { "qbittorrent",     "x11+wayland", 0, MODULE_RUN(osrm_qbittorrent) },
+    { "qpwgraph",        "x11+wayland", 0, MODULE_RUN(osrm_qpwgraph) },
+    { "redshift",        "x11",         0, MODULE_RUN(osrm_redshift) },
+    { "rofi",            "x11",         1, MODULE_RUN(osrm_rofi) },
+    { "rust",            "x11+wayland", 0, MODULE_RUN(osrm_rust) },
+    { "sddm",            "x11+wayland", 1, MODULE_RUN(osrm_sddm) },
+    { "serie",           "x11+wayland", 1, MODULE_RUN(osrm_serie) },
+    { "starship",        "x11+wayland", 1, MODULE_RUN(osrm_starship) },
+    { "steam",           "x11+wayland", 0, MODULE_RUN(osrm_steam) },
+    { "swap",            "x11+wayland", 0, MODULE_RUN(osrm_swap) },
+    { "swaylock",        "wayland",     1, MODULE_RUN(osrm_swaylock) },
+    { "tcc",             "x11+wayland", 0, MODULE_RUN(osrm_tcc) },
+    { "telegram",        "x11+wayland", 1, MODULE_RUN(osrm_telegram) },
+    { "theming",         "x11",         1, MODULE_RUN(osrm_theming) },
+    { "thumbnails",      "x11+wayland", 0, MODULE_RUN(osrm_thumbnails) },
+    { "thunar",          "x11+wayland", 0, MODULE_RUN(osrm_thunar) },
+    { "thunderbird",     "x11+wayland", 1, MODULE_RUN(osrm_thunderbird) },
+    { "ufw",             "x11+wayland", 0, MODULE_RUN(osrm_ufw) },
+    { "viewers",         "x11+wayland", 1, MODULE_RUN(osrm_viewers) },
+    { "vlc",             "x11+wayland", 1, MODULE_RUN(osrm_vlc) },
+    { "vmware-init",     "x11",         0, MODULE_RUN(osrm_vmware_init) },
+    { "vscode",          "x11+wayland", 0, MODULE_RUN(osrm_vscode) },
+    { "vscode-insiders", "x11+wayland", 0, MODULE_RUN(osrm_vscode_insiders) },
+    { "waybar",          "wayland",     1, MODULE_RUN(osrm_waybar) },
+    { "waydroid",        "wayland",     0, MODULE_RUN(osrm_waydroid) },
+    { "wayland",         "wayland",     0, MODULE_RUN(osrm_wayland) },
+    { "waylock",         "wayland",     1, MODULE_RUN(osrm_waylock) },
+    { "wezterm",         "x11+wayland", 1, MODULE_RUN(osrm_wezterm) },
+    { "wleave",          "wayland",     1, MODULE_RUN(osrm_wleave) },
+    { "wlogout",         "wayland",     1, MODULE_RUN(osrm_wlogout) },
+    { "wofi",            "wayland",     1, MODULE_RUN(osrm_wofi) },
+    { "xdg",             "x11+wayland", 0, MODULE_RUN(osrm_xdg) },
+    { "xorg",            "x11",         1, MODULE_RUN(osrm_xorg) },
+    { "yandex-browser",  "x11+wayland", 0, MODULE_RUN(osrm_yandex_browser) },
+    { "yazi",            "x11+wayland", 1, MODULE_RUN(osrm_yazi) },
+    { "zen-browser",     "x11+wayland", 1, MODULE_RUN(osrm_zen_browser) },
+    { "zig",             "x11+wayland", 0, MODULE_RUN(osrm_zig) },
+    { "zip",             "x11+wayland", 0, MODULE_RUN(osrm_zip) },
+    { "zsh",             "x11+wayland", 1, MODULE_RUN(osrm_zsh) }
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 
@@ -67,6 +308,36 @@ static const ModuleRow *find(const char *name);
  * rather than inferred: test/unit/module_themable.sh diffs every marker against
  * what the script actually references, so a module that grows a theme layer and
  * forgets the header fails the suite instead of silently losing its paint. */
+/* osr_module_has -- does this tier own that name? */
+int osr_module_has(const char *name) { return find(name) != NULL; }
+
+/* osr_module_run -- run one module, in this process.
+ *
+ * theme_only is the §6a pass: everything that installs, downloads, builds or
+ * starts becomes a no-op for the rest of this process, so what the module does
+ * is its file copying -- which is what a theme is. The sh tier spelled the same
+ * thing osr_apply_stub_mutators (lib/apply.sh); see lib/module.h on why one is
+ * derived and one is enumerated.
+ *
+ * Returns 1 for success. A failing module is reported and the caller decides
+ * whether to continue -- one broken module must not abort a whole rice install,
+ * same contract the sh run_module had. */
+int osr_module_run(const char *name, int theme_only) {
+    const ModuleRow *m;
+
+    if (theme_only) osr_set_theme_only(1);
+    m = find(name);
+    if (m == NULL) {
+        osr_warn("no such C module");
+        return 0;
+    }
+#ifdef OSR_RUNTIME_MODULES
+    return osr_module_runtime_run(name);
+#else
+    return m->run();
+#endif
+}
+
 int osr_module_themable(const char *name) {
     Str path;
     char *buf;
@@ -128,6 +399,7 @@ static int usage(void) {
     fputs("  session <name>    its `# session:` marker\n", stderr);
     fputs("  themable <name>   exit 0 when it consumes the resolved theme\n", stderr);
     fputs("  run <name>        install it\n", stderr);
+    fputs("  run --theme-only <name>  only its theme layer, no installs\n", stderr);
     fputs("  pkgmap <name>     what lib/pkgmap resolves that name to\n", stderr);
     return 2;
 }
@@ -165,16 +437,10 @@ int osr_module_main(int argc, char **argv) {
     if (strcmp(argv[1], "themable") == 0 && argc == 3) {
         return osr_module_themable(argv[2]) ? 0 : 1;
     }
-    if (strcmp(argv[1], "run") == 0 && argc == 3) {
-        const ModuleRow *m = find(argv[2]);
-        if (m == NULL) {
-            osr_warn("no such C module");
-            return 1;
-        }
-        /* A failing module is reported and the run continues -- one broken
-         * module must not abort a whole rice install, same contract the sh
-         * run_module has. */
-        return m->run() ? 0 : 1;
+    if (strcmp(argv[1], "run") == 0 && (argc == 3 || argc == 4)) {
+        int theme_only = argc == 4;
+        if (theme_only && strcmp(argv[2], "--theme-only") != 0) return usage();
+        return osr_module_run(argv[theme_only ? 3 : 2], theme_only) ? 0 : 1;
     }
     return usage();
 }

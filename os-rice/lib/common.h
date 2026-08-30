@@ -18,9 +18,9 @@
  *                escape strings it hands out
  *   sh_quote     values handed back to a shell to eval
  *
- * The contract for the whole rewrite is byte-for-byte identical output: each
- * sh original is frozen under test/ref/ and diffed against its C replacement
- * by a unit test, so these helpers reproduce sh's quirks on purpose.
+ * These helpers reproduce a few of sh's behaviours on purpose -- word
+ * splitting, `printf %b`, the way a missing value reads as empty -- because
+ * the formats and manifests they parse were written against sh's rules.
  *
  * C89 + POSIX.
  */
@@ -150,6 +150,9 @@ void log_line(Str *out, const char *color_env, const char *tag,
  * error() keeps the `exit`). */
 void osr_info(const char *msg);
 void osr_warn(const char *msg);
+
+/* osr_debug_line -- the same, gated on $OSR_DEBUG. */
+void osr_debug_line(const char *msg);
 void osr_success_line(const char *msg);
 void osr_error_line(const char *msg);
 

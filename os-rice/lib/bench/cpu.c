@@ -23,6 +23,12 @@
 #define POLL_NS 250000000L   /* 250 ms: fine enough to catch a boost spike,
                               * coarse enough that the poller costs nothing */
 
+void bench_opts_init(BenchOpts *opts) {
+    opts->seconds = BENCH_DEFAULT_SECONDS;
+    opts->verbose = 0;
+    opts->announce = 0;
+}
+
 /* --- sensors -------------------------------------------------------------- */
 
 /* find_cpu_temp -- the sysfs attribute most likely to be the CPU package.
@@ -631,7 +637,7 @@ void bench_sensors_report(Str *out) {
     }
 }
 
-int bench_cpu(const BenchOpts *o, BenchResult *r) {
+int bench_cpu(const BenchOpts *opts, BenchResult *r) {
     PwrMeter meter;
     Poller p;
     char temp_path[BENCH_PATH_MAX];
@@ -658,7 +664,7 @@ int bench_cpu(const BenchOpts *o, BenchResult *r) {
 
     /* Idle first, and before anything has heated the part up -- an idle figure
      * taken after the load phases would be measuring the cooldown, not idle. */
-    idle_secs = o->seconds / 4;
+    idle_secs = opts->seconds / 4;
     if (idle_secs < 3) idle_secs = 3;
     /* The idle phase only happens when there is a meter to read during it, so
      * the denominator has to say 2 on a machine without one rather than
@@ -666,7 +672,7 @@ int bench_cpu(const BenchOpts *o, BenchResult *r) {
     nphase = (meter.source != PWR_NONE) ? 3 : 2;
     if (meter.source != PWR_NONE) {
         int i;
-        phase(o->announce, ++phase_n, nphase, "idle power", idle_secs,
+        phase(opts->announce, ++phase_n, nphase, "idle power", idle_secs,
               "machine at rest");
         pwr_begin(&meter);
         for (i = 0; i < idle_secs * 4; i++) {
@@ -678,10 +684,10 @@ int bench_cpu(const BenchOpts *o, BenchResult *r) {
 
     /* Single core: what one thread can do, which is the number that moves when
      * boost behaviour changes. */
-    phase(o->announce, ++phase_n, nphase, "single-core throughput", o->seconds,
+    phase(opts->announce, ++phase_n, nphase, "single-core throughput", opts->seconds,
           "stress-ng matrixprod on 1 thread");
     pwr_begin(&meter);
-    if (run_stressng(1, o->seconds, &p, o->verbose, &r->single_ops)) r->have_single = 1;
+    if (run_stressng(1, opts->seconds, &p, opts->verbose, &r->single_ops)) r->have_single = 1;
 
     /* All cores: the sustained figure, and the one the power reading belongs
      * to -- peak temperature and clock are captured across both phases. */
@@ -689,11 +695,11 @@ int bench_cpu(const BenchOpts *o, BenchResult *r) {
     str_addz(&detail, "stress-ng matrixprod on ");
     str_addl(&detail, r->ncpu);
     str_addz(&detail, r->ncpu == 1 ? " thread" : " threads");
-    phase(o->announce, ++phase_n, nphase, "all-core throughput", o->seconds,
+    phase(opts->announce, ++phase_n, nphase, "all-core throughput", opts->seconds,
           str_text(&detail));
     str_free(&detail);
     pwr_begin(&meter);
-    if (run_stressng(0, o->seconds, &p, o->verbose, &r->all_ops)) r->have_all = 1;
+    if (run_stressng(0, opts->seconds, &p, opts->verbose, &r->all_ops)) r->have_all = 1;
     if (r->have_power) {
         double w;
         if (pwr_end(&meter, &w)) r->load_w = w;

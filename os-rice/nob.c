@@ -6,8 +6,11 @@
  *
  *   mkdir build
  *   cc -o build/nob nob.c   (build\nob.exe on Windows)
- *   ./build/nob             (builds build/install)
- *   ./build/nob test        (builds + runs the C unit tests)
+ *   ./build/nob             (builds the full static programs)
+ *   ./build/nob static      (same as the default)
+ *   ./build/nob runtime     (builds build/osr-runtime, modules on demand)
+ *   ./build/nob both        (builds static and runtime outputs)
+ *   ./build/nob test        (builds both + runs the test suite)
  *   ./build/nob clean
  *   ./build/nob -v          (any of the above, with full command lines)
  *
@@ -105,7 +108,6 @@ static const char *lib_srcs[] = {
     "provide_module.c",
     "modules.c",
     "modules/src/common.c",
-    "modules/wezterm.c",
     "modules/pwsh.c",
     "modules/oh-my-posh.c",
     "modules/win-tweaks.c",
@@ -125,6 +127,7 @@ static const char *lib_srcs[] = {
      * further down: this script has always assumed the host it runs on is the
      * system it builds for. */
     "modules/fastfetch.c",
+    "modules/wezterm.c",
 #endif
 };
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
@@ -166,19 +169,155 @@ static const char *posix_srcs[] = {
     "lib/uv/journal.c",
     "lib/render.c",
     "lib/module.c",
+    "lib/pkg.c",
+    "lib/build.c",
+    "lib/config.c",
+    "lib/wallpaper_front.c",
+    "lib/git.c",
+    "lib/service.c",
+    "lib/preflight.c",
+    "lib/nerdfont.c",
+    "lib/gnome.c",
+    "lib/migrate.c",
+    "lib/apply.c",
+    "lib/reload.c",
+    /* lib/fetch.c is lib/net.sh; lib/net.c comes with it for the shared
+     * header parsers (its I/O half is the Windows one, stubbed here). */
+    "lib/fetch.c",
+    "lib/net.c",
     "lib/modules.c",
-    "modules/flameshot.c",
-    "modules/helpers.c",
+    "modules/alacritty.c",
+    "modules/amnezia-vpn.c",
+    "modules/arandr.c",
+    "modules/archives.c",
+    "modules/audio.c",
+    "modules/avahi.c",
+    "modules/benchmark.c",
+    "modules/blueman.c",
+    "modules/brightnessctl.c",
+    "modules/btop.c",
+    "modules/celluloid.c",
+    "modules/cliphist.c",
+    "modules/codecs.c",
+    "modules/copyq.c",
+    "modules/cpu-microcodes.c",
+    "modules/curseforge.c",
+    "modules/datagrip.c",
+    "modules/discord.c",
+    "modules/disks.c",
+    "modules/dkms.c",
+    "modules/dnscrypt.c",
     "modules/docker.c",
+    "modules/dunst.c",
+    "modules/easyeffects.c",
+    "modules/evolution.c",
+    "modules/fcitx5.c",
+    "modules/feh.c",
+    "modules/firefox.c",
+    "modules/flameshot.c",
+    "modules/flatpak.c",
+    "modules/foot.c",
+    "modules/gh.c",
+    "modules/ghostty.c",
+    "modules/git-base.c",
+    "modules/gnome-focus.c",
+    "modules/gnome-overview.c",
+    "modules/go.c",
+    "modules/gpaste.c",
+    "modules/gpu-drivers.c",
+    "modules/gtklock.c",
+    "modules/gvfs.c",
+    "modules/helpers.c",
+    "modules/helvum.c",
+    "modules/htop.c",
+    "modules/hyprcursor.c",
+    "modules/hypridle.c",
+    "modules/hyprland.c",
+    "modules/hyprlock.c",
+    "modules/hyprpaper.c",
+    "modules/hyprpicker.c",
+    "modules/i3.c",
+    "modules/i3lock.c",
+    "modules/input.c",
+    "modules/inxi.c",
+    "modules/kate.c",
+    "modules/kdeconnect.c",
+    "modules/keyring.c",
+    "modules/lightdm.c",
+    "modules/loupe.c",
+    "modules/luminance.c",
+    "modules/mako.c",
+    "modules/micro.c",
+    "modules/mirrors.c",
+    "modules/nautilus.c",
+    "modules/ncdu.c",
+    "modules/networkmanager.c",
+    "modules/nwg-displays.c",
+    "modules/obs-studio.c",
+    "modules/onlyoffice.c",
+    "modules/openssh.c",
+    "modules/pacman-multilib.c",
+    "modules/paru.c",
+    "modules/picom.c",
+    "modules/pipewire.c",
+    "modules/polkit-agent.c",
+    "modules/polybar.c",
+    "modules/power.c",
+    "modules/printer.c",
+    "modules/proteus.c",
+    "modules/pulseaudio.c",
+    "modules/qbittorrent.c",
+    "modules/qpwgraph.c",
+    "modules/redshift.c",
+    "modules/rofi.c",
+    "modules/rust.c",
+    "modules/sddm.c",
+    "modules/serie.c",
+    "modules/starship.c",
+    "modules/steam.c",
+    "modules/swap.c",
+    "modules/swaylock.c",
     "modules/tcc.c",
+    "modules/telegram.c",
+    "modules/theming.c",
+    "modules/thumbnails.c",
+    "modules/thunar.c",
+    "modules/thunderbird.c",
+    "modules/ufw.c",
+    "modules/viewers.c",
+    "modules/vlc.c",
+    "modules/vmware-init.c",
+    "modules/vscode.c",
+    "modules/vscode-insiders.c",
+    "modules/waybar.c",
+    "modules/waydroid.c",
+    "modules/wayland.c",
+    "modules/waylock.c",
+    "modules/wleave.c",
+    "modules/wlogout.c",
+    "modules/wofi.c",
+    "modules/xdg.c",
+    "modules/xorg.c",
+    "modules/yandex-browser.c",
+    "modules/yazi.c",
+    "modules/zen-browser.c",
+    "modules/zig.c",
+    "modules/zip.c",
+    "modules/zsh.c",
 #ifndef _WIN32
     /* the other half of the split described in lib_srcs: this file's POSIX
      * branch is the Linux fastfetch module, its Windows branch is the Windows
      * one, and only one of them is ever in a binary. */
     "modules/fastfetch.c",
+    "modules/wezterm.c",
 #endif
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
+/* Entries before modules/alacritty.c are the runtime core. Keep this count at
+ * the boundary above: runtime builds compile these units plus
+ * lib/module_runtime.c, while static builds compile the whole list. */
+#define POSIX_CORE_SRCS_COUNT 34
+#define POSIX_RUNTIME_SRC "lib/module_runtime.c"
 
 static const char *test_names[] = {
     "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
@@ -198,7 +337,13 @@ static const char *test_names[] = {
  * static helpers the header does not export.
  */
 static const char *posix_test_names[] = {
-    "uv_journal_test", "bench_test"
+    "uv_journal_test", "bench_test",
+    /* The behaviour tests (test/harness.c). They link nothing at all -- they
+     * drive build/osr as a subprocess and assert what it did to a sandboxed
+     * box -- which is why they belong here rather than with the tests that
+     * link the lib objects: a black-box test of what a unit must do should
+     * not break when the unit is renamed or split. */
+    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test", "reload_test", "migrate_test", "zsh_test", "gnome_test", "gnome_modules_test", "detect_test", "gpu_drivers_test", "audio_test", "swap_test", "log_test", "ui_test", "state_test", "testrun_test", "user_test", "theme_test", "theme_layers_test", "wallpaper_test", "config_test", "terminals_test", "build_test", "apps_test", "desktop_test", "install_test", "modules_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 
@@ -517,16 +662,40 @@ static bool collect_dep(Nob_Walk_Entry entry) {
     return true;
 }
 
+/* unity_srcs -- .c files that are #included by another translation unit
+ * rather than compiled on their own.
+ *
+ * They have to be listed because collect_dep only registers .h files, and for
+ * dependency purposes an #included .c IS a header: nothing else records that
+ * test/unit_c/uv_journal_test.c is rebuilt when lib/uv/journal.c changes. The
+ * failure this prevents is the bad direction -- editing the unit under test
+ * and running a test binary compiled from the version before the edit, which
+ * reports green about code that no longer exists.
+ *
+ * Explicit rather than derived by scanning every source for its includes: the
+ * set changes about once a year, and a list beside the lists of what IS
+ * compiled is the obvious place to look when it does.
+ */
+static const char *unity_srcs[] = {
+    "test/harness.c",       /* every test that #includes the harness */
+    "lib/common.c",         /* uv_journal_test, bench_test */
+    "lib/uv/journal.c", "lib/uv/backend.c", "lib/uv/generic_opp.c",
+    "lib/bench/cpu.c", "lib/bench/power.c", "lib/bench/util.c",
+};
+#define UNITY_SRCS_COUNT (sizeof(unity_srcs) / sizeof(unity_srcs[0]))
+
 /* collect_deps -- walk the tree once per run for headers. If the walk
  * fails (an unreadable directory, say) deps_usable stays false and every
  * timestamp check below answers "rebuild": without the full header list
  * we cannot prove anything is up to date, and guessing wrong ships a
  * stale binary. */
 static void collect_deps(void) {
+    size_t i;
     if (deps_collected) return;
     deps_collected = true;
     deps_usable = nob_walk_dir(".", collect_dep);
     nob_da_append(&deps, "nob.c");
+    for (i = 0; i < UNITY_SRCS_COUNT; i++) nob_da_append(&deps, unity_srcs[i]);
 }
 
 /* needs_compile -- is src's object missing, older than src, or older than
@@ -626,6 +795,31 @@ static bool link_posix(const char *bin) {
     return nob_cmd_run(&cmd);
 }
 
+/* link_posix_runtime -- build the small host in one compiler invocation. Its
+ * object set differs from the static host only by a preprocessor definition,
+ * so separate source-to-binary compilation avoids mixing incompatible objects
+ * in build/obj while keeping the ordinary static build unchanged. */
+static bool link_posix_runtime(const char *bin) {
+    Nob_Cmd cmd = {0};
+    const char *inputs[POSIX_CORE_SRCS_COUNT + 3];
+    size_t count = 0;
+    size_t i;
+
+    inputs[count++] = "osr.c";
+    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) inputs[count++] = posix_srcs[i];
+    inputs[count++] = POSIX_RUNTIME_SRC;
+    collect_deps();
+    if (nob_needs_rebuild(bin, inputs, count) == 0 &&
+        nob_needs_rebuild(bin, deps.items, deps.count) == 0) return true;
+
+    actions++;
+    append_common_flags(&cmd);
+    nob_cmd_append(&cmd, "-DOSR_RUNTIME_MODULES=1", "-rdynamic", "-o", bin, "osr.c");
+    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
+    nob_cmd_append(&cmd, POSIX_RUNTIME_SRC, "-ldl");
+    return nob_cmd_run(&cmd);
+}
+
 /* link_exe -- main_src's own object + every shared object. Async when procs
  * is given, so the binaries of one batch link in parallel too. */
 static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
@@ -705,6 +899,15 @@ static bool build_tests(void) {
     return nob_procs_flush(&procs);
 }
 
+#ifndef _WIN32
+static bool run_runtime_module_tests(void) {
+    Nob_Cmd cmd = {0};
+    nob_log(NOB_INFO, "--- runtime_modules ---");
+    nob_cmd_append(&cmd, "sh", "test/runtime_modules.sh");
+    return nob_cmd_run(&cmd);
+}
+#endif
+
 static bool run_all_tests(void) {
     bool ok = true;
     size_t i;
@@ -716,6 +919,7 @@ static bool run_all_tests(void) {
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         if (!run_test(posix_test_names[i])) ok = false;
     }
+    if (!run_runtime_module_tests()) ok = false;
 #endif
     return ok;
 }
@@ -729,6 +933,7 @@ static bool clean(void) {
     delete_if_exists(BIN("install"));
     delete_if_exists(BIN("wallpaper"));
     delete_if_exists(BIN("osr"));
+    delete_if_exists(BIN("osr-runtime"));
     delete_if_exists(obj_of("install.c"));
     delete_if_exists(obj_of("wallpaper.c"));
     delete_if_exists(obj_of("osr.c"));
@@ -813,6 +1018,17 @@ static bool build_all(void) {
     if (!link_posix(BIN("osr"))) return false;
 #endif
     return true;
+}
+
+static bool build_runtime(void) {
+#ifdef _WIN32
+    nob_log(NOB_ERROR, "runtime C modules are supported only by the POSIX build");
+    return false;
+#else
+    if (!cc_toolchain_check()) return false;
+    if (!mkdir_if_needed(BUILD_DIR)) return false;
+    return link_posix_runtime(BIN("osr-runtime"));
+#endif
 }
 
 /* --- autoconf-style command echo -------------------------------------
@@ -1039,19 +1255,29 @@ int main(int argc, char **argv) {
     NOB_UNUSED(program);
     const char *subcommand = argc > 0 ? nob_shift(argv, argc) : NULL;
 
-    if (subcommand == NULL || strcmp(subcommand, "all") == 0) {
+    if (subcommand == NULL || strcmp(subcommand, "all") == 0 || strcmp(subcommand, "static") == 0) {
         if (!build_all()) return 1;
         if (actions == 0) nob_log(NOB_INFO, "everything up to date");
         return 0;
     }
+    if (strcmp(subcommand, "runtime") == 0) {
+        if (!build_runtime()) return 1;
+        if (actions == 0) nob_log(NOB_INFO, "everything up to date");
+        return 0;
+    }
+    if (strcmp(subcommand, "both") == 0) {
+        if (!build_all() || !build_runtime()) return 1;
+        if (actions == 0) nob_log(NOB_INFO, "everything up to date");
+        return 0;
+    }
     if (strcmp(subcommand, "test") == 0) {
-        if (!build_all()) return 1;
+        if (!build_all() || !build_runtime()) return 1;
         return run_all_tests() ? 0 : 1;
     }
     if (strcmp(subcommand, "clean") == 0) {
         return clean() ? 0 : 1;
     }
 
-    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: (none)/all, test, clean; -v for full command lines)", subcommand);
+    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: static, runtime, both, test, clean; -v for full command lines)", subcommand);
     return 1;
 }

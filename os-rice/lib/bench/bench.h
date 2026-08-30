@@ -44,6 +44,7 @@
 #define BENCH_PATH_MAX 256
 #define BENCH_LABEL 16
 #define BENCH_TEXT_MAX 160
+#define BENCH_DEFAULT_SECONDS 20
 
 /* --- shared helpers (lib/bench/util.c) ------------------------------------
  *
@@ -163,18 +164,21 @@ typedef struct {
     int announce;  /* name each phase as it starts */
 } BenchOpts;
 
+/* bench_opts_init -- set defaults before parsing optional run flags. */
+void bench_opts_init(BenchOpts *opts);
+
 /* bench_deps_missing -- names of the tools that are not installed, appended to
  * out space-separated. Returns how many. */
 int bench_deps_missing(Str *out);
 
-/* bench_cpu -- idle power, then single-core, then all-core. With o->announce
+/* bench_cpu -- idle power, then single-core, then all-core. With opts->announce
  * each phase says what it is and how long it takes before it starts: the run is
  * a minute of a silent, fully loaded machine, and "which of these is it doing
  * now" is not answerable from a single line printed at the top.
  *
  * Returns 1 when at least the throughput phases ran; a machine with no power
  * sensor still produces a useful result, so a missing meter is not a failure. */
-int bench_cpu(const BenchOpts *o, BenchResult *r);
+int bench_cpu(const BenchOpts *opts, BenchResult *r);
 
 /* bench_sensors_report -- `osr benchmark sensors`: every probe pwr_detect and
  * find_cpu_temp make, with its verdict, plus a census of the three sysfs trees

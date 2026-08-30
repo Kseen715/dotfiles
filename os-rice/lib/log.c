@@ -55,6 +55,21 @@ static const char *step_prefix(char *buf, size_t buf_sz) {
     return buf;
 }
 
+/* osr_step_prefix -- the same "[03/12] ", for a caller composing its own line
+ * (the theme apply's per-layer debug). "" when no total is known. */
+const char *osr_step_prefix(char *buf, size_t buf_sz) {
+    const char *p = step_prefix(buf, buf_sz);
+    return p != NULL ? p : "";
+}
+
+/* osr_log_step -- an [INFO] line carrying install.sh's "[03/12] " counter, for
+ * a caller inside this process. The counters come from the environment, so a
+ * forked module's own lines line up with the runner's. */
+void osr_log_step(const char *msg) {
+    char prefix[32];
+    emit(stdout, "OSR_CYAN", "[INFO]", step_prefix(prefix, sizeof(prefix)), msg);
+}
+
 static int usage(void) {
     fputs("usage: osr log <level> <message>\n\n", stderr);
     fputs("  info | success        stdout\n", stderr);
@@ -77,8 +92,7 @@ int osr_log_main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(level, "step") == 0) {
-        char prefix[32];
-        emit(stdout, "OSR_CYAN", "[INFO]", step_prefix(prefix, sizeof(prefix)), msg);
+        osr_log_step(msg);
         return 0;
     }
     if (strcmp(level, "debug") == 0) {

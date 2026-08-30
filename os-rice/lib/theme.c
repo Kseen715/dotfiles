@@ -30,8 +30,8 @@
  * a shell function) and osr_resolve_theme's orchestration (it must set shell
  * variables, and it ends the run through error()).
  *
- * Byte-for-byte with the sh original, frozen at test/ref/theme_sh_ref.sh and
- * diffed by test/unit/theme_c_parity.sh.
+ * What the parser must accept, and what it must refuse, is stated in
+ * test/unit_c/theme_test.c.
  *
  * C89 + POSIX.
  */
@@ -39,6 +39,8 @@
 
 #include "common.h"
 #include "cmds.h"
+#include "config.h"
+#include "module.h"
 
 #include "render.h"
 
@@ -165,6 +167,26 @@ static void directives_free(Directives *d) {
     d->count = 0;
 }
 
+/* osr_theme_read_lines -- a manifest's directive lines for a caller that would
+ * have run `_osr_theme_lines <file> | while IFS= read -r`. One line per entry,
+ * each newline-terminated, and the manifest's FINAL line dropped when the file
+ * ended without a newline: `read` returns false on a partial line, so the
+ * shell loop never ran its body for it either. */
+void osr_theme_read_lines(Str *out, const char *path) {
+    Directives d;
+    size_t i;
+    size_t n;
+
+    if (!theme_lines(&d, path)) return;
+    n = d.count;
+    if (d.last_incomplete && n > 0) n--;
+    for (i = 0; i < n; i++) {
+        str_add(out, str_text(&d.items[i]), d.items[i].len);
+        str_addc(out, '\n');
+    }
+    directives_free(&d);
+}
+
 /* match_prefix -- the sed `s|^<key>:[[:space:]]*||p` shape: does this directive
  * start with "<key>:"? If so, out points at the value (whitespace skipped).
  * The key goes through a BRE, as it did through sed. */
@@ -190,31 +212,37 @@ static int match_prefix(const char *directive, const char *key, const char **val
 /* --- the readers ---------------------------------------------------------- */
 
 /* cmd_list -- every dir under themes/ that has a theme.list. */
-static int cmd_list(void) {
+/* osr_theme_list -- every theme name, one per line. A theme is a directory
+ * under themes/ that carries a theme.list; anything else in there is not one. */
+void osr_theme_list(Str *out) {
     Str pattern;
-    Str out;
     glob_t g;
     size_t i;
 
     str_init(&pattern);
     str_addz(&pattern, osr_root());
     str_addz(&pattern, "/themes/*/");
-    if (glob(str_text(&pattern), GLOB_NOCHECK, NULL, &g) != 0) { str_free(&pattern); return 0; }
+    if (glob(str_text(&pattern), GLOB_NOCHECK, NULL, &g) != 0) { str_free(&pattern); return; }
     str_free(&pattern);
 
-    str_init(&out);
     for (i = 0; i < g.gl_pathc; i++) {
         Str probe;
         str_init(&probe);
         str_addz(&probe, g.gl_pathv[i]);
         str_addz(&probe, "theme.list");         /* the glob keeps its slash */
         if (file_exists(str_text(&probe))) {
-            base_of(&out, g.gl_pathv[i]);
-            str_addc(&out, '\n');
+            base_of(out, g.gl_pathv[i]);
+            str_addc(out, '\n');
         }
         str_free(&probe);
     }
     globfree(&g);
+}
+
+static int cmd_list(void) {
+    Str out;
+    str_init(&out);
+    osr_theme_list(&out);
     out_flush(&out);
     str_free(&out);
     return 0;
@@ -225,14 +253,17 @@ static int theme_list_path(Str *out, const char *name) {
     return file_exists(str_text(out));
 }
 
-static int cmd_exists(const char *name) {
+/* osr_theme_exists -- is <name> a real theme (a themes/<name>/theme.list)? */
+int osr_theme_exists(const char *name) {
     Str p;
     int ok;
     str_init(&p);
     ok = (*name != '\0') && theme_list_path(&p, name);
     str_free(&p);
-    return ok ? 0 : 1;
+    return ok;
 }
+
+static int cmd_exists(const char *name) { return osr_theme_exists(name) ? 0 : 1; }
 
 /* first_value -- the first directive matching "<key>:", value only. */
 static int first_value(Str *out, const char *manifest, const char *key) {
@@ -252,18 +283,25 @@ static int first_value(Str *out, const char *manifest, const char *key) {
     return found;
 }
 
+/* osr_theme_meta -- the same lookup for a caller inside this process, where
+ * the shell tier spent a fork on `osr theme meta`. Appends nothing when the
+ * theme does not define the key, which is what `$(...)` handed sh as "". */
+void osr_theme_meta(Str *out, const char *name, const char *key) {
+    Str manifest;
+    str_init(&manifest);
+    path_of(&manifest, "themes", name, "theme.list");
+    (void)first_value(out, str_text(&manifest), key);
+    str_free(&manifest);
+}
+
 /* cmd_meta -- osr_theme_meta: a single-valued field, "" when absent. No
  * trailing newline: the sh version ended with `printf '%s'`. */
 static int cmd_meta(const char *name, const char *key) {
-    Str manifest;
     Str out;
-    str_init(&manifest);
-    path_of(&manifest, "themes", name, "theme.list");
     str_init(&out);
-    (void)first_value(&out, str_text(&manifest), key);
+    osr_theme_meta(&out, name, key);
     out_flush(&out);
     str_free(&out);
-    str_free(&manifest);
     return 0;
 }
 
@@ -283,25 +321,31 @@ static void split_words(Str *out, const char *value) {
 }
 
 /* cmd_configs -- every `config:` line (not just the first), space-split. */
-static int cmd_configs(const char *name) {
+/* osr_theme_configs -- the whole config/ dirs the theme drops into ~/.config on
+ * apply (its `config:` lines), one per line. */
+void osr_theme_configs(Str *out, const char *name) {
     Str manifest;
-    Str out;
     Directives d;
     size_t i;
 
     str_init(&manifest);
     path_of(&manifest, "themes", name, "theme.list");
-    str_init(&out);
     if (theme_lines(&d, str_text(&manifest))) {
         for (i = 0; i < d.count; i++) {
             const char *v;
-            if (match_prefix(str_text(&d.items[i]), "config", &v)) split_words(&out, v);
+            if (match_prefix(str_text(&d.items[i]), "config", &v)) split_words(out, v);
         }
         directives_free(&d);
     }
+    str_free(&manifest);
+}
+
+static int cmd_configs(const char *name) {
+    Str out;
+    str_init(&out);
+    osr_theme_configs(&out, name);
     out_flush(&out);
     str_free(&out);
-    str_free(&manifest);
     return 0;
 }
 
@@ -623,16 +667,22 @@ static int cmd_rice_themes(const char *rice) {
     return 0;
 }
 
-static int cmd_rice_default(const char *rice) {
+/* osr_rice_default_theme -- a rice's `theme:` line: the theme installed with it.
+ * Appends nothing when the manifest names none. */
+void osr_rice_default_theme(Str *out, const char *rice) {
     Str manifest;
-    Str out;
     str_init(&manifest);
     path_of(&manifest, "rices", rice, "rice.list");
+    (void)first_value(out, str_text(&manifest), "theme");
+    str_free(&manifest);
+}
+
+static int cmd_rice_default(const char *rice) {
+    Str out;
     str_init(&out);
-    (void)first_value(&out, str_text(&manifest), "theme");
+    osr_rice_default_theme(&out, rice);
     out_flush(&out);
     str_free(&out);
-    str_free(&manifest);
     return 0;
 }
 
@@ -711,9 +761,11 @@ static int cmd_swatch(const char *name) {
 /* cmd_menu -- the numbered picker. Prompt and input go through /dev/tty, never
  * stdout: this runs inside a `$(...)`, so stdout is the captured return value.
  * Empty, invalid or EOF input falls back to the default theme. */
-static int cmd_menu(void) {
+/* osr_theme_menu -- the numbered picker. Prompt and input go through /dev/tty
+ * because the shell tier called this inside a `$(...)`, where stdout IS the
+ * return value; keeping the tty split makes the C caller identical. */
+void osr_theme_menu(Str *out) {
     Str names;
-    Str out;
     Str prompt;
     char **items = NULL;
     size_t count = 0;
@@ -763,14 +815,11 @@ static int cmd_menu(void) {
         count++;
     }
 
-    str_init(&out);
     if (count == 0) {
-        str_addz(&out, dflt);
-        out_flush(&out);
-        str_free(&out);
+        str_addz(out, dflt);
         str_free(&names);
         free(items);
-        return 0;
+        return;
     }
 
     tty = fopen("/dev/tty", "r+");
@@ -813,15 +862,95 @@ static int cmd_menu(void) {
             if (*p < '0' || *p > '9') numeric = 0;      /* `*[!0-9]*` */
         }
         if (numeric) pick = strtol(answer, NULL, 10);
-        if (numeric && pick >= 1 && pick <= (long)count) str_addz(&out, items[pick - 1]);
-        else str_addz(&out, dflt);
+        if (numeric && pick >= 1 && pick <= (long)count) str_addz(out, items[pick - 1]);
+        else str_addz(out, dflt);
     }
-    out_flush(&out);
-    str_free(&out);
     str_free(&names);
     for (i = 0; i < count; i++) free(items[i]);
     free(items);
+}
+
+static int cmd_menu(void) {
+    Str out;
+    str_init(&out);
+    osr_theme_menu(&out);
+    out_flush(&out);
+    str_free(&out);
     return 0;
+}
+
+/* --- the shell-callable half of lib/theme.sh, in process -------------------
+ *
+ * These are the three functions the sh shim existed for: they SET
+ * OSR_THEME/OSR_THEME_DIR for everything downstream, end the run through
+ * error(), and loop over apply_config. None of that needed a shell once the
+ * caller stopped being one -- the environment they publish is inherited by every
+ * child this process forks, which is exactly what `export` bought the shim.
+ */
+
+/* osr_resolve_theme -- set OSR_THEME + OSR_THEME_DIR. Resolution order:
+ * explicit name > interactive menu > default theme. After this, a module's
+ * `[ -f "$OSR_THEME_DIR/config/..." ]` guards fire. Fatal on a name that is not
+ * a theme: that one the user typed, and guessing at it would paint the wrong
+ * desktop silently. */
+void osr_resolve_theme(const char *want) {
+    Str pick, dir;
+
+    str_init(&pick); str_init(&dir);
+    if (want != NULL && *want != '\0') {
+        if (!osr_theme_exists(want))
+            osr_die("no such theme: '%s' (see: osr themes)", want);
+        str_addz(&pick, want);
+    } else if (isatty(0) && isatty(1) && access("/dev/tty", R_OK) == 0) {
+        osr_theme_menu(&pick);
+    } else {
+        str_addz(&pick, env_str("OSR_DEFAULT_THEME", "xin"));
+        osr_infof("no interactive terminal - using default theme '%s'", str_text(&pick));
+    }
+
+    str_addz(&dir, osr_root());
+    str_addz(&dir, "/themes/");
+    str_addz(&dir, str_text(&pick));
+    setenv("OSR_THEME", str_text(&pick), 1);
+    setenv("OSR_THEME_DIR", str_text(&dir), 1);
+    osr_infof("theme: %s", str_text(&pick));
+    str_free(&pick); str_free(&dir);
+}
+
+/* osr_unset_theme -- "this run paints nothing", explicitly.
+ *
+ * The counterpart to osr_resolve_theme for a module set where no module reads
+ * the theme (osr_module_themable says no for all of them): every theme guard is
+ * `[ -n "$OSR_THEME_DIR" ]`, so empty-and-exported is the value that makes them
+ * all decline, and nothing is asked of the user for an answer nothing consumes. */
+void osr_unset_theme(void) {
+    setenv("OSR_THEME", "", 1);
+    setenv("OSR_THEME_DIR", "", 1);
+}
+
+/* osr_apply_theme_configs -- drop the whole config/ dirs the current theme
+ * declares (`config:` in theme.list) into ~/.config. These are the appearance
+ * dirs no module owns; a module-owned layer is installed by its module. */
+int osr_apply_theme_configs(void) {
+    const char *theme = env_str("OSR_THEME", "");
+    Str list;
+    size_t pos = 0;
+    Line line;
+    int ok = 1;
+
+    if (*theme == '\0') return 1;
+    str_init(&list);
+    osr_theme_configs(&list, theme);
+    while (next_line(str_text(&list), list.len, &pos, &line)) {
+        Str name;
+        if (line.len == 0) continue;
+        str_init(&name);
+        str_add(&name, line.start, line.len);
+        ok = osr_apply_config(str_text(&name)) && ok;
+        str_free(&name);
+    }
+    str_free(&list);
+    return ok;
 }
 
 static int usage(void) {

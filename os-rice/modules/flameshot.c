@@ -3,8 +3,8 @@
  * are the scriptable pair the i3 bindings use for "region straight to
  * clipboard", which flameshot cannot do without opening its editor.
  *
- * Port of modules/flameshot.sh, kept as the reference at
- * test/ref/flameshot_sh_ref.sh. C89.
+ * Was modules/flameshot.sh; what it must do is stated in the C tests
+ * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
 
