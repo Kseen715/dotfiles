@@ -103,21 +103,49 @@ int main(void) {
     /* Non-vacuous first: every assertion below would pass against an empty
      * list, and an empty list is precisely the failure that would leave a
      * theme apply installing packages. */
-    osr_assert_true(lines(verbs) > 50, "the verb list is the real one");
-    osr_assert_true(has_line(verbs, "pkg_install"), "a package verb is in it");
-    osr_assert_true(has_line(verbs, "enable_service"), "a service verb is in it");
+    osr_assert_true(lines(verbs) > 10, "the verb list is the real one");
 
-    /* The read-only allowlist is the one thing that must NOT be stubbed:
-     * every name on it has to be a real function of a mutating lib, or the
-     * exception silently protects nothing. */
-    osr_assert_true(has_line(verbs, "pkg_installed"),
-                    "the query 'pkg_installed' is defined by a mutating lib");
-    osr_assert_true(has_line(verbs, "_pkgmap_one"),
-                    "the query '_pkgmap_one' is defined by a mutating lib");
-    osr_assert_true(has_line(verbs, "service_resolve"),
-                    "the query 'service_resolve' is defined by a mutating lib");
-    osr_assert_true(has_line(verbs, "osr_downloader"),
-                    "the query 'osr_downloader' is defined by a mutating lib");
+    /* The list is derived from the functions that ask osr_theme_only() before
+     * acting, so what these assert is that each KIND of mutation is covered.
+     * A verb that forgot the check would be absent here and would also run
+     * for real during a theme apply -- the same defect, seen twice. */
+    osr_assert_true(has_line(verbs, "osr_pkg_install"),
+                    "installing a package is neutralized");
+    osr_assert_true(has_line(verbs, "osr_pkg_remove"),
+                    "and removing one");
+    osr_assert_true(has_line(verbs, "osr_pkg_refresh"),
+                    "and refreshing the index, which is a network round trip");
+    osr_assert_true(has_line(verbs, "osr_service_enable"),
+                    "enabling a service is neutralized");
+    osr_assert_true(has_line(verbs, "osr_service_disable"),
+                    "and disabling one");
+    osr_assert_true(has_line(verbs, "osr_fetch_download"),
+                    "downloading a file is neutralized -- a theme switch that "
+                    "reached the network would not be a hotkey");
+    osr_assert_true(has_line(verbs, "osr_build_run"),
+                    "and running a source builder, which is the slowest thing "
+                    "in the tree");
+    osr_assert_true(has_line(verbs, "osr_git_repo"),
+                    "cloning a repository is neutralized");
+    osr_assert_true(has_line(verbs, "osr_install_nerd_font"),
+                    "and installing a font");
+    osr_assert_true(has_line(verbs, "osr_run_root"),
+                    "and the escalation itself -- which is the backstop: a "
+                    "mutation that slipped past every verb above still cannot "
+                    "become root during an apply");
+
+    /* What must NOT be in it: the queries a module branches on. Neutralizing
+     * one of those does not prevent a mutation, it makes the module take the
+     * wrong branch and write the wrong config. */
+    osr_assert_true(!has_line(verbs, "osr_pkg_installed"),
+                    "`is it installed` is a QUERY and is not neutralized -- a "
+                    "stubbed probe makes a module take the wrong branch, which "
+                    "is worse than the mutation it was meant to prevent");
+    osr_assert_true(!has_line(verbs, "osr_pkgmap_resolve"),
+                    "nor is name resolution: stubbing it would resolve every "
+                    "package name to nothing");
+    osr_assert_true(!has_line(verbs, "osr_service_resolve"),
+                    "nor is the servicemap lookup");
     free(verbs);
 
     /* --- 2. theme-carrying modules ---------------------------------------- */
@@ -233,6 +261,191 @@ int main(void) {
         osr_assert_true(bad == 0, "every name in the scan is a module");
     }
     free(all);
+
+    /* ================================================================
+     * 4. The apply itself, end to end
+     *
+     * `osr apply theme <name>` is the hotkey path: swap the look, touch
+     * nothing else. Three promises, and each one is a thing a user would
+     * notice being broken within a minute:
+     *
+     *   IT INSTALLS NOTHING. Every mutating verb is neutralised for the rest
+     *   of the process, so an apply cannot reach the network or a package
+     *   manager -- which is what makes it fast enough to bind to a key.
+     *
+     *   IT IS A PURE FUNCTION OF THE THEME. A -> B -> A returns the identical
+     *   file. A composed config that accumulated would drift with every
+     *   switch, and the drift would only show up much later.
+     *
+     *   IT IS IDEMPOTENT. Applying the same theme twice changes nothing on
+     *   disk (SS2).
+     *
+     * Driven through `osr apply theme` directly and NEVER through
+     * `install.sh --theme-only`: the runner resolves $OSR_HOME from passwd, so
+     * running that here would apply a theme to the home of whoever runs the
+     * suite. This entry point takes $OSR_HOME from the environment, which is
+     * exactly why osr_apply_theme lives in a lib rather than inline in the
+     * runner.
+     * ================================================================ */
+    {
+        HStr dots;
+        char *before;
+        char *after;
+        char *nord_first;
+
+        hs_init(&dots);
+        hs_path(&dots, hs_text(&sb.osr_root), "..");
+        osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&dots));
+        hs_free(&dots);
+        osr_sb_env(&sb, "OSR_PKG", "apt");
+        osr_sb_env(&sb, "OSR_DISTRO", "ubuntu");
+        osr_sb_env(&sb, "OSR_ID_LIKE", "debian");
+        osr_sb_env(&sb, "OSR_CODENAME", "noble");
+        osr_sb_env(&sb, "OSR_VERSION_ID", "24.04");
+        osr_sb_env(&sb, "OSR_INIT", "systemd");
+        osr_sb_real(&sb, "python3");
+
+        /* A small rice, so the apply narrows to a handful of layers. The theme
+         * applied over it is deliberately a DIFFERENT name from the rice: the
+         * two are separate axes (SS6), and conflating them is the bug this
+         * arrangement would catch. */
+        osr_sb_rm(&sb, "home");
+        osr_sb_mkdir(&sb, "home/.config/osr");
+        osr_sb_write(&sb, "home/.config/osr/state", "rice=catppuccin\n", 0644);
+
+        osr_sb_reset(&sb);
+        osr_assert_rc(osr_sb_run_core(&sb, "apply", "theme", "nord",
+                                      (const char *)NULL), 0,
+                      "apply: a theme apply succeeds");
+        osr_assert_out(&sb, "applying theme 'nord'",
+                       "apply: and says which theme it is applying");
+
+        {
+            HStr layer;
+            char *text;
+            hs_init(&layer);
+            hs_path(&layer, hs_text(&sb.root),
+                    "home/.config/osr/zsh/rc.d/90-theme.zsh");
+            text = h_slurp(hs_text(&layer));
+            osr_assert_true(strstr(text, "OSR_RICE_THEME=\"nord\"") != NULL,
+                "apply: the zsh theme layer landed, and it is nord's");
+            free(text);
+            hs_free(&layer);
+        }
+        {
+            HStr toml;
+            char *text;
+            hs_init(&toml);
+            hs_path(&toml, hs_text(&sb.root), "home/.config/starship.toml");
+            text = h_slurp(hs_text(&toml));
+            osr_assert_true(strstr(text, "#88c0d0") != NULL,
+                "apply: starship.toml was composed with nord's palette");
+            nord_first = text;
+            hs_free(&toml);
+        }
+
+        /* The state records the theme AND keeps the rice: they are separate
+         * axes, and an apply that forgot the rice would narrow the next one
+         * to every module in the tree. */
+        {
+            HStr st;
+            char *text;
+            hs_init(&st);
+            hs_path(&st, hs_text(&sb.root), "home/.config/osr/state");
+            text = h_slurp(hs_text(&st));
+            osr_assert_true(strstr(text, "theme=nord") != NULL,
+                "apply: the state records the applied theme");
+            osr_assert_true(strstr(text, "rice=catppuccin") != NULL,
+                "apply: and keeps the rice -- theme and rice are separate axes");
+            free(text);
+            hs_free(&st);
+        }
+
+        /* No package manager was ever consulted. A stray call would have
+         * needed the network or a sudo ticket; this asserts on the output
+         * rather than trusting that it did not. */
+        {
+            static const char *const forbidden[] = {
+                "Installing ", "apt-get", "pacman", "xbps-install",
+                "dnf install", NULL
+            };
+            const char *out = osr_sb_capture_both(&sb);
+            int clean = 1;
+            int i;
+            for (i = 0; forbidden[i] != NULL; i++) {
+                if (strstr(out, forbidden[i]) != NULL) clean = 0;
+            }
+            osr_assert_true(clean,
+                "apply: no package or install step ran at all -- every mutating "
+                "verb is neutralised for the rest of the process, which is what "
+                "makes an apply fast enough to bind to a hotkey");
+            osr_assert_true(strstr(out, "password") == NULL &&
+                            strstr(out, "sudo:") == NULL,
+                "apply: and nothing prompted for sudo -- a root layer with no "
+                "ticket is skipped, not asked about");
+        }
+
+        /* Switching replaces, rather than accumulating. */
+        osr_sb_reset(&sb);
+        osr_sb_run_core(&sb, "apply", "theme", "gruvbox", (const char *)NULL);
+        {
+            HStr layer, toml;
+            char *text;
+            hs_init(&layer);
+            hs_path(&layer, hs_text(&sb.root),
+                    "home/.config/osr/zsh/rc.d/90-theme.zsh");
+            text = h_slurp(hs_text(&layer));
+            osr_assert_true(strstr(text, "OSR_RICE_THEME=\"gruvbox\"") != NULL,
+                "switch: the zsh layer is now gruvbox's");
+            free(text);
+            hs_free(&layer);
+
+            hs_init(&toml);
+            hs_path(&toml, hs_text(&sb.root), "home/.config/starship.toml");
+            text = h_slurp(hs_text(&toml));
+            osr_assert_true(strstr(text, "#fabd2f") != NULL,
+                "switch: starship.toml carries gruvbox's palette");
+            osr_assert_true(strstr(text, "#88c0d0") == NULL,
+                "switch: and NO trace of the previous theme -- a composed file "
+                "that accumulated would be a TOML parse error, or worse, two "
+                "palettes and a coin toss");
+            free(text);
+            hs_free(&toml);
+        }
+
+        /* A -> B -> A is the identical file. */
+        osr_sb_reset(&sb);
+        osr_sb_run_core(&sb, "apply", "theme", "nord", (const char *)NULL);
+        {
+            HStr toml;
+            hs_init(&toml);
+            hs_path(&toml, hs_text(&sb.root), "home/.config/starship.toml");
+            after = h_slurp(hs_text(&toml));
+            osr_assert_eq(nord_first, after,
+                "switch: A -> B -> A returns the identical file -- a theme is "
+                "a pure function of itself, not of the order themes were "
+                "applied in");
+            hs_free(&toml);
+        }
+        free(nord_first);
+
+        /* SS2: the same theme twice changes nothing on disk. */
+        before = after;
+        osr_sb_reset(&sb);
+        osr_sb_run_core(&sb, "apply", "theme", "nord", (const char *)NULL);
+        {
+            HStr toml;
+            char *again2;
+            hs_init(&toml);
+            hs_path(&toml, hs_text(&sb.root), "home/.config/starship.toml");
+            again2 = h_slurp(hs_text(&toml));
+            osr_assert_eq(before, again2,
+                "apply: re-applying the same theme is a no-op (SS2)");
+            free(again2);
+            hs_free(&toml);
+        }
+        free(before);
+    }
 
     osr_sb_free(&sb);
     return osr_finish();

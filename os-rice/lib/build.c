@@ -1889,6 +1889,28 @@ static void rm_rf_root(const char *path) {
  * box (Toolbox, snap, flatpak, a distro package, a hand-unpacked /opt/datagrip-*)
  * is reported and left alone -- §5, we own only what we wrote. */
 #define DATAGRIP_PREFIX "/opt/datagrip"
+
+/* datagrip_prefix -- the tree this builder owns, overridable so a test can
+ * point the whole install at a sandbox.
+ *
+ * provide_telegram has had this since it was written; the DataGrip port lost
+ * it, and with it the only way to exercise this builder without writing to a
+ * real /opt. The paths below therefore compose it at runtime rather than
+ * pasting the macro into a string literal. */
+static const char *datagrip_prefix(void) {
+    return env_str("OSR_DATAGRIP_PREFIX", DATAGRIP_PREFIX);
+}
+
+/* dg_path -- <prefix><suffix>, for the handful of paths under the tree. */
+static const char *dg_path(const char *suffix) {
+    static Str held;
+    static int ready = 0;
+    if (!ready) { str_init(&held); ready = 1; }
+    str_reset(&held);
+    str_addz(&held, datagrip_prefix());
+    str_addz(&held, suffix);
+    return str_text(&held);
+}
 #define DATAGRIP_FEED \
     "https://data.services.jetbrains.com/products/releases?code=DG&latest=true&type=release"
 
@@ -2032,7 +2054,7 @@ static void datagrip_report_foreign(void) {
               "JetBrains Toolbox has its own DataGrip at %s - Toolbox updates that one, "
               "this module updates " DATAGRIP_PREFIX);
     str_free(&toolbox);
-    warn_glob("/opt", "datagrip", DATAGRIP_PREFIX,
+    warn_glob("/opt", "datagrip", datagrip_prefix(),
               "an unpacked DataGrip tree at %s is not owned by this module - "
               "remove it if it is a leftover");
 }
@@ -2047,13 +2069,13 @@ static void datagrip_desktop_entry(void) {
     char *argv[5];
 
     str_init(&exe);
-    str_addz(&exe, DATAGRIP_PREFIX "/bin/datagrip");
+    str_addz(&exe, dg_path("/bin/datagrip"));
     if (access(str_text(&exe), X_OK) != 0) {
         str_reset(&exe);
-        str_addz(&exe, DATAGRIP_PREFIX "/bin/datagrip.sh");
+        str_addz(&exe, dg_path("/bin/datagrip.sh"));
     }
     if (access(str_text(&exe), X_OK) != 0)
-        osr_die("no DataGrip launcher under " DATAGRIP_PREFIX "/bin");
+        osr_die("no DataGrip launcher under %s/bin", datagrip_prefix());
 
     /* /usr/local/bin precedes /usr/bin, and this is also the via_source probe. */
     argv[0] = (char *)"ln"; argv[1] = (char *)"-sf"; argv[2] = exe.p;
@@ -2061,8 +2083,8 @@ static void datagrip_desktop_entry(void) {
     (void)osr_run_root(argv);
 
     str_init(&icon);
-    if (file_exists(DATAGRIP_PREFIX "/bin/datagrip.png"))      str_addz(&icon, DATAGRIP_PREFIX "/bin/datagrip.png");
-    else if (file_exists(DATAGRIP_PREFIX "/bin/datagrip.svg")) str_addz(&icon, DATAGRIP_PREFIX "/bin/datagrip.svg");
+    if (file_exists(dg_path("/bin/datagrip.png")))      str_addz(&icon, dg_path("/bin/datagrip.png"));
+    else if (file_exists(dg_path("/bin/datagrip.svg"))) str_addz(&icon, dg_path("/bin/datagrip.svg"));
     else osr_warn("no datagrip icon in the tarball - the menu entry will use the theme fallback");
 
     /* StartupWMClass is what the IDE actually sets on its window; without it the
@@ -2091,7 +2113,7 @@ static void datagrip_desktop_entry(void) {
  * That is what makes `osr module datagrip` the update path. */
 static int provide_datagrip(void) {
     static const char *const deps[] = { "tar", "gzip", NULL };
-    Str ver, url, have, tmp, tar_path, src;
+    Str ver, url, have, tmp, tar_path, src, parent;
     long size = 0;
     char *argv[6];
 
@@ -2101,7 +2123,7 @@ static int provide_datagrip(void) {
     datagrip_report_foreign();
 
     str_init(&have);
-    if (datagrip_version_at(&have, DATAGRIP_PREFIX) &&
+    if (datagrip_version_at(&have, datagrip_prefix()) &&
         strcmp(str_text(&have), str_text(&ver)) == 0) {
         osr_infof("DataGrip %s is already the current release - skipping the download",
                   str_text(&ver));
@@ -2113,9 +2135,21 @@ static int provide_datagrip(void) {
     else              osr_infof("installing DataGrip %s", str_text(&ver));
     str_free(&have);
 
+    /* Staged beside the tree it will become, so the `mv` into place is a
+     * rename within one filesystem rather than a copy of a gigabyte -- and so
+     * that a test pointing OSR_DATAGRIP_PREFIX at a sandbox does not have the
+     * staging directory land in the real /opt anyway. provide_telegram derives
+     * its parent the same way. */
+    str_init(&parent);
+    {
+        const char *pfx = datagrip_prefix();
+        const char *slash = strrchr(pfx, '/');
+        if (slash == NULL || slash == pfx) str_addz(&parent, "/");
+        else str_add(&parent, pfx, (size_t)(slash - pfx));
+    }
     str_init(&tmp);
-    if (!stage_dir(&tmp, "/opt", "datagrip"))
-        osr_die("failed to create a staging directory under /opt");
+    if (!stage_dir(&tmp, str_text(&parent), "datagrip"))
+        osr_die("failed to create a staging directory under %s", str_text(&parent));
     {
         Str base;
         str_init(&base);
@@ -2157,20 +2191,22 @@ static int provide_datagrip(void) {
             osr_die("the DataGrip tarball has an unexpected layout (no product-info.json)");
         }
     }
-    rm_rf_root(DATAGRIP_PREFIX);
-    argv[0] = (char *)"mv"; argv[1] = src.p; argv[2] = (char *)DATAGRIP_PREFIX; argv[3] = NULL;
+    rm_rf_root(datagrip_prefix());
+    argv[0] = (char *)"mv"; argv[1] = src.p; argv[2] = (char *)datagrip_prefix();
+    argv[3] = NULL;
     if (osr_run_root(argv) != 0) {
         rm_rf_root(str_text(&tmp));
-        osr_die("failed to install DataGrip into " DATAGRIP_PREFIX);
+        osr_die("failed to install DataGrip into %s", datagrip_prefix());
     }
     rm_rf_root(str_text(&tmp));
     argv[0] = (char *)"chown"; argv[1] = (char *)"-R"; argv[2] = (char *)"0:0";
-    argv[3] = (char *)DATAGRIP_PREFIX; argv[4] = NULL;
+    argv[3] = (char *)datagrip_prefix(); argv[4] = NULL;
     (void)osr_run_root(argv);
     datagrip_desktop_entry();
     /* /opt is root-owned, so the IDE's own updater cannot patch this tree:
      * `osr module datagrip` (this builder) is the update path. */
-    str_free(&ver); str_free(&url); str_free(&tmp); str_free(&tar_path); str_free(&src);
+    str_free(&ver); str_free(&url); str_free(&tmp); str_free(&tar_path);
+    str_free(&src); str_free(&parent);
     return 1;
 }
 
