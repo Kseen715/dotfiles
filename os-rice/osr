@@ -42,6 +42,9 @@
 #   osr test                                         run the test suite
 #   osr --check                                      report what a barebone box
 #                                                    is missing, then exit
+#   OSR_C_MODULE_BACKEND=runtime osr module <name>    compile/load C modules on
+#                                                    demand; default is static
+#                                                    (OSR_MODULE_CC overrides cc)
 #
 # It is also the barebone entry point. Piped from curl there is no checkout
 # yet, so it installs git and a compiler, clones the repo and re-execs the
@@ -222,8 +225,15 @@ OSR_ROOT=$OSR_SELF_DIR
 OSR_LIB="$OSR_ROOT/lib"
 # The dotfiles repo root is the parent of os-rice/ -- configs live there.
 OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
-OSR_BIN="$OSR_ROOT/build/osr"
-export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN
+case ${OSR_C_MODULE_BACKEND:-static} in
+    static)  OSR_C_MODULE_BACKEND=static; OSR_BIN="$OSR_ROOT/build/osr"; OSR_BUILD_TARGET=static ;;
+    runtime) OSR_C_MODULE_BACKEND=runtime; OSR_BIN="$OSR_ROOT/build/osr-runtime"; OSR_BUILD_TARGET=runtime ;;
+    *)
+        printf '[ERROR] osr: OSR_C_MODULE_BACKEND must be static or runtime\n' >&2
+        exit 2
+        ;;
+esac
+export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN OSR_C_MODULE_BACKEND
 
 if [ ! -x "$OSR_BIN" ]; then
     # nob.c is the build system (its header comment has the one-time bootstrap
@@ -237,9 +247,9 @@ if [ ! -x "$OSR_BIN" ]; then
             exit 1
         }
     fi
-    ( cd -- "$OSR_ROOT" && ./build/nob ) >/dev/null || {
+    ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >/dev/null || {
         printf '[ERROR] osr: nob could not build %s\n' "$OSR_BIN" >&2
-        ( cd -- "$OSR_ROOT" && ./build/nob ) >&2
+        ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >&2
         exit 1
     }
 fi
@@ -312,7 +322,7 @@ case "$_cmd" in
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")
-        sed -n '2,51p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,54p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
         echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, benchmark, undervolt, list, themes, modules, test)" >&2

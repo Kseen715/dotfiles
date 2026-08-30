@@ -2,7 +2,7 @@
 title: os-rice — Design
 type: design
 status: past-MVP
-updated: 2026-08-28
+updated: 2026-08-30
 tags:
   - kind/design
   - topic/os-rice
@@ -20,10 +20,11 @@ whole rices.
 
 > [!success] The backbone is C
 > Every part of it — the libs, the runner, the front end, the test runner and
-> all 120 modules — is a C translation unit linked into one binary
-> (`build/osr`), the same shape the Windows core already had. `osr`,
-> `install.sh` and `wallpaper.sh` are the only `.sh` files the harness
-> contains, and the last two are shims over that binary. Sections [[#D-3. The C harness|D-3]],
+> all 120 modules — is a C translation unit. The default `build/osr` links the
+> complete module set; optional `build/osr-runtime` links only the host and
+> compiles a module when first used. `osr`, `install.sh` and `wallpaper.sh` are
+> the only `.sh` files the harness contains, and the last two are shims over the
+> selected binary. Sections [[#D-3. The C harness|D-3]],
 > [[#D-4. A module may be a C unit instead of a script|D-4]] and
 > [[#13. The port, and what it left behind|13]] are the design and the record.
 
@@ -84,8 +85,9 @@ stays gated on `[ -t 1 ]`.
 ### D-3. The C harness
 
 The POSIX side is C, arranged like the Windows core: `nob.c` links `osr.c` (a
-command dispatcher) with one translation unit per file it replaced into a
-single binary, `build/osr`.
+command dispatcher) with one translation unit per file it replaced. The default
+output, `build/osr`, also links every module. The optional runtime output keeps
+the same core and module registry but loads module objects on demand (D-4).
 
 | shell file | unit | command | what moved |
 | --- | --- | --- | --- |
@@ -139,9 +141,9 @@ the shell tier, and why, is [[#13. The port, and what it left behind|§13]].
 tiers coexisted for the whole port — a `.sh` module sat unchanged beside the C
 ones until its turn came — and the dispatch that made that possible is still
 what runs: the runner asks `osr_module_has(<name>)` per manifest entry, and
-hands anything it does not own to a shell with the libs sourced around it — so
-a `rice.list` never says which tier it wants, and a module can move between
-them without touching a rice.
+hands anything it does not own to plain sh without the C-only os-rice verbs. A
+`rice.list` never says which tier it wants, and a module can move between them
+without touching a rice.
 
 **One file, not one per OS.** `modules/fastfetch.c` holds both
 implementations — Windows behind `#ifdef _WIN32` (dispatched from
@@ -162,6 +164,47 @@ be able to carry them (providers included) before a shell module can move
 without losing behaviour. Until then a port happens when a module is being
 touched anyway, and preferably one whose logic is real rather than three lines
 of package install.
+
+### D-4a. Static and runtime module backends
+
+Module dispatch has two build-time backends with one registry and one module
+API:
+
+- `./build/nob static` (also the no-argument default) produces `build/osr`, with
+  every registry function pointer resolved at link time. It requires no compiler
+  when modules run.
+- `./build/nob runtime` produces `build/osr-runtime`, with registry names,
+  session metadata and themable flags but no POSIX module objects. The first run
+  of a registered name compiles its `modules/<name>.c` into a shared object,
+  loads `osrm_<name>` with `dlopen`/`dlsym`, and invokes it through the same
+  return contract. `./build/nob both` produces both outputs.
+
+`OSR_C_MODULE_BACKEND=static|runtime` selects which output the `osr` launcher
+builds and executes; static remains the compatibility default. Runtime module
+compilation selects `OSR_MODULE_CC`, then `CC`, then the first available of
+`cc`, `gcc`, `clang`, and `tcc`, and passes an argv directly rather than constructing a shell command.
+
+The cache is
+`${XDG_CACHE_HOME:-$HOME/.cache}/os-rice/modules/abi-1/`. A key covers source
+content, `lib/module.h`, `lib/common.h`, compiler command, internal ABI version,
+OS and architecture. Compilation happens under a per-key lock, writes a unique
+temporary output, and atomically renames it into place. A failed compile cannot
+become a cache hit. The registry remains the allowlist: arbitrary source names
+and path traversal never reach the compiler, `module has` does not compile, and
+a runtime C-module failure never falls through to a same-name shell file after
+mutations may have started.
+
+Loaded modules call the existing `lib/module.h` host symbols. The runtime host
+exports those symbols with `-rdynamic`, making this an internal host ABI rather
+than a portable plugin ABI. Cache ABI versioning and public-header hashing are
+therefore part of correctness, not optimization. Handles remain loaded for the
+short life of the command so module code cannot outlive its object.
+
+This mode is POSIX/Linux-only. Windows remains static. Runtime compilation is
+not adaptive JIT: it compiles a requested source unit once and reuses the
+content-addressed object. It is also not sandboxing; module source is trusted
+installer code and executes with exactly the privileges available to the host.
+Use `build/osr` for a compiler-free deployment.
 
 > [!note] Providers are ported
 > `osr_pkg_install` covers all five methods — native, `script:`, `cargo:`,

@@ -2,7 +2,7 @@
 title: os-rice
 type: readme
 status: past-MVP
-updated: 2026-08-28
+updated: 2026-08-30
 tags:
   - kind/readme
   - topic/os-rice
@@ -24,8 +24,9 @@ rice is a plain list of what to install.
 
 > [!success] The backbone is C
 > The port is finished. Every lib, every module, the runner and the test
-> runner are C translation units linked into one binary (`build/osr`) — the
-> shape the Windows core already had. **`osr`, `install.sh` and `wallpaper.sh`
+> runner are C translation units. The default `build/osr` links everything
+> into one static module host; optional `build/osr-runtime` compiles and loads
+> one module when it is first used. **`osr`, `install.sh` and `wallpaper.sh`
 > are the only `.sh` files the harness contains**, and the last two are
 > two-line shims over the binary. See
 > [[os-rice/DESIGN#13. The port, and what it left behind|DESIGN 13]].
@@ -51,6 +52,7 @@ os-rice/
     theme.c install.c  `osr detect`, `osr theme`, `osr install`,
     testrun.c          `osr test-run`
     module.h/.c        the API a POSIX module written in C may call
+    module_runtime.c   compile/cache/load backend for build/osr-runtime
     modules.c          the registry of those modules (`osr module`)
     common.h/.c        buffer, printf %b, the log line
     cmds.h             one declaration per command entry point
@@ -147,10 +149,48 @@ is not a TTY, so piping to a logfile stays clean.
 
 ---
 
+## Build modes
+
+The default remains a full executable with every POSIX module linked in. It can
+be deployed and run without a compiler:
+
+```sh
+mkdir -p build
+cc -o build/nob nob.c
+./build/nob static       # build/osr; same as ./build/nob with no argument
+```
+
+The runtime host keeps the same module registry and API but leaves module
+objects out of the executable. On first use it compiles only the requested
+`modules/<name>.c`, stores the shared object in the user cache, loads it, and
+calls its existing `osrm_<name>` entry point:
+
+```sh
+./build/nob runtime      # build/osr-runtime
+./build/nob both         # both outputs
+OSR_C_MODULE_BACKEND=runtime ./osr module flameshot
+```
+
+Runtime objects live under
+`${XDG_CACHE_HOME:-$HOME/.cache}/os-rice/modules/abi-1/`. The cache key includes
+the module source, public module headers, compiler command, runtime ABI, OS, and
+architecture, so relevant changes compile a new object. Set `OSR_MODULE_CC` to
+override the module compiler; it falls back to `CC`, then the first available of
+`cc`, `gcc`, `clang`, and `tcc`. Compiler text is split into argv and executed directly, never through `sh -c`.
+
+Runtime mode is currently POSIX/Linux-only and needs a working compiler when an
+uncached module is first used. It is runtime compilation, not adaptive JIT:
+modules compile on demand, not from execution profiling. Module source remains
+trusted installer code and runs with the same privileges as a statically linked
+module; dynamic loading is not a sandbox. Windows and compiler-free deployments
+use the static output.
+
+---
+
 ## How it works
 
 - **Package method, not just name.** A `pkgmap` row's RHS may carry a provider tag (`script:`, `source:`, `cargo:`, `aur:`). `pkg_install` expands logical names, installs the native batch in one call, then dispatches tagged rows — each provider owning its own idempotency probe. Untagged names pass through unchanged, so the common case needs no row at all.
-- **Every module declares its session.** Line one is `# session: x11`, `wayland` or `x11+wayland`, enforced by `test/lint.sh`. That makes "can this rice move to X11?" a grep: `grep -l '^# session: wayland' os-rice/modules/*.sh`.
+- **Every module declares its session.** Its `lib/modules.c` registry row is `x11`, `wayland`, or `x11+wayland`, so session compatibility is metadata rather than source inspection.
 - **Service name, per init.** `servicemap` rows may carry `@<init>`, most specific wins — one `enable_service bluetooth` reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit. No module branches on the init system.
 - **Idempotent by contract.** Run a rice 100x and it converges; a second run is all `[ok] skipped`, zero errors.
 - **Config layered by ownership.** `00-env` (user, seeded once), `10-*`/`20-*`/`30-*` (dotfiles, overwritten), `90-theme` (rice, swapped), `99-local` (machine, never touched). `~/.zshrc` is a thin loader owning only a marked block.
@@ -176,10 +216,12 @@ int osrm_flameshot(void) {
 }
 ```
 
-Then one row in `lib/modules.c` (name, session marker, function) and one line
-in `nob.c`'s `posix_srcs`. Everything a module may call is `lib/module.h`:
-packages (`osr_pkg_install`, resolved through `lib/pkgmap/` exactly as
-`pkg_install` does), steps (`osr_run_step` for a command, `osr_step` for a
+Then add one row in `lib/modules.c` (name, session marker, themable flag,
+function) and one line in `nob.c`'s POSIX module source list. Static builds link
+that source into `build/osr`; runtime builds use the registry row as their
+allowlist and compile the source only when requested. Everything a module may
+call is `lib/module.h`: packages (`osr_pkg_install`, resolved through
+`lib/pkgmap/` exactly as `pkg_install` does), steps (`osr_run_step` for a
 function of your own — the thing the shell tier could not do), services,
 `as_root`/`as_user` execs, the config-file primitives, and the detected facts.
 

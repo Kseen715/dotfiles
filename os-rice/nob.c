@@ -6,8 +6,11 @@
  *
  *   mkdir build
  *   cc -o build/nob nob.c   (build\nob.exe on Windows)
- *   ./build/nob             (builds build/install)
- *   ./build/nob test        (builds + runs the C unit tests)
+ *   ./build/nob             (builds the full static programs)
+ *   ./build/nob static      (same as the default)
+ *   ./build/nob runtime     (builds build/osr-runtime, modules on demand)
+ *   ./build/nob both        (builds static and runtime outputs)
+ *   ./build/nob test        (builds both + runs the test suite)
  *   ./build/nob clean
  *   ./build/nob -v          (any of the above, with full command lines)
  *
@@ -310,6 +313,11 @@ static const char *posix_srcs[] = {
 #endif
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
+/* Entries before modules/alacritty.c are the runtime core. Keep this count at
+ * the boundary above: runtime builds compile these units plus
+ * lib/module_runtime.c, while static builds compile the whole list. */
+#define POSIX_CORE_SRCS_COUNT 34
+#define POSIX_RUNTIME_SRC "lib/module_runtime.c"
 
 static const char *test_names[] = {
     "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
@@ -787,6 +795,31 @@ static bool link_posix(const char *bin) {
     return nob_cmd_run(&cmd);
 }
 
+/* link_posix_runtime -- build the small host in one compiler invocation. Its
+ * object set differs from the static host only by a preprocessor definition,
+ * so separate source-to-binary compilation avoids mixing incompatible objects
+ * in build/obj while keeping the ordinary static build unchanged. */
+static bool link_posix_runtime(const char *bin) {
+    Nob_Cmd cmd = {0};
+    const char *inputs[POSIX_CORE_SRCS_COUNT + 3];
+    size_t count = 0;
+    size_t i;
+
+    inputs[count++] = "osr.c";
+    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) inputs[count++] = posix_srcs[i];
+    inputs[count++] = POSIX_RUNTIME_SRC;
+    collect_deps();
+    if (nob_needs_rebuild(bin, inputs, count) == 0 &&
+        nob_needs_rebuild(bin, deps.items, deps.count) == 0) return true;
+
+    actions++;
+    append_common_flags(&cmd);
+    nob_cmd_append(&cmd, "-DOSR_RUNTIME_MODULES=1", "-rdynamic", "-o", bin, "osr.c");
+    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
+    nob_cmd_append(&cmd, POSIX_RUNTIME_SRC, "-ldl");
+    return nob_cmd_run(&cmd);
+}
+
 /* link_exe -- main_src's own object + every shared object. Async when procs
  * is given, so the binaries of one batch link in parallel too. */
 static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
@@ -866,6 +899,15 @@ static bool build_tests(void) {
     return nob_procs_flush(&procs);
 }
 
+#ifndef _WIN32
+static bool run_runtime_module_tests(void) {
+    Nob_Cmd cmd = {0};
+    nob_log(NOB_INFO, "--- runtime_modules ---");
+    nob_cmd_append(&cmd, "sh", "test/runtime_modules.sh");
+    return nob_cmd_run(&cmd);
+}
+#endif
+
 static bool run_all_tests(void) {
     bool ok = true;
     size_t i;
@@ -877,6 +919,7 @@ static bool run_all_tests(void) {
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         if (!run_test(posix_test_names[i])) ok = false;
     }
+    if (!run_runtime_module_tests()) ok = false;
 #endif
     return ok;
 }
@@ -890,6 +933,7 @@ static bool clean(void) {
     delete_if_exists(BIN("install"));
     delete_if_exists(BIN("wallpaper"));
     delete_if_exists(BIN("osr"));
+    delete_if_exists(BIN("osr-runtime"));
     delete_if_exists(obj_of("install.c"));
     delete_if_exists(obj_of("wallpaper.c"));
     delete_if_exists(obj_of("osr.c"));
@@ -974,6 +1018,17 @@ static bool build_all(void) {
     if (!link_posix(BIN("osr"))) return false;
 #endif
     return true;
+}
+
+static bool build_runtime(void) {
+#ifdef _WIN32
+    nob_log(NOB_ERROR, "runtime C modules are supported only by the POSIX build");
+    return false;
+#else
+    if (!cc_toolchain_check()) return false;
+    if (!mkdir_if_needed(BUILD_DIR)) return false;
+    return link_posix_runtime(BIN("osr-runtime"));
+#endif
 }
 
 /* --- autoconf-style command echo -------------------------------------
@@ -1200,19 +1255,29 @@ int main(int argc, char **argv) {
     NOB_UNUSED(program);
     const char *subcommand = argc > 0 ? nob_shift(argv, argc) : NULL;
 
-    if (subcommand == NULL || strcmp(subcommand, "all") == 0) {
+    if (subcommand == NULL || strcmp(subcommand, "all") == 0 || strcmp(subcommand, "static") == 0) {
         if (!build_all()) return 1;
         if (actions == 0) nob_log(NOB_INFO, "everything up to date");
         return 0;
     }
+    if (strcmp(subcommand, "runtime") == 0) {
+        if (!build_runtime()) return 1;
+        if (actions == 0) nob_log(NOB_INFO, "everything up to date");
+        return 0;
+    }
+    if (strcmp(subcommand, "both") == 0) {
+        if (!build_all() || !build_runtime()) return 1;
+        if (actions == 0) nob_log(NOB_INFO, "everything up to date");
+        return 0;
+    }
     if (strcmp(subcommand, "test") == 0) {
-        if (!build_all()) return 1;
+        if (!build_all() || !build_runtime()) return 1;
         return run_all_tests() ? 0 : 1;
     }
     if (strcmp(subcommand, "clean") == 0) {
         return clean() ? 0 : 1;
     }
 
-    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: (none)/all, test, clean; -v for full command lines)", subcommand);
+    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: static, runtime, both, test, clean; -v for full command lines)", subcommand);
     return 1;
 }

@@ -283,4 +283,11 @@ int osr_seed_file_root(const char *dst, const char *content);
  * neither, which is the caller's cue to fall back to the dotfiles default. */
 int osr_install_theme_layer(const char *app, const char *name, const char *dst);
 
+/* osr_module_runtime_run -- compile modules/<name>.c into the user cache when
+ * stale, load it into this process, and call its osrm_<name> entry point.
+ * Present only in the runtime-module build; static builds dispatch directly. */
+#ifdef OSR_RUNTIME_MODULES
+int osr_module_runtime_run(const char *name);
+#endif
+
 #endif /* OSR_MODULE_H */
