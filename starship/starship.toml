@@ -379,10 +379,11 @@ disabled = false
 # format = '[$symbol$health ]($style)'
 # disabled = false
 
-[maven]
-symbol = "🅼 "
-format = '[$symbol($version )]($style)'
-disabled = false
+# Not working, need custom shim (2026-08-31)
+# [maven]
+# symbol = "🅼 "
+# format = '[$symbol($version )]($style)'
+# disabled = false
 
 [mojo]
 symbol = "󰈸 "
