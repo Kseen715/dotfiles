@@ -107,6 +107,7 @@ int osrm_inxi(void);
 int osrm_kate(void);
 int osrm_kdeconnect(void);
 int osrm_keyring(void);
+int osrm_lcc(void);
 int osrm_lightdm(void);
 int osrm_loupe(void);
 int osrm_luminance(void);
@@ -229,6 +230,7 @@ static const ModuleRow modules[] = {
     { "kate",            "x11+wayland", 1, MODULE_RUN(osrm_kate) },
     { "kdeconnect",      "x11+wayland", 0, MODULE_RUN(osrm_kdeconnect) },
     { "keyring",         "x11+wayland", 0, MODULE_RUN(osrm_keyring) },
+    { "lcc",             "x11+wayland", 0, MODULE_RUN(osrm_lcc) },
     { "lightdm",         "x11",         1, MODULE_RUN(osrm_lightdm) },
     { "loupe",           "x11+wayland", 0, MODULE_RUN(osrm_loupe) },
     { "luminance",       "wayland",     0, MODULE_RUN(osrm_luminance) },

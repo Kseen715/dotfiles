@@ -270,6 +270,7 @@ static const char *posix_srcs[] = {
     "modules/kate.c",
     "modules/kdeconnect.c",
     "modules/keyring.c",
+    "modules/lcc.c",
     "modules/lightdm.c",
     "modules/loupe.c",
     "modules/luminance.c",

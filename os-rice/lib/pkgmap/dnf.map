@@ -7,6 +7,10 @@ build = gcc gcc-c++ make
 dev-headers = openssl-devel pkgconf-pkg-config
 fd = fd-find
 
+# lcc (modules/lcc.c) is a 32-bit-only compiler; needs the 32-bit libc and
+# libgcc to link the i386 binaries it emits.
+multilib = glibc-devel.i686 libgcc.i686
+
 # chafa is native and current on supported Fedora (1.18.x via updates), so it
 # needs no method row. These are the build deps for provide_chafa, which
 # modules/yazi.sh still calls directly when it finds a chafa older than

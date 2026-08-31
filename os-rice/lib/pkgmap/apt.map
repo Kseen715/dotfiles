@@ -6,6 +6,10 @@ build = build-essential
 dev-headers = libssl-dev pkg-config
 fd = fd-find
 
+# lcc (modules/lcc.c) is a 32-bit-only compiler; it needs gcc -m32 and the
+# 32-bit libc to link the i386 binaries it emits.
+multilib = gcc-multilib libc6-dev-i386
+
 # Native-first (§1a G6): prefer the distro package so it updates via apt; fall
 # back to a downloaded binary / install script only on releases that lack it.
 # Availability was checked per release; a row exists ONLY where native is absent.

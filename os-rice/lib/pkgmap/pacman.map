@@ -6,6 +6,11 @@ dev-headers = openssl pkgconf
 gh = github-cli
 i3 = i3-wm
 
+# lcc (modules/lcc.c) is a 32-bit-only compiler; needs the multilib repo's
+# 32-bit libc and libgcc to link the i386 binaries it emits (enable that repo
+# with the pacman-multilib module first).
+multilib = lib32-glibc lib32-gcc-libs
+
 # chafa is native and current on Arch (rolling, 1.18.x) - no method row. Build
 # deps only, for the provide_chafa repair path in modules/yazi.sh; Arch ships
 # headers in the main package, so these are the runtime names.

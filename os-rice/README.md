@@ -204,7 +204,7 @@ use the static output.
 
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
-| GNU Linux | - | [lcc](https://github.com/drh/lcc) | - |
+| GNU Linux | - | [drh/lcc](https://github.com/drh/lcc) | - |
 | GNU Linux | - | mingw-w64 | - |
 
 ### Not working
