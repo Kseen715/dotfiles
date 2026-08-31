@@ -631,6 +631,14 @@ void nob_go_rebuild_urself(int argc, char **argv, const char *source_path)
     memset(&cmd, 0, sizeof(cmd));
     nob_cmd_append(&cmd, cc);
     nob_cmd_append(&cmd, "-DNOB89");
+    /* -std=c89 is load-bearing, not cosmetic. Without it the rebuild runs
+     * in the compiler's default (gnu17) mode, where the <sys/types.h> this
+     * header includes drags in glibc's <stdbool.h>; `bool` is then _Bool
+     * instead of this file's `typedef int bool`, so nob.c's
+     * `bool (*)(Nob_Walk_Entry)` callbacks no longer match Nob_Walk_Func
+     * (`int (*)`) and gcc>=14 rejects the mismatch as an error. Forcing
+     * C89 keeps every signature in this header's C90 contract. */
+    nob_cmd_append(&cmd, "-std=c89");
     nob_cmd_append(&cmd, "-o");
     nob_cmd_append(&cmd, self);
     nob_cmd_append(&cmd, source_path);

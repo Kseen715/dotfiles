@@ -411,7 +411,7 @@ static const char *posix_test_names[] = {
  * host where none of the names ahead of it resolve -- an MSVC-only Windows
  * box, say: whatever compiled nob demonstrably exists here, so it is the
  * one candidate that cannot leave us with nothing. */
-static const char *cc_ladder[] = {"tcc", "zig cc", "gcc", "cc", DEFAULT_CC};
+static const char *cc_ladder[] = {"tcc", "clang", "gcc", "zig cc", "cc", DEFAULT_CC};
 #define CC_LADDER_COUNT (sizeof(cc_ladder) / sizeof(cc_ladder[0]))
 
 #define CC_DETECTED BUILD_DIR "/cc.detected"
@@ -583,9 +583,35 @@ static void append_cc(Nob_Cmd *cmd) {
 
 static bool is_msvc(void) { return is_msvc_name(cc_prog()); }
 
+/* is_chibicc -- does $CC name chibicc, with or without a path and flags?
+ * chibicc is deliberately absent from cc_ladder: it is a self-hosting toy
+ * compiler that searches /usr/include but not the compiler-private
+ * directory where stddef.h actually lives on a glibc host, and it cannot
+ * parse GCC's own stdarg.h (`typedef __builtin_va_list __gnuc_va_list;`).
+ * Left alone, `CC=chibicc` dies on the first real system header with a
+ * "stddef.h: cannot open file" that reads like a missing file, not a
+ * missing capability -- so say so up front. */
+static bool is_chibicc(void) {
+    const char *prog = cc_prog();
+    const char *base = prog;
+    const char *p;
+    size_t len;
+    for (p = prog; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    return len == 7 && memcmp(base, "chibicc", 7) == 0;
+}
+
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
 static void check_cc_detection(void) {
+    if (is_chibicc()) {
+        nob_log(NOB_WARNING,
+                "CC=%s: chibicc cannot compile this tree against glibc/GCC headers "
+                "(no include path to stddef.h; cannot parse GCC's stdarg.h). "
+                "Use tcc, gcc or clang.", cc());
+    }
     NOB_ASSERT(is_msvc_name("cl"));
     NOB_ASSERT(is_msvc_name("cl.exe"));
     NOB_ASSERT(is_msvc_name("C:\\VC\\bin\\cl.exe"));

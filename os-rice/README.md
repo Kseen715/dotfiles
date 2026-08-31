@@ -187,6 +187,35 @@ use the static output.
 
 ---
 
+## Supported compiler targets
+
+### Working
+
+| OS | Arch | Compiler | Notes | Compilation time |
+|---|---|---|---|---|
+| GNU Linux | x86_64 | tcc 0.9.27 | Ladder 1 priority | 1.18s |
+| GNU Linux | x86_64 | clang 21.1.8 | Ladder 2 priority | ~9.99x |
+| GNU Linux | x86_64 | gcc 15.2.0 | Ladder 3 priority | ~10.75x |
+| GNU Linux | x86_64 | zig 0.14.1 cc clang 20.1.8 | Ladder 4 priority | ~19.33x |
+
+### In testing
+
+| OS | Arch | Compiler | Notes |
+|---|---|---|---|
+| GNU Linux | - | lcc | - |
+| GNU Linux | - | pcc | - |
+| GNU Linux | - | bcc | 8bit |
+| GNU Linux | - | nbc | - |
+| GNU Linux | - | sdcc | - |
+| GNU Linux | - | faucc | - |
+| GNU Linux | - | mingw-w64 | - |
+
+### Not working
+
+| OS | Arch | Compiler | Notes |
+|---|---|---|---|
+| GNU Linux | any | chibicc | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+
 ## How it works
 
 - **Package method, not just name.** A `pkgmap` row's RHS may carry a provider tag (`script:`, `source:`, `cargo:`, `aur:`). `pkg_install` expands logical names, installs the native batch in one call, then dispatches tagged rows — each provider owning its own idempotency probe. Untagged names pass through unchanged, so the common case needs no row at all.
