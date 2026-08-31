@@ -204,9 +204,6 @@ use the static output.
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
 | GNU Linux | - | [lcc](https://github.com/drh/lcc) | - |
-| GNU Linux | - | bcc | 8bit |
-| GNU Linux | - | nbc | - |
-| GNU Linux | - | sdcc | - |
 | GNU Linux | - | faucc | - |
 | GNU Linux | - | mingw-w64 | - |
 
@@ -214,7 +211,9 @@ use the static output.
 
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
-| GNU Linux | any | [chibicc](https://github.com/rui314/chibicc) | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+| GNU Linux | - | [chibicc](https://github.com/rui314/chibicc) | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+| GNU Linux | - | [bcc](https://github.com/realchonk/bcc) | Does not have libc implementation |
+| GNU Linux | - | [sdcc](https://sdcc.sourceforge.net/) | Targets only microprocessors |
 
 ## How it works
 
