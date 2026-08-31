@@ -34,8 +34,10 @@ int osrm_copyq(void) {
     /* One shell for the whole rewrite, and the SAME text the sh module used: it
      * is a read-modify-write of a file CopyQ also writes, and splitting it into
      * several commands would widen the window in which both are mid-edit. */
+#if defined(__GNUC__) && !defined(__PCC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Woverlength-strings"
+#endif
     static const char rewrite[] =
         "\n"
         "        _conf=$1\n"
@@ -50,7 +52,9 @@ int osrm_copyq(void) {
         "        grep -v \"^[[:space:]]*#\" \"$_theme\" | grep -v \"^[[:space:]]*$\" >>\"$_tmp\"\n"
         "        mv -f \"$_tmp\" \"$_conf\"\n"
         "    ";
+#if defined(__GNUC__) && !defined(__PCC__)
 #pragma GCC diagnostic pop
+#endif
     Str dir, theme, conf;
     char *argv[7];
     int ok;

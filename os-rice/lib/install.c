@@ -271,9 +271,9 @@ static void parse_args(Args *a, int argc, char **argv) {
 
     str_init(&pos);
     for (i = 0; i < argc && action[0] == '\0'; i++) {
-        const char *a = argv[i];
-        if (strcmp(a, "--user") == 0 || strcmp(a, "--theme") == 0) {
-            int is_user = (strcmp(a, "--user") == 0);
+        const char *arg = argv[i];
+        if (strcmp(arg, "--user") == 0 || strcmp(arg, "--theme") == 0) {
+            int is_user = (strcmp(arg, "--user") == 0);
             if (i + 1 >= argc || argv[i + 1][0] == '\0') {
                 action = "missing-arg";
                 action_arg = is_user ? "--user needs a name" : "--theme needs a theme name";
@@ -282,31 +282,31 @@ static void parse_args(Args *a, int argc, char **argv) {
             if (is_user) user = argv[i + 1];
             else theme = argv[i + 1];
             i++;
-        } else if (strcmp(a, "--theme-only") == 0) {
+        } else if (strcmp(arg, "--theme-only") == 0) {
             theme_only = "1";
-        } else if (strcmp(a, "--no-reload") == 0) {
+        } else if (strcmp(arg, "--no-reload") == 0) {
             no_reload = "1";
-        } else if (strcmp(a, "--verbose") == 0) {
+        } else if (strcmp(arg, "--verbose") == 0) {
             verbose = 1;
-        } else if (strcmp(a, "--module") == 0) {
+        } else if (strcmp(arg, "--module") == 0) {
             module_mode = "1";
-        } else if (strcmp(a, "--list") == 0) {
+        } else if (strcmp(arg, "--list") == 0) {
             action = "list";
-        } else if (strcmp(a, "--list-themes") == 0) {
+        } else if (strcmp(arg, "--list-themes") == 0) {
             action = "list-themes";
-        } else if (strcmp(a, "--list-modules") == 0) {
+        } else if (strcmp(arg, "--list-modules") == 0) {
             action = "list-modules";
-        } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
+        } else if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
             action = "usage";
-        } else if (a[0] == '-') {
+        } else if (arg[0] == '-') {
             action = "error";
-            action_arg = a;
+            action_arg = arg;
         } else {
             /* OSR_POS="$OSR_POS $1" -- the leading space is part of it, and
              * the field splitting of the result is what makes "only one
              * rice may be given" detectable later. */
             str_addc(&pos, ' ');
-            str_addz(&pos, a);
+            str_addz(&pos, arg);
         }
     }
 

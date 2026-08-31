@@ -603,6 +603,23 @@ static bool is_chibicc(void) {
     return len == 7 && memcmp(base, "chibicc", 7) == 0;
 }
 
+/* is_pcc -- does $CC name pcc (Portable C Compiler), with or without a path?
+ * pcc advertises __GNUC__ but does not understand every glibc attribute: it
+ * warns "unsupported attribute `__cold__'" on stdlib.h/stdio.h on every
+ * translation unit. Scoped here (not in append_common_flags for every
+ * compiler) because gcc/clang builds want real attribute diagnostics. */
+static bool is_pcc(void) {
+    const char *prog = cc_prog();
+    const char *base = prog;
+    const char *p;
+    size_t len;
+    for (p = prog; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    return len == 3 && memcmp(base, "pcc", 3) == 0;
+}
+
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
 static void check_cc_detection(void) {
@@ -650,6 +667,7 @@ static void append_common_flags(Nob_Cmd *cmd) {
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
     nob_cmd_append(cmd, "-Wno-unused-function");
+    if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", NULL);
 #ifdef _WIN32
     cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
 #endif

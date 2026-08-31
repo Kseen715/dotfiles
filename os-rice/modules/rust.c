@@ -83,7 +83,7 @@ static int install_cargo_tooling(void *ctx) {
             osr_warn("cargo-binstall install failed - cargo: packages will build from source");
     }
     if (!user_x(str_text(&update))) {
-        int rc;
+        int rc_upd;
         if (user_x(str_text(&binstall))) {
             argv[0] = binstall.p; argv[1] = (char *)"--no-confirm";
             argv[2] = (char *)"cargo-update"; argv[3] = NULL;
@@ -91,8 +91,8 @@ static int install_cargo_tooling(void *ctx) {
             argv[0] = cargo.p; argv[1] = (char *)"install"; argv[2] = (char *)"--locked";
             argv[3] = (char *)"cargo-update"; argv[4] = NULL;
         }
-        rc = osr_run_user(argv);
-        if (rc != 0) osr_warn("cargo-update install failed");
+        rc_upd = osr_run_user(argv);
+        if (rc_upd != 0) osr_warn("cargo-update install failed");
     }
     /* The shim 20-aliases.zsh's cargo() hands to `cargo install-update -r`:
      * cargo-update invokes it as `<shim> install ...` and it rewrites that into

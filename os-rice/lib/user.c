@@ -30,6 +30,13 @@
 /* _XOPEN_SOURCE, not just _POSIX_C_SOURCE: realpath() is XSI on glibc. */
 #define _XOPEN_SOURCE 700
 
+/* pcc advertises __GNUC__, so glibc's limits.h takes the GCC branch and
+ * never defines its POSIX limits; its own limits.h then has no PATH_MAX.
+ * Fall back to the Linux value (POSIX allows PATH_MAX to be undefined). */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 #include "common.h"
 #include "cmds.h"
 #include "config.h"

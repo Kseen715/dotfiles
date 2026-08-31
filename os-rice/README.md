@@ -193,7 +193,8 @@ use the static output.
 
 | OS | Arch | Compiler | Notes | Compilation time |
 |---|---|---|---|---|
-| GNU Linux | x86_64 | tcc 0.9.27 | Ladder 1 priority | 1.18s |
+| GNU Linux | x86_64 | [tcc](https://bellard.org/tcc/) 0.9.27 | Ladder 1 priority | 1.18s |
+| GNU Linux | x86_64 | [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | - | ~3.56x |
 | GNU Linux | x86_64 | clang 21.1.8 | Ladder 2 priority | ~9.99x |
 | GNU Linux | x86_64 | gcc 15.2.0 | Ladder 3 priority | ~10.75x |
 | GNU Linux | x86_64 | zig 0.14.1 cc clang 20.1.8 | Ladder 4 priority | ~19.33x |
@@ -202,8 +203,7 @@ use the static output.
 
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
-| GNU Linux | - | lcc | - |
-| GNU Linux | - | pcc | - |
+| GNU Linux | - | [lcc](https://github.com/drh/lcc) | - |
 | GNU Linux | - | bcc | 8bit |
 | GNU Linux | - | nbc | - |
 | GNU Linux | - | sdcc | - |
@@ -214,7 +214,7 @@ use the static output.
 
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
-| GNU Linux | any | chibicc | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+| GNU Linux | any | [chibicc](https://github.com/rui314/chibicc) | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
 
 ## How it works
 
