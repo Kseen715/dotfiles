@@ -55,10 +55,21 @@
  * target, so unlike those files this one is free to use C99 (nob.h itself
  * requires it).
  */
-#define NOB_IMPLEMENTATION
-#include "nob.h"
+/* Pick the backend from the language mode the compiler is actually in:
+ * __STDC_VERSION__ is defined only from C99 on (199901L, 201112L, ...); in
+ * C89 -- and on compilers like MSVC that never define it -- it is absent,
+ * which is exactly when nob.h (a C99 header) cannot be used. NOB89 forces
+ * the fallback regardless. */
+#if defined(NOB89) || !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 199901L)
+#  define NOB89_IMPLEMENTATION
+#  include "nob89.h"
+#else
+#  define NOB_IMPLEMENTATION
+#  include "nob.h"
+#endif
 
 #include <ctype.h>
+#include <stdarg.h>
 #include <string.h>
 
 /* EXE -- the host's executable suffix. Windows needs ".exe"; on a Linux/CI
@@ -89,6 +100,22 @@
 static bool mkdir_if_needed(const char *path) {
     if (nob_file_exists(path) > 0) return true;
     return nob_mkdir_if_not_exists(path);
+}
+
+/* cmd_append_args -- append a NULL-terminated list of arguments. C89 has no
+ * variadic macros, so this plain variadic *function* stands in for nob.h's
+ * variadic nob_cmd_append() wherever several arguments are pushed at once;
+ * nob.c then works unchanged against both nob.h and the C89 nob89.h. */
+static void cmd_append_args(Nob_Cmd *cmd, ...) {
+    va_list ap;
+    const char *arg;
+    va_start(ap, cmd);
+    for (;;) {
+        arg = va_arg(ap, const char *);
+        if (arg == NULL) break;
+        nob_cmd_append(cmd, arg);
+    }
+    va_end(ap);
 }
 
 static const char *lib_srcs[] = {
@@ -454,13 +481,18 @@ static bool cc_probe(const char *candidate) {
     if (n == 0) return false;
     for (i = 0; i < n; i++) nob_cmd_append(&cmd, words[i]);
     if (is_msvc_name(words[0])) {
-        nob_cmd_append(&cmd, "/nologo", CC_PROBE_SRC, "/Fo" CC_PROBE_OBJ, "/Fe" CC_PROBE_BIN);
+        cmd_append_args(&cmd, "/nologo", CC_PROBE_SRC, "/Fo" CC_PROBE_OBJ, "/Fe" CC_PROBE_BIN, NULL);
     } else {
-        nob_cmd_append(&cmd, CC_PROBE_SRC, "-o", CC_PROBE_BIN);
+        cmd_append_args(&cmd, CC_PROBE_SRC, "-o", CC_PROBE_BIN, NULL);
     }
     /* the "CMD: ..." line for a candidate we are only trying out is noise */
     nob_minimal_log_level = NOB_WARNING;
-    ok = nob_cmd_run(&cmd, .stdout_path = DEV_NULL, .stderr_path = DEV_NULL);
+    {
+        Nob_Cmd_Opt opt = {0};
+        opt.stdout_path = DEV_NULL;
+        opt.stderr_path = DEV_NULL;
+        ok = nob_cmd_run_opt(&cmd, opt);
+    }
     nob_minimal_log_level = saved;
     return ok;
 }
@@ -583,17 +615,17 @@ static void append_common_flags(Nob_Cmd *cmd) {
          * /wd4505 is -Wno-unused-function; the CRT one silences the
          * fopen/getenv "deprecation" that C89 code cannot avoid. cl only
          * ever targets Windows, so the XP defines are unconditional here. */
-        nob_cmd_append(cmd, "/nologo", "/W4", "/O2");
-        nob_cmd_append(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS");
-        nob_cmd_append(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501");
+        cmd_append_args(cmd, "/nologo", "/W4", "/O2", NULL);
+        cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
+        cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
         return;
     }
-    nob_cmd_append(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2");
+    cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2", NULL);
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
     nob_cmd_append(cmd, "-Wno-unused-function");
 #ifdef _WIN32
-    nob_cmd_append(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501");
+    cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
 #endif
 }
 
@@ -736,11 +768,15 @@ static bool compile_objs(const char **srcs, size_t count) {
             /* /Fo takes its path glued on, no separate argument. The .o
              * name (rather than MSVC's usual .obj) is fine and keeps
              * obj_of()/clean() single-dialect. */
-            nob_cmd_append(&cmd, "/c", srcs[i], nob_temp_sprintf("/Fo%s", obj_of(srcs[i])));
+            cmd_append_args(&cmd, "/c", srcs[i], nob_temp_sprintf("/Fo%s", obj_of(srcs[i])), NULL);
         } else {
-            nob_cmd_append(&cmd, "-c", srcs[i], "-o", obj_of(srcs[i]));
+            cmd_append_args(&cmd, "-c", srcs[i], "-o", obj_of(srcs[i]), NULL);
         }
-        if (!nob_cmd_run(&cmd, .async = &procs)) return false;
+        {
+            Nob_Cmd_Opt opt = {0};
+            opt.async = &procs;   /* nob89 runs this synchronously */
+            if (!nob_cmd_run_opt(&cmd, opt)) return false;
+        }
     }
     return nob_procs_flush(&procs);
 }
@@ -763,11 +799,11 @@ static void append_lib_objs(Nob_Cmd *cmd) {
 static void append_common_libs(Nob_Cmd *cmd) {
     if (is_msvc()) {
         /* cl hands plain .lib arguments straight to the linker. */
-        nob_cmd_append(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib");
+        cmd_append_args(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib", NULL);
         return;
     }
 #ifdef _WIN32
-    nob_cmd_append(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32");
+    cmd_append_args(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32", NULL);
 #else
     NOB_UNUSED(cmd);
 #endif
@@ -789,7 +825,7 @@ static bool link_posix(const char *bin) {
     if (is_msvc()) {
         nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
     } else {
-        nob_cmd_append(&cmd, "-o", bin);
+        cmd_append_args(&cmd, "-o", bin, NULL);
     }
     for (i = 0; i < POSIX_SRCS_COUNT + 1; i++) nob_cmd_append(&cmd, objs[i]);
     return nob_cmd_run(&cmd);
@@ -814,9 +850,9 @@ static bool link_posix_runtime(const char *bin) {
 
     actions++;
     append_common_flags(&cmd);
-    nob_cmd_append(&cmd, "-DOSR_RUNTIME_MODULES=1", "-rdynamic", "-o", bin, "osr.c");
+    cmd_append_args(&cmd, "-DOSR_RUNTIME_MODULES=1", "-rdynamic", "-o", bin, "osr.c", NULL);
     for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
-    nob_cmd_append(&cmd, POSIX_RUNTIME_SRC, "-ldl");
+    cmd_append_args(&cmd, POSIX_RUNTIME_SRC, "-ldl", NULL);
     return nob_cmd_run(&cmd);
 }
 
@@ -830,12 +866,16 @@ static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     if (is_msvc()) {
         nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
     } else {
-        nob_cmd_append(&cmd, "-o", bin);
+        cmd_append_args(&cmd, "-o", bin, NULL);
     }
     nob_cmd_append(&cmd, obj_of(main_src));
     append_lib_objs(&cmd);
     append_common_libs(&cmd);
-    return nob_cmd_run(&cmd, .async = procs);
+    {
+        Nob_Cmd_Opt opt = {0};
+        opt.async = procs;   /* nob89 runs this synchronously */
+        return nob_cmd_run_opt(&cmd, opt);
+    }
 }
 
 /* link_standalone -- one object, no lib objects, no Windows link libraries:
@@ -849,10 +889,14 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
     if (is_msvc()) {
         nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
     } else {
-        nob_cmd_append(&cmd, "-o", bin);
+        cmd_append_args(&cmd, "-o", bin, NULL);
     }
     nob_cmd_append(&cmd, obj);
-    return nob_cmd_run(&cmd, .async = procs);
+    {
+        Nob_Cmd_Opt opt = {0};
+        opt.async = procs;   /* nob89 runs this synchronously */
+        return nob_cmd_run_opt(&cmd, opt);
+    }
 }
 
 /* run_test -- tests read fixtures via a path relative to test/unit_c/, so
@@ -862,10 +906,11 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
 static bool run_test(const char *name) {
     const char *bin_name = nob_temp_sprintf("../../" TEST_BIN_DIR "/%s" EXE, name);
     Nob_Cmd cmd = {0};
+    bool ok;
     nob_log(NOB_INFO, "--- %s ---", name);
     nob_cmd_append(&cmd, bin_name);
     if (!nob_set_current_dir("test/unit_c")) return false;
-    bool ok = nob_cmd_run(&cmd);
+    ok = nob_cmd_run(&cmd);
     nob_set_current_dir("../..");
     return ok;
 }
@@ -903,7 +948,7 @@ static bool build_tests(void) {
 static bool run_runtime_module_tests(void) {
     Nob_Cmd cmd = {0};
     nob_log(NOB_INFO, "--- runtime_modules ---");
-    nob_cmd_append(&cmd, "sh", "test/runtime_modules.sh");
+    cmd_append_args(&cmd, "sh", "test/runtime_modules.sh", NULL);
     return nob_cmd_run(&cmd);
 }
 #endif
@@ -1246,14 +1291,17 @@ static int drop_verbose_flags(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    const char *program;
+    const char *subcommand;
+
     if (!want_verbose(argc, argv)) nob_set_log_handler(&brief_log_handler);
     NOB_GO_REBUILD_URSELF(argc, argv);
     argc = drop_verbose_flags(argc, argv);
     check_cc_detection();
 
-    const char *program = nob_shift(argv, argc);
+    program = nob_shift(argv, argc);
     NOB_UNUSED(program);
-    const char *subcommand = argc > 0 ? nob_shift(argv, argc) : NULL;
+    subcommand = argc > 0 ? nob_shift(argv, argc) : NULL;
 
     if (subcommand == NULL || strcmp(subcommand, "all") == 0 || strcmp(subcommand, "static") == 0) {
         if (!build_all()) return 1;
