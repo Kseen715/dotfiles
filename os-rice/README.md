@@ -191,43 +191,43 @@ use the static output.
 
 ### Working
 
-| OS | Arch | Compiler | Notes | Compilation time |
+| Compiler | OS | Arch | Notes | Compilation time |
 |---|---|---|---|---|
-| GNU Linux | x86_64 | [tcc](https://bellard.org/tcc/) 0.9.27 | Ladder 1 priority | 1.18s |
-| GNU Linux | x86_64 | [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | - | ~3.56x |
-| GNU Linux | x86_64 | clang 21.1.8 | Ladder 2 priority | ~9.99x |
-| GNU Linux | x86_64 | gcc 15.2.0 | Ladder 3 priority | ~10.75x |
-| GNU Linux | i386 (32-bit) | gcc 15.2.0 `-m32` | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | ~11.47x |
-| GNU Linux | x86_64 | zig 0.14.1 cc clang 20.1.8 | Ladder 4 priority | ~19.33x |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 1.18s |
+| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | ~3.56x |
+| clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | ~9.99x |
+| gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | ~10.75x |
+| gcc 15.2.0 `-m32` | GNU Linux | i386(x86) | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | ~11.47x |
+| zig 0.14.1 cc clang 20.1.8 | GNU Linux | x86_64 | Ladder 4 priority | ~19.33x |
 
 ### In testing
 
-| OS | Arch | Compiler | Notes |
+| Compiler | OS | Arch | Notes |
 |---|---|---|---|
-| GNU Linux | - | [drh/lcc](https://github.com/drh/lcc) | - |
-| Windows | - | mingw-w64 | - |
-| Windows | - | [OrangeC](https://github.com/LADSoft/OrangeC) | - |
-| - | - | [CompCert](https://github.com/AbsInt/CompCert) | - |
-| - | - | [arocc](https://github.com/Vexu/arocc) | - |
-| - | - | [SmallerC](https://github.com/alexfru/SmallerC) | - |
-| - | - | [shecc](https://github.com/sysprog21/shecc) | - |
-| - | - | [Cuik](https://github.com/RealNeGate/Cuik) | - |
-| - | - | [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | - |
-| - | - | [amacc](https://github.com/jserv/amacc) | - |
-| - | - | [lacc](https://github.com/larmel/lacc) | - |
-| - | - | [cproc](https://github.com/michaelforney/cproc) | - |
-| - | - | [xcc](https://github.com/tyfkda/xcc) | - |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | - | - |
+| mingw-w64 | Windows | - | - |
+| [OrangeC](https://github.com/LADSoft/OrangeC) | Windows | - | - |
+| [CompCert](https://github.com/AbsInt/CompCert) | - | - | - |
+| [arocc](https://github.com/Vexu/arocc) | - | - | - |
+| [SmallerC](https://github.com/alexfru/SmallerC) | - | - | - |
+| [shecc](https://github.com/sysprog21/shecc) | - | - | - |
+| [Cuik](https://github.com/RealNeGate/Cuik) | - | - | - |
+| [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | - | - | - |
+| [amacc](https://github.com/jserv/amacc) | - | - | - |
+| [lacc](https://github.com/larmel/lacc) | - | - | - |
+| [cproc](https://github.com/michaelforney/cproc) | - | - | - |
+| [xcc](https://github.com/tyfkda/xcc) | - | - | - |
 
 ### Not working
 
-| OS | Arch | Compiler | Notes |
+| Compiler | OS | Arch | Notes |
 |---|---|---|---|
-| GNU Linux | - | [chibicc](https://github.com/rui314/chibicc) | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
-| GNU Linux | - | [faucc](https://github.com/FAU-AS-MOS/FAUcc) | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
-| GNU Linux | - | [bcc](https://github.com/realchonk/bcc) | Does not have libc implementation |
-| GNU Linux | - | [sdcc](https://sdcc.sourceforge.net/) | Targets only microprocessors |
-| - | - | [wrecc](https://github.com/PhilippRados/wrecc) | Unfinished |
-| - | - | [ts-c-compiler](https://github.com/Mati365/ts-c-compiler) | Unfinished; support only 16 bit x86 |
+| [chibicc](https://github.com/rui314/chibicc) | GNU Linux | - | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+| [faucc](https://github.com/FAU-AS-MOS/FAUcc) | GNU Linux | - | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
+| [bcc](https://github.com/realchonk/bcc) | GNU Linux | - | Does not have libc implementation |
+| [sdcc](https://sdcc.sourceforge.net/) | GNU Linux | - | Targets only microprocessors |
+| [wrecc](https://github.com/PhilippRados/wrecc) | - | - | Unfinished |
+| [ts-c-compiler](https://github.com/Mati365/ts-c-compiler) | - | - | Unfinished; support only 16 bit x86 |
 
 ## How it works
 
