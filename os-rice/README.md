@@ -205,7 +205,18 @@ use the static output.
 | OS | Arch | Compiler | Notes |
 |---|---|---|---|
 | GNU Linux | - | [drh/lcc](https://github.com/drh/lcc) | - |
-| GNU Linux | - | mingw-w64 | - |
+| Windows | - | mingw-w64 | - |
+| Windows | - | [OrangeC](https://github.com/LADSoft/OrangeC) | - |
+| - | - | [CompCert](https://github.com/AbsInt/CompCert) | - |
+| - | - | [arocc](https://github.com/Vexu/arocc) | - |
+| - | - | [SmallerC](https://github.com/alexfru/SmallerC) | - |
+| - | - | [shecc](https://github.com/sysprog21/shecc) | - |
+| - | - | [Cuik](https://github.com/RealNeGate/Cuik) | - |
+| - | - | [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | - |
+| - | - | [amacc](https://github.com/jserv/amacc) | - |
+| - | - | [lacc](https://github.com/larmel/lacc) | - |
+| - | - | [cproc](https://github.com/michaelforney/cproc) | - |
+| - | - | [xcc](https://github.com/tyfkda/xcc) | - |
 
 ### Not working
 
@@ -215,6 +226,8 @@ use the static output.
 | GNU Linux | - | [faucc](https://github.com/FAU-AS-MOS/FAUcc) | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
 | GNU Linux | - | [bcc](https://github.com/realchonk/bcc) | Does not have libc implementation |
 | GNU Linux | - | [sdcc](https://sdcc.sourceforge.net/) | Targets only microprocessors |
+| - | - | [wrecc](https://github.com/PhilippRados/wrecc) | Unfinished |
+| - | - | [ts-c-compiler](https://github.com/Mati365/ts-c-compiler) | Unfinished; support only 16 bit x86 |
 
 ## How it works
 

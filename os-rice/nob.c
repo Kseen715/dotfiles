@@ -638,6 +638,26 @@ static bool is_pcc(void) {
     return len == 3 && memcmp(base, "pcc", 3) == 0;
 }
 
+/* is_lcc -- does $CC name lcc (Fraser & Hanson's retargetable C compiler),
+ * with or without a path? lcc's driver does not speak gcc's flag dialect at
+ * all: it reads -Wall as -Wa<ll> (an assembler flag "ll" that GNU as then
+ * fails to open), and any option it does not recognize before -c is silently
+ * treated as a linker input file. So lcc gets its own branch of
+ * append_common_flags below. Deliberately absent from cc_ladder (it is a
+ * 32-bit-only i386 C89 compiler a user picks explicitly, never a default).
+ */
+static bool is_lcc(void) {
+    const char *prog = cc_prog();
+    const char *base = prog;
+    const char *p;
+    size_t len;
+    for (p = prog; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    return len == 3 && memcmp(base, "lcc", 3) == 0;
+}
+
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
 static void check_cc_detection(void) {
@@ -653,6 +673,16 @@ static void check_cc_detection(void) {
                 "this host's glibc/GCC headers (no __builtin_bswap*/__builtin_expect, "
                 "no casts in constant expressions). The flags below are faucc-correct, "
                 "but any TU that includes a system header still fails at cc1. "
+                "Use tcc, gcc or clang for a full build.", cc());
+    }
+    if (is_lcc()) {
+        nob_log(NOB_WARNING,
+                "CC=%s: lcc is a 32-bit-only (i386) C89 compiler; every binary "
+                "built with it is a 32-bit ELF and links against /usr/lib32 "
+                "(multilib) plus its own liblcc.a. Its 2002 rcc front end only "
+                "parses headers the include-patch dir covers, so a TU that pulls "
+                "in a modern-glibc-only construct (bits/byteswap.h's ull "
+                "constants, gcc stddef.h's size_t) still fails at rcc. "
                 "Use tcc, gcc or clang for a full build.", cc());
     }
     NOB_ASSERT(is_msvc_name("cl"));
@@ -698,6 +728,15 @@ static void append_common_flags(Nob_Cmd *cmd) {
          * faucc's own man page. Its cc1 then still fails on any TU that
          * pulls in a system header -- see check_cc_detection. */
         cmd_append_args(cmd, "-b", "i386", "-O", "2", NULL);
+        return;
+    }
+    if (is_lcc()) {
+        /* lcc's driver (see is_lcc) does not understand -std/-Wall/-Wextra/
+         * -pedantic/-O2: -Wall becomes -Wa<ll> and breaks the assembler, and
+         * unrecognized options before -c are treated as linker inputs. The
+         * patched driver (modules/src/lcc-linux.c) already forces -std=c89 on
+         * its own cpp line and lcc optimizes by default, so the compiler is
+         * invoked bare -- append_cc(cmd) above already put it on the line. */
         return;
     }
     cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2", NULL);

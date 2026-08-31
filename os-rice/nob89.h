@@ -627,6 +627,25 @@ static int nob89_cc_is_faucc(const char *c)
     return len == 5 && memcmp(base, "faucc", 5) == 0;
 }
 
+/* nob89_cc_is_lcc -- does the $CC that would rebuild us name lcc (Fraser &
+ * Hanson's retargetable compiler), with or without a path? lcc's driver does
+ * not understand -std=c89: with no -c on the line (a link) it silently
+ * treats the flag as a linker input file, so GNU ld dies on "unrecognized
+ * option '-std=c89'". The patched driver (modules/src/lcc-linux.c) already
+ * forces -std=c89 on its own cpp line and rcc is a C89 compiler natively,
+ * so the C89 pin below can be skipped for it the same way it is for faucc. */
+static int nob89_cc_is_lcc(const char *c)
+{
+    const char *base = c;
+    const char *p;
+    size_t len;
+    for (p = c; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    return len == 3 && memcmp(base, "lcc", 3) == 0;
+}
+
 void nob_go_rebuild_urself(int argc, char **argv, const char *source_path)
 {
     const char *self;
@@ -650,14 +669,16 @@ void nob_go_rebuild_urself(int argc, char **argv, const char *source_path)
     nob_cmd_append(&cmd, cc);
     nob_cmd_append(&cmd, "-DNOB89");
     /* -std=c89 is load-bearing, not cosmetic -- except for faucc, which
-     * does not accept the flag at all. Without it the rebuild runs in the
+     * does not accept the flag at all, and lcc, whose driver reads it as a
+     * linker input on a link line. Without it the rebuild runs in the
      * compiler's default (gnu17) mode, where the <sys/types.h> this header
      * includes drags in glibc's <stdbool.h>; `bool` is then _Bool instead
      * of this file's `typedef int bool`, so nob.c's
      * `bool (*)(Nob_Walk_Entry)` callbacks no longer match Nob_Walk_Func
      * (`int (*)`) and gcc>=14 rejects the mismatch as an error. Forcing
-     * C89 keeps every signature in this header's C90 contract. */
-    if (!nob89_cc_is_faucc(cc)) nob_cmd_append(&cmd, "-std=c89");
+     * C89 keeps every signature in this header's C90 contract. (lcc gets
+     * C89 anyway: its driver's cpp line already pins -std=c89.) */
+    if (!nob89_cc_is_faucc(cc) && !nob89_cc_is_lcc(cc)) nob_cmd_append(&cmd, "-std=c89");
     nob_cmd_append(&cmd, "-o");
     nob_cmd_append(&cmd, self);
     nob_cmd_append(&cmd, source_path);
