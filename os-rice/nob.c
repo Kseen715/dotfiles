@@ -675,16 +675,6 @@ static void check_cc_detection(void) {
                 "but any TU that includes a system header still fails at cc1. "
                 "Use tcc, gcc or clang for a full build.", cc());
     }
-    if (is_lcc()) {
-        nob_log(NOB_WARNING,
-                "CC=%s: lcc is a 32-bit-only (i386) C89 compiler; every binary "
-                "built with it is a 32-bit ELF and links against /usr/lib32 "
-                "(multilib) plus its own liblcc.a. Its 2002 rcc front end only "
-                "parses headers the include-patch dir covers, so a TU that pulls "
-                "in a modern-glibc-only construct (bits/byteswap.h's ull "
-                "constants, gcc stddef.h's size_t) still fails at rcc. "
-                "Use tcc, gcc or clang for a full build.", cc());
-    }
     NOB_ASSERT(is_msvc_name("cl"));
     NOB_ASSERT(is_msvc_name("cl.exe"));
     NOB_ASSERT(is_msvc_name("C:\\VC\\bin\\cl.exe"));

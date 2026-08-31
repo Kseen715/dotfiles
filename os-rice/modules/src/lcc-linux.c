@@ -1,7 +1,7 @@
 /* modules/src/lcc-linux.c -- the lcc driver (etc/linux.c), patched so a 2002
  * C89 compiler works on a modern glibc/gcc host. modules/lcc.c copies this
  * over the upstream etc/linux.c before building; the whole diff from upstream
- * is the four quirks below, all verified against glibc 2.4x / gcc 15.
+ * is the five quirks below, all verified against glibc 2.4x / gcc 15.
  *
  *   1. @LCCPREFIX@ -- the install prefix, sedded in at install time (so a
  *      bare `lcc` works with no environment). Upstream defaults to
@@ -16,6 +16,12 @@
  *      i386 only) and, via option(), also rewrites the include-patch overlay
  *      when a -lccdir override arrives -- so the patch header ships under
  *      the same prefix as everything else.
+ *   5. cpp and rcc both get `-w` (inhibit warnings): the stubs redefine the
+ *      __STDC__/__attribute__ builtins every TU (cpp-15 ignores
+ *      -Wno-builtin-macro-redefined for command-line -D redefinitions) and
+ *      rcc's 2002 diagnostics on this modern tree (function-pointer casts
+ *      from dlsym, 64-bit shift advisories) are all noise. Errors still
+ *      print.
  *
  * The include-patch dir (see include[] below) holds modules/src/
  * lcc-struct_mutex.h, a copy of glibc's <bits/struct_mutex.h> with its C11
@@ -35,14 +41,14 @@ static char rcsid[] = "$Id$";
 char *suffixes[] = { ".c", ".i", ".s", ".o", ".out", 0 };
 char inputs[256] = "";
 char *cpp[] = { LCCDIR "gcc/cpp",
-	"-m32", "-std=c89", "-U__GNUC__", "-D_POSIX_SOURCE", "-D__STDC__=1", "-D__STRICT_ANSI__",
+	"-w", "-m32", "-std=c89", "-U__GNUC__", "-D_POSIX_SOURCE", "-D__STDC__=1", "-D__STRICT_ANSI__",
 	"-Dunix", "-Di386", "-Dlinux",
 	"-D__unix__", "-D__i386__", "-D__linux__", "-D__signed__=signed",
 	"-D__attribute__(x)=", "-D__attribute__=", "-D__restrict=", "-Drestrict=",
 	"-Dinline=", "-D__inline=", "-D__inline__=", "-D__extension__=",
 	"$1", "$2", "$3", 0 };
 char *include[] = {"-I" LCCDIR "include", "-I" LCCDIR "gcc/include", "-I" LCCDIR "include-patch", "-I/usr/include", 0 };
-char *com[] = {LCCDIR "rcc", "-target=x86/linux", "$1", "$2", "$3", 0 };
+char *com[] = {LCCDIR "rcc", "-target=x86/linux", "-w", "$1", "$2", "$3", 0 };
 char *as[] = { "/usr/bin/as", "-32", "-o", "$3", "$1", "$2", 0 };
 char *ld[] = {
 	/*  0 */ "/usr/bin/ld", "-m", "elf_i386", "-dynamic-linker",
