@@ -25,6 +25,7 @@
 
 #include "common.h"
 #include "cmds.h"
+#include "module.h"
 
 #include <glob.h>
 #include <sys/stat.h>

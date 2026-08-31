@@ -81,11 +81,12 @@ void osr_service_resolve(Str *out, const char *name) {
 }
 
 int osr_service_enable(const char *name) {
-    if (osr_theme_only()) return osr_theme_only_skip("enable_service");
     Str svc;
     const char *init = env_str("OSR_INIT", "");
     char *argv[6];
     int rc = 1;
+
+    if (osr_theme_only()) return osr_theme_only_skip("enable_service");
 
     str_init(&svc);
     osr_service_resolve(&svc, name);
@@ -151,11 +152,12 @@ int osr_service_enable(const char *name) {
 }
 
 int osr_service_disable(const char *name) {
-    if (osr_theme_only()) return osr_theme_only_skip("disable_service");
     Str svc;
     const char *init = env_str("OSR_INIT", "");
     char *argv[6];
     int rc = 1;
+
+    if (osr_theme_only()) return osr_theme_only_skip("disable_service");
 
     str_init(&svc);
     osr_service_resolve(&svc, name);

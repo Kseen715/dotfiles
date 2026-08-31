@@ -15,6 +15,7 @@
  *
  * C89 + POSIX.
  */
+#define _XOPEN_SOURCE 700
 #include <fcntl.h>
 #include <glob.h>
 #include <sys/stat.h>

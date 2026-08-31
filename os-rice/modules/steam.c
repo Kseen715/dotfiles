@@ -7,6 +7,7 @@
  * Was modules/steam.sh; what it must do is stated in the C tests
  * under test/unit_c/ rather than diffed against a recording. C89.
  */
+#define _POSIX_C_SOURCE 200809L
 #include "../lib/module.h"
 #include "../lib/common.h"
 

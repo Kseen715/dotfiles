@@ -98,9 +98,11 @@ pid_t osr_fetch_child(const char *backend, const char *url, int write_fd) {
 }
 
 int osr_fetch_stdout(const char *url) {
-    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
-    const char *backend = osr_fetch_ensure();
+    const char *backend;
     char *argv[5];
+
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
+    backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
         osr_warn("no downloader found (need curl, wget, or busybox)");
@@ -146,9 +148,11 @@ int osr_fetch_pipe_root(const char *url, char *const argv[]) {
 }
 
 int osr_fetch_buffer(Str *out, const char *url) {
-    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
-    const char *backend = osr_fetch_ensure();
+    const char *backend;
     char *argv[5];
+
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
+    backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
         osr_warn("no downloader found (need curl, wget, or busybox)");
@@ -292,8 +296,7 @@ static void progress_line(Str *out, const char *name, long now, long total, long
 }
 
 int osr_fetch_download(const char *url, const char *dest, long expected) {
-    if (osr_theme_only()) return !osr_theme_only_skip("osr_download");
-    const char *backend = osr_fetch_ensure();
+    const char *backend;
     char *argv[6];
     long total = expected;
     long min_bytes = env_long("OSR_PROGRESS_MIN_BYTES", PROGRESS_MIN_DEFAULT);
@@ -303,6 +306,9 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
     pid_t pid;
     int status;
     int reaped = 0;
+
+    if (osr_theme_only()) return !osr_theme_only_skip("osr_download");
+    backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
         osr_warn("no downloader found (need curl, wget, or busybox)");
@@ -388,8 +394,9 @@ int osr_json_string_field(Str *out, const char *json, const char *key) {
  * resolve" warning, which is what a caller with a fallback wants: lib/build.sh
  * spelled that `github_latest ... 2>/dev/null || _tag=""`. */
 static int github_tag(Str *out, const char *repo, int quiet) {
-    if (osr_theme_only()) return !osr_theme_only_skip("github_latest");
     Str url, json;
+
+    if (osr_theme_only()) return !osr_theme_only_skip("github_latest");
 
     str_init(&url);
     str_addz(&url, "https://api.github.com/repos/");

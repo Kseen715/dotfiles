@@ -36,6 +36,12 @@ int osr_user_main(int argc, char **argv);     /* lib/user.sh */
 int osr_user_shell_is(const char *user, const char *shell);
 int osr_register_shell(const char *shell);
 int osr_set_login_shell(const char *user, const char *shell);
+
+/* osr_resolve_user -- which account is being riced and where it lives, into
+ * this process's environment as OSR_USER/OSR_HOME for the runner and every
+ * child it forks (install.sh's `export`). Order: --user > $SUDO_USER >
+ * $USER > whoever we are (§8). */
+void osr_resolve_user(const char *explicit_user);
 int osr_theme_main(int argc, char **argv);    /* lib/theme.sh */
 
 /* osr_theme_meta -- a theme's single-valued `key: value` field, appended to
@@ -63,6 +69,12 @@ int osr_apply_theme_configs(void);
  * loop over `osr theme lines` would have seen them (lib/theme.c). */
 void osr_theme_read_lines(Str *out, const char *path);
 int osr_detect_main(int argc, char **argv);   /* lib/detect.sh */
+
+/* osr_detect_export -- osr_detect, straight into this process's environment,
+ * for the runner: the facts set with setenv so every child it forks inherits
+ * them, which is what the sh `export` bought. `what` is "all" or one probe's
+ * name ("ram", the one the runner re-runs after warming a sudo ticket). */
+void osr_detect_export(const char *what);
 
 /* osr_gpu_chip -- the chip codename of the first GPU of that vendor, out of
  * the OSR_GPU_DEVICES osr_detect exported. 0 when this box has no such GPU,

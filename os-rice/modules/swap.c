@@ -355,7 +355,8 @@ static int apply_sysctl(void *ctx) {
      * it by default - only /etc/sysctl.conf - and `tee` into a missing directory
      * fails with a bare "No such file or directory" that reads like a
      * permissions problem. The directory is still the right target: Void's runit
-     * core-service 08-sysctl.sh globs /etc/sysctl.d/*.conf at boot, so a drop-in
+     * core-service 08-sysctl.sh globs the *.conf files in /etc/sysctl.d/ at
+     * boot, so a drop-in
      * here is applied on every start, which /etc/sysctl.conf edits would not be
      * (that file is the admin's, not ours). */
     str_init(&dir);
@@ -427,12 +428,14 @@ static int make_file(void *ctx) {
         "        # both of which this module used to do by hand. Pre-creating the file\n"
         "        # with touch makes it fail - 'cannot set permissions on swap file:\n"
         "        # Success' - because it expects to own the creation. That failure used\n"
-        "        # to be swallowed by 2>/dev/null and silently fell through to dd, which\n"
+        "        # to be swallowed by 2>/dev/null and silently fell through to dd, which\n");
+    str_addz(&s,
         "        # writes 4 GiB one megabyte at a time behind a spinner with no progress:\n"
         "        # indistinguishable from a hang, and the reason for the lock above.\n"
         "        #\n"
         "        # stderr is NOT redirected any more. If this fails the message is the\n"
-        "        # only thing that explains the fallback, and it costs nothing to keep.\n"
+        "        # only thing that explains the fallback, and it costs nothing to keep.\n");
+    str_addz(&s,
         "        if mkswap -U clear --size ");
     str_addl(&s, p->file_want);
     str_addz(&s,

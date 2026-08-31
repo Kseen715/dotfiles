@@ -359,7 +359,6 @@ void osr_theme_modules(Str *out, const char *rice) {
         free(buf);
 
         while (next_line(str_text(&lines), lines.len, &pos, &line)) {
-            Str path;
             Str name;
             if (memchr(line.start, ':', line.len) != NULL)
                 continue;   /* require: / theme: / themes: -- not modules */
@@ -403,7 +402,7 @@ void osr_theme_modules(Str *out, const char *rice) {
             }
             closedir(d);
         }
-        /* The C tier's names go into the same sorted sweep: `modules/*.sh` was
+        /* The C tier's names go into the same sorted sweep: modules' *.sh were
          * the whole world when lib/apply.sh wrote this, and a module that has
          * moved to C still paints. */
         {

@@ -551,9 +551,10 @@ static void prune_one(const char *ours) {
 /* apt_prune_bootstrap_lists -- drop one of our bootstrap lists once the vendor
  * package describes the same repo itself, BEFORE any apt call.
  *
- * Not cosmetic: our list pins signed-by=/etc/apt/keyrings/*.asc and the
- * vendor's postinst writes its own list for the same URI with
- * signed-by=/usr/share/keyrings/*.gpg -- and apt 3.0 (Debian 13+) treats one
+ * Not cosmetic: our list pins a signed-by pointing at our .asc under
+ * /etc/apt/keyrings/, and the vendor's postinst writes its own list for the
+ * same URI with signed-by pointing at a .gpg under /usr/share/keyrings/ --
+ * and apt 3.0 (Debian 13+) treats one
  * repo described twice with different signed-by values as fatal, which breaks
  * every later apt call on the box, not just ours.
  */
@@ -1118,8 +1119,9 @@ static int via_native(const char *const names[]) {
  * may need, so it cannot run second. Pass 2 keeps manifest order, which is the
  * only dependency graph os-rice has (§4). */
 int osr_pkg_install(const char *const names[]) {
-    if (osr_theme_only()) return osr_theme_only_skip("pkg_install");
     size_t i;
+
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_install");
 
     if (!via_native(names)) return 0;
 
@@ -1200,13 +1202,14 @@ static int pkg_usage(void) {
  * must stay a no-op).
  */
 int osr_pkg_remove(const char *const names[]) {
-    if (osr_theme_only()) return osr_theme_only_skip("pkg_remove");
     Str rm;
     const char *mgr = osr_mod_pkg();
     char **argv;
     size_t argc = 0;
     size_t i;
     int rc;
+
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_remove");
 
     str_init(&rm);
     for (i = 0; names[i] != NULL; i++) {

@@ -11,7 +11,7 @@
  * (§4), so a rice would install it once and never update it, while the builder
  * compares versions - which makes `osr module telegram` the repair path.
  * Telegram paints its own widgets, so the GTK and Qt layers do nothing to it -
- * its only theming input is a .tdesktop-palette (§6b, telegram/*.tmpl).
+ * its only theming input is a .tdesktop-palette (§6b, telegram's *.tmpl).
  *
  * Was modules/telegram.sh; what it must do is stated in the C tests
  * under test/unit_c/ rather than diffed against a recording. C89.

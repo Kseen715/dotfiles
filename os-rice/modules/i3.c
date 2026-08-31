@@ -11,7 +11,8 @@
  *   ~/.config/i3/config.d/99-local.conf
  *                                    machine-owned, seeded empty, never touched.
  *
- * The base config ends with `include ~/.config/i3/config.d/*.conf`, so the theme
+ * The base config ends with an `include` of the *.conf files under
+ * ~/.config/i3/config.d/, so the theme
  * layer swaps independently of the keybinds (i3 >= 4.20 has `include`, and it
  * glob-expands the path).
  *

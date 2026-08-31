@@ -32,6 +32,8 @@
  * anything the user has edited is reported by migrate_stale instead of
  * rewritten. */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverlength-strings"
 static const char *const MIG_LOCAL_OLD =
     "# --- ssh-agent: reuse an existing agent, or start one -------------------------\n"
     "# NOTE: start_agent never writes $SSH_ENV, so the -f test below is never true and\n"
@@ -57,6 +59,7 @@ static const char *const MIG_LOCAL_OLD =
     "export NVM_DIR=\"$HOME/.nvm\"\n"
     "[ -s \"$NVM_DIR/nvm.sh\" ] && \\. \"$NVM_DIR/nvm.sh\"\n"
     "[ -s \"$NVM_DIR/bash_completion\" ] && \\. \"$NVM_DIR/bash_completion\"\n";
+#pragma GCC diagnostic pop
 
 static const char *const MIG_BREW_V1 =
     "# Homebrew shell environment (machine-specific), only if installed.\n"
@@ -72,7 +75,8 @@ static const char *const MIG_BREW_V2 =
     "        eval \"$(brew shellenv)\"\n"
     "    fi\n"
     "fi\n";
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverlength-strings"
 static const char *const MIG_BREW_NEW =
     "# Homebrew shell environment (machine-specific), only if installed. Probed by\n"
     "# absolute path, never `command -v brew`: a PATH lookup that MISSES has to stat\n"
@@ -86,6 +90,7 @@ static const char *const MIG_BREW_NEW =
     "    done\n"
     "    unset _osr_brew\n"
     "fi\n";
+#pragma GCC diagnostic pop
 
 static const char *const MIG_TYPESET =
     "# Keep $path unique for good. The guards above only cover this file; anything\n"

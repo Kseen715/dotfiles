@@ -92,10 +92,11 @@ static void clone_into(const char *name, const char *url, const char *dir,
 
 int osr_git_repo(const char *name, const char *url, const char *dir,
                  char *const clone_args[]) {
-    if (osr_theme_only()) return osr_theme_only_skip("git_repo");
     Str git_dir;
     Str remote;
     int have_git_dir;
+
+    if (osr_theme_only()) return osr_theme_only_skip("git_repo");
 
     /* Fix root-owned files from a previous sudo run (§8): the git work below
      * runs as OSR_USER, so every byte under the repo must be that user's. */
@@ -177,10 +178,11 @@ int osr_git_repo(const char *name, const char *url, const char *dir,
 }
 
 int osr_zsh_plugin(const char *name, const char *url) {
-    if (osr_theme_only()) return osr_theme_only_skip("zsh_plugin");
     Str dir;
     char *args[3];
     int ok;
+
+    if (osr_theme_only()) return osr_theme_only_skip("zsh_plugin");
 
     str_init(&dir);
     str_addz(&dir, osr_mod_home());
@@ -268,11 +270,12 @@ static void patch_installer(Str *out, const char *script, size_t len) {
 }
 
 int osr_install_omz(void) {
-    if (osr_theme_only()) return osr_theme_only_skip("install_omz");
     Str core;
     Str script;
     Str patched;
     int rc;
+
+    if (osr_theme_only()) return osr_theme_only_skip("install_omz");
 
     str_init(&core);
     omz_path(&core, "/oh-my-zsh.sh");

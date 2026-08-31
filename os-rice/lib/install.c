@@ -631,7 +631,7 @@ static int cmd_final(const char *module_mode, const char *modules,
  * run, by handing it to a shell.
  *
  * What it does NOT get any more is os-rice's own verbs. `pkg_install`,
- * `install_layer` and the rest were shell functions in lib/*.sh; they are C
+ * `install_layer` and the rest were shell functions in lib's *.sh; they are C
  * functions now, and there are no .sh libs left to source. So a shell module
  * runs with the facts in its environment (every OSR_* variable the runner
  * exported) and plain sh -- which is enough for a one-off local module, and is

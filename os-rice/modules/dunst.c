@@ -20,7 +20,8 @@ int osrm_dunst(void) {
     ok = osr_pkg_install_step("Installing dunst", pkgs);
 
     /* Two layers, in order: the dotfiles base dunstrc, then the theme's drop-in
-     * beside it. dunst reads dunstrc.d/*.conf after dunstrc, so the palette can
+     * beside it. dunst reads the *.conf files in dunstrc.d/ after dunstrc, so
+     * the palette can
      * be a separate file and the base one stays the rice's. */
     str_init(&src); str_init(&dst);
     str_addz(&src, osr_mod_dotfiles());

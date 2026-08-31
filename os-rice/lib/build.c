@@ -15,6 +15,7 @@
  *
  * C89 + POSIX.
  */
+#define _POSIX_C_SOURCE 200809L
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -352,10 +353,11 @@ static int version_ge(const char *have, const char *want) {
 /* --- the shared primitives ------------------------------------------------- */
 
 int osr_install_tarball_bin(const char *url, const char *bin) {
-    if (osr_theme_only()) return osr_theme_only_skip("_osr_install_tarball_bin");
     Str tmp, tar_path, found, dest;
     char *argv[7];
     int ok;
+
+    if (osr_theme_only()) return osr_theme_only_skip("_osr_install_tarball_bin");
 
     str_init(&tmp); str_init(&tar_path); str_init(&found); str_init(&dest);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
@@ -876,7 +878,6 @@ static int zig_url_version(Str *out, const char *url) {
 }
 
 int osr_build_zig(const char *want) {
-    if (osr_theme_only()) return osr_theme_only_skip("provide_zig");
     const char *a = arch();
     const char *m;
     Str json, cands, url, ver, dir, exe;
@@ -884,6 +885,8 @@ int osr_build_zig(const char *want) {
     size_t pos = 0;
     Line line;
     int picked = 0;
+
+    if (osr_theme_only()) return osr_theme_only_skip("provide_zig");
 
     if (strcmp(a, "x86_64") == 0)       m = "x86_64";
     else if (strcmp(a, "aarch64") == 0) m = "aarch64";
@@ -3180,8 +3183,9 @@ static const Builder *lookup(const char *fn) {
 int osr_build_has(const char *fn) { return lookup(fn) != NULL; }
 
 int osr_build_run(const char *fn) {
-    if (osr_theme_only()) return osr_theme_only_skip("provide_*");
     const Builder *b = lookup(fn);
+
+    if (osr_theme_only()) return osr_theme_only_skip("provide_*");
     if (b == NULL) return 0;
     return b->fn();
 }

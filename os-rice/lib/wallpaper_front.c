@@ -30,10 +30,6 @@
 
 #include <unistd.h>
 
-/* osr_resolve_user -- lib/user.c's, the same call install.sh made before
- * anything read $OSR_HOME. */
-void osr_resolve_user(const char *explicit_user);
-
 static const char *root_dir(void) { return env_str("OSR_ROOT", "."); }
 
 /* usage -- wallpaper.sh printed its own header comment (`sed -n '2,9p' | sed
