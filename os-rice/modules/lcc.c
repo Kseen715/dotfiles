@@ -212,6 +212,34 @@ int osrm_lcc(void) {
         ok = 0; goto out;
     }
 
+    /* Two more rcc-vs-modern-glibc overlays (2026-08): bits/byteswap.h's
+     * `0x...ull` constants (rcc has no C99 lexer for the suffix) and
+     * <stddef.h>'s size_t redeclaration against glob.h's own size_t under
+     * _XOPEN_SOURCE. byteswap.h lands in include-patch/bits/ next to the
+     * struct_mutex one (both shadow /usr/include); stddef.h lands in include/
+     * -- the FIRST -I on the driver's path -- so it shadows gcc's stddef.h
+     * entirely and the identical typedef never reaches rcc twice. */
+    join(&patch, osr_mod_root(), "modules/src/lcc-byteswap.h");
+    str_reset(&script);
+    str_addz(&script, "cp ");
+    str_addz(&script, str_text(&patch));
+    str_addz(&script, " ");
+    str_addz(&script, str_text(&prefix));
+    str_addz(&script, "/include-patch/bits/byteswap.h");
+    if (!run_sh_user("Installing patched glibc byteswap.h", str_text(&script))) {
+        ok = 0; goto out;
+    }
+    join(&patch, osr_mod_root(), "modules/src/lcc-stddef.h");
+    str_reset(&script);
+    str_addz(&script, "cp ");
+    str_addz(&script, str_text(&patch));
+    str_addz(&script, " ");
+    str_addz(&script, str_text(&prefix));
+    str_addz(&script, "/include/stddef.h");
+    if (!run_sh_user("Installing lcc stddef.h overlay", str_text(&script))) {
+        ok = 0; goto out;
+    }
+
     /* lcc's own headers plus the gcc support dir the driver links against.
      * The four gcc paths come from `gcc -print-file-name`, so this follows
      * whatever gcc version and multilib layout the box actually has. */
@@ -258,6 +286,20 @@ int osrm_lcc(void) {
     str_addz(&script, str_text(&prefix));
     str_addz(&script, " CC=\"cc -m32 -std=gnu89\" CFLAGS=\"-g\" liblcc");
     if (!run_sh_user("Building lcc runtime library (32-bit)", str_text(&script))) {
+        ok = 0; goto out;
+    }
+    /* Patch rcc's C front end to tolerate an *identical* typedef redeclaration
+     * (with _XOPEN_SOURCE set, glibc's glob.h and <stddef.h> both typedef
+     * size_t; gcc accepts the C11-style identical redeclaration, the 2002 C89
+     * rcc hard-errors -- the os-rice tree triggers it). Idempotent script. */
+    join(&patch, osr_mod_root(), "modules/src/lcc-patch-decl.sh");
+    str_reset(&script);
+    str_addz(&script, "sh ");
+    str_addz(&script, str_text(&patch));
+    str_addz(&script, " ");
+    str_addz(&script, str_text(&srclcc));
+    str_addz(&script, "/src/decl.c");
+    if (!run_sh_user("Patching rcc to accept identical typedef redefinition", str_text(&script))) {
         ok = 0; goto out;
     }
     str_reset(&script);

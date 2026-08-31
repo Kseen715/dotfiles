@@ -970,7 +970,12 @@ static bool link_posix_runtime(const char *bin) {
 
     actions++;
     append_common_flags(&cmd);
-    cmd_append_args(&cmd, "-DOSR_RUNTIME_MODULES=1", "-rdynamic", "-o", bin, "osr.c", NULL);
+    /* -rdynamic exports the host's symbols for the dlopen'd modules to
+     * resolve. lcc's driver does not know it and would hand it to ld as an
+     * input file; -Wl-E is the same linker flag (-E) through lcc's loader
+     * options (-Wl takes the flags with no comma: -Wl,arg is a lone token). */
+    cmd_append_args(&cmd, "-DOSR_RUNTIME_MODULES=1",
+                    is_lcc() ? "-Wl-E" : "-rdynamic", "-o", bin, "osr.c", NULL);
     for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
     cmd_append_args(&cmd, POSIX_RUNTIME_SRC, "-ldl", NULL);
     return nob_cmd_run(&cmd);
