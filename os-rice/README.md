@@ -194,7 +194,7 @@ use the static output.
 | Compiler | OS | Arch | Notes | Compilation time |
 |---|---|---|---|---|
 | [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 1.18s |
-| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | x86_64 | - | ~2.11x |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386(x86) | - | ~2.11x |
 | [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | ~3.56x |
 | clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | ~9.99x |
 | gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | ~10.75x |
