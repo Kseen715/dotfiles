@@ -45,6 +45,16 @@ int osr_install_tarball_bin(const char *url, const char *bin);
 int osr_chafa_ok(void);
 int osr_fzf_ok(void);
 
+/* osr_lsd_ok -- the third face of "presence is not sufficiency", and the one
+ * that is not about a version: a distro lsd links the distro libgit2, which
+ * links libssh2, so lsd stops at the dynamic loader the moment anything down
+ * that chain goes missing. It is still installed, `command -v` still finds it,
+ * and pkg_install would never touch it again -- but 20-aliases.zsh aliases ls
+ * to it, so EVERY `ls` in every shell answers with a loader error. Nothing here
+ * asks how new it is; asking whether it RUNS covers a broken link and an absent
+ * binary alike. */
+int osr_lsd_ok(void);
+
 /* osr_build_zig -- install Zig from ziglang.org as a whole tree, symlinked into
  * /usr/local/bin. want pins an exact version ("0.14.1"); "" or NULL takes the
  * newest stable. Exposed because it is also a PREREQUISITE: the ghostty source

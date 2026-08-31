@@ -1299,6 +1299,19 @@ static int provide_btop_tarball(void) {
     return ok;
 }
 
+/* osr_lsd_ok -- does the lsd on PATH actually run? tool_version_2 captures
+ * stdout only and a loader failure writes to stderr, so a broken lsd reaches
+ * here as an empty capture and answers 0 -- the same answer an absent lsd
+ * gives, which is what the caller wants for both. */
+int osr_lsd_ok(void) {
+    Str have;
+    int ok;
+    str_init(&have);
+    ok = tool_version_2(&have, "lsd");
+    str_free(&have);
+    return ok;
+}
+
 /* provide_lsd_tarball -- the lsd binary from the release .tar.gz (old dpkg). */
 static int provide_lsd_tarball(void) {
     Str tag, url;

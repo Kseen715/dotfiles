@@ -175,6 +175,11 @@ int main(void) {
      * gates on the version because an old distro fzf breaks the up-arrow
      * history widget, and a CI host with an old one would start a download. */
     osr_sb_stub_body(&sb, "fzf", "printf '0.74.3 (15f64c49)\\n'\n");
+    /* And an lsd that STARTS, for the same reason with a different failure at
+     * the end of it: modules/zsh.c gates on the binary running at all, so a
+     * host whose lsd cannot load its libgit2/libssh2 chain -- or one with no
+     * lsd -- would otherwise start a release download here. */
+    osr_sb_stub_body(&sb, "lsd", "printf 'lsd 1.2.0\\n'\n");
     /* A no-op git leaves the module's own idempotency probes to decide, and
      * nothing is fetched. */
     osr_sb_stub_body(&sb, "git", "exit 0\n");
@@ -365,6 +370,46 @@ int main(void) {
             "not set");
 
         hs_free(&zsh_path);
+    }
+
+    /* ================================================================
+     * 6. lsd: installed is not the same as working
+     *
+     * 20-aliases.zsh aliases ls to lsd, so lsd is not one tool among the
+     * others here -- it is the command the user types most. The distro build
+     * is dynamically linked (libgit2 -> libssh2), which means a package that
+     * is present, correct, and up to date still stops at the dynamic loader
+     * when something further down that chain goes missing: every `ls` in every
+     * shell answers with a loader error, and pkg_install's presence probe is
+     * satisfied, so a rerun changes nothing. The guard asks whether the binary
+     * RUNS, and the statically linked release tarball is the repair.
+     * ================================================================ */
+    {
+        /* A working lsd first: the repair must not fire on a healthy box, or
+         * every install downloads a binary the distro already provides. */
+        old_install(LEGACY_ENV_V1, LEGACY_LOCAL);
+        osr_sb_stub_body(&sb, "lsd", "printf 'lsd 1.2.0\\n'\n");
+        run();
+        osr_assert_true(
+            strstr(osr_sb_capture_both(&sb), "does not run") == NULL,
+            "lsd: a working lsd is left to the package manager (SS2)");
+
+        /* Then the broken one, verbatim in the shape a missing libssh2 gives:
+         * the loader writes to stderr and nothing reaches stdout, so a probe
+         * reading stdout sees exactly what it sees for an absent binary. */
+        osr_sb_stub_body(&sb, "lsd",
+            "printf 'lsd: error while loading shared libraries: "
+            "libssh2.so.1: cannot open shared object file\\n' >&2\n"
+            "exit 127\n");
+        /* Hermetic: the builder must not be able to reach the network even if
+         * the guard wrongly lets it through. */
+        osr_sb_stub_body(&sb, "curl", "exit 1\n");
+        old_install(LEGACY_ENV_V1, LEGACY_LOCAL);
+        run();
+        osr_assert_out(&sb, "does not run",
+            "lsd: a present-but-unstartable lsd IS replaced -- `command -v` "
+            "finds it and the package manager considers it installed, so "
+            "nothing else in the run would ever notice");
     }
 
     hs_free(&p);

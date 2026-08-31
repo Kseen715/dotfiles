@@ -335,6 +335,10 @@ int main(void) {
     osr_sb_stub_body(&sb, "zsh", "exit 0\n");
     osr_sb_stub_body(&sb, "git", "exit 0\n");
     osr_sb_stub_body(&sb, "fzf", "printf '0.74.3 (abc)\\n'\n");
+    /* Likewise an lsd that starts: zsh.c falls back to the release tarball for
+     * one that does not, and the switch under test here is about config
+     * layers, not about fetching binaries. */
+    osr_sb_stub_body(&sb, "lsd", "printf 'lsd 1.2.0\\n'\n");
     /* starship is already on the box, so the module composes its config
      * instead of fetching an installer -- which is the half under test. */
     osr_sb_stub_body(&sb, "starship", "printf 'starship 1.20.0\\n'\n");

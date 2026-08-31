@@ -24,6 +24,7 @@
 #include "../lib/migrate.h"
 
 #include <stddef.h>
+#include <string.h>
 
 /* --- the regions the migrations replace, byte for byte -----------------------
  * seed_once/seed_empty deliberately skip a file that is already there, so none
@@ -123,6 +124,8 @@ static int plugin(void *ctx) {
 
 static int build_fzf(void *ctx) { (void)ctx; return osr_build_run("provide_fzf"); }
 
+static int build_lsd(void *ctx) { (void)ctx; return osr_build_run("provide_lsd_tarball"); }
+
 /* migrate_layers -- the three fixes that have to reach a box installed before
  * the layer that now owns the text. */
 static int migrate_layers(void *ctx) {
@@ -206,6 +209,21 @@ int osrm_zsh(void) {
     if (!osr_fzf_ok())
         ok = osr_step("Installing fzf >= " OSR_FZF_MIN " (zsh up-arrow history picker)",
                       build_fzf, NULL) && ok;
+
+    /* The same shape for lsd, but the sufficiency it tests is that the binary
+     * STARTS (osr_lsd_ok). A distro lsd is dynamically linked against the
+     * distro libgit2 -> libssh2, and 20-aliases.zsh aliases ls to it, so a gap
+     * anywhere down that chain turns every `ls` in every shell into a loader
+     * error. The release tarball is statically linked, which is precisely why
+     * it is the repair and not just a second source.
+     *
+     * apk is excluded for the reason spelled out against thunderbird in
+     * apk.map: that tarball is a GLIBC build. On musl it would install a binary
+     * that cannot start over one that merely might not - and because the alias
+     * guard is `command -v lsd`, a present-but-dead lsd is worse than none. */
+    if (!osr_lsd_ok() && strcmp(osr_mod_pkg(), "apk") != 0)
+        ok = osr_step("Installing lsd from the release tarball (the packaged one "
+                      "does not run)", build_lsd, NULL) && ok;
 
     ok = osr_step("Installing oh-my-zsh", omz, NULL) && ok;
     for (i = 0; i < sizeof(plugins) / sizeof(plugins[0]); i++) {
