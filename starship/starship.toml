@@ -154,9 +154,14 @@ format = '[$symbol($version )]($style)'
 disabled = false
 
 [c]
+disabled = true
+
+[custom.c]
 symbol = " "
-format = '[$symbol($version(-$name) )]($style)'
+style = 'bold 149'
+format = '[$symbol($output )]($style)'
 detect_extensions =[ "c", "h", "cu" ]
+command = "for c in gcc clang tcc; do command -v $c >/dev/null 2>&1 && $c -v 2>&1 | sed -nE 's/.*(gcc|clang|tcc) version ([0-9.]+).*/v\\2-\\1/p' | head -n 1; done | xargs"
 disabled = false
 
 [custom.c3]
@@ -312,6 +317,14 @@ style = 'bold yellow'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['hc', 'HC']
 command = "hcc --version | sed -n 's/^hcc \\(beta-v[0-9.]\\+\\).*/\\1/p'"
+disabled = false
+
+[custom.make]
+symbol = " "
+style = 'bold yellow'
+format = '[$symbol($output )]($style)'
+detect_files = ['Makefile', 'makefile', 'GNUmakefile']
+command = "make --version | sed -n 's/^GNU Make \\([0-9.]\\+\\).*/v\\1/p'"
 disabled = false
 
 [java]
