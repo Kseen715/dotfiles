@@ -603,6 +603,23 @@ static bool is_chibicc(void) {
     return len == 7 && memcmp(base, "chibicc", 7) == 0;
 }
 
+/* is_faucc -- does $CC name faucc (FAUcc, the FAU machine's C compiler),
+ * with or without a path? faucc emits only 16-bit (i286) or 32-bit (i386)
+ * Intel code -- there is no 64-bit backend -- and its cc1 predates most of
+ * what a modern glibc header does, so it needs its own flag dialect (see
+ * append_common_flags) and its own early warning (see check_cc_detection). */
+static bool is_faucc(void) {
+    const char *prog = cc_prog();
+    const char *base = prog;
+    const char *p;
+    size_t len;
+    for (p = prog; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    len = strlen(base);
+    return len == 5 && memcmp(base, "faucc", 5) == 0;
+}
+
 /* is_pcc -- does $CC name pcc (Portable C Compiler), with or without a path?
  * pcc advertises __GNUC__ but does not understand every glibc attribute: it
  * warns "unsupported attribute `__cold__'" on stdlib.h/stdio.h on every
@@ -628,6 +645,14 @@ static void check_cc_detection(void) {
                 "CC=%s: chibicc cannot compile this tree against glibc/GCC headers "
                 "(no include path to stddef.h; cannot parse GCC's stdarg.h). "
                 "Use tcc, gcc or clang.", cc());
+    }
+    if (is_faucc()) {
+        nob_log(NOB_WARNING,
+                "CC=%s: faucc is 32-bit-only (-b i386) and its cc1 cannot consume "
+                "this host's glibc/GCC headers (no __builtin_bswap*/__builtin_expect, "
+                "no casts in constant expressions). The flags below are faucc-correct, "
+                "but any TU that includes a system header still fails at cc1. "
+                "Use tcc, gcc or clang for a full build.", cc());
     }
     NOB_ASSERT(is_msvc_name("cl"));
     NOB_ASSERT(is_msvc_name("cl.exe"));
@@ -661,6 +686,17 @@ static void append_common_flags(Nob_Cmd *cmd) {
         cmd_append_args(cmd, "/nologo", "/W4", "/O2", NULL);
         cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
         cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
+        return;
+    }
+    if (is_faucc()) {
+        /* faucc rejects every gcc dialect/warning flag we use elsewhere
+         * (-std=c89, -Wall, -Wextra, -pedantic, -Wno-unused-function) and
+         * has no 64-bit backend at all, so the 32-bit one is the only
+         * choice for this tree. -b i386 is the architecture selector
+         * (i286 would be 16-bit); -O level is accepted but ignored by
+         * faucc's own man page. Its cc1 then still fails on any TU that
+         * pulls in a system header -- see check_cc_detection. */
+        cmd_append_args(cmd, "-b", "i386", "-O", "2", NULL);
         return;
     }
     cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2", NULL);
