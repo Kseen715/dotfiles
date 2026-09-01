@@ -36,6 +36,7 @@
 #include "preflight.h"
 #include "reload.h"
 
+#include <fcntl.h>
 #include <glob.h>
 #include <signal.h>
 #include <sys/types.h>
@@ -689,6 +690,18 @@ static void sudo_warmup(void) {
     {
         pid_t parent = getppid();
         char *keep[4];
+        int devnull;
+        /* Off the controlling terminal, for real: the keeper's `sudo` opens
+         * /dev/tty and saves/restores its termios, and doing that while the
+         * run is printing leaves the tty mid-change -- log lines then come
+         * out stair-stepped (LF with no CR). setsid drops the tty, and stdin
+         * goes to /dev/null so sudo cannot reach one anyway. */
+        setsid();
+        devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, 0); dup2(devnull, 1); dup2(devnull, 2);
+            if (devnull > 2) close(devnull);
+        }
         keep[0] = (char *)"sudo"; keep[1] = (char *)"-n"; keep[2] = (char *)"true";
         keep[3] = NULL;
         for (;;) {

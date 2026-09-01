@@ -272,17 +272,40 @@ static void shell_major(Str *out) {
     str_free(&raw);
 }
 
+/* ext_data_home -- "XDG_DATA_HOME=<home>/.local/share", the environment
+ * assignment every gnome-extensions call is made with.
+ *
+ * gnome-extensions unpacks into $XDG_DATA_HOME/gnome-shell/extensions and GNOME
+ * Shell reads ~/.local/share/gnome-shell/extensions, and those are the same
+ * directory only while XDG_DATA_HOME is unset or honest. A snap-confined
+ * terminal is neither: VS Code's snap exports
+ * XDG_DATA_HOME=$HOME/snap/code-insiders/<rev>/.local/share, so an install run
+ * from that terminal unpacks the extension inside the snap, reports success,
+ * and the Shell finds nothing at the next login. Nothing warns -- the
+ * extension is installed, just not where anything looks.
+ *
+ * So the path is derived from the riced account's home (§8) rather than
+ * inherited. That is also the right answer for `sudo osr`, where the ambient
+ * XDG_DATA_HOME would be root's.
+ */
+static void ext_data_home(Str *out) {
+    str_addz(out, "XDG_DATA_HOME=");
+    str_addz(out, osr_mod_home());
+    str_addz(out, "/.local/share");
+}
+
 /* ext_fetch -- the body of the step: ask the API for the build that matches
  * this Shell, download the zip, hand it to gnome-extensions. ctx is the UUID. */
 static int ext_fetch(void *ctx) {
     const char *uuid = (const char *)ctx;
-    Str major, json, url, zip, query;
-    char *argv[5];
+    Str major, json, url, zip, query, data_home;
+    char *argv[7];
     int ok = 0;
 
     str_init(&major); str_init(&json); str_init(&url);
-    str_init(&zip); str_init(&query);
+    str_init(&zip); str_init(&query); str_init(&data_home);
     shell_major(&major);
+    ext_data_home(&data_home);
 
     str_addz(&query, "https://extensions.gnome.org/extension-info/?uuid=");
     str_addz(&query, uuid);
@@ -302,11 +325,13 @@ static int ext_fetch(void *ctx) {
         str_addz(&dl, "https://extensions.gnome.org");
         str_addz(&dl, str_text(&url));
         if (osr_fetch_download(str_text(&dl), zip.p, 0)) {
-            argv[0] = (char *)"gnome-extensions";
-            argv[1] = (char *)"install";
-            argv[2] = (char *)"--force";
-            argv[3] = zip.p;
-            argv[4] = NULL;
+            argv[0] = (char *)"env";
+            argv[1] = (char *)str_text(&data_home);
+            argv[2] = (char *)"gnome-extensions";
+            argv[3] = (char *)"install";
+            argv[4] = (char *)"--force";
+            argv[5] = zip.p;
+            argv[6] = NULL;
             ok = osr_run_user(argv) == 0;
         }
         str_free(&dl);
@@ -316,12 +341,73 @@ static int ext_fetch(void *ctx) {
     }
 
     str_free(&major); str_free(&json); str_free(&url);
-    str_free(&zip); str_free(&query);
+    str_free(&zip); str_free(&query); str_free(&data_home);
     return ok;
 }
 
+/* ext_enable -- put the UUID in org.gnome.shell enabled-extensions, appending
+ * to whatever is already there.
+ *
+ * NOT `gnome-extensions enable`: that verb asks the RUNNING Shell over D-Bus,
+ * and the Shell knows nothing about an extension that was unpacked a second
+ * ago -- it answers "Extension doesn't exist" and enables nothing. The zip
+ * lands, the command fails, and the next login starts a Shell that has the
+ * extension on disk and disabled. The key is the state the Shell reads at
+ * startup, so writing it directly is what actually survives the logout the
+ * user is about to do; a live Shell watches this key too and picks the
+ * extension up once it has rescanned.
+ *
+ * Idempotent, and the list is shared state (SS5): every other extension in it
+ * stays. The quoted UUID is what is searched for, so no uuid can match inside
+ * another. */
+static void ext_enable(const char *uuid) {
+    Str existing, quoted, value;
+    char *argv[6];
+
+    str_init(&existing); str_init(&quoted); str_init(&value);
+    str_addc(&quoted, '\'');
+    str_addz(&quoted, uuid);
+    str_addc(&quoted, '\'');
+
+    argv[0] = (char *)"gsettings";
+    argv[1] = (char *)"get";
+    argv[2] = (char *)"org.gnome.shell";
+    argv[3] = (char *)"enabled-extensions";
+    argv[4] = NULL;
+    (void)osr_run_user_capture(argv, &existing);
+    str_trim_trailing(&existing, '\n');
+
+    if (strstr(str_text(&existing), str_text(&quoted)) != NULL) {
+        osr_infof("  %s already enabled", uuid);
+        str_free(&existing); str_free(&quoted); str_free(&value);
+        return;
+    }
+
+    /* Same append as osr_gnome_keybind's: a "'" in the value is the one
+     * reliable sign there is a list element to keep, because gsettings spells
+     * empty at least three ways ("@as []", "[]", "''"). */
+    if (strchr(str_text(&existing), '\'') != NULL) {
+        size_t len = existing.len;
+        if (len > 0 && str_text(&existing)[len - 1] == ']') len--;
+        str_add(&value, str_text(&existing), len);
+        str_addz(&value, ", ");
+        str_addz(&value, str_text(&quoted));
+        str_addc(&value, ']');
+    } else {
+        str_addc(&value, '[');
+        str_addz(&value, str_text(&quoted));
+        str_addc(&value, ']');
+    }
+
+    argv[1] = (char *)"set";
+    argv[4] = (char *)str_text(&value);
+    argv[5] = NULL;
+    if (osr_run_user(argv) != 0)
+        osr_warnf("%s installed but not enabled - enable it in Extensions", uuid);
+    str_free(&existing); str_free(&quoted); str_free(&value);
+}
+
 int osr_gnome_extension_install(const char *desc, const char *uuid) {
-    char *argv[4];
 
     /* No Shell, no extension host: an extension zip unpacked next to a session
      * that cannot load it is a directory nobody reads. */
@@ -331,12 +417,7 @@ int osr_gnome_extension_install(const char *desc, const char *uuid) {
     }
     if (!osr_step_try(desc, ext_fetch, (void *)uuid)) return 0;
 
-    argv[0] = (char *)"gnome-extensions";
-    argv[1] = (char *)"enable";
-    argv[2] = (char *)uuid;
-    argv[3] = NULL;
-    if (osr_run_user_quiet(argv) != 0)
-        osr_warnf("%s installed but not enabled yet - log out and back in", uuid);
+    ext_enable(uuid);
     return 1;
 }
 
