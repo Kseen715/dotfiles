@@ -199,17 +199,46 @@ int main(void) {
     /* ================================================================
      * 3. Intel -- iris, crocus, amber
      * ================================================================ */
+    /* An Intel iGPU reports its load only through the i915 perf PMU, which an
+     * unprivileged process cannot open -- so the monitors are installed AND
+     * given CAP_PERFMON. Both stubs have to exist for the grant to happen:
+     * osr_setcap is a no-op for a program that is not installed. */
+    osr_sb_stub(&sb, "intel_gpu_top", 0);
+    osr_sb_stub(&sb, "setcap", 0);
+    {
+        /* The hook that reapplies the capability after an upgrade, written into
+         * the sandbox rather than the machine's own /etc/pacman.d/hooks. */
+        HStr hooks;
+        hs_init(&hooks);
+        hs_path(&hooks, hs_text(&sb.root), "pacman-hooks");
+        osr_sb_env(&sb, "OSR_PACMAN_HOOK_DIR", hs_text(&hooks));
+        hs_free(&hooks);
+    }
+
     gpu("Alder Lake-P GT2 [Iris Xe Graphics]", "Intel Corporation");
     installs("vulkan-intel", "modern Intel gets ANV");
     installs("intel-media-driver", "modern Intel gets the iHD VA-API driver");
+    installs("intel-compute-runtime", "modern Intel gets the NEO OpenCL runtime");
+    installs("nvtop", "modern Intel gets a GPU load monitor");
+    installs("setcap cap_perfmon+ep",
+        "and intel_gpu_top may read the PMU without root");
+    osr_assert_tree_is(&sb, "pacman-hooks",
+        "pacman-hooks\n"
+        "pacman-hooks/99-osr-setcap-intel_gpu_top.hook\n",
+        "a package hook reapplies it -- an upgrade of intel-gpu-tools replaces "
+        "the file with one that has no capabilities, and the GPU readout would "
+        "otherwise go away with no error anywhere");
 
     gpu("3rd Gen Core processor Graphics Controller", "Intel Corporation");
     installs("libva-intel-driver", "Ivy Bridge gets the i965 VA-API driver");
+    skips("intel-compute-runtime",
+        "Ivy Bridge does not get NEO -- that OpenCL runtime starts at gen8");
     skips("intel-media-driver",
         "Ivy Bridge does not get iHD -- that driver starts at Broadwell");
 
     gpu("82945G/GZ Integrated Graphics Controller", "Intel Corporation");
     installs("mesa-amber", "gen3 Intel gets mesa-amber");
+    skips("setcap", "gen3 Intel has no engine busy counters to grant access to");
 
     /* ================================================================
      * 4. Virtual GPUs

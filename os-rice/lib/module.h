@@ -166,6 +166,20 @@ int osr_run_user_capture(char *const argv[], Str *out);
 /* osr_have_cmd -- `command -v <name>`. */
 int osr_have_cmd(const char *name);
 
+/* osr_setcap -- put a file capability set on an installed program, e.g.
+ * "cap_perfmon+ep" so it can open a hardware PMU without being root or without
+ * the box loosening kernel.perf_event_paranoid for every process on it.
+ * Best-effort: a program that is not installed, and a filesystem that carries
+ * no xattrs (overlayfs in a container), are both a 0 and neither is fatal.
+ *
+ * File capabilities do not survive the package being upgraded (dpkg and pacman
+ * both replace the file), so a successful grant also installs the apt or pacman
+ * hook that reapplies it -- rather than holding the package at a version, which
+ * would trade the upgrade away for the capability and overrule a piece of state
+ * that is the user's (lib/pkg.c, G2). On a manager with no hook mechanism the
+ * loss is warned about and a module rerun is the fix. */
+int osr_setcap(const char *caps, const char *cmd);
+
 /* --- packages ------------------------------------------------------------- */
 /* osr_pkg_install -- the native half of lib/pkg.sh: resolve each logical name
  * through lib/pkgmap/, skip what is already installed, refresh the index once

@@ -122,6 +122,27 @@ static const FamilyRow INTEL[] = {
     { NULL, NULL }
 };
 
+/* intel_pmu_perms -- make the GPU's load readable without root.
+ *
+ * Intel is the odd vendor out here: NVIDIA reports utilisation through NVML and
+ * AMD through ROCm SMI or amdgpu's gpu_busy_percent in sysfs, both readable by
+ * anyone, while i915 publishes engine busy-time only as a perf PMU. Opening a
+ * PMU event is CPU-wide, so perf_event_open refuses it for an unprivileged
+ * process at the upstream kernel default (perf_event_paranoid = 2) and refuses
+ * it outright at Ubuntu's default of 4 -- which is why intel_gpu_top asks for
+ * root and why btop just says "Failed to initialize PMU" and shows no GPU.
+ *
+ * The two ways out are lowering that sysctl to 0 for every process on the box,
+ * or giving CAP_PERFMON to the handful of programs that read the PMU. This is
+ * the second: narrower, and it leaves the machine's perf policy alone. btop
+ * grants itself the same capability (modules/btop.c) because it is installed
+ * after this module, not before it.
+ *
+ * Intel only: no other vendor's monitor needs a capability at all. */
+static void intel_pmu_perms(void) {
+    (void)osr_setcap("cap_perfmon+ep", "intel_gpu_top");
+}
+
 /* intel_family -- the Intel table's fall-through is "modern", not "Unknown". */
 static const char *intel_family(const char *chip) {
     const char *f = classify(INTEL, chip);
@@ -185,11 +206,13 @@ int osrm_gpu_drivers(void) {
     };
     static const char *const intel_modern[] = {
         "mesa", "lib32-mesa", "mesa-utils", "vulkan-intel", "lib32-vulkan-intel",
-        "intel-media-driver", "libva-utils", "intel-gpu-tools", VK, NULL
+        "intel-media-driver", "libva-utils", "intel-gpu-tools", "nvtop",
+        "intel-compute-runtime", "ocl-icd", "clinfo", VK, NULL
     };
     static const char *const intel_crocus[] = {
         "mesa", "lib32-mesa", "mesa-utils", "vulkan-intel", "lib32-vulkan-intel",
-        "libva-intel-driver", "lib32-libva-intel-driver", "libva-utils", VK, NULL
+        "libva-intel-driver", "lib32-libva-intel-driver", "libva-utils",
+        "intel-gpu-tools", "nvtop", VK, NULL
     };
     static const char *const intel_amber[] = {
         "mesa-amber", "lib32-mesa-amber", "mesa-utils", "xf86-video-intel",
@@ -320,12 +343,14 @@ int osrm_gpu_drivers(void) {
                       chip.len > 0 ? str_text(&chip) : "unknown", fam);
             if (strcmp(fam, "modern") == 0) {
                 ok = osr_pkg_install_step("Installing Intel drivers", intel_modern) && ok;
+                intel_pmu_perms();
             } else if (strcmp(fam, "crocus") == 0) {
                 /* gen6-7.5: crocus for GL, hasvk (shipped in vulkan-intel) for
                  * gen7.5 only, i965 VA-API for video. */
                 osr_warn("pre-Broadwell Intel: Vulkan is hasvk-only (gen7.5) and partial");
                 ok = osr_pkg_install_step("Installing Intel crocus drivers",
                                           intel_crocus) && ok;
+                intel_pmu_perms();
             } else {
                 osr_warn("gen3-5 Intel is mesa-amber only - no Vulkan");
                 ok = osr_pkg_install_step("Installing Intel amber drivers",

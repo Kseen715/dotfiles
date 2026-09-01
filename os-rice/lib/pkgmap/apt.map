@@ -417,6 +417,8 @@ vulkan-intel = mesa-vulkan-drivers
 vulkan-swrast = mesa-vulkan-drivers
 vulkan-virtio = mesa-vulkan-drivers
 opencl-mesa = mesa-opencl-icd
+# Intel's NEO compute runtime: same driver, Debian names it after the ICD.
+intel-compute-runtime = intel-opencl-icd
 ocl-icd = ocl-icd-libopencl1
 libvdpau = libvdpau1
 libvdpau-va-gl = libvdpau-va-gl1

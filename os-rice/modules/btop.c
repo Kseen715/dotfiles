@@ -29,6 +29,22 @@ int osrm_btop(void) {
 
     ok = osr_pkg_install_step("Installing btop", pkgs);
 
+    /* btop's GPU box is vendor-blind everywhere except Intel: NVML and ROCm SMI
+     * hand it NVIDIA and AMD utilisation with no permissions at all, while an
+     * Intel iGPU only publishes engine busy-time through the i915 perf PMU --
+     * a privileged perf_event_open. Without CAP_PERFMON btop logs "Intel GPU:
+     * Failed to initialize PMU" and the card is simply absent from the display,
+     * with no error on screen. Granted here rather than in gpu-drivers because
+     * that module runs before this one, when there is no btop to grant it to.
+     * The capability is dropped when the package is upgraded, so this step is
+     * also what restores it on the next run.
+     *
+     * OSR_GPU_VENDOR is empty when the module is run on its own without
+     * detection in front of it (`osr module run btop`); that skips the grant,
+     * and a full run puts it back. */
+    if (strstr(env_str("OSR_GPU_VENDOR", ""), "Intel") != NULL)
+        (void)osr_setcap("cap_perfmon+ep", "btop");
+
     str_init(&src); str_init(&dst);
     str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/btop/btop.conf");
     str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/btop/btop.conf");

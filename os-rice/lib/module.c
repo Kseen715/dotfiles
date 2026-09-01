@@ -278,6 +278,103 @@ int osr_run_root_quiet_in(char *const argv[], int in_fd) {
 
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
 
+/* persist_cap -- keep a file capability across package upgrades.
+ *
+ * dpkg and pacman REPLACE a program's file rather than editing it, and the
+ * replacement carries no xattrs -- so the capability is gone after the next
+ * upgrade of the package that owns it, silently: btop simply stops showing the
+ * GPU again. Holding the package would also fix that, by never upgrading it,
+ * at the price of never getting a fix for it either -- and a hold is user state
+ * lib/pkg.c deliberately refuses to create or override (G2), so os-rice putting
+ * one in would be the installer overruling the user with its own policy. The
+ * capability is what needs to survive, not the version; a hook reapplies it.
+ *
+ * apt and pacman are the two managers with a drop-in for this. dnf needs a
+ * Python plugin and xbps/apk/portage have no post-transaction hook at all, so
+ * there the loss is reported and a module rerun is the fix. */
+static void persist_cap(const char *caps, const char *setcap, const char *path) {
+    const char *mgr = osr_mod_pkg();
+    const char *base = strrchr(path, '/');
+    Str file, body;
+
+    base = (base != NULL) ? base + 1 : path;
+    str_init(&file); str_init(&body);
+
+    if (strcmp(mgr, "apt") == 0) {
+        str_addz(&file, env_str("OSR_APT_CONF_DIR", "/etc/apt/apt.conf.d"));
+        str_addz(&file, "/99-osr-setcap-");
+        str_addz(&file, base);
+        str_addz(&body, "// managed by os-rice: dpkg drops file capabilities on\n"
+                        "// every unpack, and the program stops working as itself\n"
+                        "// with no error anywhere. Reapplied after each dpkg run.\n"
+                        "DPkg::Post-Invoke { \"test -x ");
+        str_addz(&body, path);
+        str_addz(&body, " && ");
+        str_addz(&body, setcap); str_addc(&body, ' '); str_addz(&body, caps);
+        str_addc(&body, ' '); str_addz(&body, path);
+        str_addz(&body, " || true\"; };\n");
+    } else if (strcmp(mgr, "pacman") == 0) {
+        const char *dir = env_str("OSR_PACMAN_HOOK_DIR", "/etc/pacman.d/hooks");
+        char *argv[4];
+        argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
+        argv[2] = (char *)dir; argv[3] = NULL;
+        (void)osr_run_root_quiet(argv);
+        str_addz(&file, dir); str_addz(&file, "/99-osr-setcap-");
+        str_addz(&file, base); str_addz(&file, ".hook");
+        /* Type = Path, not Package: the target is the FILE whose capability is
+         * being restored, so the hook needs no knowledge of which package ships
+         * it (intel_gpu_top comes from intel-gpu-tools, btop from btop). */
+        str_addz(&body, "# managed by os-rice: pacman replaces the file on upgrade\n"
+                        "# and the replacement carries no capabilities.\n"
+                        "[Trigger]\nOperation = Install\nOperation = Upgrade\n"
+                        "Type = Path\nTarget = ");
+        str_addz(&body, path[0] == '/' ? path + 1 : path);
+        str_addz(&body, "\n\n[Action]\nDescription = Restoring ");
+        str_addz(&body, caps); str_addz(&body, " on "); str_addz(&body, base);
+        str_addz(&body, "\nWhen = PostTransaction\nExec = ");
+        str_addz(&body, setcap); str_addc(&body, ' '); str_addz(&body, caps);
+        str_addc(&body, ' '); str_addz(&body, path); str_addc(&body, '\n');
+    } else {
+        osr_warnf("%s has no package hook here - %s loses %s on its next upgrade, "
+                  "rerun the module to restore it", mgr, base, caps);
+    }
+
+    if (file.len > 0 && !osr_write_root(str_text(&file), str_text(&body)))
+        osr_warnf("could not write %s - %s loses %s on its next upgrade",
+                  str_text(&file), base, caps);
+    str_free(&file); str_free(&body);
+}
+
+/* osr_setcap -- see module.h. setcap itself lives in libcap (libcap2-bin on
+ * Debian), which is not a hard dependency of anything here, so a box without it
+ * is warned about rather than failed: the capability is an optimisation of
+ * permissions, never the thing being installed. */
+int osr_setcap(const char *caps, const char *cmd) {
+    Str path, setcap;
+    char *argv[4];
+    int ok = 0;
+
+    if (!osr_have_cmd(cmd)) return 0;
+    str_init(&path); str_init(&setcap);
+    if (!osr_path_lookup("setcap", &setcap)) {
+        osr_warnf("setcap is missing - %s will not get %s", cmd, caps);
+    } else if (osr_path_lookup(cmd, &path)) {
+        argv[0] = (char *)str_text(&setcap);
+        argv[1] = (char *)caps;
+        argv[2] = (char *)str_text(&path);
+        argv[3] = NULL;
+        ok = osr_run_root_quiet(argv) == 0;
+        if (ok) {
+            osr_infof("%s granted %s", str_text(&path), caps);
+            persist_cap(caps, str_text(&setcap), str_text(&path));
+        } else {
+            osr_warnf("could not grant %s to %s", caps, str_text(&path));
+        }
+    }
+    str_free(&path); str_free(&setcap);
+    return ok;
+}
+
 /* capture -- the shared body of the two capture helpers: run argv, collect its
  * stdout, and either discard stderr or fold it into the same pipe. */
 static int capture(char *const argv[], Str *out, int merge_err) {
