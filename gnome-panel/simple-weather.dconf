@@ -1,0 +1,13 @@
+[/]
+always-packaged-icons=false
+is-activated=true
+locations=['{"name":"Белгород","lat":50.5955595,"lon":36.5873394}']
+main-location-index=int64 0
+my-loc-provider='ipinfo.io'
+panel-box='center'
+panel-offset=50.0
+panel-priority=int64 2
+show-panel-icon=true
+show-refresh-button=false
+show-suntime=false
+symbolic-icons-panel=false
