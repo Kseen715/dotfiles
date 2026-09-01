@@ -19,3 +19,10 @@ height=420
 hide_scroll=true
 insensitive=true
 prompt=search
+
+# Entries whose .desktop declares Actions= (Alacritty's "New", Ghostty's
+# windows) otherwise collapse behind a `>` expander. Not worth it here: wofi
+# ships no default key to open one, its first Right lands on the expander title
+# rather than the list, and the inner GtkListBox keeps a stale row selected
+# after focus leaves. One flat list of primary actions instead.
+no_actions=true

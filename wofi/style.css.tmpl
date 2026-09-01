@@ -14,6 +14,11 @@
 * {
   border: none;
   border-radius: 8px;
+  /* GTK's focus ring is a dashed rectangle that hugs whatever widget owns
+   * focus - on an expanded drun entry that is the expander row itself, not
+   * #entry, so it drew a second box tight around the label. The only ring
+   * this theme wants is the inset one on #entry:selected below. */
+  outline: none;
   min-height: 0;
   font-family: {{mono_font}}, JetBrains Mono, monospace;
   font-size: 14px;
@@ -34,17 +39,14 @@
   border: none;
   border-radius: 12px 12px 0 0;
   padding: 8px 12px;
-  outline: none;
+  /* Adwaita rings a focused GtkEntry with its own stock-blue box-shadow, which
+   * `border: none` does not touch. Clear it and reuse the entry ring instead,
+   * so the focused search bar and the selected entry read as one thing. */
+  box-shadow: none;
 }
 
-/* wofi never clears the GTK focus ring on its own; without these the entry
- * keeps a stock-blue outline that belongs to no palette here. */
-#input:focus,
-#input:focus-visible,
-#input:active {
-  border: none;
-  outline: none;
-  outline-offset: 0px;
+#input:focus {
+  box-shadow: inset 0 0 0 1px @accent;
 }
 
 #scroll #inner-box {
@@ -65,8 +67,13 @@
 #entry:selected {
   color: @accent;
   background-color: @surface;
-  outline-color: @accent;
-  -gtk-outline-radius: 12px;
+  /* GTK paints the focus ring as a dashed square outline and ignores any
+   * radius set on it, so it never matched the entry fill (8px, from *).
+   * Drop the outline and draw the ring as an inset shadow: box-shadow is
+   * clipped by border-radius, so ring and fill share one corner. */
+  outline: none;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px @accent;
 }
 
 #unselected {
