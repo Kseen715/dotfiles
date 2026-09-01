@@ -86,6 +86,7 @@ int osrm_ghostty(void);
 int osrm_git_base(void);
 int osrm_gnome_focus(void);
 int osrm_gnome_overview(void);
+int osrm_gnome_panel(void);
 int osrm_go(void);
 int osrm_gpaste(void);
 int osrm_gpu_drivers(void);
@@ -209,6 +210,7 @@ static const ModuleRow modules[] = {
     { "git-base",        "x11+wayland", 0, MODULE_RUN(osrm_git_base) },
     { "gnome-focus",     "wayland",     0, MODULE_RUN(osrm_gnome_focus) },
     { "gnome-overview",  "x11+wayland", 0, MODULE_RUN(osrm_gnome_overview) },
+    { "gnome-panel",     "x11+wayland", 0, MODULE_RUN(osrm_gnome_panel) },
     { "go",              "x11+wayland", 0, MODULE_RUN(osrm_go) },
     { "gpaste",          "x11+wayland", 0, MODULE_RUN(osrm_gpaste) },
     { "gpu-drivers",     "x11+wayland", 0, MODULE_RUN(osrm_gpu_drivers) },

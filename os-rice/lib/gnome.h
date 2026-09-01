@@ -44,4 +44,18 @@ int osr_gnome_free_binding(const char *binding);
 int osr_gnome_keybind(const char *id, const char *name, const char *binding,
                       const char *command);
 
+/* osr_gnome_extension_install -- install one extensions.gnome.org extension by
+ * UUID for the Shell major this box runs, then enable it. extensions.gnome.org
+ * serves a DIFFERENT zip per Shell major, so the version goes into the query
+ * and there is no version-independent download URL to hardcode.
+ *
+ * Best effort in both halves (§9): the download runs inside a step of its own
+ * that reports and continues rather than ending the install, because a rice
+ * must not die on an unreachable extensions site, and enabling only sticks once
+ * the Shell has loaded the new extension -- on a live session that means a
+ * logout (Wayland) or Alt+F2 r (X11), which is what the warning says. Returns 1
+ * when the extension is now installed on disk.
+ */
+int osr_gnome_extension_install(const char *desc, const char *uuid);
+
 #endif /* OSR_GNOME_H */

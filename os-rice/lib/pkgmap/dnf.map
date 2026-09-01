@@ -67,3 +67,7 @@ thunderbird@40 = source:provide_thunderbird_tarball
 
 # turbostat/perf, Fedora's single package.
 kernel-tools = kernel-tools
+
+# Fedora keeps the GObject typelib Astra Monitor imports in the -devel package;
+# plain libgtop2 is the shared library alone (modules/gnome-panel.c).
+libgtop = libgtop2-devel

@@ -249,6 +249,7 @@ static const char *posix_srcs[] = {
     "modules/git-base.c",
     "modules/gnome-focus.c",
     "modules/gnome-overview.c",
+    "modules/gnome-panel.c",
     "modules/go.c",
     "modules/gpaste.c",
     "modules/gpu-drivers.c",

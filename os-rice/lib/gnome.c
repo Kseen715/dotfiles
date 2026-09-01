@@ -6,10 +6,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "module.h"
 
 #include "cmds.h"
+#include "fetch.h"
 #include "gnome.h"
 
 #define MEDIA_KEYS "org.gnome.settings-daemon.plugins.media-keys"
@@ -247,6 +249,94 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
 
     osr_infof("  %s %s shortcut registered at %s", id, binding, str_text(&path));
     str_free(&path); str_free(&child); str_free(&existing);
+    return 1;
+}
+
+/* --- shell extensions ----------------------------------------------------- */
+
+/* shell_major -- "50" out of `gnome-shell --version`'s "GNOME Shell 50.1". The
+ * extensions API keys its builds on the major and nothing else. */
+static void shell_major(Str *out) {
+    Str raw;
+    char *argv[3];
+    const char *p;
+
+    str_init(&raw);
+    argv[0] = (char *)"gnome-shell";
+    argv[1] = (char *)"--version";
+    argv[2] = NULL;
+    (void)osr_run_capture(argv, &raw);
+    p = str_text(&raw);
+    while (*p != '\0' && (*p < '0' || *p > '9')) p++;
+    while (*p >= '0' && *p <= '9') str_addc(out, *p++);
+    str_free(&raw);
+}
+
+/* ext_fetch -- the body of the step: ask the API for the build that matches
+ * this Shell, download the zip, hand it to gnome-extensions. ctx is the UUID. */
+static int ext_fetch(void *ctx) {
+    const char *uuid = (const char *)ctx;
+    Str major, json, url, zip, query;
+    char *argv[5];
+    int ok = 0;
+
+    str_init(&major); str_init(&json); str_init(&url);
+    str_init(&zip); str_init(&query);
+    shell_major(&major);
+
+    str_addz(&query, "https://extensions.gnome.org/extension-info/?uuid=");
+    str_addz(&query, uuid);
+    str_addz(&query, "&shell_version=");
+    str_addz(&query, str_text(&major));
+
+    str_addz(&zip, env_str("TMPDIR", "/tmp"));
+    str_addc(&zip, '/');
+    str_addz(&zip, uuid);
+    str_addz(&zip, ".zip");
+
+    if (osr_fetch_buffer(&json, str_text(&query)) &&
+        osr_json_string_field(&url, str_text(&json), "download_url") &&
+        url.len > 0) {
+        Str dl;
+        str_init(&dl);
+        str_addz(&dl, "https://extensions.gnome.org");
+        str_addz(&dl, str_text(&url));
+        if (osr_fetch_download(str_text(&dl), zip.p, 0)) {
+            argv[0] = (char *)"gnome-extensions";
+            argv[1] = (char *)"install";
+            argv[2] = (char *)"--force";
+            argv[3] = zip.p;
+            argv[4] = NULL;
+            ok = osr_run_user(argv) == 0;
+        }
+        str_free(&dl);
+        (void)unlink(str_text(&zip));
+    } else {
+        osr_warnf("no build of %s for GNOME %s", uuid, str_text(&major));
+    }
+
+    str_free(&major); str_free(&json); str_free(&url);
+    str_free(&zip); str_free(&query);
+    return ok;
+}
+
+int osr_gnome_extension_install(const char *desc, const char *uuid) {
+    char *argv[4];
+
+    /* No Shell, no extension host: an extension zip unpacked next to a session
+     * that cannot load it is a directory nobody reads. */
+    if (!osr_have_cmd("gnome-shell")) {
+        osr_warnf("gnome-shell not found - skipping %s", uuid);
+        return 0;
+    }
+    if (!osr_step_try(desc, ext_fetch, (void *)uuid)) return 0;
+
+    argv[0] = (char *)"gnome-extensions";
+    argv[1] = (char *)"enable";
+    argv[2] = (char *)uuid;
+    argv[3] = NULL;
+    if (osr_run_user_quiet(argv) != 0)
+        osr_warnf("%s installed but not enabled yet - log out and back in", uuid);
     return 1;
 }
 

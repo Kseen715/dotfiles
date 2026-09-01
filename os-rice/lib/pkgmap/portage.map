@@ -20,3 +20,7 @@ kernel-tools = sys-power/cpupower dev-util/perf
 
 # TinyCC is dev-lang/tcc; the bare name does not resolve to an atom.
 tcc = dev-lang/tcc
+
+# Panel sensors (modules/gnome-panel.c): neither bare name resolves to an atom.
+lm_sensors = sys-apps/lm-sensors
+libgtop = gnome-base/libgtop

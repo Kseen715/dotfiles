@@ -321,6 +321,50 @@ int main(void) {
     db_holds(MK " custom-keybindings ['" MK_PATH "custom0/', '" MK_PATH "cliphist/']",
         "cliphist: a shortcut somebody else registered is preserved (SS5)");
 
+    /* ================================================================
+     * 4. gnome-panel -- the GNOME top bar as a status bar
+     *
+     * Two halves with different failure modes. The clock detail is gsettings
+     * and lands here; the extensions need a Shell and the network, and this
+     * sandbox has neither -- which is the case worth pinning, because a module
+     * that gave up on the whole panel when extensions.gnome.org is unreachable
+     * would silently leave the clock alone too.
+     * ================================================================ */
+    osr_sb_env(&sb, "OSR_PKG", "apt");
+    osr_sb_env(&sb, "OSR_DISTRO", "ubuntu");
+    fresh();
+    on_desktop("i3", "i3");
+    run_module("gnome-panel");
+    db_empty("gnome-panel: no interface key is written off GNOME");
+    osr_assert_true(strstr(osr_sb_capture_both(&sb), "Astra Monitor") == NULL,
+        "gnome-panel: no extension is even attempted off GNOME -- there is no "
+        "Shell there to load one");
+
+    fresh();
+    on_desktop("ubuntu:GNOME", "gnome");
+    run_module("gnome-panel");
+    db_holds("org.gnome.desktop.interface clock-show-seconds true",
+        "gnome-panel: the clock shows seconds -- the reason to watch a bar "
+        "clock rather than ask the system");
+    db_holds("org.gnome.desktop.interface clock-show-weekday true",
+        "gnome-panel: and the weekday");
+    db_holds("org.gnome.desktop.interface clock-show-date true",
+        "gnome-panel: and the date");
+    osr_assert_log(&sb, "apt-get install",
+        "gnome-panel: lm_sensors/libgtop are installed -- without them the "
+        "temperature and per-process modules have nothing to read");
+    osr_assert_true(
+        strstr(osr_sb_capture_both(&sb), "gnome-shell not found") != NULL,
+        "gnome-panel: a box with no Shell binary reports the skipped extension "
+        "instead of downloading a zip nothing will load");
+
+    {
+        int before = db_lines();
+        run_module("gnome-panel");
+        osr_assert_true(db_lines() == before,
+            "gnome-panel: a rerun writes no second value (SS2)");
+    }
+
     hs_free(&p);
     osr_sb_free(&sb);
     return osr_finish();

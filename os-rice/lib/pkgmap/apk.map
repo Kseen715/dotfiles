@@ -52,3 +52,6 @@ kernel-tools = perf
 # (tcc-libs-static), and musl's headers live in musl-dev - the bare `tcc`
 # package alone compiles nothing.
 tcc = tcc tcc-libs-static musl-dev
+
+# Alpine hyphenates the sensors package (modules/gnome-panel.c).
+lm_sensors = lm-sensors

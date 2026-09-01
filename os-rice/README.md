@@ -242,7 +242,7 @@ use the static output.
 ## Writing a module
 
 A module installs one thing: a C translation unit `modules/<name>.c`,
-registered in `lib/modules.c`. All 120 are C. A `modules/<name>.sh` still runs
+registered in `lib/modules.c`. All are C. A `modules/<name>.sh` still runs
 if one appears — a rice never says which tier it wanted — but it gets no
 os-rice verbs, because those are C functions now. See
 [[os-rice/DESIGN#11a. Every `.sh` module is legacy|DESIGN 11a]] and

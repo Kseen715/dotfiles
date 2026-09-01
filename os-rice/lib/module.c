@@ -339,6 +339,30 @@ int osr_run_user_capture(char *const argv[], Str *out) {
     return ok;
 }
 
+/* detach_stdin -- a step whose output is CAPTURED must not keep the terminal on
+ * stdin. The step child's stdout and stderr are the step log, so it can never
+ * be interactive; what stdin still buys it is a way to hang. apt is the case
+ * that proved it: `sudo` on Ubuntu 26.04 is sudo-rs, which runs the command in
+ * a session and pty of its own, and apt's terminal handoff to dpkg across that
+ * boundary lands the pre-configure fork in state T (stopped, no tracer) with
+ * apt waiting on it forever -- an install that never finishes and never fails.
+ * With stdin on /dev/null there is no terminal to hand over and the same
+ * install completes. `-y`, DEBIAN_FRONTEND=noninteractive and Dpkg::Use-Pty=0
+ * do NOT cover this; they answer questions, and nothing was being asked.
+ *
+ * Only on the captured path: off a TTY / under --verbose (osr_ui_live() == 0)
+ * output is streamed and a step may legitimately be interactive -- a source
+ * build's sudo password prompt is read there. sudo itself reads /dev/tty
+ * rather than stdin, so its prompt still works on this path too.
+ */
+static void detach_stdin(void) {
+    int null_fd = open("/dev/null", O_RDONLY);
+    if (null_fd >= 0) {
+        dup2(null_fd, 0);
+        if (null_fd > 2) close(null_fd);
+    }
+}
+
 /* osr_run_step -- run_step, with a real command in the middle. The paint loop
  * is lib/ui.c's, driven here the way lib/ui.sh drives it: the command's output
  * goes to a per-step log, the block repaints while it runs, and the whole
@@ -377,6 +401,7 @@ int osr_run_step(const char *desc, char *const argv[]) {
         return 0;
     }
     if (pid == 0) {
+        detach_stdin();
         dup2(fd, 1);
         dup2(fd, 2);
         close(fd);
@@ -471,6 +496,7 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
         return 0;
     }
     if (pid == 0) {
+        detach_stdin();
         dup2(fd, 1);
         dup2(fd, 2);
         close(fd);

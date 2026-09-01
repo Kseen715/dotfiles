@@ -440,3 +440,8 @@ lib32-vulkan-intel =
 lib32-vulkan-virtio =
 lib32-libvdpau =
 lib32-libva-intel-driver =
+
+# libgtop is the per-process accounting library Astra Monitor reads through GJS
+# (modules/gnome-panel.c); what the extension imports is the typelib, which
+# Debian ships in the GIR package rather than in the shared library one.
+libgtop = gir1.2-gtop-2.0
