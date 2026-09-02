@@ -235,6 +235,7 @@ static const char *lib_srcs[] = {
      * system it builds for. */
     "modules/fastfetch.c",
     "modules/wezterm.c",
+    "modules/starship.c",
 #endif
 };
 #define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
@@ -386,7 +387,6 @@ static const char *posix_srcs[] = {
     "modules/rust.c",
     "modules/sddm.c",
     "modules/serie.c",
-    "modules/starship.c",
     "modules/steam.c",
     "modules/swap.c",
     "modules/swaylock.c",
@@ -423,6 +423,7 @@ static const char *posix_srcs[] = {
      * one, and only one of them is ever in a binary. */
     "modules/fastfetch.c",
     "modules/wezterm.c",
+    "modules/starship.c",
 #endif
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))

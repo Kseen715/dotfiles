@@ -153,15 +153,24 @@ symbol = " "
 format = '[$symbol($version )]($style)'
 disabled = false
 
+# Superseded by [custom.c] below.
 [c]
 disabled = true
 
+# C compilers. `ccver` (starship/ccver.c in this repo, built into ~/.local/bin)
+# lists EVERY compiler on PATH -- "v15.2.0-gcc v20.1.0-clang" -- which the
+# built-in [c] module cannot do: it reports only the first one it finds. It is
+# a compiled helper rather than a shell one-liner because starship runs custom
+# commands through `sh -c` on unix but `cmd /C` on Windows, so one one-liner
+# cannot serve both (the old `for c in gcc clang tcc; do ... sed ...` silently
+# produced nothing on Windows). Pass names to override the probe list, e.g.
+# `ccver gcc clang tcc cc`.
 [custom.c]
 symbol = " "
 style = 'bold 149'
 format = '[$symbol($output )]($style)'
-detect_extensions =[ "c", "h", "cu" ]
-command = "for c in gcc clang tcc; do command -v $c >/dev/null 2>&1 && $c -v 2>&1 | sed -nE 's/.*(gcc|clang|tcc) version ([0-9.]+).*/v\\2-\\1/p' | head -n 1; done | xargs"
+detect_extensions = ['c', 'h', 'cu']
+command = "ccver"
 disabled = false
 
 [custom.c3]

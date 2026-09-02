@@ -60,6 +60,11 @@ int osrm_pwsh(const char *repo_root, const char *themes_root, const char *map_pa
               const char *theme, int theme_only);
 int osrm_oh_my_posh(const char *repo_root, const char *themes_root, const char *map_path,
                     const char *theme, int theme_only);
+/* Starship has no row in modules.c's dispatch table on this side: the prompt
+ * engine is installed as part of the oh-my-posh module, which is what calls
+ * this. Its POSIX branch is a registry row of its own. */
+int osrm_starship(const char *repo_root, const char *themes_root, const char *map_path,
+                  const char *theme, int theme_only);
 
 /* The win- group -- OS-level passes over a Windows machine rather than
  * app modules: no package, no font, no config file, and so no theme layer
