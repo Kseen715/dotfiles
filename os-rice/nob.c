@@ -775,13 +775,35 @@ static void check_cc_detection(void) {
     }
 }
 
+/* unoptimized_src -- sources built at -O0 on purpose.
+ *
+ * Only one so far: lib/yaml.c is the vendored parser's 13k-line
+ * implementation, and it is the most expensive unit in the tree to
+ * optimize -- gcc -O2 spends about 3.4s on it, more than three times the
+ * next-slowest file, where -O0 costs 0.7s. What that buys is throughput
+ * inside a YAML parser reading configuration files of a few kilobytes,
+ * which is not a cost this tool can measure. Move it back if a profile ever
+ * disagrees.
+ *
+ * The dialects that ignore -O flags anyway (lcc invokes its compiler bare,
+ * faucc documents -O as accepted-and-ignored) are unaffected either way.
+ */
+static bool unoptimized_src(const char *src) {
+    return strcmp(src, "lib/yaml.c") == 0;
+}
+
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
  * this script produces is built with, in whichever dialect $CC speaks. XP
  * floor: see PLAN_UNIVERSAL.md's toolchain matrix -- checked today against
  * an ordinary current mingw-w64; the pinned XP toolchain itself is still
  * long-away-planned (Task 0.1).
  */
-static void append_common_flags(Nob_Cmd *cmd) {
+static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
+    /* -O0 rather than -O2 for one file, and emitted in place of it rather
+     * than after it: "the last -O wins" is how gcc, clang and tcc behave,
+     * but it is not a rule every compiler follows, and a line carrying both
+     * levels is ambiguous to read besides. See unoptimized_src. */
+    bool o0 = src && unoptimized_src(src);
     append_cc(cmd);
     if (is_msvc()) {
         /* No /std: equivalent to -std=c89 -- MSVC's C mode is already C89
@@ -789,7 +811,7 @@ static void append_common_flags(Nob_Cmd *cmd) {
          * /wd4505 is -Wno-unused-function; the CRT one silences the
          * fopen/getenv "deprecation" that C89 code cannot avoid. cl only
          * ever targets Windows, so the XP defines are unconditional here. */
-        cmd_append_args(cmd, "/nologo", "/W4", "/O2", NULL);
+        cmd_append_args(cmd, "/nologo", "/W4", o0 ? "/Od" : "/O2", NULL);
         cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
         cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
         return;
@@ -814,7 +836,8 @@ static void append_common_flags(Nob_Cmd *cmd) {
          * invoked bare -- append_cc(cmd) above already put it on the line. */
         return;
     }
-    cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2", NULL);
+    cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic",
+                    o0 ? "-O0" : "-O2", NULL);
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
     nob_cmd_append(cmd, "-Wno-unused-function");
@@ -824,25 +847,9 @@ static void append_common_flags(Nob_Cmd *cmd) {
 #endif
 }
 
-/* append_src_flags -- the few per-file departures from those flags.
- *
- * Only one so far: lib/yaml.c is the vendored parser's 13k-line
- * implementation, and it is the most expensive unit in the tree to optimise
- * -- gcc -O2 spends about 3.4s on it, more than three times the next-slowest
- * file and about a third of a clean build, where -O0 costs 0.7s. What that
- * buys is throughput inside a YAML parser reading configuration files of a
- * few kilobytes, which is not a cost this tool can measure. So it is built
- * unoptimised on purpose; move it back if a profile ever disagrees.
- *
- * The dialects that ignore -O flags entirely (lcc invokes its compiler bare,
- * faucc documents -O as accepted-and-ignored) are left alone -- an
- * unrecognized option before -c is a linker input to lcc's driver.
- */
-static void append_src_flags(Nob_Cmd *cmd, const char *src) {
-    if (strcmp(src, "lib/yaml.c") != 0) return;
-    if (is_lcc() || is_faucc()) return;
-    /* last -O on the line wins, in both dialects. */
-    nob_cmd_append(cmd, is_msvc() ? "/Od" : "-O0");
+
+static void append_common_flags(Nob_Cmd *cmd) {
+    append_common_flags_for(cmd, NULL);
 }
 
 /* BIN -- a program's path in the build directory, with the host's suffix:
@@ -1119,8 +1126,7 @@ static bool compile_objs(const char **srcs, size_t count) {
     for (i = 0; i < count; i++) {
         if (!needs_compile(srcs[i])) continue;
         actions++;
-        append_common_flags(&cmd);
-        append_src_flags(&cmd, srcs[i]);
+        append_common_flags_for(&cmd, srcs[i]);
         if (dep_flag()) cmd_append_args(&cmd, dep_flag(), "-MF", dep_of(srcs[i]), NULL);
         if (is_msvc()) {
             /* /Fo takes its path glued on, no separate argument. The .o
