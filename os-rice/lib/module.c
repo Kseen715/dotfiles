@@ -1,17 +1,29 @@
-/* lib/module.c -- the implementation of lib/module.h, the API a Linux module
- * written in C is allowed to use.
+/* lib/module.c -- the implementation of lib/module.h, the API a module written
+ * in C is allowed to use, on either operating system.
  *
- * Everything here is the C form of something a .sh module called: run_step,
- * pkg_install, enable_service, as_root/as_user, backup_copy, ensure_line. The
- * sh versions stay where they are (lib/pkg.sh, lib/service.sh, lib/config.sh)
- * because ~118 shell modules still call them; these are the same behaviors
- * for the modules that have moved to C.
+ * ONE FILE, TWO BODIES. Everything here is the C form of something a .sh
+ * module called -- run_step, enable_service, as_root/as_user, backup_copy,
+ * ensure_line -- and the two systems answer several of those differently
+ * enough that they are written out separately below rather than threaded
+ * through with #ifdefs line by line. What they are NOT is two headers or two
+ * module trees: a module is modules/<name>.c exporting osrm_<name>(void), and
+ * which of the two bodies below it links against is nob.c's decision, not
+ * the module's.
  *
- * Packages are no longer here: they moved to lib/pkg.c when they grew the
- * provider methods (script:, cargo:, aur:), which is a whole unit's worth.
+ * Read the POSIX body for the design; the Windows one is written against it,
+ * and its header comment lists the four places the two genuinely diverge
+ * (privilege is per process rather than per command; there is no fork; a
+ * command is a line rather than a vector; the package half lives in
+ * lib/pkg.c on both sides).
  *
- * C89 + POSIX.
+ * Packages are not here on either side: they moved to lib/pkg.c when they
+ * grew the provider methods (script:, cargo:, aur:, source: -- and, on
+ * Windows, scoop:/choco:/winget:), which is a whole unit's worth.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
+
 #define _XOPEN_SOURCE 700
 
 #include "common.h"
@@ -38,51 +50,11 @@ const char *osr_mod_pkg(void)       { return env_str("OSR_PKG", ""); }
 const char *osr_mod_distro(void)    { return env_str("OSR_DISTRO", ""); }
 const char *osr_mod_init(void)      { return env_str("OSR_INIT", ""); }
 
-/* --- saying things -------------------------------------------------------- */
-
-static void say(void (*emit)(const char *), const char *fmt, va_list ap) {
-    char buf[2048];
-    vsprintf(buf, fmt, ap);
-    emit(buf);
-}
-
-void osr_infof(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    say(osr_info, fmt, ap);
-    va_end(ap);
-}
-
-void osr_debugf(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    say(osr_debug_line, fmt, ap);
-    va_end(ap);
-}
-
-void osr_warnf(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    say(osr_warn, fmt, ap);
-    va_end(ap);
-}
-
-void osr_successf(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    say(osr_success_line, fmt, ap);
-    va_end(ap);
-}
-
-/* osr_die -- lib/log.sh's error(): print, then end the run. In sh only the
- * shell could do the exit; here the module IS the process. */
-void osr_die(const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    say(osr_error_line, fmt, ap);
-    va_end(ap);
-    exit(1);
-}
+/* --- saying things --------------------------------------------------------
+ * osr_infof and its four siblings are lib/common.c's now: both cores print
+ * through them, so they belong with the line shape they use rather than in
+ * the POSIX module runtime. See lib/common.h.
+ * ------------------------------------------------------------------------- */
 
 /* --- running things ------------------------------------------------------- */
 
@@ -884,3 +856,541 @@ int osr_ensure_line(const char *file, const char *line) {
     if (present) return 1;
     return append_as_user(file, line);
 }
+
+#else /* _WIN32 */
+
+/* --- the Windows body ------------------------------------------------------
+ *
+ * Four differences are worth knowing before reading it, because they are why
+ * some of these bodies are much shorter than their POSIX twins:
+ *
+ * PRIVILEGE IS PER PROCESS, NOT PER COMMAND. There is no sudo. A run that
+ * needs Administrator elevates itself once, up front (lib/elevate.h relaunches
+ * the whole process under the `runas` verb), and everything after that point
+ * is already elevated. So as_root and as_user -- osr_run_root, osr_run_user
+ * and their quiet/capturing variants -- are all the same act here: run it as
+ * whoever we are. They stay distinct FUNCTIONS because the module calling them
+ * still means two different things, and because the profile a config lands in
+ * is a separate question that osr_mod_home answers (an elevated child is told
+ * the riced user's home through --user-home; see elevate.h).
+ *
+ * THERE IS NO FORK. osr_step's POSIX body runs the callback in a forked child
+ * so its output can be captured into the live window; here it is called
+ * directly, with its description printed first. A step is still a step in the
+ * log; it just is not isolated from the process that ran it.
+ *
+ * A COMMAND IS A LINE, NOT A VECTOR. CreateProcess takes one command line and
+ * the callee re-splits it, so every argv a module hands over is joined and
+ * quoted here (win_cmdline). That is the one lossy step in this body, and it
+ * is why the quoting rule is spelled out at that function rather than assumed.
+ *
+ * THERE IS ONE INIT SYSTEM. osr_service_enable drives the SCM through sc.exe
+ * and lib/servicemap/ carries no Windows file, because a Windows service's
+ * name IS the name you use -- the problem servicemap exists to solve does not
+ * arise.
+ * ------------------------------------------------------------------------- */
+
+#include "common.h"
+#include "module.h"
+#include "ui.h"
+#include "render.h"
+#include "elevate.h"
+
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <direct.h>
+#include <fcntl.h>
+#include <io.h>
+#include <process.h>
+
+/* --- what the module was given --------------------------------------------
+ *
+ * Read out of the environment, exactly as the POSIX body reads them, so a
+ * module sees one contract. `osr detect` (lib/windetect.c) is what puts them
+ * there, and osr.c's startup resolves OSR_ROOT/OSR_DOTFILES from the
+ * executable's own location when nothing else has.
+ * ------------------------------------------------------------------------- */
+const char *osr_mod_root(void)      { return env_str("OSR_ROOT", "."); }
+const char *osr_mod_dotfiles(void)  { return env_str("OSR_DOTFILES", ".."); }
+const char *osr_mod_user(void)      { return env_str("OSR_USER", env_str("USERNAME", "")); }
+const char *osr_mod_home(void)      { return env_str("OSR_HOME", env_str("USERPROFILE", "")); }
+const char *osr_mod_theme(void)     { return env_str("OSR_THEME", ""); }
+const char *osr_mod_theme_dir(void) { return env_str("OSR_THEME_DIR", ""); }
+const char *osr_mod_pkg(void)       { return env_str("OSR_PKG", "windows"); }
+const char *osr_mod_distro(void)    { return env_str("OSR_DISTRO", "windows"); }
+/* There is exactly one service manager here, and it has been the same one
+ * since NT: the SCM, driven through sc.exe. lib/servicemap/ has no Windows
+ * file for the same reason -- nothing to choose between. */
+const char *osr_mod_init(void)      { return env_str("OSR_INIT", "scm"); }
+
+/* --- theme-only mode -------------------------------------------------------
+ * The section 6a flag, and the same enumerated list the POSIX side keeps: the
+ * mutating verbs below check it and become logging no-ops, so what survives a
+ * `--theme-only` run is the file copying, which is what a theme is.
+ * ------------------------------------------------------------------------- */
+static int theme_only = 0;
+
+int osr_theme_only(void) { return theme_only; }
+void osr_set_theme_only(int on) { theme_only = on ? 1 : 0; }
+
+int osr_theme_only_skip(const char *verb) {
+    osr_debugf("theme-only: skipping %s", verb);
+    return 1;
+}
+
+/* --- composing a command line ---------------------------------------------- */
+
+/* win_cmdline -- join argv into the single command line CreateProcess and the
+ * C runtime's spawn family take.
+ *
+ * An argument is quoted when it contains a space, a tab or a quote, and an
+ * embedded quote is doubled -- which is what cmd.exe and the CRT's own
+ * argument parser agree on for the cases this tree produces (paths, package
+ * ids, flags). It is deliberately not a general Win32 quoting routine: the
+ * backslash-before-quote rule only matters for arguments ending in a
+ * backslash inside quotes, and a path that has to survive that is passed
+ * through a file, not a command line.
+ *
+ * Returns 0 (leaving out empty) if the result would not fit, because a
+ * truncated command line is a different command.
+ */
+static int win_cmdline(char *out, unsigned long out_sz, char *const argv[]) {
+    unsigned long len = 0;
+    int i;
+
+    if (out_sz == 0) return 0;
+    out[0] = '\0';
+
+    for (i = 0; argv[i] != NULL; i++) {
+        const char *a = argv[i];
+        int needs_quote = (*a == '\0') || strpbrk(a, " \t\"") != NULL;
+        const char *p;
+
+        if (i > 0) {
+            if (len + 1 >= out_sz) { out[0] = '\0'; return 0; }
+            out[len++] = ' ';
+        }
+        if (needs_quote) {
+            if (len + 1 >= out_sz) { out[0] = '\0'; return 0; }
+            out[len++] = '"';
+        }
+        for (p = a; *p != '\0'; p++) {
+            if (*p == '"') {
+                if (len + 1 >= out_sz) { out[0] = '\0'; return 0; }
+                out[len++] = '"';
+            }
+            if (len + 1 >= out_sz) { out[0] = '\0'; return 0; }
+            out[len++] = *p;
+        }
+        if (needs_quote) {
+            if (len + 1 >= out_sz) { out[0] = '\0'; return 0; }
+            out[len++] = '"';
+        }
+    }
+    out[len] = '\0';
+    return 1;
+}
+
+#define OSR_WIN_CMD_MAX 4096
+
+/* --- running things --------------------------------------------------------
+ *
+ * osr_run is the base: spawn argv, wait, hand back its exit status. Every
+ * other runner here is that plus a redirection, and the as_root/as_user pairs
+ * are that unchanged -- see this file's header on why.
+ * ------------------------------------------------------------------------- */
+
+/* spawn_redirected -- run argv with stdin/stdout/stderr optionally pointed
+ * somewhere else. Each of in_fd/out_fd/err_fd is a descriptor to use, or -1
+ * to leave that stream alone. The saved descriptors are restored before
+ * returning, so a caller's own streams survive.
+ */
+static int spawn_redirected(char *const argv[], int in_fd, int out_fd, int err_fd) {
+    int saved[3];
+    int wants[3];
+    intptr_t rc;
+    int i;
+
+    wants[0] = in_fd; wants[1] = out_fd; wants[2] = err_fd;
+
+    fflush(stdout);
+    fflush(stderr);
+
+    for (i = 0; i < 3; i++) {
+        saved[i] = -1;
+        if (wants[i] < 0) continue;
+        saved[i] = _dup(i);
+        _dup2(wants[i], i);
+    }
+
+    rc = _spawnvp(_P_WAIT, argv[0], (const char *const *)argv);
+
+    for (i = 0; i < 3; i++) {
+        if (saved[i] < 0) continue;
+        _dup2(saved[i], i);
+        _close(saved[i]);
+    }
+
+    return (rc < 0) ? 127 : (int)rc;
+}
+
+/* devnull -- an open descriptor on NUL, or -1. The caller closes it. */
+static int devnull(void) { return _open("NUL", _O_WRONLY); }
+
+int osr_run(char *const argv[]) { return spawn_redirected(argv, -1, -1, -1); }
+
+/* as_root / as_user: the same thing here. Kept as separate entry points
+ * because a module still means two different things by them, and because
+ * that is what makes a module one file across both systems. */
+int osr_run_root(char *const argv[]) { return osr_run(argv); }
+int osr_run_user(char *const argv[]) { return osr_run(argv); }
+
+static int run_quiet_as(char *const argv[]) {
+    int null_fd = devnull();
+    int rc = spawn_redirected(argv, -1, null_fd, null_fd);
+    if (null_fd >= 0) _close(null_fd);
+    return rc;
+}
+
+int osr_run_root_quiet(char *const argv[]) { return run_quiet_as(argv); }
+int osr_run_user_quiet(char *const argv[]) { return run_quiet_as(argv); }
+
+int osr_run_user_in(char *const argv[], int in_fd) {
+    return spawn_redirected(argv, in_fd, -1, -1);
+}
+
+int osr_run_root_in(char *const argv[], int in_fd) {
+    return spawn_redirected(argv, in_fd, -1, -1);
+}
+
+static int run_quiet_in(char *const argv[], int in_fd) {
+    int null_fd = devnull();
+    int rc = spawn_redirected(argv, in_fd, null_fd, -1);
+    if (null_fd >= 0) _close(null_fd);
+    return rc;
+}
+
+int osr_run_user_quiet_in(char *const argv[], int in_fd) { return run_quiet_in(argv, in_fd); }
+int osr_run_root_quiet_in(char *const argv[], int in_fd) { return run_quiet_in(argv, in_fd); }
+
+int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
+
+/* osr_setcap -- POSIX file capabilities have no Windows equivalent: a
+ * privilege here belongs to a token, not to a file, so there is nothing to
+ * grant. Best-effort by contract on both sides (lib/module.h), so this is a
+ * quiet 0 rather than a warning on every run of a module that asks. */
+int osr_setcap(const char *caps, const char *cmd) {
+    (void)caps;
+    osr_debugf("setcap: not a Windows concept, %s left as installed", cmd);
+    return 0;
+}
+
+/* --- capturing output ------------------------------------------------------
+ *
+ * _popen rather than a pipe assembled by hand: the command has already been
+ * joined into a line by the time it gets here, and _popen is what runs a line
+ * and gives back a stream.
+ * ------------------------------------------------------------------------- */
+static int capture(char *const argv[], Str *out, int merge_err) {
+    char cmd[OSR_WIN_CMD_MAX];
+    char buf[512];
+    FILE *fp;
+    int rc;
+
+    if (!win_cmdline(cmd, sizeof(cmd), argv)) return 0;
+    if (merge_err) {
+        if (strlen(cmd) + 6 >= sizeof(cmd)) return 0;
+        strcat(cmd, " 2>&1");
+    } else {
+        if (strlen(cmd) + 9 >= sizeof(cmd)) return 0;
+        strcat(cmd, " 2>NUL");
+    }
+
+    fp = _popen(cmd, "r");
+    if (fp == NULL) return 0;
+    while (fgets(buf, (int)sizeof(buf), fp) != NULL) str_addz(out, buf);
+    rc = _pclose(fp);
+    return rc == 0;
+}
+
+int osr_run_capture(char *const argv[], Str *out)      { return capture(argv, out, 0); }
+int osr_run_capture_err(char *const argv[], Str *out)  { return capture(argv, out, 1); }
+int osr_run_root_capture(char *const argv[], Str *out) { return capture(argv, out, 1); }
+int osr_run_user_capture(char *const argv[], Str *out) { return capture(argv, out, 0); }
+
+/* --- steps -----------------------------------------------------------------
+ *
+ * osr_run_step keeps the sh run_step's fatality, which lib/module.h documents
+ * as part of the contract: a module must not limp on past a mutation that only
+ * half applied. osr_run_step_cmd (lib/winui.h) does NOT end the run, because
+ * its own callers -- the package dispatch, the builders -- report and carry
+ * on; the difference between the two is exactly this function.
+ * ------------------------------------------------------------------------- */
+int osr_run_step(const char *desc, char *const argv[]) {
+    char cmd[OSR_WIN_CMD_MAX];
+
+    if (!win_cmdline(cmd, sizeof(cmd), argv)) osr_die("%s failed (command line too long)", desc);
+    if (osr_run_step_cmd(desc, cmd) != 0) osr_die("%s failed", desc);
+    return 1;
+}
+
+int osr_run_step_root(const char *desc, char *const argv[]) { return osr_run_step(desc, argv); }
+int osr_run_step_user(const char *desc, char *const argv[]) { return osr_run_step(desc, argv); }
+
+/* osr_step -- the live window around a function of this program. With no fork
+ * to isolate it in, the callback runs here and its output goes straight to the
+ * log; the step is still announced and still fatal on failure, which is what
+ * its callers depend on. */
+int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
+    osr_infof("%s", desc);
+    if (!fn(ctx)) osr_die("%s failed", desc);
+    return 1;
+}
+
+/* osr_step_try -- the same, non-fatal: the shape that exists for an OPTIONAL
+ * package only some machines carry. */
+int osr_step_try(const char *desc, int (*fn)(void *ctx), void *ctx) {
+    osr_infof("%s", desc);
+    if (!fn(ctx)) {
+        osr_warnf("%s failed -- continuing", desc);
+        return 0;
+    }
+    return 1;
+}
+
+/* --- files -----------------------------------------------------------------
+ *
+ * Every write here is a plain write. The POSIX bodies route theirs through
+ * `sudo -u` or `sudo tee` because the installer may be running as a different
+ * account than the one being riced; the Windows equivalent of that split is
+ * the profile a path resolves in (osr_mod_home, fed by --user-home across an
+ * elevation boundary), not the identity of the writing call.
+ * ------------------------------------------------------------------------- */
+
+/* dir_of -- the directory part of a path, either separator. */
+static void dir_of(Str *out, const char *path) {
+    const char *fwd = strrchr(path, '/');
+    const char *back = strrchr(path, '\\');
+    const char *slash = fwd;
+
+    if (back != NULL && (slash == NULL || back > slash)) slash = back;
+    str_reset(out);
+    if (slash == NULL) str_addc(out, '.');
+    else str_add(out, path, (size_t)(slash - path));
+}
+
+int osr_mkdir_p(const char *dir) {
+    Str part;
+    const char *p;
+    int ok = 1;
+
+    if (dir == NULL || *dir == '\0') return 0;
+
+    str_init(&part);
+    for (p = dir; ; p++) {
+        if (*p == '/' || *p == '\\' || *p == '\0') {
+            /* Skip a bare drive letter ("C:") and the leading component of a
+             * UNC path: neither is a directory that can be created. */
+            if (part.len > 0 && !(part.len == 2 && part.p[1] == ':')) {
+                if (_mkdir(str_text(&part)) != 0 && errno != EEXIST) {
+                    if (!dir_exists(str_text(&part))) ok = 0;
+                }
+            }
+            if (*p == '\0') break;
+        }
+        str_addc(&part, *p);
+    }
+    str_free(&part);
+    return ok;
+}
+
+int osr_mkdir_p_all(const char *const dirs[]) {
+    size_t i;
+    int ok = 1;
+    for (i = 0; dirs[i] != NULL; i++) {
+        if (!osr_mkdir_p(dirs[i])) ok = 0;
+    }
+    return ok;
+}
+
+/* write_file -- the body behind all four of the write/append entry points.
+ * Content is written verbatim, so a caller that wants a trailing newline
+ * includes one -- the same rule lib/module.h states for the POSIX pair. */
+static int write_file(const char *path, const char *text, int append) {
+    Str dir;
+    FILE *fp;
+    size_t len = strlen(text);
+    int ok;
+
+    str_init(&dir);
+    dir_of(&dir, path);
+    osr_mkdir_p(str_text(&dir));
+    str_free(&dir);
+
+    fp = fopen(path, append ? "ab" : "wb");
+    if (fp == NULL) {
+        osr_warnf("cannot write %s", path);
+        return 0;
+    }
+    ok = (len == 0) || (fwrite(text, 1, len, fp) == len);
+    fclose(fp);
+    if (!ok) osr_warnf("short write to %s", path);
+    return ok;
+}
+
+int osr_write_root(const char *path, const char *text)  { return write_file(path, text, 0); }
+int osr_append_root(const char *path, const char *text) { return write_file(path, text, 1); }
+int osr_write_user(const char *path, const char *text)  { return write_file(path, text, 0); }
+int osr_append_user(const char *path, const char *text) { return write_file(path, text, 1); }
+
+/* osr_install_file -- backup_copy: back dst up to dst.bak once, then copy,
+ * skipping the write entirely when the contents already match. The skip is
+ * not an optimization -- it is what keeps a rerun from rewriting a file whose
+ * mtime other things watch (section 2). */
+int osr_install_file(const char *src, const char *dst) {
+    Str bak;
+    int ok;
+
+    if (!file_exists(src)) {
+        osr_warnf("install: %s does not exist", src);
+        return 0;
+    }
+    if (osr_files_equal(src, dst)) return 1;
+
+    if (file_exists(dst)) {
+        str_init(&bak);
+        str_addz(&bak, dst);
+        str_addz(&bak, ".bak");
+        if (!file_exists(str_text(&bak))) {
+            /* Once, ever: the .bak is what the machine looked like BEFORE
+             * os-rice touched it, and overwriting it on the second run would
+             * throw that away in favour of os-rice's own last output. */
+            CopyFileA(dst, str_text(&bak), FALSE);
+        }
+        str_free(&bak);
+    }
+
+    ok = osr_copy_file(src, dst);
+    if (!ok) osr_warnf("install: could not write %s", dst);
+    return ok;
+}
+
+int osr_install_layer(const char *src, const char *dst) { return osr_install_file(src, dst); }
+
+/* seed -- write once when absent, then never again: the "seeded, then yours"
+ * contract (section 5). Already present counts as success. */
+static int seed(const char *dst, const char *content) {
+    if (file_exists(dst)) return 1;
+    return write_file(dst, content, 0);
+}
+
+int osr_seed_file(const char *dst, const char *content)      { return seed(dst, content); }
+int osr_seed_file_root(const char *dst, const char *content) { return seed(dst, content); }
+
+int osr_ensure_line(const char *file, const char *line) {
+    char *buf;
+    size_t len, pos = 0;
+    Line got;
+    size_t want = strlen(line);
+    int present = 0;
+
+    buf = slurp(file, &len);
+    if (buf != NULL) {
+        while (next_line(buf, len, &pos, &got)) {
+            if (got.len == want && memcmp(got.start, line, want) == 0) { present = 1; break; }
+        }
+        free(buf);
+    }
+    if (present) return 1;
+
+    {
+        Str text;
+        int ok;
+        str_init(&text);
+        /* A file that does not end in a newline would otherwise get this line
+         * glued onto its last one. */
+        if (buf != NULL && len > 0) {
+            char *tail = slurp(file, &len);
+            if (tail != NULL) {
+                if (len > 0 && tail[len - 1] != '\n') str_addc(&text, '\n');
+                free(tail);
+            }
+        }
+        str_addz(&text, line);
+        str_addc(&text, '\n');
+        ok = write_file(file, str_text(&text), 1);
+        str_free(&text);
+        return ok;
+    }
+}
+
+/* osr_install_theme_layer -- the current theme's version of <app>/<name> into
+ * dst, whether the theme ships the file itself or the dotfiles template has to
+ * be rendered for it (lib/render.c's osr_theme_source decides which, the same
+ * way on both systems). Returns 0 when this theme has neither, which is the
+ * caller's cue to fall back to the dotfiles default -- so a miss here is not a
+ * failure. */
+int osr_install_theme_layer(const char *app, const char *name, const char *dst) {
+    Str src;
+    int is_temp = 0;
+    int ok;
+
+    str_init(&src);
+    if (!osr_theme_source(&src, app, name, &is_temp)) {
+        str_free(&src);
+        return 0;
+    }
+    ok = osr_install_file(str_text(&src), dst);
+    if (is_temp) remove(str_text(&src));
+    str_free(&src);
+    return ok;
+}
+
+/* --- services --------------------------------------------------------------
+ *
+ * One init system, driven through sc.exe. lib/servicemap/ carries no Windows
+ * file because there is nothing to map: a Windows service's name IS the name
+ * you use, and a logical name that differs per init is a problem the SCM does
+ * not have.
+ * ------------------------------------------------------------------------- */
+int osr_service_enable(const char *name) {
+    char *argv[6];
+    char start_arg[64];
+
+    if (osr_theme_only()) return osr_theme_only_skip("service_enable");
+
+    if (!osr_is_admin()) {
+        osr_warnf("service '%s': changing a service needs Administrator rights -- skipped", name);
+        return 0;
+    }
+
+    /* `start= auto` with the space after the '=' is sc.exe's own syntax, not
+     * a typo: sc parses `option= value` pairs and rejects `option=value`. */
+    sprintf(start_arg, "start= auto");
+    argv[0] = (char *)"sc";
+    argv[1] = (char *)"config";
+    argv[2] = (char *)name;
+    argv[3] = start_arg;
+    argv[4] = NULL;
+    if (osr_run_quiet(argv) != 0) {
+        osr_warnf("service '%s': could not set it to start automatically", name);
+        return 0;
+    }
+
+    argv[0] = (char *)"sc";
+    argv[1] = (char *)"start";
+    argv[2] = (char *)name;
+    argv[3] = NULL;
+    /* Already running is a non-zero exit and a success: the service is in the
+     * state this asked for, which is the whole of what enable means. */
+    (void)osr_run_quiet(argv);
+    return 1;
+}
+
+#endif /* _WIN32 */

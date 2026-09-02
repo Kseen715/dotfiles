@@ -1,7 +1,19 @@
-/* lib/reload.c -- C port of lib/reload.sh. See lib/reload.h.
+/* lib/reload.c -- tell the running desktop to re-read what just changed. See
+ * lib/reload.h.
+ *
+ * POSIX ONLY, and the Windows branch at the bottom of this file is empty on
+ * purpose rather than unwritten. Everything here is "signal a long-running
+ * process to re-read its config": xrdb, i3-msg, hyprctl, a SIGUSR1 to a
+ * notification daemon. Windows has no equivalent to signal -- Explorer reads
+ * its settings once at startup, and the honest instruction is the one
+ * modules/win-tweaks.c already prints ("sign out for these to take effect"),
+ * not a reload that quietly does nothing. Restarting a user's shell out from
+ * under them is not a decision this makes.
  *
  * C89 + POSIX.
  */
+#ifndef _WIN32
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <pwd.h>
@@ -343,3 +355,30 @@ int osr_reload_main(int argc, char **argv) {
     if (strcmp(what, "gtk") == 0)     { osr_reload_gtk();     return 0; }
     return reload_usage();
 }
+
+#else /* _WIN32 */
+
+#include <stdio.h>
+
+#include "common.h"
+#include "cmds.h"
+#include "reload.h"
+
+/* Nothing to signal -- see the file header. Each returns 1 because "there was
+ * nothing to reload" is not a failure, and a caller that treated it as one
+ * would report a theme apply as broken. */
+int osr_reload_x11(void)     { return 1; }
+int osr_reload_wayland(void) { return 1; }
+int osr_reload_notify(void)  { return 1; }
+int osr_reload_gtk(void)     { return 1; }
+int osr_reload_all(void)     { return 1; }
+
+int osr_reload_main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    fputs("osr reload: nothing here re-reads its config on a signal -- sign out "
+          "for Explorer and taskbar settings to take effect\n", stderr);
+    return 0;
+}
+
+#endif /* _WIN32 */

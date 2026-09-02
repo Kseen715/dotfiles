@@ -22,7 +22,7 @@
  */
 #include "../lib/module.h"
 #include "../lib/common.h"
-#include "../lib/nerdfont.h"
+#include "../lib/fonts.h"
 
 #include <stddef.h>
 

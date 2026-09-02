@@ -83,6 +83,17 @@ int osr_gpu_chip(Str *out, const char *vendor);
 int osr_install_main(int argc, char **argv);  /* install.sh */
 int osr_module_main(int argc, char **argv);   /* the Linux C modules */
 int osr_pkg_main(int argc, char **argv);      /* lib/pkg.sh */
+
+#ifdef _WIN32
+/* osr_reg_read_str -- one REG_SZ registry value into a bounded buffer, 1 when
+ * it was there and non-empty. lib/pkg.c owns it because that is where the
+ * registry reading started (re-reading the environment after an install);
+ * lib/detect.c reads the same hive for the version facets, and a second copy
+ * of twelve lines of RegQueryValueEx is not worth having. `root` is an HKEY,
+ * passed as void * so a caller need not include windows.h to name one. */
+int osr_reg_read_str(void *root, const char *subkey, const char *value,
+                     char *out, unsigned long out_sz);
+#endif
 int osr_net_main(int argc, char **argv);      /* lib/net.sh */
 int osr_build_main(int argc, char **argv);    /* lib/build.sh */
 int osr_config_main(int argc, char **argv);   /* lib/config.sh */

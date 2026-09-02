@@ -1,91 +1,58 @@
-/* modules/wezterm.c -- port of windows-rice/modules/wezterm.ps1: package +
- * font + dotfiles-owned .wezterm.lua + theme-rendered colors/osr-rice.toml.
- * C89.
- */
-#ifdef _WIN32
-
-#include "src/common.h"
-
-#include "../lib/winpkg.h"
-#include "../lib/fonts.h"
-#include "../lib/theme_render.h"
-#include "../lib/config_copy.h"
-#include "../lib/winui.h"
-
-#include <stddef.h>
-
-int osrm_wezterm(const char *repo_root, const char *themes_root, const char *map_path,
-                 const char *theme, int theme_only) {
-    char dotfiles_dir[600];
-    char dest_theme[600];
-    char layer_src[700];
-    int is_temp;
-    int ok = 1;
-
-    osrm_path_join(dotfiles_dir, sizeof(dotfiles_dir), repo_root, "wezterm");
-
-    if (!theme_only) {
-        char src_lua[700];
-        char dest_lua[600];
-        osr_winpkg_install(map_path, "wezterm", NULL);
-        osr_install_nerd_font("JetBrainsMono");
-
-        osrm_path_join(src_lua, sizeof(src_lua), dotfiles_dir, ".wezterm.lua");
-        osr_expand_home("~/.wezterm.lua", dest_lua, sizeof(dest_lua));
-        if (!osr_copy_file(src_lua, dest_lua)) { osr_warn("wezterm: could not write %s", dest_lua); ok = 0; }
-    }
-
-    osr_expand_home("~/.config/wezterm/colors/osr-rice.toml", dest_theme, sizeof(dest_theme));
-    if (osr_theme_layer_source(themes_root, repo_root, "wezterm", "wezterm-theme.toml", theme,
-                                layer_src, sizeof(layer_src), &is_temp)) {
-        if (!osr_copy_file(layer_src, dest_theme)) ok = 0;
-        osr_theme_layer_cleanup(layer_src, is_temp);
-    } else {
-        /* Linux's own dotfiles-level default, same fallback wezterm.ps1 uses
-         * when no theme.list resolves at all. */
-        char fallback[700];
-        osrm_path_join(fallback, sizeof(fallback), dotfiles_dir, "wezterm-theme.toml");
-        if (!osr_copy_file(fallback, dest_theme)) ok = 0;
-    }
-
-    if (ok) osr_success("wezterm: themed as '%s'", theme);
-    else osr_warn("wezterm: one or more config files failed to write");
-    return ok;
-}
-
-#else /* !_WIN32 */
-
-/* The POSIX branch, once modules/wezterm.sh. What it must install and
- * configure is stated in test/unit_c/terminals_test.c.
+/* modules/wezterm.c -- WezTerm: package, the Nerd Font its glyphs need, the
+ * dotfiles-owned .wezterm.lua, and the theme-owned palette.
  *
- * WezTerm is BUILT FROM SOURCE on every target (any.map -> source:provide_wezterm,
- * upstream's documented route); there is no AppImage/flatpak path. The build
- * needs a Rust toolchain, so list `rust` before `wezterm` in a rice (manifest
- * order is the dependency graph, §4).
+ * ONE FUNCTION. What used to be two -- a port of wezterm.ps1 above an #ifdef
+ * and a port of wezterm.sh below it -- is one body, because the two were
+ * already doing the same four things in the same order and only spelled them
+ * differently.
  *
- * Config is split by ownership (§5), same shape as foot/ghostty:
+ * WHERE THE PACKAGE COMES FROM is the map's business, not this file's, and the
+ * two maps say different things on purpose. Every POSIX target builds WezTerm
+ * from source (lib/pkgmap/any.map -> source:provide_wezterm, upstream's
+ * documented route; there is no AppImage or flatpak path), so a rice must list
+ * `rust` before `wezterm` -- manifest order is the dependency graph (section
+ * 4). Windows takes winget's build on x86_64 and reaches the same builder only
+ * on arm64, where upstream publishes nothing at all. Neither of those
+ * decisions is visible here, which is the whole value of the map.
+ *
+ * CONFIG IS SPLIT BY OWNERSHIP (section 5), the same shape as foot and ghostty:
  *
  *   .wezterm.lua           dotfiles-owned (10-layer) -- overwritten on update
- *   colors/osr-rice.toml   rice-owned palette (90-layer) -- swapped on rice
- *                          switch (§6), falling back to the dotfiles default
- *                          when a rice ships none
+ *   colors/osr-rice.toml   theme-owned palette (90-layer) -- swapped on a
+ *                          rice or theme switch (section 6), falling back to
+ *                          the dotfiles default when a theme ships none
  *
  * The base .wezterm.lua selects `color_scheme = "osr-rice"` when that file is
- * present, so the palette swaps independently of the base -- the §5 split
- * applied to a DE config, via WezTerm's own custom-color-scheme directory (its
- * config is Lua and has no include directive like foot.ini).
+ * present, so the palette swaps independently of the base -- the section 5
+ * split applied to a DE config through WezTerm's own custom-color-scheme
+ * directory, since its config is Lua and has no include directive the way
+ * foot.ini does.
+ *
+ * What it must install and configure is stated in test/unit_c/terminals_test.c.
+ *
+ * C89.
  */
 #include "../lib/module.h"
-#include "../lib/nerdfont.h"
+#include "../lib/fonts.h"
+
+#include <stddef.h>
 
 static int nerd_font(void *ctx) { return osr_install_nerd_font((const char *)ctx); }
 
 int osrm_wezterm(void) {
+    /* unzip and fontconfig are the font install's own dependencies on POSIX;
+     * on Windows the font goes through a package manager that brings its own,
+     * and the map has no row for either -- so the list is trimmed there rather
+     * than asking for two packages that do not exist. */
+#ifndef _WIN32
     static const char *const pkgs[] = { "wezterm", "unzip", "fontconfig", NULL };
+#else
+    static const char *const pkgs[] = { "wezterm", NULL };
+#endif
     Str src, dst;
     int ok;
 
-    ok = osr_pkg_install_step("Installing WezTerm (source build)", pkgs);
+    ok = osr_pkg_install_step("Installing WezTerm", pkgs);
     ok = osr_step("Installing JetBrains Mono Nerd Font", nerd_font,
                   (void *)"JetBrainsMono") && ok;
 
@@ -95,9 +62,9 @@ int osrm_wezterm(void) {
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
-    /* Palette. The rice override wins; the dotfiles default covers a rice that
-     * ships none. In --module mode OSR_THEME_DIR is whatever rice the theme
-     * picker resolved (§6). */
+    /* Palette. The theme's version wins; the dotfiles default covers a theme
+     * that ships none. In --module mode OSR_THEME_DIR is whatever the theme
+     * picker resolved (section 6). */
     str_reset(&dst);
     str_addz(&dst, osr_mod_home());
     str_addz(&dst, "/.config/wezterm/colors/osr-rice.toml");
@@ -109,7 +76,7 @@ int osrm_wezterm(void) {
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
     str_free(&src); str_free(&dst);
+
+    if (ok) osr_successf("wezterm: themed as '%s'", osr_mod_theme());
     return ok;
 }
-
-#endif /* _WIN32 */

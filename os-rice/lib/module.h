@@ -38,14 +38,13 @@ const char *osr_mod_pkg(void);       /* apt | dnf | pacman | apk | xbps | portag
 const char *osr_mod_distro(void);    /* the os-release ID */
 const char *osr_mod_init(void);      /* systemd | openrc | runit | sysvinit */
 
-/* --- saying things -------------------------------------------------------- */
-/* Same five lines as lib/log.sh, printf-style. osr_die prints and exits 1,
- * which is lib/log.sh's error(): the one fatal path. */
-void osr_infof(const char *fmt, ...);
-void osr_debugf(const char *fmt, ...);
-void osr_warnf(const char *fmt, ...);
-void osr_successf(const char *fmt, ...);
-void osr_die(const char *fmt, ...);
+/* --- saying things --------------------------------------------------------
+ * The same five lines as lib/log.sh, printf-style: osr_infof, osr_debugf,
+ * osr_warnf, osr_successf and osr_die (which prints and exits 1 -- lib/log.sh's
+ * error(), the one fatal path). They are declared in common.h, included above,
+ * because BOTH cores print through them; a module needs no other include to
+ * say something.
+ * ------------------------------------------------------------------------- */
 
 /* --- theme-only mode ------------------------------------------------------
  * §6a. `osr theme <name>` runs the SAME modules a rice install runs, with every
@@ -194,6 +193,18 @@ int osr_setcap(const char *caps, const char *cmd);
  */
 int osr_pkg_install(const char *const names[]);
 int osr_pkg_installed(const char *name);
+
+/* osr_pkg_need -- install one logical name, treating it as already present
+ * when `test_command` resolves on PATH.
+ *
+ * The difference from osr_pkg_install is only which question decides "already
+ * done": the package NAME for the ordinary path, a COMMAND for this one. That
+ * matters where the two differ -- a builder that needs `cargo` asks for the
+ * package `rustup`, because rustup is the installer and cargo is what the
+ * build actually needs -- and it is why the builders installing their own
+ * dependencies call this rather than the plain form. test_command may be NULL,
+ * which means "the name itself". */
+int osr_pkg_need(const char *name, const char *test_command);
 
 /* osr_pkg_native_installed -- the native package database's answer for a REAL
  * package name, with no pkgmap resolution in front of it (_native_installed).

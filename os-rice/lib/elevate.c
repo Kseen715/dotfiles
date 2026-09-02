@@ -11,7 +11,7 @@
 #include <windows.h>
 #include <shellapi.h>
 
-#include "winui.h"
+#include "common.h"
 
 static char g_args[2048];
 static int g_have_args = 0;
@@ -102,17 +102,17 @@ int osr_elevate_now(const char *reason) {
     g_attempted = 1;
 
     if (!g_have_args) {
-        osr_warn("cannot elevate: osr_elevate_init was never called");
+        osr_warnf("cannot elevate: osr_elevate_init was never called");
         return 0;
     }
     if (GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe)) == 0) {
-        osr_warn("cannot elevate: this executable's own path is unknown");
+        osr_warnf("cannot elevate: this executable's own path is unknown");
         return 0;
     }
 
-    osr_info("%s", reason);
-    osr_info("requesting Administrator rights -- one prompt covers this whole run,");
-    osr_info("which continues in the elevated window UAC opens.");
+    osr_infof("%s", reason);
+    osr_infof("requesting Administrator rights -- one prompt covers this whole run,");
+    osr_infof("which continues in the elevated window UAC opens.");
 
     memset(&sei, 0, sizeof(sei));
     sei.cbSize = sizeof(sei);
@@ -125,9 +125,9 @@ int osr_elevate_now(const char *reason) {
     if (!ShellExecuteExA(&sei)) {
         err = GetLastError();
         if (err == ERROR_CANCELLED) {
-            osr_warn("elevation declined -- continuing without Administrator rights");
+            osr_warnf("elevation declined -- continuing without Administrator rights");
         } else {
-            osr_warn("elevation failed (error %lu) -- continuing without Administrator rights",
+            osr_warnf("elevation failed (error %lu) -- continuing without Administrator rights",
                      (unsigned long)err);
         }
         return 0;

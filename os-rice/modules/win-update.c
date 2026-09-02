@@ -20,11 +20,9 @@
  *
  * C89.
  */
-#include "src/common.h"
-
+#include "../lib/module.h"
 #include "../lib/elevate.h"
-#include "../lib/winpkg.h"
-#include "../lib/winui.h"
+#include "../lib/ui.h"
 
 #include <stddef.h>
 
@@ -35,17 +33,14 @@
  * look now"; a machine where one of the two interfaces is absent or inert
  * is the normal case, not an error to abort on. */
 static void try_step(const char *desc, const char *cmd) {
-    if (osr_run_step(desc, cmd) != 0) {
-        osr_warn("win-update: '%s' did not report success (may not be this "
+    if (osr_run_step_cmd(desc, cmd) != 0) {
+        osr_warnf("win-update: '%s' did not report success (may not be this "
                  "Windows version's interface)", cmd);
     }
 }
 
-int osrm_win_update(const char *repo_root, const char *themes_root, const char *map_path,
-                      const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme;
-
-    if (theme_only) return 1; /* nothing themed here */
+int osrm_win_update(void) {
+    if (osr_theme_only()) return osr_theme_only_skip("win-update");
 
     /* win-update.ps1 opened with Invoke-ElevatedScript. Both interfaces
      * below drive a machine-wide service, so this is the same one prompt,
@@ -59,7 +54,7 @@ int osrm_win_update(const char *repo_root, const char *themes_root, const char *
     /* Windows 10/11: the Update Orchestrator. Scan, then download, then
      * install -- three separate verbs, in that order, because each one
      * only queues work for the next. */
-    if (osr_winpkg_have_command("usoclient")) {
+    if (osr_have_cmd("usoclient")) {
         try_step("windows update: scan (usoclient)", "usoclient StartScan");
         try_step("windows update: download (usoclient)", "usoclient StartDownload");
         try_step("windows update: install (usoclient)", "usoclient StartInstall");
@@ -68,17 +63,14 @@ int osrm_win_update(const char *repo_root, const char *themes_root, const char *
     /* Deliberately no claim that anything was installed: every interface
      * here is asynchronous -- it hands work to a service and returns long
      * before that service is done. */
-    osr_success("win-update: update run requested -- Windows Update continues "
+    osr_successf("win-update: update run requested -- Windows Update continues "
                 "in the background");
     return 1;
 }
 
 #else /* !_WIN32 */
 
-int osrm_win_update(const char *repo_root, const char *themes_root, const char *map_path,
-                      const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme; (void)theme_only;
-    return 0;
-}
+/* Nothing to ask: there is no Windows Update here. */
+int osrm_win_update(void) { return 0; }
 
 #endif /* _WIN32 */

@@ -1,8 +1,17 @@
-/* lib/ui.c -- the C implementation behind lib/ui.sh: colors, the live
- * step window (dimmed tail of a step's output + a spinner line), and the
- * step counter. First slice of the sh -> C rewrite on the POSIX side.
+/* lib/ui.c -- lib/ui.sh's live step window: a dimmed tail of a step's own
+ * output with a spinner line under it, repainted in place, collapsing to one
+ * [ok]/[!!] line when the step finishes.
  *
- * What the window must do is stated in test/unit_c/ui_test.c. Several
+ * ONE FILE, TWO BODIES, and this is the subsystem where that split is least
+ * negotiable: the two systems share no code here at all. The POSIX body moves
+ * the cursor with ANSI escapes around a child it watches with kill/waitpid;
+ * the Windows body moves it with the console API around a CreateProcess
+ * handle, because a real XP or Windows 7 console interprets no escape
+ * sequence -- and unlike color, which degrades to plain text, a block that
+ * repaints itself has nothing to degrade to. Everything they DO share -- the
+ * tag column, the palette, the five log lines -- is lib/common.c's.
+ *
+ * What the POSIX window must do is stated in test/unit_c/ui_test.c. Several
  * behaviours below look like quirks and are load-bearing, so they are kept
  * and explained rather than cleaned up:
  *
@@ -15,7 +24,7 @@
  *     BYTES, and trailing blank lines vanish with the command
  *     substitution's trailing newlines.
  *   - `[ -t 1 ]` gates colors, the cursor hide/show and the whole live
- *     window (§3 auto-degrade): piped or --verbose output stays plain.
+ *     window (section 3 auto-degrade): piped or --verbose output stays plain.
  *
  * The deliberate exceptions are named where they are made -- see
  * filter_line_bytes for CR, tail_window for the cut width, and tag_pad for
@@ -23,20 +32,22 @@
  * [ok] line starts its text where the [INFO] lines around it do. All three
  * are asserted where they are decided, in test/unit_c/ui_test.c.
  *
- * Why a helper binary rather than one program that owns the whole run:
- * run_step's arguments are shell FUNCTIONS (pkg_install, as_root, ...), so
- * only the shell can fork them. lib/ui.sh keeps exactly that fork and the
- * shell-level state (exported vars, EXIT trap) and hands every byte of
- * terminal output to this program. `spin` therefore watches a process it
- * did not spawn, with kill(pid, 0), the same way the sh `_spin` did.
+ * Why the POSIX side is also a helper BINARY (`osr ui ...`) rather than only
+ * an in-process API: run_step's arguments were shell FUNCTIONS (pkg_install,
+ * as_root, ...), so only a shell could fork them, and lib/ui.sh kept that fork
+ * and handed every byte of terminal output here. `spin` therefore watches a
+ * process it did not spawn, with kill(pid, 0), the same way the sh `_spin`
+ * did. Nothing in this tree still calls it that way, but the surface is what
+ * a shell module gets.
  *
  * Subcommands (see usage() at the bottom):
  *   vars step-prefix tty-mode cursor-hide cursor-show
  *   paint done spin result fail-tail
  *
- * C89 + POSIX. Deliberately no dependency on lib/ui.h -- that header is the
- * Windows core's own UI library (different API, different console model).
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
+
 #define _POSIX_C_SOURCE 200809L
 #define _DEFAULT_SOURCE 1
 #define _BSD_SOURCE 1
@@ -689,3 +700,340 @@ int osr_ui_main(int argc, char **argv) {
     }
     return usage();
 }
+
+#else /* _WIN32 */
+
+/* --- the Windows body ------------------------------------------------------
+ *
+ * The same window, painted through the classic console API:
+ * SetConsoleCursorPosition to get back to the top of the block,
+ * FillConsoleOutputCharacterA to clear a row. Not ANSI, because the reach
+ * targets this tree keeps (XP, 7) interpret none of it -- see the file header.
+ *
+ * The child is spawned with CreateProcess and its output redirected into a
+ * temp file that the paint loop tails while it runs, which is this side's
+ * answer to the POSIX body's pipe-and-waitpid. `cmd /c` wraps the command line
+ * so that built-ins, pipes and quoting behave the way they would if the caller
+ * had typed it, which is what its callers (the package dispatch, the vendor
+ * install scripts) hand over.
+ *
+ * There is no `osr ui` command on this side: nothing here is driven from a
+ * shell, so the surface is the one in-process entry point below.
+ * ------------------------------------------------------------------------- */
+
+#include "common.h"
+#include "cmds.h"
+#include "ui.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#define OSR_STEP_TAIL_LINES 5
+#define OSR_STEP_LINE_LEN   300
+#define OSR_STEP_MAX_LINES  64
+
+/* stream_is_console -- can this handle be repainted at all? A pipe or a file
+ * has no cursor to move, which is ui.sh's `[ -t 1 ]` for this block. */
+static int stream_is_console(HANDLE h) {
+    return h != NULL && h != INVALID_HANDLE_VALUE && GetFileType(h) == FILE_TYPE_CHAR;
+}
+
+/* step_temp_log_path -- a per-run scratch file the child process's stdout
+ * and stderr are redirected into, so the paint loop below can tail it
+ * while the child is still running. Mirrors ui.sh's $OSR_LOG.step.
+ */
+static void step_temp_log_path(char *out, unsigned long out_sz) {
+    char dir[300];
+    DWORD n = GetTempPathA((DWORD)sizeof(dir), dir);
+    unsigned long dir_len;
+    unsigned long need;
+
+    if (n == 0 || n >= sizeof(dir)) { if (out_sz > 0) out[0] = '\0'; return; }
+
+    dir_len = (unsigned long)strlen(dir);
+    need = dir_len + (unsigned long)strlen("osr-step-XXXXXXXX.log");
+    if (need >= out_sz) { if (out_sz > 0) out[0] = '\0'; return; }
+
+    sprintf(out, "%sosr-step-%lu.log", dir, (unsigned long)GetCurrentProcessId());
+}
+
+/* step_read_tail -- last (up to) OSR_STEP_TAIL_LINES lines currently in
+ * path, CR stripped. Reads only the trailing chunk of the file, not the
+ * whole thing (the child may still be writing to it) -- a bounded
+ * approximation of `tail -n 5`, not byte-exact, which is fine since this
+ * is a cosmetic preview: the full log still lands on disk regardless.
+ */
+static unsigned long step_read_tail(const char *path, char lines[][OSR_STEP_LINE_LEN], unsigned long max_lines) {
+    FILE *fp;
+    long size;
+    static char buf[4096];
+    size_t n;
+    char *line_starts[OSR_STEP_MAX_LINES];
+    unsigned long total;
+    char *p, *line_start;
+    unsigned long start, i, count;
+
+    fp = fopen(path, "rb");
+    if (fp == NULL) return 0;
+    fseek(fp, 0, SEEK_END);
+    size = ftell(fp);
+    if (size > (long)sizeof(buf) - 1) fseek(fp, -(long)(sizeof(buf) - 1), SEEK_END);
+    else fseek(fp, 0, SEEK_SET);
+    n = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+    buf[n] = '\0';
+
+    total = 0;
+    line_start = buf;
+    for (p = buf; *p != '\0' && total < OSR_STEP_MAX_LINES; p++) {
+        if (*p == '\n') {
+            *p = '\0';
+            line_starts[total++] = line_start;
+            line_start = p + 1;
+        }
+    }
+    if (*line_start != '\0' && total < OSR_STEP_MAX_LINES) line_starts[total++] = line_start;
+
+    start = (total > max_lines) ? (total - max_lines) : 0;
+    count = 0;
+    for (i = start; i < total; i++) {
+        char *s = line_starts[i];
+        unsigned long len = (unsigned long)strlen(s);
+        if (len > 0 && s[len - 1] == '\r') s[--len] = '\0';
+        if (len >= OSR_STEP_LINE_LEN) len = OSR_STEP_LINE_LEN - 1;
+        memcpy(lines[count], s, len);
+        lines[count][len] = '\0';
+        count++;
+    }
+    return count;
+}
+
+/* step_write_line -- clear the console row the cursor is currently on and
+ * print text (color optional, bright applies FOREGROUND_INTENSITY), then
+ * advance to the next row. Always re-reads the cursor position first --
+ * see step_paint's comment on why nothing here caches a row number across
+ * calls.
+ */
+static void step_write_line(HANDLE h, const char *text, WORD color) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    COORD pos;
+    DWORD written;
+    char clipped[OSR_STEP_LINE_LEN];
+    unsigned long len;
+    unsigned long cols;
+
+    if (!GetConsoleScreenBufferInfo(h, &csbi)) { printf("%s\n", text); return; }
+    pos.X = 0;
+    pos.Y = csbi.dwCursorPosition.Y;
+    cols = (unsigned long)csbi.dwSize.X;
+    FillConsoleOutputCharacterA(h, ' ', (DWORD)cols, pos, &written);
+    SetConsoleCursorPosition(h, pos);
+
+    len = (unsigned long)strlen(text);
+    if (len >= sizeof(clipped)) len = sizeof(clipped) - 1;
+    memcpy(clipped, text, len);
+    clipped[len] = '\0';
+    if (cols > 0 && cols < sizeof(clipped) && len > cols) clipped[cols] = '\0';
+
+    SetConsoleTextAttribute(h, color);
+    fputs(clipped, stdout);
+    SetConsoleTextAttribute(h, csbi.wAttributes);
+    fputc('\n', stdout);
+    fflush(stdout);
+}
+
+/* step_paint -- repaint the block in place: up to OSR_STEP_TAIL_LINES
+ * lines tailed from the step's own log (dim), then status_line last
+ * (normal brightness). *painted tracks how many rows the block currently
+ * occupies so the next call can find its way back to the top -- always by
+ * asking the console where the cursor is NOW and subtracting *painted,
+ * never by remembering an absolute row, so a console that scrolled during
+ * the last paint can't desync this one (the same reason ui.sh's own
+ * `\033[%dA` is relative, not absolute).
+ */
+static void step_paint(HANDLE h, const char *log_path, int *painted, const char *status_line) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    char tail[OSR_STEP_TAIL_LINES][OSR_STEP_LINE_LEN];
+    unsigned long tail_count;
+    unsigned long i;
+    int drawn;
+
+    if (!GetConsoleScreenBufferInfo(h, &csbi)) return;
+    if (*painted > 0) {
+        COORD up;
+        up.X = 0;
+        up.Y = csbi.dwCursorPosition.Y - (SHORT)*painted;
+        if (up.Y < 0) up.Y = 0;
+        SetConsoleCursorPosition(h, up);
+    }
+
+    tail_count = step_read_tail(log_path, tail, OSR_STEP_TAIL_LINES);
+    drawn = 0;
+    for (i = 0; i < tail_count; i++) {
+        step_write_line(h, tail[i], FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+        drawn++;
+    }
+    step_write_line(h, status_line, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+    drawn++;
+
+    *painted = drawn;
+}
+
+/* step_erase -- clear the *painted rows the block currently occupies and
+ * leave the cursor at the block's top row, ready for one final result
+ * line. Same "re-read the cursor every time" rule as step_paint.
+ */
+static void step_erase(HANDLE h, int painted) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    COORD pos;
+    int i;
+
+    if (painted <= 0) return;
+    if (!GetConsoleScreenBufferInfo(h, &csbi)) return;
+    pos.X = 0;
+    pos.Y = csbi.dwCursorPosition.Y - (SHORT)painted;
+    if (pos.Y < 0) pos.Y = 0;
+    SetConsoleCursorPosition(h, pos);
+
+    for (i = 0; i < painted; i++) {
+        step_write_line(h, "", FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+    }
+
+    if (!GetConsoleScreenBufferInfo(h, &csbi)) return;
+    pos.X = 0;
+    pos.Y = csbi.dwCursorPosition.Y - (SHORT)painted;
+    if (pos.Y < 0) pos.Y = 0;
+    SetConsoleCursorPosition(h, pos);
+}
+
+/* run_step_plain -- the non-TTY / OSR_VERBOSE path: print desc once, run
+ * the command with its output streamed straight to the real console (no
+ * redirection, no spinner), same as ui.sh's run_step else-branch
+ * (`info "$_rs_desc"; "$@"`).
+ */
+static int run_step_plain(const char *desc, const char *cmd) {
+    osr_infof("%s", desc);
+    return system(cmd);
+}
+
+/* run_step_tty -- the live spinner path: TTY attached, OSR_VERBOSE unset. */
+static int run_step_tty(HANDLE h, const char *desc, const char *cmd, char *log_path) {
+    static const char frames[4] = { '|', '/', '-', '\\' };
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    HANDLE log_handle;
+    SECURITY_ATTRIBUTES sa;
+    int painted;
+    unsigned long frame;
+    DWORD exit_code;
+    CONSOLE_CURSOR_INFO cursor_info;
+    BOOL cursor_was_visible;
+    char status[OSR_STEP_LINE_LEN];
+    char cmdline[1024];
+
+    if (strlen("cmd /c ") + strlen(cmd) >= sizeof(cmdline)) return run_step_plain(desc, cmd);
+
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+
+    log_handle = CreateFileA(log_path, GENERIC_WRITE, FILE_SHARE_READ, &sa,
+                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (log_handle == INVALID_HANDLE_VALUE) return run_step_plain(desc, cmd);
+
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = log_handle;
+    si.hStdError = log_handle;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    /* CreateProcess needs "cmd /c <cmd>" to run a shell command line the
+     * same way system() does (built-ins, pipes, quoting rules).
+     */
+    sprintf(cmdline, "cmd /c %s", cmd);
+
+    memset(&pi, 0, sizeof(pi));
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+        CloseHandle(log_handle);
+        return run_step_plain(desc, cmd);
+    }
+    CloseHandle(log_handle);
+
+    cursor_was_visible = TRUE;
+    if (GetConsoleCursorInfo(h, &cursor_info)) {
+        cursor_was_visible = cursor_info.bVisible;
+        cursor_info.bVisible = FALSE;
+        SetConsoleCursorInfo(h, &cursor_info);
+    }
+
+    painted = 0;
+    frame = 0;
+    for (;;) {
+        DWORD wait_result = WaitForSingleObject(pi.hProcess, 200);
+        sprintf(status, "%-*c%s", OSR_TAG_WIDTH, frames[frame % 4], desc);
+        step_paint(h, log_path, &painted, status);
+        frame++;
+        if (wait_result == WAIT_OBJECT_0) break;
+    }
+
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    step_erase(h, painted);
+    {
+        char result[OSR_STEP_LINE_LEN];
+        if (exit_code == 0) sprintf(result, "%-*s%s", OSR_TAG_WIDTH, "[ok]", desc);
+        else sprintf(result, "%-*s%s", OSR_TAG_WIDTH, "[!!]", desc);
+        step_write_line(h, result, exit_code == 0
+            ? (FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+            : (FOREGROUND_RED | FOREGROUND_INTENSITY));
+    }
+
+    if (cursor_was_visible) {
+        cursor_info.bVisible = TRUE;
+        SetConsoleCursorInfo(h, &cursor_info);
+    }
+
+    if (exit_code != 0) {
+        char tail[OSR_STEP_TAIL_LINES][OSR_STEP_LINE_LEN];
+        unsigned long tail_count = step_read_tail(log_path, tail, OSR_STEP_TAIL_LINES);
+        unsigned long i;
+        for (i = 0; i < tail_count; i++) fprintf(stderr, "%s\n", tail[i]);
+    }
+
+    remove(log_path);
+    return (int)exit_code;
+}
+
+int osr_run_step_cmd(const char *desc, const char *cmd) {
+    HANDLE out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (!stream_is_console(out_handle) || env_is_set("OSR_VERBOSE")) {
+        return run_step_plain(desc, cmd);
+    }
+
+    {
+        char log_path[300];
+        step_temp_log_path(log_path, sizeof(log_path));
+        if (log_path[0] == '\0') return run_step_plain(desc, cmd);
+        return run_step_tty(out_handle, desc, cmd, log_path);
+    }
+}
+
+/* osr_ui_main -- `osr ui` is a shell-facing surface, and no shell drives this
+ * core. Saying so beats a subcommand table that answers every word with a
+ * window nothing asked for. */
+int osr_ui_main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    fputs("osr ui: the step window is driven in process here, not from a shell\n", stderr);
+    return 2;
+}
+
+#endif /* _WIN32 */

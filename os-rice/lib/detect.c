@@ -1,15 +1,24 @@
-/* lib/detect.c -- the C behind lib/detect.sh: detect the host once.
+/* lib/detect.c -- detect the host once.
  *
  *   all          every fact, as shell assignments to eval
- *   ram          just the RAM facets (install.sh re-probes them after sudo)
+ *   ram          just the RAM facets (the runner re-probes them after sudo)
  *   cpu|gpu|npu|virt   the individual probes, same shape
  *   gpu-chip <vendor>  the chip codename of the first <vendor> GPU
  *
  * Sets OSR_DISTRO/OSR_PKG/OSR_INIT plus the release, arch and config-path
- * facets the map @qualifier resolver (§1) and the preconditions (§10) read,
- * then the hardware facets (§7): CPU id, RAM, GPU/NPU vendor, virtualization.
+ * facets the map @qualifier resolver (section 1) and the preconditions
+ * (section 10) read, then the hardware facets (section 7): CPU id, RAM,
+ * GPU/NPU vendor, virtualization.
  *
- * The probes are the sh ones, command for command: lscpu, lspci -mm,
+ * ONE FILE, TWO BODIES, and here they share nothing but the NAMES -- which is
+ * the whole of what has to be shared. Those names are what lib/pkgmap's
+ * `name@facet` keys are matched against and what a rice's `require:` line
+ * reads, so a facet that means one thing on one system and another elsewhere
+ * would silently resolve the wrong package. Everything under them differs: a
+ * Linux box answers out of /etc/os-release, /proc and /sys, a Windows one out
+ * of the registry and a few system calls.
+ *
+ * The POSIX probes are the sh ones, command for command: lscpu, lspci -mm,
  * dmidecode -t 17 (with the unprivileged sudo -n retry), /proc/meminfo,
  * /sys/class/drm, /sys/class/accel, systemd-detect-virt. Same order, same
  * fallbacks, same "silent and command-guarded so a minimal box never errors"
@@ -19,18 +28,62 @@
  * What every probe must answer, and what each fallback is for, is stated in
  * test/unit_c/detect_test.c.
  *
- * C89 + POSIX.
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "common.h"
 #include "cmds.h"
 #include "module.h"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <glob.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include <unistd.h>
+#endif
+
+typedef struct {
+    Str distro, id_like, codename, version_id, version;
+    Str arch, arch_deb, pkg, init, etc_default;
+    Str cpu_vendor, cpu_model, cpu_arch;
+    long cpu_cores, cpu_threads;
+    Str ram_total, ram_type, ram_speed;
+    long ram_sticks, ram_channels;
+    Str gpu_vendor, gpu_model, gpu_devices;
+    long gpu_count;
+    Str npu_vendor;
+    long npu_count;
+    Str virt;
+} Facts;
+
+static void facts_init(Facts *f) {
+    str_init(&f->distro); str_init(&f->id_like); str_init(&f->codename);
+    str_init(&f->version_id); str_init(&f->version);
+    str_init(&f->arch); str_init(&f->arch_deb); str_init(&f->pkg);
+    str_init(&f->init); str_init(&f->etc_default);
+    str_init(&f->cpu_vendor); str_init(&f->cpu_model); str_init(&f->cpu_arch);
+    f->cpu_cores = 0; f->cpu_threads = 0;
+    str_init(&f->ram_total); str_init(&f->ram_type); str_init(&f->ram_speed);
+    f->ram_sticks = 0; f->ram_channels = 0;
+    str_init(&f->gpu_vendor); str_init(&f->gpu_model); str_init(&f->gpu_devices);
+    f->gpu_count = 0;
+    str_init(&f->npu_vendor); f->npu_count = 0;
+    str_init(&f->virt);
+}
+
+/* Sink -- where a detected fact goes: into a shell assignment for a
+ * caller to eval, or straight into this process's environment. Declared
+ * here, above the split, because both bodies publish through it and the
+ * set of names they publish is the contract between them. */
+typedef void (*Sink)(void *ctx, const char *name, const char *value);
+
+#ifndef _WIN32
 
 /* --- little helpers -------------------------------------------------------- */
 
@@ -171,35 +224,6 @@ static void quoted_field(Str *out, const char *line, int n) {
 }
 
 /* --- the facts ------------------------------------------------------------- */
-
-typedef struct {
-    Str distro, id_like, codename, version_id, version;
-    Str arch, arch_deb, pkg, init, etc_default;
-    Str cpu_vendor, cpu_model, cpu_arch;
-    long cpu_cores, cpu_threads;
-    Str ram_total, ram_type, ram_speed;
-    long ram_sticks, ram_channels;
-    Str gpu_vendor, gpu_model, gpu_devices;
-    long gpu_count;
-    Str npu_vendor;
-    long npu_count;
-    Str virt;
-} Facts;
-
-static void facts_init(Facts *f) {
-    str_init(&f->distro); str_init(&f->id_like); str_init(&f->codename);
-    str_init(&f->version_id); str_init(&f->version);
-    str_init(&f->arch); str_init(&f->arch_deb); str_init(&f->pkg);
-    str_init(&f->init); str_init(&f->etc_default);
-    str_init(&f->cpu_vendor); str_init(&f->cpu_model); str_init(&f->cpu_arch);
-    f->cpu_cores = 0; f->cpu_threads = 0;
-    str_init(&f->ram_total); str_init(&f->ram_type); str_init(&f->ram_speed);
-    f->ram_sticks = 0; f->ram_channels = 0;
-    str_init(&f->gpu_vendor); str_init(&f->gpu_model); str_init(&f->gpu_devices);
-    f->gpu_count = 0;
-    str_init(&f->npu_vendor); f->npu_count = 0;
-    str_init(&f->virt);
-}
 
 /* os_release_value -- what `. /etc/os-release && printf %s "${KEY:-}"` gives:
  * the file is SOURCED, so quotes come off and a later assignment wins. */
@@ -738,16 +762,15 @@ static void detect_virt(Facts *f) {
  * this process's environment for the runner and every child it forks. So the
  * emitters take a SINK and the two spellings are one list, not two -- a fact
  * added to one is added to both, which is the drift this shape exists to
- * prevent.
+ * prevent. Sink itself is declared above the split, since both bodies publish
+ * through it.
  */
-typedef void (*Sink)(void *ctx, const char *name, const char *value);
-
 static void sh_sink(void *ctx, const char *name, const char *value) {
     sh_assign((Str *)ctx, name, value);
 }
 static void env_sink(void *ctx, const char *name, const char *value) {
     (void)ctx;
-    setenv(name, value, 1);
+    osr_setenv(name, value);
 }
 
 static void emit_num(Sink put, void *ctx, const char *name, long v) {
@@ -843,7 +866,7 @@ void osr_detect_export(const char *what) {
         detect_npu(&f); emit_npu(env_sink, NULL, &f);
     } else if (strcmp(what, "virt") == 0) {
         detect_virt(&f);
-        setenv("OSR_VIRT", str_text(&f.virt), 1);
+        osr_setenv("OSR_VIRT", str_text(&f.virt));
     }
 }
 
@@ -931,3 +954,244 @@ int osr_detect_main(int argc, char **argv) {
     str_free(&out);
     return 0;
 }
+
+#else /* _WIN32 */
+
+/* --- the Windows body ------------------------------------------------------
+ *
+ * The same job and the same variable names, out of a different place. A Linux
+ * box answers "what am I" out of /etc/os-release, /proc and /sys; a Windows one
+ * answers it out of the registry and a handful of system calls, and there is
+ * no lspci to walk.
+ *
+ * What matters is that the FACET NAMES are identical, because they are what
+ * lib/pkgmap's `name@facet` keys are matched against (DESIGN section 1a) and
+ * what a rice's `require:` predicates read (section 10). So:
+ *
+ *   OSR_DISTRO      windows
+ *   OSR_VERSION_ID  the product major, 11 or 10       (~ a distro's version)
+ *   OSR_CODENAME    DisplayVersion, e.g. 24H2         (~ trixie, noble)
+ *   OSR_ARCH        x86_64 | arm64 | x86              (the same three names)
+ *   OSR_PKG         windows -- which names the map, lib/pkgmap/windows.map,
+ *                   exactly as `apt` names apt.map. Not scoop/choco/winget:
+ *                   which of those serves a package is a per-ROW decision,
+ *                   not a property of the machine.
+ *   OSR_INIT        scm, the one service manager there is
+ *
+ * The hardware facets (section 7) are what a rice reports and preflights
+ * against, so they are answered too, from the registry and
+ * GlobalMemoryStatusEx. There is no GPU or NPU probe yet: the honest answer is
+ * "not detected", and a wrong vendor is worse than none. Every consumer
+ * already handles that, because a Linux box with no lspci gives it too.
+ * ------------------------------------------------------------------------ */
+
+#define OSR_WINVER_KEY "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+#define OSR_CPU_KEY    "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0"
+
+#ifndef PROCESSOR_ARCHITECTURE_ARM64
+#define PROCESSOR_ARCHITECTURE_ARM64 12
+#endif
+
+/* reg -- one REG_SZ into a Str, empty when it is not there. lib/pkg.c owns the
+ * reader (it reads the same hive to refresh the environment after an install);
+ * this is the Str shape the emitters want. */
+static void reg(Str *out, const char *subkey, const char *value) {
+    char buf[512];
+    str_reset(out);
+    if (osr_reg_read_str(HKEY_LOCAL_MACHINE, subkey, value, buf, sizeof(buf))) {
+        str_addz(out, buf);
+    }
+}
+
+static void detect_release(Facts *f) {
+    Str tmp;
+
+    str_init(&tmp);
+    str_addz(&f->distro, "windows");
+    str_addz(&f->pkg, "windows");
+    str_addz(&f->init, "scm");
+
+    /* DisplayVersion is the modern name (21H2 onward); ReleaseId is what
+     * older builds wrote instead. Either one is the codename analogue. */
+    reg(&tmp, OSR_WINVER_KEY, "DisplayVersion");
+    if (tmp.len == 0) reg(&tmp, OSR_WINVER_KEY, "ReleaseId");
+    str_add(&f->codename, str_text(&tmp), tmp.len);
+
+    /* Windows 11 still reports major version 10, so the build number is the
+     * only honest way to tell the two apart: 22000 is the threshold. */
+    reg(&tmp, OSR_WINVER_KEY, "CurrentBuild");
+    str_addz(&f->version_id, (tmp.len > 0 && atoi(str_text(&tmp)) >= 22000) ? "11" : "10");
+
+    /* OSR_VERSION is the full one on the POSIX side (VERSION= from
+     * os-release); here that is the build, which is what a support answer
+     * ever actually asks for. */
+    str_add(&f->version, str_text(&tmp), tmp.len);
+
+    str_free(&tmp);
+}
+
+static void detect_arch(Facts *f) {
+    SYSTEM_INFO si;
+
+    /* GetNativeSystemInfo, not GetSystemInfo: under WOW64 the latter reports
+     * the EMULATED architecture, which is the wrong facet to key a package
+     * choice on -- an arm64 machine would ask for the x86_64 row and get a
+     * binary it can only emulate. Names match the POSIX branch's OSR_ARCH. */
+    GetNativeSystemInfo(&si);
+    switch (si.wProcessorArchitecture) {
+        case PROCESSOR_ARCHITECTURE_AMD64: str_addz(&f->arch, "x86_64"); break;
+        case PROCESSOR_ARCHITECTURE_ARM64: str_addz(&f->arch, "arm64");  break;
+        case PROCESSOR_ARCHITECTURE_INTEL: str_addz(&f->arch, "x86");    break;
+        default: break;
+    }
+    /* No dpkg here, so no Debian architecture name to carry. */
+}
+
+static void detect_cpu(Facts *f) {
+    SYSTEM_INFO si;
+    Str tmp;
+
+    str_init(&tmp);
+    /* The brand string, out of the registry key every tool reads it from.
+     * Squeezed because Intel pads its own brand string internally -- see
+     * str_add_squeezed, which exists for this one field. */
+    reg(&tmp, OSR_CPU_KEY, "ProcessorNameString");
+    str_add_squeezed(&f->cpu_model, str_text(&tmp), tmp.len);
+    reg(&tmp, OSR_CPU_KEY, "VendorIdentifier");
+    str_add(&f->cpu_vendor, str_text(&tmp), tmp.len);
+    str_add(&f->cpu_arch, str_text(&f->arch), f->arch.len);
+    str_free(&tmp);
+
+    /* dwNumberOfProcessors is logical processors, i.e. threads. The physical
+     * core count needs GetLogicalProcessorInformation and is left at 0 rather
+     * than guessed: a benchmark that divides by a wrong core count reports a
+     * wrong number confidently. */
+    GetNativeSystemInfo(&si);
+    f->cpu_threads = (long)si.dwNumberOfProcessors;
+}
+
+static void detect_ram(Facts *f) {
+    MEMORYSTATUSEX mem;
+
+    mem.dwLength = sizeof(mem);
+    if (!GlobalMemoryStatusEx(&mem)) return;
+
+    /* Whole GB, rounded, which is the unit and the rounding the POSIX branch
+     * gives MemTotal -- so the two report one number the same way. The type,
+     * speed, stick and channel counts come from SMBIOS, which is what
+     * dmidecode reads on the other side and what nothing here reads yet. */
+    str_addl(&f->ram_total, (long)((mem.ullTotalPhys + (1024UL * 1024UL * 512UL))
+                                   / (1024UL * 1024UL * 1024UL)));
+    str_addz(&f->ram_total, "G");
+}
+
+/* detect_virt -- is this a virtual machine? Left unanswered rather than
+ * guessed: the reliable tells (hypervisor CPUID leaf, SMBIOS manufacturer)
+ * are each a probe of their own, and "" is exactly what systemd-detect-virt
+ * gives on a machine it cannot classify. */
+static void detect_virt(Facts *f) { (void)f; }
+
+static void sh_sink(void *ctx, const char *name, const char *value) {
+    sh_assign((Str *)ctx, name, value);
+}
+static void env_sink(void *ctx, const char *name, const char *value) {
+    (void)ctx;
+    osr_setenv(name, value);
+}
+
+static void emit_num(Sink put, void *ctx, const char *name, long v) {
+    Str s;
+    str_init(&s);
+    str_addl(&s, v);
+    put(ctx, name, str_text(&s));
+    str_free(&s);
+}
+
+/* detect_all -- every probe, published through `put`. The same variable set
+ * the POSIX branch publishes, including the ones this side leaves empty: a
+ * consumer must see the name whatever the answer, or "unset" and "no such
+ * device" become the same thing. */
+static int detect_all(Sink put, void *ctx, Facts *f) {
+    detect_release(f);
+    detect_arch(f);
+    put(ctx, "OSR_DISTRO", str_text(&f->distro));
+    put(ctx, "OSR_PKG", str_text(&f->pkg));
+    put(ctx, "OSR_INIT", str_text(&f->init));
+    put(ctx, "OSR_CODENAME", str_text(&f->codename));
+    put(ctx, "OSR_VERSION_ID", str_text(&f->version_id));
+    put(ctx, "OSR_VERSION", str_text(&f->version));
+    put(ctx, "OSR_ID_LIKE", str_text(&f->id_like));
+    put(ctx, "OSR_ARCH", str_text(&f->arch));
+    put(ctx, "OSR_ARCH_DEB", str_text(&f->arch_deb));
+    put(ctx, "OSR_ETC_DEFAULT", str_text(&f->etc_default));
+
+    detect_cpu(f);
+    put(ctx, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
+    put(ctx, "OSR_CPU_MODEL", str_text(&f->cpu_model));
+    put(ctx, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
+    emit_num(put, ctx, "OSR_CPU_CORES", f->cpu_cores);
+    emit_num(put, ctx, "OSR_CPU_THREADS", f->cpu_threads);
+
+    detect_ram(f);
+    put(ctx, "OSR_RAM_TOTAL", str_text(&f->ram_total));
+    put(ctx, "OSR_RAM_TYPE", str_text(&f->ram_type));
+    put(ctx, "OSR_RAM_SPEED", str_text(&f->ram_speed));
+    emit_num(put, ctx, "OSR_RAM_STICKS", f->ram_sticks);
+    emit_num(put, ctx, "OSR_RAM_CHANNELS", f->ram_channels);
+
+    put(ctx, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
+    put(ctx, "OSR_GPU_MODEL", str_text(&f->gpu_model));
+    emit_num(put, ctx, "OSR_GPU_COUNT", f->gpu_count);
+    put(ctx, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
+    put(ctx, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
+    emit_num(put, ctx, "OSR_NPU_COUNT", f->npu_count);
+
+    detect_virt(f);
+    put(ctx, "OSR_VIRT", str_text(&f->virt));
+    return f->pkg.len != 0;
+}
+
+void osr_detect_export(const char *what) {
+    Facts f;
+
+    /* Nothing here is expensive or privileged, so there is no reason to probe
+     * one facet at a time -- the POSIX branch splits them because its RAM
+     * probe needs a sudo ticket the runner has not warmed yet. */
+    (void)what;
+    facts_init(&f);
+    detect_all(env_sink, NULL, &f);
+}
+
+/* osr_gpu_chip -- no GPU probe on this side, so the honest answer is "no such
+ * device". A module branching on a chip codename gets the same 0 a Linux box
+ * with no lspci gives it, which is a path they all already handle. */
+int osr_gpu_chip(Str *out, const char *vendor) {
+    (void)out;
+    (void)vendor;
+    return 0;
+}
+
+static int usage(void) {
+    fputs("usage: osr detect <what>\n\n", stderr);
+    fputs("  all              every fact, as shell assignments to eval\n", stderr);
+    fputs("  gpu-chip <v>     the chip codename of the first <v> GPU\n", stderr);
+    return 2;
+}
+
+int osr_detect_main(int argc, char **argv) {
+    Facts f;
+    Str out;
+
+    if (argc < 2) return usage();
+    if (strcmp(argv[1], "gpu-chip") == 0 && argc == 3) return 1;   /* never detected */
+    if (strcmp(argv[1], "all") != 0) return usage();
+
+    facts_init(&f);
+    str_init(&out);
+    detect_all(sh_sink, &out, &f);
+    out_flush(&out);
+    str_free(&out);
+    return 0;
+}
+
+#endif /* _WIN32 */

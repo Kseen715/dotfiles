@@ -21,56 +21,61 @@
  * directly when we already are $OSR_USER, through `sudo -u` when we are not.
  * With that here, lib/state.sh had nothing left to do and is gone.
  *
- * The sh original matched keys with sed and grep, i.e. as BASIC REGULAR
- * EXPRESSIONS (`osr_state_get "wallpaper.$OSR_THEME"` really does treat that
- * dot as "any character"), so this uses regcomp/regexec in BRE mode rather
- * than a literal compare -- same matches, quirks included. A key that is not
- * a valid BRE is the one place this deliberately differs: sed/grep would
- * error out, which in `set`'s case silently truncated the file to one line;
- * here it reads as "matches nothing", so the file survives.
+ * A KEY IS MATCHED LITERALLY. The sh original matched with sed and grep, i.e.
+ * as basic regular expressions, so `osr_state_get "wallpaper.$OSR_THEME"`
+ * really did treat that dot as "any character" -- and `wallpaper.nord` is a
+ * real key, composed per theme by lib/config.c, sitting in a file that may
+ * also hold `wallpaperXnord`. The regex reading of it was never wanted, it was
+ * inherited; matching the bytes is what every caller means, it is what
+ * test/unit_c/state_test.c asserts, and it costs this unit its one POSIX-only
+ * dependency (<regex.h> does not exist off POSIX), which is why it is written
+ * out here rather than compiled.
  *
- * C89 + POSIX.
+ * The write is the one genuinely privileged step, and the only part of this
+ * file with two bodies: see write_state below.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "common.h"
 #include "cmds.h"
 
+#ifndef _WIN32
 #include <fcntl.h>
-/* tcc (0.9.27) reports __STDC_VERSION__ as C99 whatever -std= asks for, so
- * glibc's regex.h takes the branch that sizes regexec's __pmatch with a VLA
- * parameter -- which tcc then cannot parse ("'__nmatch' undeclared"). The
- * header leaves this macro as the override hook; empty is its own pre-C99
- * spelling, and that size was only ever documentation. */
-#ifndef _REGEX_NELTS
-#define _REGEX_NELTS(n)
-#endif
-#include <regex.h>
 #include <pwd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
-/* state_path -- "${OSR_HOME:-$HOME}/.config/osr/state". OSR_HOME is what
- * makes the tests hermetic and what user-for-user installs point at. */
+/* state_path -- "$OSR_HOME/.config/osr/state", where OSR_HOME is the account
+ * being riced rather than whoever is running (osr_home). That indirection is
+ * what makes the tests hermetic and what user-for-user installs point at, and
+ * on Windows it is also what an elevated run needs: the state belongs in the
+ * riced profile, not the admin's.
+ *
+ * `.config\\osr\\` on Windows too, deliberately: it is where this rice already
+ * puts fastfetch's and wezterm's configs, so the state file is where someone
+ * would look for it. */
 static void state_path(Str *out) {
-    str_addz(out, env_str("OSR_HOME", env_str("HOME", "")));
+    str_addz(out, osr_home());
     str_addz(out, "/.config/osr/state");
 }
 
 /* key_regex -- compile "^<key>=" the way sed's `s/^KEY=//p` and grep's
  * `-v "^KEY="` read it: a BRE. Returns 0 when the key is not one. */
-static int key_regex(regex_t *re, const char *key) {
-    Str pat;
-    int rc;
-    str_init(&pat);
-    str_addc(&pat, '^');
-    str_addz(&pat, key);
-    str_addc(&pat, '=');
-    rc = regcomp(re, str_text(&pat), 0); /* 0 = POSIX basic, as in sed/grep */
-    str_free(&pat);
-    return rc == 0;
+/* key_match -- does this line assign `key`? Returns the offset of the value
+ * (just past the '='), or 0 when it does not -- 0 being impossible for a hit,
+ * since a key is at least one byte. */
+static size_t key_match(const Line *line, const char *key, size_t key_len) {
+    if (line->len < key_len + 1) return 0;
+    if (memcmp(line->start, key, key_len) != 0) return 0;
+    if (line->start[key_len] != '=') return 0;
+    return key_len + 1;
 }
 
 /* cmd_get -- sed -n "s/^KEY=//p" <file> | tail -n 1.
@@ -87,8 +92,8 @@ static int state_lookup(const char *key, Str *value, int *had_newline) {
     char *buf;
     size_t len;
     size_t pos = 0;
+    size_t key_len = strlen(key);
     Line line;
-    regex_t re;
     int found = 0;
 
     *had_newline = 0;
@@ -97,21 +102,15 @@ static int state_lookup(const char *key, Str *value, int *had_newline) {
     buf = slurp(str_text(&path), &len);
     str_free(&path);
     if (buf == NULL) return 0;
-    if (!key_regex(&re, key)) { free(buf); return 0; }
 
     while (next_line(buf, len, &pos, &line)) {
-        regmatch_t m;
-        char saved = line.start[line.len];
-        ((char *)line.start)[line.len] = '\0';
-        if (regexec(&re, line.start, 1, &m, 0) == 0) {
-            value->len = 0;
-            str_add(value, line.start + m.rm_eo, line.len - (size_t)m.rm_eo);
-            found = 1;
-            *had_newline = line.had_newline;
-        }
-        ((char *)line.start)[line.len] = saved;
+        size_t at = key_match(&line, key, key_len);
+        if (at == 0) continue;
+        value->len = 0;
+        str_add(value, line.start + at, line.len - at);
+        found = 1;
+        *had_newline = line.had_newline;
     }
-    regfree(&re);
     free(buf);
     return found;
 }
@@ -151,9 +150,8 @@ static void compose(Str *out, const char *key, const char *value) {
     char *buf;
     size_t len;
     size_t pos = 0;
+    size_t key_len = strlen(key);
     Line line;
-    regex_t re;
-    int have_re;
     Str body;
 
     str_init(&path);
@@ -161,23 +159,16 @@ static void compose(Str *out, const char *key, const char *value) {
     buf = slurp(str_text(&path), &len);
     str_free(&path);
 
-    have_re = key_regex(&re, key);
     str_init(&body);
-    if (buf != NULL && have_re) {
+    if (buf != NULL) {
         int first = 1;
         while (next_line(buf, len, &pos, &line)) {
-            regmatch_t m;
-            char saved = line.start[line.len];
-            ((char *)line.start)[line.len] = '\0';
-            if (regexec(&re, line.start, 1, &m, 0) != 0) {
-                if (!first) str_addc(&body, '\n');
-                str_add(&body, line.start, line.len);
-                first = 0;
-            }
-            ((char *)line.start)[line.len] = saved;
+            if (key_match(&line, key, key_len) != 0) continue;   /* this key's old value */
+            if (!first) str_addc(&body, '\n');
+            str_add(&body, line.start, line.len);
+            first = 0;
         }
     }
-    if (have_re) regfree(&re);
     free(buf);
 
     /* `$(...)` ate the trailing newlines before the body was reprinted. */
@@ -202,6 +193,35 @@ static int cmd_compose(const char *key, const char *value) {
     str_free(&out);
     return 0;
 }
+
+/* write_state_plain -- the unprivileged write both bodies below end in:
+ * create the directory, then replace the file. */
+static int write_state_plain(const char *path, const char *dir, const Str *content) {
+    FILE *fp;
+
+    if (!osr_mkdir_parents(dir)) return 1;
+    fp = fopen(path, "wb");
+    if (fp == NULL) return 1;
+    if (content->len > 0) fwrite(str_text(content), 1, content->len, fp);
+    fclose(fp);
+    return 0;
+}
+
+/* --- writing it ------------------------------------------------------------
+ *
+ * The state file belongs to the account being riced, not to whoever is
+ * running the installer (section 8, user-for-user), and that is the whole
+ * reason this has two bodies. On POSIX the installer may BE another account
+ * -- `sudo ./osr install` runs as root -- so the write drops back to
+ * $OSR_USER through `sudo -u`, which is what lib/state.sh's `as_user mkdir -p`
+ * plus `as_user tee` did. On Windows there is no per-command identity to drop
+ * to: an elevated run is a different PROCESS, and what it was told is which
+ * profile to write into (osr_home, fed by --user-home across the elevation
+ * boundary). So the path already points at the right account and the write is
+ * a plain write.
+ * ------------------------------------------------------------------------- */
+
+#ifndef _WIN32
 
 /* target_user -- $OSR_USER, the account being riced; empty means "whoever is
  * running", which is what as_user did when the two were the same. */
@@ -270,74 +290,49 @@ static int run_as_user(char **argv, const char *content, size_t len) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
-/* mkdir_p -- `mkdir -p`, in-process, for the case where no escalation is
- * needed. Existing directories are not an error, as with -p. */
-static int mkdir_p(const char *path) {
-    Str partial;
-    const char *p = path;
+/* write_state -- the composed file into place, as $OSR_USER. */
+static int write_state(const char *path, const char *dir, const Str *content) {
     int rc = 0;
 
-    str_init(&partial);
-    if (*p == '/') { str_addc(&partial, '/'); p++; }
-    while (*p != '\0') {
-        const char *slash = strchr(p, '/');
-        size_t len = (slash != NULL) ? (size_t)(slash - p) : strlen(p);
-        if (len > 0) {
-            if (partial.len > 1 || (partial.len == 1 && partial.p[0] != '/')) str_addc(&partial, '/');
-            str_add(&partial, p, len);
-            if (mkdir(str_text(&partial), 0777) != 0 && !dir_exists(str_text(&partial))) rc = 1;
-        }
-        if (slash == NULL) break;
-        p = slash + 1;
+    if (need_sudo()) {
+        char *mk[4];
+        char *tee[3];
+        mk[0] = (char *)"mkdir"; mk[1] = (char *)"-p"; mk[2] = (char *)dir; mk[3] = NULL;
+        if (run_as_user(mk, NULL, 0) != 0) rc = 1;
+        tee[0] = (char *)"tee"; tee[1] = (char *)path; tee[2] = NULL;
+        if (run_as_user(tee, str_text(content), content->len) != 0) rc = 1;
+        return rc;
     }
-    str_free(&partial);
-    return rc;
+    return write_state_plain(path, dir, content);
 }
 
-/* dir_of -- `dirname "$path"` for the paths this writes (always absolute). */
-static void dir_of(Str *out, const char *path) {
-    const char *slash = strrchr(path, '/');
-    if (slash == NULL) { str_addc(out, '.'); return; }
-    if (slash == path) { str_addc(out, '/'); return; }
-    str_add(out, path, (size_t)(slash - path));
+#else /* _WIN32 */
+
+/* write_state -- a plain write: see this section's header on why there is no
+ * identity to drop to here. */
+static int write_state(const char *path, const char *dir, const Str *content) {
+    return write_state_plain(path, dir, content);
 }
+
+#endif /* _WIN32 */
 
 /* cmd_set -- osr_state_set: compose the new file, then write it as the user.
  * `mkdir -p` first, exactly as the sh version did. */
 static int cmd_set(const char *key, const char *value) {
     Str path;
-    Str dir;
     Str content;
-    int rc = 0;
+    char dir[OSR_PATH_MAX];
+    int rc;
 
     str_init(&path);
     state_path(&path);
-    str_init(&dir);
-    dir_of(&dir, str_text(&path));
+    osr_dirname(str_text(&path), dir, sizeof(dir));
     str_init(&content);
     compose(&content, key, value);
 
-    if (need_sudo()) {
-        char *mk[4];
-        char *tee[3];
-        mk[0] = (char *)"mkdir"; mk[1] = (char *)"-p"; mk[2] = dir.p; mk[3] = NULL;
-        if (run_as_user(mk, NULL, 0) != 0) rc = 1;
-        tee[0] = (char *)"tee"; tee[1] = path.p; tee[2] = NULL;
-        if (run_as_user(tee, str_text(&content), content.len) != 0) rc = 1;
-    } else {
-        FILE *fp;
-        if (mkdir_p(str_text(&dir)) != 0) rc = 1;
-        fp = fopen(str_text(&path), "wb");
-        if (fp == NULL) {
-            rc = 1;
-        } else {
-            if (content.len > 0) fwrite(str_text(&content), 1, content.len, fp);
-            fclose(fp);
-        }
-    }
+    rc = write_state(str_text(&path), dir, &content);
 
     str_free(&content);
-    str_free(&dir);
     str_free(&path);
     return rc;
 }

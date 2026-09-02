@@ -43,6 +43,8 @@
 #include "module.h"
 
 #include <limits.h>
+
+#ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
 
@@ -530,3 +532,80 @@ int osr_user_main(int argc, char **argv) {
     if (strcmp(argv[1], "same-content") == 0 && argc == 4) return cmd_same_content(argv[2], argv[3]);
     return usage();
 }
+
+#else /* _WIN32 */
+
+/* --- the Windows body ------------------------------------------------------
+ *
+ * The target-user model (DESIGN section 8) exists because on POSIX the
+ * installer can be running as somebody other than the account being riced:
+ * `sudo ./osr install` runs as root, and every config it writes still has to
+ * land in the user's home and be owned by the user. That is what OSR_USER and
+ * OSR_HOME carry, and what as_user acts on.
+ *
+ * Windows has the same problem and a differently shaped answer. There is no
+ * per-command identity to drop to: an elevated run is a separate PROCESS,
+ * launched under the `runas` verb, and it is told which profile to write into
+ * through --user-home (lib/elevate.h) -- this port's $SUDO_USER. So the model
+ * is the same two variables resolved in the same order, and the escalation
+ * that reads them lives in the elevation rather than in every command.
+ *
+ * The login-shell half has no counterpart at all: there is no /etc/shells and
+ * no chsh, and which shell an account gets is not a property of the account
+ * here. Those three entry points say no rather than pretending.
+ * ------------------------------------------------------------------------- */
+
+/* resolve_user -- which account is being riced and where it lives. Order:
+ * --user, then whoever we are; the home comes from osr_home, which already
+ * prefers what an elevation handed us over the profile answering the prompt. */
+static void resolve_user(Str *user, Str *home, const char *explicit_user) {
+    const char *want = (explicit_user != NULL && *explicit_user != '\0')
+                       ? explicit_user : env_str("USERNAME", "");
+
+    str_addz(user, want);
+    str_addz(home, osr_home());
+}
+
+void osr_resolve_user(const char *explicit_user) {
+    Str user, home;
+    str_init(&user); str_init(&home);
+    resolve_user(&user, &home, explicit_user);
+    osr_setenv("OSR_USER", str_text(&user));
+    osr_setenv("OSR_HOME", str_text(&home));
+    str_free(&user); str_free(&home);
+}
+
+int osr_user_shell_is(const char *user, const char *shell) {
+    (void)user; (void)shell;
+    return 0;
+}
+
+int osr_register_shell(const char *shell) {
+    (void)shell;
+    return 0;
+}
+
+int osr_set_login_shell(const char *user, const char *shell) {
+    (void)user;
+    osr_warnf("a login shell is not an account property here -- '%s' is started "
+              "by whatever launches it", shell);
+    return 0;
+}
+
+int osr_user_main(int argc, char **argv) {
+    Str user, home, out;
+
+    if (argc >= 2 && strcmp(argv[1], "resolve") == 0) {
+        str_init(&user); str_init(&home); str_init(&out);
+        resolve_user(&user, &home, argc == 3 ? argv[2] : NULL);
+        sh_assign(&out, "OSR_USER", str_text(&user));
+        sh_assign(&out, "OSR_HOME", str_text(&home));
+        out_flush(&out);
+        str_free(&out); str_free(&home); str_free(&user);
+        return 0;
+    }
+    fputs("usage: osr user resolve [name]\n", stderr);
+    return 2;
+}
+
+#endif /* _WIN32 */
