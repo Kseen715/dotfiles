@@ -55,3 +55,218 @@ tcc = tcc tcc-libs-static musl-dev
 
 # Alpine hyphenates the sensors package (modules/gnome-panel.c).
 lm_sensors = lm-sensors
+
+# --- i3/X11 desktop (rices/i3-rosemary) --------------------------------------
+# Every row below was checked against the real Alpine repository index
+# (`apk search -e` inside the alpine:3.21 .. 3.24 images), not from memory - the
+# same discipline xbps.map documents for Void. Only `main` and `community` are
+# assumed, which is what a stock install and the official images enable;
+# `testing` is opt-in and off, so a name that exists only there counts as
+# missing here, exactly like Void's nonfree repo.
+
+# Alpine does not prefix X client utilities: Arch's xorg-xrandr is just xrandr.
+xorg-xinit = xinit
+xorg-xrandr = xrandr
+xorg-xset = xset
+xorg-xsetroot = xsetroot
+xorg-xprop = xprop
+xorg-xev = xev
+xorg-xkill = xkill
+xorg-xdpyinfo = xdpyinfo
+xorg-xinput = xinput
+xorg-xmodmap = xmodmap
+xorg-xauth = xauth
+xorg-fonts-misc = font-misc-misc
+
+# Plain name differences.
+gdk-pixbuf2 = gdk-pixbuf
+gnome-disks = gnome-disk-utility
+bluez-obex = bluez-obexd
+ocl-icd = opencl-icd-loader
+p7zip = 7zip
+# raw-thumbnailer is absent; the gdk-pixbuf loader gives RAW previews instead,
+# which is what tumbler falls back to anyway (same call as xbps.map).
+raw-thumbnailer = libopenraw-pixbuf-loader
+
+# Fonts: Alpine puts the family name after a `font-` prefix.
+noto-fonts = font-noto
+noto-fonts-emoji = font-noto-emoji
+noto-fonts-cjk = font-noto-cjk
+ttf-liberation = font-liberation
+ttf-dejavu = font-dejavu
+nerd-fonts-symbols = font-nerd-fonts-symbols
+
+# --- GPU drivers (modules/gpu-drivers.c) -------------------------------------
+# Alpine suffixes the Mesa drivers with their gallium/vulkan backend instead of
+# naming the vendor the way Arch does.
+mesa-dri = mesa-dri-gallium
+vulkan-icd-loader = vulkan-loader
+vulkan-radeon = mesa-vulkan-ati
+vulkan-intel = mesa-vulkan-intel
+vulkan-swrast = mesa-vulkan-swrast
+opencl-mesa = mesa-rusticl
+libva-mesa-driver = mesa-va-gallium
+mesa-vdpau = mesa-vdpau-gallium
+# Alpine builds no virtio (venus) or Amber (pre-shader R100/R200, Intel gen3-5)
+# driver, and the Intel compute (OpenCL/Level Zero) runtime is not packaged
+# either - a VM guest falls back to llvmpipe via mesa-vulkan-swrast, and old
+# Intel/Radeon parts fall back to the classic GL driver in `mesa`.
+vulkan-virtio =
+mesa-amber =
+intel-compute-runtime =
+# 32-bit GL/Vulkan does not exist on Alpine (no multilib at all), same as the
+# lib32-libnm skip in any.map.
+lib32-mesa =
+lib32-mesa-amber =
+lib32-vulkan-icd-loader =
+lib32-vulkan-radeon =
+lib32-vulkan-intel =
+lib32-vulkan-virtio =
+lib32-libvdpau =
+lib32-libva-intel-driver =
+
+# --- theming -----------------------------------------------------------------
+# gnome-themes-extra (Adwaita-dark) is not packaged; the murrine engine is, and
+# it is the half that GTK2/GTK3 apps actually need to draw a dark theme with.
+gtk-dark-theme = gtk-murrine-engine
+
+# --- not packaged in Alpine --------------------------------------------------
+# Rust tools with no aport. The rice lists `rust` before the modules that need
+# these (§4), so cargo: is a real route here.
+xcolor = cargo:xcolor
+ouch = cargo:ouch
+serie = cargo:serie
+xidlehook = cargo:xidlehook
+# Alpine keeps the XCB screensaver extension inside libxcb (no separate package,
+# unlike Debian), same as Void.
+xidlehook-build-deps = libxcb-dev xcb-util-dev pulseaudio-dev pkgconf
+betterlockscreen = source:provide_betterlockscreen
+
+# Empty RHS = skip: in no Alpine release, and the rice still works without them.
+# What is lost, in order: the Qt clipboard manager (gpaste covers GTK apps),
+# MTP phone mounting via FUSE (gvfs-mtp still works), the emoji picker (rofi's
+# own rofi-emoji IS packaged and is what modules/rofi.c prefers), the extra
+# PipeWire mixer (pavucontrol is packaged), touchpad swipe gestures, the battery
+# notifier (the bar still shows charge), the bar's calendar popup, the .mtp/USB
+# transfer GUI, Qt6 theme matching, CUPS's print-to-PDF backend, EPUB cover
+# thumbnails, mDNS hostname resolution (.local), dual-role keys, and scripted
+# window switching (i3-msg covers the i3 bindings).
+copyq =
+simple-mtpfs =
+rofimoji =
+pwvucontrol =
+libinput-gestures =
+batsignal =
+gsimplecal =
+android-file-transfer =
+qt6ct =
+cups-pdf =
+gnome-epub-thumbnailer =
+nss-mdns =
+xcape =
+wmctrl =
+# No alsa-firmware aport (the SOF firmware for modern Intel audio IS packaged
+# and is the one that matters on hardware from the last decade).
+alsa-firmware =
+# unrar is nonfree and has no aport, and Alpine packages no `unar` either, so
+# unlike apt.map/xbps.map there is no free extractor to point at. RAR archives
+# are simply not readable here; every other format still is (7zip, p7zip's
+# replacement, is mapped above).
+unrar =
+# zram: modules/swap.c drives systemd's zram-generator or Void's runit zramen,
+# and Alpine is OpenRC, which has neither. The module already falls through to
+# "no zram" when the init is neither systemd nor runit, so these skips only stop
+# apk from being asked for packages that could never be used.
+zram-generator =
+zramen =
+# Yandex Browser cannot get a row here for the same reason thunderbird cannot
+# (see above): the vendor ships a glibc deb/rpm only, and provide_yandex_browser
+# unpacks that binary, which will not run on musl.
+yandex-browser =
+
+# --- second pass: names checked against the live APKINDEX (3.21 .. 3.24) ------
+i3 = i3wm
+gtk3 = gtk+3.0
+gtk4 = gtk4.0
+atool = atools
+jack2 = jack
+smbclient = samba-client
+qt5-wayland = qt5-qtwayland
+qt6-base = qt6-qtbase
+qt6-declarative = qt6-qtdeclarative
+qt6-svg = qt6-qtsvg
+qt6-wayland = qt6-qtwayland
+qt6-5compat = qt6-qt5compat
+xorg-xwayland = xwayland
+pipewire-audio = pipewire
+xcursor-themes = adwaita-icon-theme
+# gufw has no aport; ufw itself does, and modules/ufw.c writes its rules with
+# the CLI either way (same call dnf.map makes).
+gufw =
+# Empty RHS = skip: no aport in main/community. What is lost, in order: the
+# OpenCL device lister, out-of-tree kernel module builds (Alpine has no dkms -
+# its kernel modules come as -lts/-edge packages), Japanese input via mozc
+# (fcitx5 itself and its other engines still work), the PipeWire patchbay GUI
+# (pavucontrol still mixes), HP printer/scanner drivers (CUPS's own IPP
+# Everywhere driverless path covers modern HP hardware), Intel GPU tooling,
+# the MTP FUSE mount (gvfs-mtp still works), the vendor-neutral GL dispatch
+# library (Alpine links Mesa's libGL directly, mesa-gl), the GTK2 theme
+# switcher (lxappearance - GTK3 apps read gsettings instead), NumLock at
+# session start, the NVIDIA/AMD GPU top, Qt5/Qt6 theme matching, GPU switching
+# for hybrid laptops, Intel thermal management, X screensaver-to-locker glue
+# (xidlehook above is what the i3 rice actually uses), and `xlsclients`.
+clinfo =
+dkms =
+fcitx5-mozc =
+helvum =
+hplip =
+intel-gpu-tools =
+jmtpfs =
+libglvnd =
+lxappearance =
+numlockx =
+nvtop =
+qt5ct =
+switcheroo-control =
+thermald =
+xss-lock =
+xorg-xlsclients =
+# GPaste is native and current on Alpine (community), so `gpaste` needs no row;
+# these are the deps for provide_gpaste when a user calls the builder directly.
+gpaste-build-deps = meson ninja-build pkgconf gettext-dev gcr-dev glib-dev gtk4.0-dev libadwaita-dev pango-dev gobject-introspection-dev libx11-dev libxi-dev
+
+# --- Alpine 3.21 / 3.24 facets (§1a) -----------------------------------------
+# Alpine 3.21 predates several aports that 3.22+ carry. lsd has a builder
+# already (the upstream static tarball); the rest are skips on that release
+# only, so a 3.21 box installs the rest of the rice instead of failing on one
+# missing name: per-monitor autorandr profiles, XDG autostart replay (dex),
+# the GTK4 layer-shell library, the Gutenprint printer drivers (CUPS's own
+# driverless path still prints), driverless network scanning (sane-airscan),
+# and the Wayland locker (the i3 rice uses i3lock).
+lsd@3.21 = source:provide_lsd_tarball
+autorandr@3.21 =
+dex@3.21 =
+gtk4-layer-shell@3.21 =
+gutenprint@3.21 =
+sane-airscan@3.21 =
+waylock@3.21 =
+# tcc: no aport before 3.22, so the source build stands in there (the row
+# above names the packaged split on the releases that have it).
+tcc@3.21 = source:provide_tcc
+
+# Alpine 3.24 dropped the murrine engine and the WebP pixbuf loader. adw-gtk3
+# is the packaged dark GTK3 theme there and needs no engine; WebP thumbnails
+# are lost, which is a missing preview, not a broken desktop.
+gtk-dark-theme@3.24 = adw-gtk3
+webp-pixbuf-loader@3.24 =
+tcc-build-deps@3.21 = musl-dev
+
+layer-shell-qt5 = layer-shell-qt
+virtualbox-guest-utils = virtualbox-guest-additions
+# Not in the Alpine repositories (aports has no aport for these).
+bibata-cursor-theme =
+cliphist =
+gtklock =
+gtklock-userinfo-module =
+libdeep-filter-ladspa =
+nwg-displays =

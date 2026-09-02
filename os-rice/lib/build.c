@@ -1763,6 +1763,82 @@ static int provide_betterlockscreen(void) {
     return 1;
 }
 
+/* provide_tcc -- TinyCC from the upstream mob branch, for the targets that
+ * package it nowhere: Fedora has never carried it, and Alpine only added an
+ * aport in 3.22. Debian/Ubuntu/Arch/Void all package it, so those keep the
+ * native route and never reach this builder.
+ *
+ * The branch, not a tag: upstream's last release (0.9.27, 2017) does not build
+ * against a current glibc - its configure emits a bounds-checking stub that
+ * modern headers reject - and every distro that ships tcc ships a snapshot of
+ * `mob` for exactly that reason. There is nothing newer to pin to.
+ *
+ * `make install` puts tcc in /usr/local/bin and libtcc1.a plus the include
+ * shims under /usr/local/lib/tcc, which is where the compiled tcc looks for
+ * them; nothing else on the box links libtcc, so no ldconfig run is needed. */
+static int provide_tcc(void) {
+    static const char *const deps[] = { "build", "tcc-build-deps", "tar", NULL };
+    Str tmp, tar_path, src, jobs;
+    char *argv[6];
+
+    /* §2: the builder owns its probe. tcc is a compiler, not a service - if the
+     * binary is on PATH the job is done. */
+    if (osr_have_cmd("tcc")) {
+        osr_info("tcc is already installed - skipping the source build");
+        return 1;
+    }
+    pkg(deps);
+
+    str_init(&tmp); str_init(&tar_path); str_init(&src); str_init(&jobs);
+    if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
+    str_addz(&tar_path, str_text(&tmp));
+    str_addz(&tar_path, "/tcc.tar.gz");
+    if (!osr_fetch_download(
+            "https://github.com/TinyCC/tinycc/archive/refs/heads/mob.tar.gz",
+            tar_path.p, 0)) {
+        rm_rf(str_text(&tmp));
+        osr_die("failed to download the tinycc sources");
+    }
+    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
+    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
+    if (!run_ok(argv)) {
+        rm_rf(str_text(&tmp));
+        osr_die("failed to extract the tinycc tarball");
+    }
+    str_addz(&src, str_text(&tmp));
+    str_addz(&src, "/tinycc-mob");
+
+    /* configure picks the libc (glibc/musl) and the CPU off the build host, so
+     * it needs no arguments beyond the prefix - except the bounds checker, whose
+     * bcheck.c reaches for glibc's __ctype_b_loc and does not compile on musl.
+     * It is a debug-only feature (`tcc -b`), so drop it everywhere rather than
+     * branch on the libc. */
+    jobs_flag(&jobs);
+    argv[0] = (char *)"./configure"; argv[1] = (char *)"--prefix=/usr/local";
+    argv[2] = (char *)"--config-bcheck=no"; argv[3] = NULL;
+    if (run_in_dir(str_text(&src), AS_SELF, argv) != 0) {
+        rm_rf(str_text(&tmp));
+        osr_die("tcc configure failed");
+    }
+    argv[0] = (char *)"make"; argv[1] = jobs.p; argv[2] = NULL;
+    if (run_in_dir(str_text(&src), AS_SELF, argv) != 0) {
+        rm_rf(str_text(&tmp));
+        osr_die("tcc build failed");
+    }
+    argv[0] = (char *)"make"; argv[1] = (char *)"-C"; argv[2] = src.p;
+    argv[3] = (char *)"install"; argv[4] = NULL;
+    if (osr_run_root(argv) != 0) {
+        rm_rf(str_text(&tmp));
+        osr_die("tcc install failed");
+    }
+    rm_rf(str_text(&tmp));
+
+    str_free(&tmp); str_free(&tar_path); str_free(&src); str_free(&jobs);
+    if (!osr_have_cmd("tcc"))
+        osr_die("tcc installed but is not on PATH");
+    return 1;
+}
+
 /* provide_autotiling -- dwindle-style split direction for i3, the thing that
  * makes a stock i3 stop feeling like it needs `split h` typed before every
  * window. Packaged by Void and by Debian trixie; everywhere else it is PyPI-only,
@@ -3177,6 +3253,7 @@ static const Builder builders[] = {
     { "provide_proteus",           provide_proteus },
     { "provide_betterlockscreen",  provide_betterlockscreen },
     { "provide_autotiling",        provide_autotiling },
+    { "provide_tcc",               provide_tcc },
     { "provide_datagrip",          provide_datagrip },
     { "provide_telegram",          provide_telegram },
     { "provide_yandex_browser_deb", provide_yandex_browser_deb },

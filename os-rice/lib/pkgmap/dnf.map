@@ -71,3 +71,241 @@ kernel-tools = kernel-tools
 # Fedora keeps the GObject typelib Astra Monitor imports in the -devel package;
 # plain libgtop2 is the shared library alone (modules/gnome-panel.c).
 libgtop = libgtop2-devel
+
+# --- i3/X11 desktop (rices/i3-rosemary) --------------------------------------
+# Every row below was checked against the real Fedora repository metadata for
+# releases 41, 42, 43 and 44 (`dnf repoquery` inside the fedora:NN images), not
+# from memory - the same discipline xbps.map documents for Void. Only the free
+# Fedora repositories are assumed: RPM Fusion is opt-in and os-rice does not
+# enable it, so a name that exists ONLY there counts as missing here (see
+# `libva-intel-driver` below) exactly as Void's nonfree repo does.
+
+# Fedora ships each X client utility as its own package and does not prefix
+# them, so only the two that keep an xorg-x11-* name need naming.
+xorg-xinit = xorg-x11-xinit
+xorg-xauth = xorg-x11-xauth
+xorg-xrandr = xrandr
+xorg-xset = xset
+xorg-xsetroot = xsetroot
+xorg-xprop = xprop
+xorg-xev = xev
+xorg-xkill = xkill
+xorg-xdpyinfo = xdpyinfo
+xorg-xinput = xinput
+xorg-xmodmap = xmodmap
+xorg-fonts-misc = xorg-x11-fonts-misc
+xorg-server = xorg-x11-server-Xorg
+xf86-input-libinput = xorg-x11-drv-libinput
+
+# Plain name differences.
+networkmanager = NetworkManager
+libnm = NetworkManager-libnm
+thunar = Thunar
+sshfs = fuse-sshfs
+gnome-disks = gnome-disk-utility
+webkit2gtk-4.1 = webkit2gtk4.1
+gtk4-dev = gtk4-devel
+libadwaita-dev = libadwaita-devel
+librsvg = librsvg2
+sane = sane-backends
+bluez-obex = bluez-obexd
+sof-firmware = alsa-sof-firmware
+cpupower = kernel-tools
+p7zip = p7zip p7zip-plugins
+# Fedora 44 dropped p7zip for the upstream 7-Zip port.
+p7zip@44 = 7zip
+# One of three MTP routes (gvfs-mtp remains); Fedora packages jmtpfs, not
+# simple-mtpfs.
+simple-mtpfs = jmtpfs
+# RAW previews come from the gdk-pixbuf loader, the same fallback Void uses;
+# Fedora packages no standalone raw thumbnailer.
+raw-thumbnailer = libopenraw-pixbuf-loader
+
+# Fonts. Fedora prefixes the Noto families with the upstream project name and
+# splits Liberation per face.
+noto-fonts = google-noto-sans-fonts
+noto-fonts-emoji = google-noto-color-emoji-fonts
+noto-fonts-cjk = google-noto-sans-cjk-fonts
+ttf-liberation = liberation-sans-fonts liberation-mono-fonts liberation-serif-fonts
+ttf-dejavu = dejavu-fonts-all
+# No Nerd Fonts symbols font in Fedora, and no equivalent (the Powerline /
+# devicon private-use range is not in any packaged font). Empty RHS = skip:
+# modules/theming.c downloads a full Nerd Font anyway, which carries the same
+# patched glyphs. Same call apt.map makes.
+nerd-fonts-symbols =
+
+# GStreamer. Fedora carries the API version in the package name and suffixes the
+# patent-encumbered sets with -free; gst-libav is a standalone Rust plugin
+# package here rather than part of the ugly set.
+gstreamer = gstreamer1
+gst-plugins-base = gstreamer1-plugins-base
+gst-plugins-good = gstreamer1-plugins-good
+gst-plugins-bad = gstreamer1-plugins-bad-free
+gst-plugins-ugly = gstreamer1-plugins-ugly-free
+gst-libav = gstreamer1-plugin-libav
+gst-plugin-pipewire = pipewire-gstreamer
+
+# --- GPU drivers (modules/gpu-drivers.c) -------------------------------------
+# Arch splits the Vulkan stack per vendor; Fedora ships every Mesa Vulkan driver
+# in one package, so all four vendor rows collapse onto mesa-vulkan-drivers.
+mesa = mesa-libGL mesa-dri-drivers
+mesa-dri = mesa-dri-drivers
+vulkan-icd-loader = vulkan-loader
+vulkan-radeon = mesa-vulkan-drivers
+vulkan-intel = mesa-vulkan-drivers
+vulkan-swrast = mesa-vulkan-drivers
+vulkan-virtio = mesa-vulkan-drivers
+opencl-mesa = mesa-libOpenCL
+libva-mesa-driver = mesa-va-drivers
+mesa-vdpau = mesa-vdpau-drivers
+# Fedora 44 folded the Gallium VA drivers into mesa-dri-drivers and dropped the
+# VDPAU state tracker outright (VA-API is the only path left there).
+libva-mesa-driver@44 = mesa-dri-drivers
+mesa-vdpau@44 =
+libvdpau-va-gl@44 =
+# Amber (pre-shader R100/R200, Intel gen3-5) is not packaged by Fedora at all.
+mesa-amber =
+# The classic i965 VA-API driver lives in RPM Fusion only, which os-rice does
+# not enable; the modern Intel stack (intel-media-driver, Broadwell and newer)
+# IS in Fedora proper and covers every GPU osr is likely to meet.
+libva-intel-driver =
+intel-media-driver = libva-intel-media-driver
+# 32-bit GL/Vulkan is a multilib (.i686) install on Fedora and off the path osr
+# takes; empty RHS = skip, same call apt.map makes.
+lib32-mesa =
+lib32-mesa-amber =
+lib32-vulkan-icd-loader =
+lib32-vulkan-radeon =
+lib32-vulkan-intel =
+lib32-vulkan-virtio =
+lib32-libvdpau =
+lib32-libva-intel-driver =
+xf86-video-amdgpu = xorg-x11-drv-amdgpu
+xf86-video-ati = xorg-x11-drv-ati
+xf86-video-nouveau = xorg-x11-drv-nouveau
+xf86-video-intel = xorg-x11-drv-intel
+xf86-video-vmware = xorg-x11-drv-vmware
+
+# --- theming, thumbnails, desktop glue ---------------------------------------
+gtk-dark-theme = gnome-themes-extra gtk-murrine-engine
+# Fedora 44 retired gnome-themes-extra; adw-gtk3-theme is the packaged dark GTK3
+# theme there and the murrine engine is still what it needs to draw.
+gtk-dark-theme@44 = adw-gtk3-theme gtk-murrine-engine
+# Fedora 44 dropped the webp pixbuf loader; WebP thumbnails are lost there,
+# which is a missing preview, not a broken desktop.
+webp-pixbuf-loader@44 =
+# polkit-gnome was retired from Fedora; mate-polkit is the same GTK agent under
+# a different name (modules/polkit-agent.c probes for its exec path too).
+polkit-gnome = mate-polkit
+# i3lock-color is not packaged; plain i3lock is, and modules/i3lock.c styles
+# what it finds.
+i3lock-color = i3lock
+
+# --- not packaged in Fedora --------------------------------------------------
+# Rust tools Fedora does not package. The rice lists `rust` before the modules
+# that need these (§4), so cargo: is a real route here.
+xcolor = cargo:xcolor
+ouch = cargo:ouch
+xidlehook = cargo:xidlehook
+# xidlehook links the XCB screensaver extension and libpulse for the
+# --not-when-audio inhibit; Fedora keeps the screensaver extension inside
+# libxcb, like Void and unlike Debian.
+xidlehook-build-deps = libxcb-devel xcb-util-devel pulseaudio-libs-devel pkgconf-pkg-config
+betterlockscreen = source:provide_betterlockscreen
+autotiling = source:provide_autotiling
+# Empty RHS = skip: in no Fedora release, and the rice still works without them.
+# What is lost, in order: the rofi calc/emoji modes and the $mod+period emoji
+# picker (fcitx5's own picker still works), two extra mixers on top of
+# pavucontrol/pulsemixer, touchpad swipe gestures, kernel-level key remapping
+# (xcape, which IS packaged, covers dual-role keys at the X level), and the
+# aptX/LDAC Bluetooth codecs (SBC and AAC still work).
+rofi-calc =
+rofi-emoji =
+rofimoji =
+ncpamixer =
+pwvucontrol =
+libinput-gestures =
+keyd =
+libfreeaptx =
+# nsxiv is in no Fedora release; `imv` (installed by the same module) is the
+# image viewer there.
+nsxiv =
+# gsimplecal is not packaged; the bar's calendar popup falls back to the
+# notification daemon's own (modules/polybar.c).
+gsimplecal =
+# zramen is Void-only (a runit service). Fedora is systemd, which takes the
+# zram-generator path in modules/swap.c instead, so nothing is lost.
+zramen =
+
+# --- gpaste build deps (modules/gpaste.c) ------------------------------------
+# Fedora tracks GNOME Shell's version properly, so `gpaste` passes through to
+# the native package; these are the deps for provide_gpaste when a user calls it
+# directly on a release whose extension went stale.
+gpaste-build-deps = meson ninja-build pkgconf-pkg-config gettext gcr-devel glib2-devel gtk4-devel libadwaita-devel pango-devel gobject-introspection-devel libX11-devel libXi-devel
+
+# --- second pass: names the modules install that Fedora spells differently ----
+amd-ucode = amd-ucode-firmware
+intel-ucode = microcode_ctl
+dex = dex-autostart
+intel-gpu-tools = igt-gpu-tools
+kdeconnect = kde-connect
+lightdm-gtk-greeter = lightdm-gtk
+mesa-utils = glx-utils
+onetbb = tbb
+nlohmann-json = json-devel
+smbclient = samba-client
+vim = vim-enhanced
+xorg-xlsclients = xlsclients
+xorg-xwayland = xorg-x11-server-Xwayland
+xcursor-themes = adwaita-cursor-theme
+wayland = wayland-devel
+wayland-protocols = wayland-protocols-devel
+qt5-wayland = qt5-qtwayland
+qt6-base = qt6-qtbase
+qt6-declarative = qt6-qtdeclarative
+qt6-svg = qt6-qtsvg
+qt6-wayland = qt6-qtwayland
+qt6-5compat = qt6-qt5compat
+# Fedora replaced wget with wget2; the subpackage is what installs /usr/bin/wget.
+wget = wget2-wget
+# ffmpeg proper is RPM Fusion; ffmpeg-free is the same build with the
+# patent-encumbered decoders dropped, and is what Fedora ships in the free repo.
+ffmpeg = ffmpeg-free
+# Audio: Fedora spells the PipeWire replacement subpackages after the daemons
+# they replace, and keeps the ALSA/JACK bridges as plugin packages.
+pipewire-audio = pipewire
+pipewire-pulse = pipewire-pulseaudio
+pipewire-jack = pipewire-jack-audio-connection-kit
+jack2 = jack-audio-connection-kit
+pulseaudio-alsa = alsa-plugins-pulseaudio
+pulseaudio-jack = pulseaudio-module-jack
+# Empty RHS = skip: not in Fedora. pulsemixer's job is covered by pavucontrol
+# (installed by the same module), gufw by firewalld's own firewall-config (the
+# ufw module writes its three rules with the ufw CLI either way), and VS Code
+# only ships from Microsoft's own repo, which os-rice does not add.
+pulsemixer =
+gufw =
+vscode =
+
+# tcc: TinyCC is in no Fedora release; the source build is the route here.
+tcc = source:provide_tcc
+tcc-build-deps = glibc-devel
+
+# Fedora names the Qt layer-shell library without the Qt major, and ships the
+# VirtualBox guest bits as one "additions" package.
+layer-shell-qt5 = layer-shell-qt
+virtualbox-guest-utils = virtualbox-guest-additions
+# Not packaged for Fedora at all (COPR-only or upstream-only): empty RHS = skip,
+# so the module installs everything else instead of failing on one name.
+batsignal =
+bibata-cursor-theme =
+cliphist =
+gtklock =
+gtklock-userinfo-module =
+libdeep-filter-ladspa =
+mda-lv2 =
+nwg-displays =
+waylock =
+xcape =
+# elogind is the systemd-free seat manager; Fedora is systemd-only.
+elogind =

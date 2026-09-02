@@ -24,3 +24,169 @@ tcc = dev-lang/tcc
 # Panel sensors (modules/gnome-panel.c): neither bare name resolves to an atom.
 lm_sensors = sys-apps/lm-sensors
 libgtop = gnome-base/libgtop
+
+# --- ambiguous bare names ----------------------------------------------------
+# Portage resolves a bare name only when exactly one category provides it. Each
+# name below is also an acct-user/acct-group (or a language binding), so emerge
+# would stop and ask; qualify the atom instead.
+avahi = net-dns/avahi
+cairo = x11-libs/cairo
+dbus = sys-apps/dbus
+dnscrypt-proxy = net-dns/dnscrypt-proxy
+docker = app-containers/docker
+exo = xfce-base/exo
+flatpak = sys-apps/flatpak
+git = dev-vcs/git
+lightdm = x11-misc/lightdm
+lzip = app-arch/lzip
+mako = gui-apps/mako
+openssh = net-misc/openssh
+pango = x11-libs/pango
+pipewire = media-video/pipewire
+qbittorrent = net-p2p/qbittorrent
+sddm = x11-misc/sddm
+slop = x11-misc/slop
+tar = app-arch/tar
+xclip = x11-misc/xclip
+
+# --- X11 clients -------------------------------------------------------------
+# Gentoo splits the old xorg-apps into one atom per binary, under x11-apps.
+xorg-xrandr = x11-apps/xrandr
+xorg-xauth = x11-apps/xauth
+xorg-xdpyinfo = x11-apps/xdpyinfo
+xorg-xev = x11-apps/xev
+xorg-xinput = x11-apps/xinput
+xorg-xkill = x11-apps/xkill
+xorg-xlsclients = x11-apps/xlsclients
+xorg-xmodmap = x11-apps/xmodmap
+xorg-xprop = x11-apps/xprop
+xorg-xset = x11-apps/xset
+xorg-xsetroot = x11-apps/xsetroot
+xorg-xinit = x11-apps/xinit
+xorg-xwayland = x11-base/xwayland
+xorg-fonts-misc = media-fonts/font-misc-misc
+# dbus-x11 is a Debian split; Gentoo's sys-apps/dbus carries the X11 autolaunch
+# in the package itself (USE=X).
+dbus-x11 = sys-apps/dbus
+
+# --- toolkits and libraries --------------------------------------------------
+gtk3 = x11-libs/gtk+
+gtk4 = gui-libs/gtk
+gtk-layer-shell = gui-libs/gtk-layer-shell
+gtk4-layer-shell = gui-libs/gtk4-layer-shell
+gdk-pixbuf2 = x11-libs/gdk-pixbuf
+poppler-glib = app-text/poppler
+webkit2gtk-4.1 = net-libs/webkit-gtk
+nlohmann-json = dev-cpp/nlohmann_json
+onetbb = dev-cpp/tbb
+soundtouch = media-libs/libsoundtouch
+ocl-icd = dev-libs/opencl-icd-loader
+xz = app-arch/xz-utils
+ntfs-3g = sys-fs/ntfs3g
+udisks2 = sys-fs/udisks
+libnm = net-misc/networkmanager
+network-manager-applet = gnome-extra/nm-applet
+gnome-disks = sys-apps/gnome-disk-utility
+smbclient = net-fs/samba
+sane = media-gfx/sane-backends
+mesa-utils = x11-apps/mesa-progs
+intel-gpu-tools = x11-apps/igt-gpu-tools
+intel-media-driver = media-libs/libva-intel-media-driver
+raw-thumbnailer = media-libs/libopenraw
+lsp-plugins-ladspa = media-libs/lsp-plugins
+gst-libav = media-plugins/gst-plugins-libav
+# Qt is one atom per module under dev-qt, with the slot picking the major.
+qt5-wayland = dev-qt/qtwayland:5
+qt6-wayland = dev-qt/qtwayland
+qt6-base = dev-qt/qtbase
+qt6-declarative = dev-qt/qtdeclarative
+qt6-svg = dev-qt/qtsvg
+qt6-5compat = dev-qt/qt5compat
+layer-shell-qt5 = kde-plasma/layer-shell-qt
+
+# --- fonts -------------------------------------------------------------------
+noto-fonts = media-fonts/noto
+noto-fonts-cjk = media-fonts/noto-cjk
+noto-fonts-emoji = media-fonts/noto-emoji
+ttf-dejavu = media-fonts/dejavu
+ttf-liberation = media-fonts/liberation-fonts
+
+# --- input methods -----------------------------------------------------------
+# Gentoo keeps the fcitx5 series under the unversioned name, slot 5.
+fcitx5 = app-i18n/fcitx:5
+fcitx5-configtool = app-i18n/fcitx-configtool
+fcitx5-gtk = app-i18n/fcitx-gtk
+fcitx5-qt = app-i18n/fcitx-qt
+fcitx5-chinese-addons = app-i18n/fcitx-chinese-addons
+fcitx5-hangul = app-i18n/fcitx-hangul
+fcitx5-mozc = app-i18n/mozc
+
+# --- firmware and microcode --------------------------------------------------
+amd-ucode = sys-kernel/linux-firmware
+intel-ucode = sys-firmware/intel-microcode
+
+# --- USE flags, not packages -------------------------------------------------
+# Gentoo builds these into their parent instead of splitting them out; installing
+# the parent again would be a no-op, so skip (§2 - empty RHS is deliberate).
+gvfs-afc =
+gvfs-goa =
+gvfs-gphoto2 =
+gvfs-mtp =
+gvfs-nfs =
+gvfs-smb =
+bluez-obex =
+pipewire-audio =
+pipewire-alsa =
+pipewire-pulse =
+pipewire-jack =
+pulseaudio-alsa =
+pulseaudio-jack =
+gst-plugin-pipewire =
+tlp-rdw =
+mesa-dri = media-libs/mesa
+vulkan-swrast = media-libs/mesa
+# PulseAudio itself is a virtual on Gentoo: pipewire-pulse or the daemon both
+# satisfy it, and the rice already installs one of them.
+pulseaudio =
+virtualbox-guest-utils = app-emulation/virtualbox-guest-additions
+webp-pixbuf-loader =
+gtk-dark-theme = x11-themes/gtk-engines-murrine
+i3lock-color = x11-misc/i3lock
+
+# --- not in ::gentoo ---------------------------------------------------------
+# These live only in overlays (GURU, guru-adjacent) or nowhere at all. The rice
+# does not add overlays, so treat them the way an opt-in repo is treated
+# elsewhere: build from source where a builder exists, skip otherwise.
+betterlockscreen = source:provide_betterlockscreen
+autotiling = source:provide_autotiling
+xcolor = cargo:xcolor
+ouch = cargo:ouch
+serie = cargo:serie
+xidlehook = cargo:xidlehook
+xidlehook-build-deps = x11-libs/libxcb x11-libs/xcb-util media-libs/libpulse dev-util/pkgconf
+android-file-transfer = sys-fs/android-file-transfer-linux
+brightnessctl =
+batsignal =
+bibata-cursor-theme =
+cliphist =
+gh =
+gnome-epub-thumbnailer =
+gsimplecal =
+gtklock =
+gtklock-userinfo-module =
+gufw =
+keyd =
+libdeep-filter-ladspa =
+nerd-fonts-symbols =
+nsxiv =
+nwg-displays =
+pamixer =
+qt5ct =
+rofi-emoji =
+rofimoji =
+waylock =
+wlogout =
+zramen =
+# Vulkan drivers are USE=video_cards_* on media-libs/mesa, not separate atoms.
+vulkan-intel = media-libs/mesa
+vulkan-virtio = media-libs/mesa

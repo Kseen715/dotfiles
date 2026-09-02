@@ -139,3 +139,76 @@ xidlehook-build-deps = libxcb-devel xcb-util-devel pulseaudio-devel pkg-config
 # unrar-free: take the free extractor rather than turn on a nonfree repo behind
 # the user's back.
 unrar = unar
+
+# --- second pass: names checked against the live x86_64 repodata --------------
+gtk3 = gtk+3
+mesa-utils = mesa-demos
+nlohmann-json = json-c++
+onetbb = tbb
+jack2 = jack
+waybar = Waybar
+layer-shell-qt5 = layer-shell-qt
+qt6-5compat = qt6-qt5compat
+xorg-xwayland = xorg-server-xwayland
+xorg-xlsclients = xlsclients
+virtualbox-guest-utils = virtualbox-ose-guest
+# Void ships one Nerd Fonts package rather than a package per family.
+ttf-cascadia-code-nerd = nerd-fonts-ttf
+ttf-cascadia-mono-nerd = nerd-fonts-ttf
+ttf-iosevkaterm-nerd = nerd-fonts-ttf
+
+# Audio. Void builds the PulseAudio and JACK replacements into `pipewire`
+# itself, except the JACK client library, which is its own package.
+pipewire-audio = pipewire
+pipewire-pulse = pipewire
+pipewire-jack = libjack-pipewire
+pulseaudio-alsa = alsa-plugins-pulseaudio
+# No pulseaudio-module-jack on Void; PipeWire's JACK path above is the route
+# that actually works here.
+pulseaudio-jack =
+
+# --- GPU drivers --------------------------------------------------------------
+vulkan-intel = mesa-vulkan-intel
+vulkan-swrast = mesa-vulkan-lavapipe
+# VMware/VirtualBox guests use the modesetting driver plus Mesa's vmwgfx
+# gallium driver; Void packages no xf86-video-vmware DDX.
+xf86-video-vmware = mesa-vmwgfx-dri
+# No virtio (venus) Vulkan driver, no Amber (pre-shader R100/R200, Intel
+# gen3-5) build, and no Intel compute (OpenCL/Level Zero) runtime in `current`.
+vulkan-virtio =
+mesa-amber =
+intel-compute-runtime =
+# 32-bit GL/Vulkan lives in void-repo-multilib, which is opt-in and off on a
+# stock install - the same call any.map makes for lib32-libnm.
+lib32-mesa =
+lib32-mesa-amber =
+lib32-vulkan-intel =
+lib32-vulkan-virtio =
+lib32-libva-intel-driver =
+
+# --- microcode ----------------------------------------------------------------
+amd-ucode = linux-firmware-amd
+# Intel's microcode blob is redistributable-but-nonfree and lives in
+# void-repo-nonfree, which is opt-in and off on a stock install (see the header).
+# Empty RHS = skip rather than turn that repo on behind the user's back.
+intel-ucode =
+
+# --- GPaste (modules/gpaste.c) ------------------------------------------------
+# Void packages libgpaste only - no daemon, no CLI, no Shell extension - so the
+# source build is the route here, exactly as on apt. Same build deps as the
+# apt row, under Void's -devel names.
+gpaste = source:provide_gpaste
+gpaste-build-deps = meson ninja pkg-config gettext gcr-devel glib-devel gtk4-devel libadwaita-devel pango-devel gobject-introspection libgirepository-devel libX11-devel libXi-devel
+
+# zram-generator is a systemd generator; Void is runit and takes the zramen path
+# in modules/swap.c instead (zramen IS packaged), so this one is a skip, not a
+# gap - the mirror image of the `zramen` skip in pacman.map/dnf.map.
+zram-generator =
+pipewire-alsa = alsa-pipewire
+
+# Not in void-packages: skip rather than fail the whole install step.
+bibata-cursor-theme =
+gtklock-userinfo-module =
+libdeep-filter-ladspa =
+nwg-displays =
+zam-plugins =

@@ -447,3 +447,125 @@ lib32-libva-intel-driver =
 # (modules/gnome-panel.c); what the extension imports is the typelib, which
 # Debian ships in the GIR package rather than in the shared library one.
 libgtop = gir1.2-gtop-2.0
+
+# EasyEffects' plugin stack (modules/easyeffects.c) is named after the Arch
+# runtime libraries; Debian carries the same shared objects under SONAME-suffixed
+# binary package names.
+libebur128 = libebur128-1
+zita-convolver = libzita-convolver4
+soundtouch = libsoundtouch1
+libsamplerate = libsamplerate0
+libsndfile = libsndfile1
+libbs2b = libbs2b0
+fftw = libfftw3-double3
+speex = libspeex1
+speexdsp = libspeexdsp1
+calf = calf-plugins
+# oneTBB's runtime moved from libtbb2 to libtbb12 in bookworm; bullseye and
+# jammy still ship the old SONAME package only.
+onetbb = libtbb12
+onetbb@bullseye = libtbb2
+onetbb@jammy = libtbb2
+# Header-only library, so the -dev package is the whole thing.
+nlohmann-json = nlohmann-json3-dev
+# RNNoise is not in Debian at all: EasyEffects' noise reduction is optional and
+# degrades to "filter unavailable", so skipping beats failing the install.
+rnnoise =
+
+jack2 = jackd2
+pulseaudio-jack = pulseaudio-module-jack
+xorg-xwayland = xwayland
+# xlsclients lives in the x11-utils grab bag on Debian.
+xorg-xlsclients = x11-utils
+# `mako` on Debian is an unrelated ancient package; the Wayland daemon is
+# mako-notifier.
+mako = mako-notifier
+libglvnd = libglvnd0
+# policykit-1-gnome was dropped in trixie; mate-polkit is the same agent and is
+# present on every release.
+polkit-gnome@trixie = mate-polkit
+# VS Code ships only from Microsoft's own apt repo, which the rice does not add.
+vscode =
+
+# --- old-release holes -------------------------------------------------------
+# bullseye (11) and jammy (22.04) predate most of this desktop stack. Every row
+# below is "absent from that release's archive", not a rename: empty RHS = skip,
+# so the rest of the module still installs instead of aborting on one name.
+alacritty@bullseye =
+alacritty@jammy =
+bibata-cursor-theme@bullseye =
+bibata-cursor-theme@jammy =
+easyeffects@bullseye =
+easyeffects@jammy =
+helvum@bullseye =
+helvum@bookworm =
+helvum@jammy =
+loupe@bullseye =
+loupe@bookworm =
+loupe@jammy =
+nwg-displays@bullseye =
+nwg-displays@bookworm =
+nwg-displays@jammy =
+nwg-displays@noble =
+qpwgraph@bullseye =
+qpwgraph@jammy =
+wayland-utils@bullseye =
+wayland-utils@jammy =
+cliphist@bullseye =
+cliphist@bookworm =
+cliphist@jammy =
+nvtop@bullseye =
+nvtop@bookworm =
+swaylock@bullseye =
+layer-shell-qt@bullseye =
+qt6-wayland@bullseye =
+power-profiles-daemon@bullseye =
+zram-generator@bullseye =
+fcitx5-gtk@bullseye = fcitx5-frontend-gtk3
+fcitx5-qt@bullseye = fcitx5-frontend-qt5
+fcitx5-qt@noble = fcitx5-frontend-qt5 fcitx5-frontend-qt6
+
+# gtklock and its userinfo module landed late and separately; the module is only
+# in trixie and resolute so far.
+gtklock@bullseye =
+gtklock@bookworm =
+gtklock@jammy =
+gtklock-userinfo-module@bullseye =
+gtklock-userinfo-module@bookworm =
+gtklock-userinfo-module@jammy =
+gtklock-userinfo-module@noble =
+
+# Kvantum's Qt6 style is packaged separately and only exists in trixie/resolute;
+# elsewhere the Qt5 style is the whole package.
+kvantum = qt5-style-kvantum
+kvantum@trixie = qt5-style-kvantum qt6-style-kvantum
+kvantum@resolute = qt5-style-kvantum qt6-style-kvantum
+
+# PipeWire's split metapackages arrived in bookworm. On bullseye and jammy the
+# daemon is `pipewire` and the ALSA/JACK/Pulse shims all live in one package.
+pipewire-audio@bullseye = pipewire
+pipewire-audio@jammy = pipewire
+pipewire-alsa@bullseye = pipewire-audio-client-libraries
+pipewire-alsa@jammy = pipewire-audio-client-libraries
+pipewire-jack@bullseye = pipewire-audio-client-libraries
+pipewire-jack@jammy = pipewire-audio-client-libraries
+pipewire-pulse@bullseye = pipewire-audio-client-libraries
+
+# Ubuntu ships cpupower inside the kernel tools, not as its own package.
+cpupower@jammy = linux-tools-common linux-tools-generic
+cpupower@noble = linux-tools-common linux-tools-generic
+cpupower@resolute = linux-tools-common linux-tools-generic
+# elogind exists only where systemd does not; Ubuntu dropped the package.
+elogind@jammy =
+elogind@noble =
+elogind@resolute =
+
+# dnscrypt-proxy was pulled from bookworm (RC bug at the freeze) and is back in
+# trixie; openresolv left Ubuntu after noble, where systemd-resolved owns
+# /etc/resolv.conf anyway. Empty RHS = skip: dnscrypt.c still installs the rest.
+dnscrypt-proxy@bookworm =
+openresolv@noble =
+openresolv@resolute =
+# jmtpfs and p7zip are both gone from resolute; 7zip is the maintained fork.
+jmtpfs@resolute =
+p7zip@resolute = 7zip
