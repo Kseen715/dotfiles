@@ -13,6 +13,8 @@
  *   ./build/nob test        (builds both + runs the test suite)
  *   ./build/nob clean
  *   ./build/nob -v          (any of the above, with full command lines)
+ *   ./build/nob -t          (any of the above, timed: how long each unit
+ *                            took to compile and each binary to link)
  *
  * Commands are echoed the way an autoconf build with silent rules prints
  * them -- "TCC      build/obj/lib_net.o", "LD       build/install" -- so a
@@ -71,6 +73,9 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+#ifndef _WIN32
+#include <sys/time.h>   /* gettimeofday, for `nob -t`; see now_secs() */
+#endif
 
 /* EXE -- the host's executable suffix. Windows needs ".exe"; on a Linux/CI
  * host the produced binaries (and the tests we actually run there) carry no
@@ -100,6 +105,81 @@
 static bool mkdir_if_needed(const char *path) {
     if (nob_file_exists(path) > 0) return true;
     return nob_mkdir_if_not_exists(path);
+}
+
+/* --- per-command timing (`nob -t`) -----------------------------------
+ *
+ * `nob -t` / `--time` (or NOB_TIME=1, for the `make` wrapper, which forwards
+ * no arguments) appends the wall-clock cost of each compile and link to the
+ * line that already names it:
+ *
+ *   TCC      build/obj/lib_yaml.o                    0.412s
+ *   LD       build/osr                               0.088s
+ *   total                                            3.907s
+ *
+ * The numbers are only meaningful if one command runs at a time, so timing
+ * also serialises the build: an async batch shares the machine, and each
+ * member's wall clock would then measure the contention rather than the
+ * file. That makes a timed build slower than a real one -- it is a profile
+ * of the tree, not a stopwatch on the build you would actually run, and the
+ * total printed at the end is the serial total, not what `nob` costs you.
+ *
+ * Only commands nob decided to issue are timed; an up-to-date tree runs
+ * nothing and reports nothing, so `nob clean && nob -t` is the way to time
+ * every unit.
+ */
+static bool timing = false;
+static double timed_total = 0.0;
+
+/* now_secs -- a monotonic-ish clock in seconds. Not clock(), which counts
+ * this process's CPU time and would report ~0 for a compiler that runs in a
+ * child; not time(), whose one-second resolution is coarser than most of the
+ * units here. nob.h has nob_nanos_since_unspecified_epoch(), but nob89.h
+ * (the C89 backend) does not, and this file has to build against both. */
+#ifdef _WIN32
+static double now_secs(void) {
+    return (double)GetTickCount() / 1000.0;
+}
+#else
+static double now_secs(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+}
+#endif
+
+/* pending_echo -- the brief line for the command now running, parked by the
+ * log handler instead of printed, so the duration can be appended to it and
+ * one line still describes one command. Empty when the handler did not
+ * produce one (that is `nob -v`, which prints full command lines itself). */
+static char pending_echo[512];
+
+/* report_timed_total -- the last line of a timed run, whichever subcommand
+ * ran; registered with atexit() because main() returns from a dozen places
+ * and the total is worth printing after every one of them. Silent when
+ * nothing was rebuilt, so an up-to-date tree still prints nothing. */
+static void report_timed_total(void) {
+    if (timed_total > 0.0) fprintf(stderr, "  %-8s %-37s %8.3fs\n", "total", "", timed_total);
+}
+
+/* run_timed -- run one command, print what it cost. Synchronous by
+ * construction; see the note above on why. */
+static bool run_timed(Nob_Cmd *cmd, const char *what) {
+    double start;
+    bool ok;
+    pending_echo[0] = '\0';
+    start = now_secs();
+    ok = nob_cmd_run(cmd);
+    {
+        double secs = now_secs() - start;
+        timed_total += secs;
+        if (pending_echo[0] != '\0') {
+            fprintf(stderr, "%-48s %8.3fs\n", pending_echo, secs);
+        } else {
+            fprintf(stderr, "  %-8s %-38s %8.3fs\n", "TIME", what, secs);
+        }
+    }
+    return ok;
 }
 
 /* cmd_append_args -- append a NULL-terminated list of arguments. C89 has no
@@ -212,6 +292,10 @@ static const char *posix_srcs[] = {
      * header parsers (its I/O half is the Windows one, stubbed here). */
     "lib/fetch.c",
     "lib/net.c",
+    /* The vendored YAML parser's implementation (thirdparty/yaml.h). Core
+     * rather than static-only: config parsing is what it is here for, and
+     * that lives in the runtime host too. */
+    "lib/yaml.c",
     "lib/modules.c",
     "modules/alacritty.c",
     "modules/amnezia-vpn.c",
@@ -345,7 +429,7 @@ static const char *posix_srcs[] = {
 /* Entries before modules/alacritty.c are the runtime core. Keep this count at
  * the boundary above: runtime builds compile these units plus
  * lib/module_runtime.c, while static builds compile the whole list. */
-#define POSIX_CORE_SRCS_COUNT 34
+#define POSIX_CORE_SRCS_COUNT 35
 #define POSIX_RUNTIME_SRC "lib/module_runtime.c"
 
 static const char *test_names[] = {
@@ -883,7 +967,9 @@ static bool compile_objs(const char **srcs, size_t count) {
         } else {
             cmd_append_args(&cmd, "-c", srcs[i], "-o", obj_of(srcs[i]), NULL);
         }
-        {
+        if (timing) {
+            if (!run_timed(&cmd, obj_of(srcs[i]))) return false;
+        } else {
             Nob_Cmd_Opt opt = {0};
             opt.async = &procs;   /* nob89 runs this synchronously */
             if (!nob_cmd_run_opt(&cmd, opt)) return false;
@@ -939,6 +1025,7 @@ static bool link_posix(const char *bin) {
         cmd_append_args(&cmd, "-o", bin, NULL);
     }
     for (i = 0; i < POSIX_SRCS_COUNT + 1; i++) nob_cmd_append(&cmd, objs[i]);
+    if (timing) return run_timed(&cmd, bin);
     return nob_cmd_run(&cmd);
 }
 
@@ -969,6 +1056,7 @@ static bool link_posix_runtime(const char *bin) {
                     is_lcc() ? "-Wl-E" : "-rdynamic", "-o", bin, "osr.c", NULL);
     for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
     cmd_append_args(&cmd, POSIX_RUNTIME_SRC, "-ldl", NULL);
+    if (timing) return run_timed(&cmd, bin);
     return nob_cmd_run(&cmd);
 }
 
@@ -987,6 +1075,7 @@ static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     nob_cmd_append(&cmd, obj_of(main_src));
     append_lib_objs(&cmd);
     append_common_libs(&cmd);
+    if (timing) return run_timed(&cmd, bin);
     {
         Nob_Cmd_Opt opt = {0};
         opt.async = procs;   /* nob89 runs this synchronously */
@@ -1008,6 +1097,7 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
         cmd_append_args(&cmd, "-o", bin, NULL);
     }
     nob_cmd_append(&cmd, obj);
+    if (timing) return run_timed(&cmd, bin);
     {
         Nob_Cmd_Opt opt = {0};
         opt.async = procs;   /* nob89 runs this synchronously */
@@ -1233,6 +1323,10 @@ static bool is_verbose_flag(const char *arg) {
     return strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0;
 }
 
+static bool is_time_flag(const char *arg) {
+    return strcmp(arg, "-t") == 0 || strcmp(arg, "--time") == 0;
+}
+
 /* Cmd_Brief -- what one rendered command line boils down to: the tool that
  * ran it and the file it acted on. `name` points into the line the handler
  * was given, which outlives the printing of it. */
@@ -1375,6 +1469,14 @@ static void brief_log_handler(Nob_Log_Level level, const char *fmt, va_list args
         brief_cmd(va_arg(args, const char *), &brief);
         /* no "[INFO]" here: these lines are the build's output, not
          * commentary on it, and the column they line up in is the point. */
+        if (timing) {
+            /* park it: run_timed() prints this line once the command it
+             * describes has finished and its duration is known. */
+            size_t n = brief.name_len;
+            if (n > sizeof(pending_echo) - 16) n = sizeof(pending_echo) - 16;
+            sprintf(pending_echo, "  %-8s %.*s", brief.tag, (int)n, brief.name);
+            return;
+        }
         fprintf(stderr, "  %-8s %.*s\n", brief.tag, (int)brief.name_len, brief.name);
         return;
     }
@@ -1394,13 +1496,24 @@ static bool want_verbose(int argc, char **argv) {
     return false;
 }
 
+static bool want_timing(int argc, char **argv) {
+    const char *env = getenv("NOB_TIME");
+    int i;
+    if (env != NULL && *env != '\0' && strcmp(env, "0") != 0) return true;
+    for (i = 1; i < argc; i++) {
+        if (is_time_flag(argv[i])) return true;
+    }
+    return false;
+}
+
 /* drop_verbose_flags -- compact argv so the subcommand parse in main() sees
- * subcommands only, and `nob -v test` works in either order. */
+ * subcommands only, and `nob -v test` (or `nob -t test`) works in either
+ * order. */
 static int drop_verbose_flags(int argc, char **argv) {
     int i;
     int n = 0;
     for (i = 0; i < argc; i++) {
-        if (i > 0 && is_verbose_flag(argv[i])) continue;
+        if (i > 0 && (is_verbose_flag(argv[i]) || is_time_flag(argv[i]))) continue;
         argv[n++] = argv[i];
     }
     return n;
@@ -1410,6 +1523,8 @@ int main(int argc, char **argv) {
     const char *program;
     const char *subcommand;
 
+    timing = want_timing(argc, argv);
+    if (timing) atexit(&report_timed_total);
     if (!want_verbose(argc, argv)) nob_set_log_handler(&brief_log_handler);
     NOB_GO_REBUILD_URSELF(argc, argv);
     argc = drop_verbose_flags(argc, argv);
