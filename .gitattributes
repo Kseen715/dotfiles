@@ -4,3 +4,7 @@
 
 # Vendored: single-header build system from tsoding/nob.h
 os-rice/nob.h linguist-vendored
+
+# Vendored: LibYAML, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_yaml.py (that script is ours, this is not).
+os-rice/thirdparty/yaml.h linguist-vendored
