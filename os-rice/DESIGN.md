@@ -672,7 +672,8 @@ Dispatch on `OSR_INIT`, checking current state before acting:
 | sysvinit | `update-rc.d … enable` + `service … start` | `update-rc.d … disable` |
 
 Service *names* differ per init (`NetworkManager` vs `networkmanager`) → a
-`servicemap` echoing `pkgmap`, rows only where names actually differ.
+`servicemap/` echoing `pkgmap/` — a map file per init, read `<init>.map` then
+`any.map`, rows only where names actually differ.
 
 ### Target-user model: root-for-root or user-for-user
 
@@ -949,7 +950,7 @@ changed is the language the backbone is written in.
 | `lib/render.c` | the `{{role}}` sed script | shared with `theme.c` |
 | `lib/manifest.c` `theme_list.c` `theme_render.c` `config_copy.c` `net.c` | — | written for the Windows core, already portable |
 | `lib/fetch.c` `git.c` | `lib/net.sh` `git.sh` | the shell tier's downloader and the git/oh-my-zsh helpers; `lib/net.c` stays the landing spot for a future native fetch backend |
-| `lib/service.c` | `lib/service.sh` | both verbs on all four inits, and the servicemap facet lookup they share |
+| `lib/service.c` | `lib/service.sh` | both verbs on all four inits, and the servicemap lookup they share (`lib/servicemap/<init>.map` then `any.map`) |
 | `lib/preflight.c` `nerdfont.c` | `lib/preflight.sh` `fonts.sh` | the require: predicates and the Nerd Font install; `nerdfont.c` is so named because `lib/fonts.c` is the Windows core's |
 | `lib/gnome.c` `migrate.c` | `lib/gnome.sh` `migrate.sh` | GNOME session detection, freeing a chord off the Shell keys and registering a custom keybinding; and the migrations that patch a seeded, user-owned layer in place. `migrate_replace` takes the old and the new region as text rather than the names of two functions that print them — the fork per region bought a C caller nothing |
 | `lib/reload.c` | `lib/reload.sh` | the reload table: probe first, act second, never fatal, never restart what would lose state |

@@ -46,38 +46,40 @@ static int map_line_value(Str *out, const Line *line, const char *key) {
 
 void osr_service_resolve(Str *out, const char *name) {
     Str path;
-    Str key;
-    char *buf;
-    size_t len;
-    int pass;
-    int found = 0;
+    int which;
 
     str_init(&path);
-    str_addz(&path, env_str("OSR_LIB", "lib"));
-    str_addz(&path, "/servicemap");
-    buf = slurp(str_text(&path), &len);
-    str_free(&path);
-    if (buf == NULL) { str_addz(out, name); return; }
-
-    str_init(&key);
-    /* Most specific first: `<name>@<init>`, then the bare `<name>`. */
-    for (pass = 0; pass < 2 && !found; pass++) {
+    /* Most specific first: this init's own map, then the shared one --
+     * <manager>.map before any.map, exactly as pkgmap reads its two. */
+    for (which = 0; which < 2; which++) {
+        char *buf;
+        size_t len;
         size_t pos = 0;
         Line line;
-        str_reset(&key);
-        str_addz(&key, name);
-        if (pass == 0) {
-            str_addc(&key, '@');
-            str_addz(&key, env_str("OSR_INIT", ""));
+
+        str_reset(&path);
+        str_addz(&path, env_str("OSR_LIB", "lib"));
+        str_addz(&path, "/servicemap/");
+        if (which == 0) {
+            str_addz(&path, env_str("OSR_INIT", ""));
+            str_addz(&path, ".map");
+        } else {
+            str_addz(&path, "any.map");
         }
+        buf = slurp(str_text(&path), &len);
+        if (buf == NULL) continue;   /* an init with no rows needs no file */
         while (next_line(buf, len, &pos, &line)) {
             /* head -n 1: the first matching row wins. */
-            if (map_line_value(out, &line, str_text(&key))) { found = 1; break; }
+            if (map_line_value(out, &line, name)) {
+                free(buf);
+                str_free(&path);
+                return;
+            }
         }
+        free(buf);
     }
-    str_free(&key);
-    free(buf);
-    if (!found) str_addz(out, name);
+    str_free(&path);
+    str_addz(out, name);
 }
 
 int osr_service_enable(const char *name) {

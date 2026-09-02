@@ -13,12 +13,12 @@
 #include "common.h"
 
 /* osr_service_resolve -- the logical name mapped to this init's real unit
- * name through lib/servicemap. A row key may carry an optional @<init>
- * qualifier and the most specific match wins -- `<name>@<init>` before the
- * bare `<name>` -- mirroring pkgmap's facets (§1a). That is what lets one
- * logical name cover units whose NAME differs per init (bluetooth.service on
- * systemd, /etc/sv/bluetoothd on runit) without any module growing an init
- * `case`. An unlisted name is its own unit.
+ * name through lib/servicemap/. The init picks the FILE, most specific first:
+ * `<init>.map` then `any.map`, mirroring how pkgmap reads `<manager>.map`
+ * before `any.map` (§1a). That is what lets one logical name cover units whose
+ * NAME differs per init (bluetooth.service on systemd, /etc/sv/bluetoothd on
+ * runit) without any module growing an init `case`. An unlisted name is its
+ * own unit, and an init with no rows needs no file.
  */
 void osr_service_resolve(Str *out, const char *name);
 

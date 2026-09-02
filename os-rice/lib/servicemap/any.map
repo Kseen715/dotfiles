@@ -1,0 +1,9 @@
+# any.map — logical service name -> real unit, shared across all inits. Read
+# after <init>.map, so a per-init row overrides a row here — the same order
+# pkgmap reads <manager>.map before any.map (§1a).
+#
+# Format:  <logical> = <real unit>
+#
+# Empty so far: every name that differs does so per init, which is what the
+# per-init files are for. A row belongs here only when EVERY init calls the unit
+# something other than its logical name.

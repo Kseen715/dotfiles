@@ -237,7 +237,7 @@ void osr_apt_prune_bootstrap_lists(void);
 
 /* --- services ------------------------------------------------------------- */
 /* osr_service_enable -- enable + start a service under whatever init this box
- * runs, resolving the logical name through lib/servicemap first. */
+ * runs, resolving the logical name through lib/servicemap/ first. */
 int osr_service_enable(const char *name);
 
 /* --- files ---------------------------------------------------------------- */

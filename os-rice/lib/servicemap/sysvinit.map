@@ -1,0 +1,5 @@
+# sysvinit.map — logical service name -> the init.d script sysvinit uses. Empty
+# on purpose: Debian/Ubuntu name the CUPS script after the daemon, but both
+# their sysvinit and systemd hosts accept `cups`, so no row is needed (§8).
+#
+# Format:  <logical> = <real script>

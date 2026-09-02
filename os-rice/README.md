@@ -75,7 +75,7 @@ os-rice/
     preflight.c        the require: predicates
     nerdfont.c gnome.c migrate.c
     pkgmap/            logical name -> real package(s), per manager
-    servicemap         logical service -> real unit, where they differ
+    servicemap/        logical service -> real unit, per init, where they differ
   modules/             120 POSIX modules, all C. ONE file per module, never
     <name>.c           one per OS: a module both systems can have holds
                        both branches behind #ifdef _WIN32
@@ -233,7 +233,7 @@ use the static output.
 
 - **Package method, not just name.** A `pkgmap` row's RHS may carry a provider tag (`script:`, `source:`, `cargo:`, `aur:`). `pkg_install` expands logical names, installs the native batch in one call, then dispatches tagged rows — each provider owning its own idempotency probe. Untagged names pass through unchanged, so the common case needs no row at all.
 - **Every module declares its session.** Its `lib/modules.c` registry row is `x11`, `wayland`, or `x11+wayland`, so session compatibility is metadata rather than source inspection.
-- **Service name, per init.** `servicemap` rows may carry `@<init>`, most specific wins — one `enable_service bluetooth` reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit. No module branches on the init system.
+- **Service name, per init.** `servicemap/` is a file per init (`<init>.map`, then `any.map`), most specific wins — one `enable_service bluetooth` reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit. No module branches on the init system.
 - **Idempotent by contract.** Run a rice 100x and it converges; a second run is all `[ok] skipped`, zero errors.
 - **Config layered by ownership.** `00-env` (user, seeded once), `10-*`/`20-*`/`30-*` (dotfiles, overwritten), `90-theme` (rice, swapped), `99-local` (machine, never touched). `~/.zshrc` is a thin loader owning only a marked block.
 

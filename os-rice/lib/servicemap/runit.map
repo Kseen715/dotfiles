@@ -1,0 +1,18 @@
+# runit.map — logical service name -> the unit name runit uses. Rows only where
+# a name actually differs from the logical one (§8); unlisted names pass through
+# unchanged.
+#
+# Format:  <logical> = <real unit>
+#   The init is the FILE, not a qualifier on the row — the same split pkgmap
+#   uses for the package manager (§1a). A row here applies to runit only; a row
+#   that should apply to every init goes in any.map, which is read second.
+#
+# Void/runit names its daemons after the binary; systemd names them after the
+# service. These are the two that actually bite a desktop install: without them
+# `enable_service bluetooth` links a non-existent /etc/sv/bluetooth on Void and
+# the Bluetooth applet finds no adapter.
+bluetooth = bluetoothd
+cups = cupsd
+
+# modules/printer.sh enables the Samba daemon for network printer discovery.
+smb = smbd

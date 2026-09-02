@@ -1,0 +1,5 @@
+# openrc.map — logical service name -> the init.d script OpenRC uses. Empty on
+# purpose so far: Alpine and Gentoo name their scripts after the service, so the
+# logical names pass through unchanged (§8).
+#
+# Format:  <logical> = <real script>

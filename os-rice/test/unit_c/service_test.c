@@ -72,11 +72,12 @@ static void init_tools(void) {
 
 /* --- 1. servicemap resolution -------------------------------------------
  *
- * `resolve` is a pure lookup: it prints a name and runs nothing. The rows are
- * qualified by init, so the same logical name answers differently per init --
- * that is the entire reason the map exists, and asserting the systemd case
- * alongside the runit one is what proves the qualifier is being read rather
- * than the first matching row taken.
+ * `resolve` is a pure lookup: it prints a name and runs nothing. The rows live
+ * in a file per init (lib/servicemap/<init>.map, then any.map), so the same
+ * logical name answers differently per init -- that is the entire reason the
+ * map exists, and asserting the systemd case alongside the runit one is what
+ * proves the init's own file is being read rather than the first matching row
+ * anywhere taken.
  */
 static void resolution(void) {
     /* resolve prints the bare name with NO trailing newline: it exists to be
@@ -100,10 +101,14 @@ static void resolution(void) {
     osr_assert_out_is(&sb, "bluetooth",
                       "systemd: the runit rows do not apply");
 
-    /* The map's own filename appears in it as a comment. A parser that took
-     * comment text for a row would answer this with something else. */
-    run("resolve", "servicemap");
-    osr_assert_out_is(&sb, "servicemap", "a comment row is not a service");
+    /* The map's own filename appears in it as a comment, and so does the
+     * `Format:` line. A parser that took comment text for a row would answer
+     * one of these with something else. */
+    on("runit");
+    run("resolve", "runit.map");
+    osr_assert_out_is(&sb, "runit.map", "a comment row is not a service");
+    run("resolve", "Format:");
+    osr_assert_out_is(&sb, "Format:", "nor is the format line's own key");
 }
 
 /* --- 2. systemd ----------------------------------------------------------

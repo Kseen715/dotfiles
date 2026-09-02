@@ -1,0 +1,5 @@
+# systemd.map — logical service name -> the unit name systemd uses. Empty on
+# purpose: systemd names units after the service, which is what the logical
+# names already are, so every one of them passes through unchanged (§8).
+#
+# Format:  <logical> = <real unit>

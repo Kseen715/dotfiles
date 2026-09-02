@@ -304,10 +304,9 @@ already does for `OSR_INIT=runit`.
 | acpid | `acpid.service` | `acpid` |
 | sshd | `sshd.service` | `sshd` |
 
-The two that actually differ are handled by new `@runit` facet rows in
-`lib/servicemap` (`bluetooth@runit = bluetoothd`, `cups@runit = cupsd`) — the same
-"most specific match wins" trick `pkgmap` already uses, so no module grows an
-init `case`.
+The two that actually differ are handled by rows in `lib/servicemap/runit.map`
+(`bluetooth = bluetoothd`, `cups = cupsd`) — the same "most specific file wins"
+split `pkgmap/` already uses, so no module grows an init `case`.
 
 `dbus` and `elogind` must be enabled **before** a graphical session, or polkit,
 udisks automount, screen locking on lid-close and portals all fail silently.
@@ -317,7 +316,7 @@ udisks automount, screen locking on lid-close and portals all fail silently.
 ## 9. What this produced in the repo
 
 - `lib/pkgmap/xbps.map` — every row above that differs from the logical name.
-- `lib/servicemap` + `lib/service.sh` — `@<init>` facet support, `bluetooth`/`cups`.
+- `lib/servicemap/` + `lib/service.sh` — a map file per init, `bluetooth`/`cups`.
 - `modules/` — 37 new distro-agnostic modules (`xorg`, `picom`, `polybar`,
   `rofi`, `dunst`, `i3lock`, `feh`, `flameshot`, `copyq`, `arandr`, `redshift`,
   `xdg`, `polkit-agent`, `gvfs`, `keyring`, `thumbnails`, `codecs`, `theming`,
