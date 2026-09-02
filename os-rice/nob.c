@@ -824,6 +824,27 @@ static void append_common_flags(Nob_Cmd *cmd) {
 #endif
 }
 
+/* append_src_flags -- the few per-file departures from those flags.
+ *
+ * Only one so far: lib/yaml.c is the vendored parser's 13k-line
+ * implementation, and it is the most expensive unit in the tree to optimise
+ * -- gcc -O2 spends about 3.4s on it, more than three times the next-slowest
+ * file and about a third of a clean build, where -O0 costs 0.7s. What that
+ * buys is throughput inside a YAML parser reading configuration files of a
+ * few kilobytes, which is not a cost this tool can measure. So it is built
+ * unoptimised on purpose; move it back if a profile ever disagrees.
+ *
+ * The dialects that ignore -O flags entirely (lcc invokes its compiler bare,
+ * faucc documents -O as accepted-and-ignored) are left alone -- an
+ * unrecognized option before -c is a linker input to lcc's driver.
+ */
+static void append_src_flags(Nob_Cmd *cmd, const char *src) {
+    if (strcmp(src, "lib/yaml.c") != 0) return;
+    if (is_lcc() || is_faucc()) return;
+    /* last -O on the line wins, in both dialects. */
+    nob_cmd_append(cmd, is_msvc() ? "/Od" : "-O0");
+}
+
 /* BIN -- a program's path in the build directory, with the host's suffix:
  * BIN("install") is "build/install.exe" on Windows, "build/install"
  * elsewhere. A macro, not a function, so it stays a plain literal usable
@@ -837,14 +858,25 @@ static void append_common_flags(Nob_Cmd *cmd) {
  * translation units are compiled once in parallel and then linked into all
  * of install/wallpaper/the test binaries.
  */
-static const char *obj_of(const char *src) {
+static const char *build_path_of(const char *src, const char *ext) {
     size_t len = strlen(src);
-    char *obj = nob_temp_sprintf("%s/%.*s.o", OBJ_DIR, (int)(len - 2), src); /* strip ".c" */
+    char *out = nob_temp_sprintf("%s/%.*s%s", OBJ_DIR, (int)(len - 2), src, ext); /* strip ".c" */
     char *p;
-    for (p = obj + sizeof(OBJ_DIR); *p; p++) {
+    for (p = out + sizeof(OBJ_DIR); *p; p++) {
         if (*p == '/' || *p == '\\') *p = '_';
     }
-    return obj;
+    return out;
+}
+
+static const char *obj_of(const char *src) {
+    return build_path_of(src, ".o");
+}
+
+/* dep_of -- "lib/net.c" -> "build/obj/lib_net.d", the make-syntax list of
+ * headers the compiler saw the last time it built that object. Next to the
+ * object on purpose: the two are made together and thrown away together. */
+static const char *dep_of(const char *src) {
+    return build_path_of(src, ".d");
 }
 
 /* --- incremental builds ---------------------------------------------
@@ -854,14 +886,15 @@ static const char *obj_of(const char *src) {
  * relinked only when it is older than its objects. Two runs in a row with
  * nothing edited in between means the second one runs no compiler at all.
  *
- * deps -- what every object depends on besides its own .c file: nob.c
- * (the compiler flags live in it, so editing them has to invalidate every
- * object) and every .h in the tree. Which .c includes which .h is
- * deliberately not tracked -- no -MMD dep files to parse, nothing that
- * works in only one compiler's dialect -- so touching any header rebuilds
- * everything. That over-builds, but it cannot under-build, and
- * under-building is the failure mode that silently links a stale object
- * and costs an afternoon. A full build of this tree is a couple seconds.
+ * Every object depends on nob.c as well as its own .c file: the compiler
+ * flags live in nob.c, so editing them has to invalidate every object.
+ * Headers are tracked per object out of the dependency files the compiler
+ * writes (see dep_flag below). deps -- every .h in the tree -- is the
+ * fallback for compilers that cannot write those, and for the first build
+ * of an object, when no dependency file exists yet: touching any header
+ * then rebuilds everything. That over-builds, but it cannot under-build,
+ * and under-building is the failure mode that silently links a stale
+ * object and costs an afternoon.
  */
 static Nob_File_Paths deps = {0};
 static bool deps_collected = false;
@@ -925,14 +958,142 @@ static void collect_deps(void) {
     for (i = 0; i < UNITY_SRCS_COUNT; i++) nob_da_append(&deps, unity_srcs[i]);
 }
 
-/* needs_compile -- is src's object missing, older than src, or older than
- * any of deps? A timestamp we could not read (-1) counts as "yes" for the
- * same reason as above. */
+/* --- exact header dependencies ---------------------------------------
+ *
+ * The whole-tree rule above is the fallback, not the plan. When the compiler
+ * can write dependency files -- `-MMD -MF x.d`, which gcc, clang, tcc and
+ * zig cc all speak -- it is asked to, and then an object depends on the
+ * headers it actually included rather than on every header in the tree.
+ * Editing thirdparty/yaml.h rebuilds lib/yaml.o; editing lib/ui.h rebuilds
+ * the dozen units that include it, not all 190.
+ *
+ * The flag is probed rather than assumed, once per `clean` and cached in
+ * build/cc.deps, because $CC can be anything: MSVC spells this /showIncludes
+ * and needs its output parsed, lcc and faucc have no equivalent at all, and
+ * a compiler handed a flag it does not know fails the build rather than the
+ * probe. Anything that does not answer the probe keeps the old rule, which
+ * over-builds but cannot under-build.
+ *
+ * A missing or unreadable .d also falls back: on the first build of an
+ * object there is nothing to read yet, and "no record" must never be read as
+ * "no dependencies".
+ */
+#define CC_DEPS BUILD_DIR "/cc.deps"
+#define CC_PROBE_DEP BUILD_DIR "/cc_probe.d"
+
+/* dep_flag_probe -- does $CC write a dep file when handed `flag -MF path`?
+ * Compile-only: the linker has nothing to do with it, and cc_probe() already
+ * proved the link works. */
+static bool dep_flag_probe(const char *flag) {
+    Nob_Log_Level saved = nob_minimal_log_level;
+    Nob_Cmd cmd = {0};
+    bool ok;
+    if (!nob_write_entire_file(CC_PROBE_SRC, "int main(void) { return 0; }\n", 29)) return false;
+    if (nob_file_exists(CC_PROBE_DEP) > 0) nob_delete_file(CC_PROBE_DEP);
+    append_cc(&cmd);
+    cmd_append_args(&cmd, flag, "-MF", CC_PROBE_DEP, "-c", CC_PROBE_SRC,
+                    "-o", CC_PROBE_OBJ, NULL);
+    nob_minimal_log_level = NOB_WARNING;
+    {
+        Nob_Cmd_Opt opt = {0};
+        opt.stdout_path = DEV_NULL;
+        opt.stderr_path = DEV_NULL;
+        ok = nob_cmd_run_opt(&cmd, opt);
+    }
+    ok = ok && nob_file_exists(CC_PROBE_DEP) > 0;
+    if (nob_file_exists(CC_PROBE_DEP) > 0) nob_delete_file(CC_PROBE_DEP);
+    cc_probe_cleanup();
+    nob_minimal_log_level = saved;
+    return ok;
+}
+
+/* dep_flag -- the flag this compiler wants, or NULL if it has none.
+ *
+ * gcc, clang and zig cc take -MMD (deps without the system headers); tcc
+ * only knows -MD, which for it means the same thing. The answer is cached
+ * in build/cc.deps, next to the detected compiler, so the probe runs once
+ * per toolchain rather than once per build. Compilers whose dep output is
+ * spelled differently or not at all (MSVC's /showIncludes, lcc, faucc) get
+ * NULL and fall back to the whole-tree rule; handing a compiler a flag it
+ * does not know fails the build rather than the probe.
+ */
+static const char *dep_flag(void) {
+    static char cached[8] = "";
+    static bool probed = false;
+    Nob_String_Builder sb = {0};
+    if (probed) return cached[0] ? cached : NULL;
+    probed = true;
+    if (is_msvc() || is_lcc() || is_faucc()) return NULL;
+    if (nob_file_exists(CC_DEPS) > 0 && nob_read_entire_file(CC_DEPS, &sb) && sb.count > 0) {
+        size_t n = sb.count < sizeof(cached) - 1 ? sb.count : sizeof(cached) - 1;
+        memcpy(cached, sb.items, n);
+        cached[n] = '\0';
+        nob_sb_free(sb);
+        return cached[0] == '-' ? cached : NULL;
+    }
+    nob_sb_free(sb);
+    if (!mkdir_if_needed(BUILD_DIR)) return NULL;
+    if (dep_flag_probe("-MMD")) strcpy(cached, "-MMD");
+    else if (dep_flag_probe("-MD")) strcpy(cached, "-MD");
+    else strcpy(cached, "no");
+    nob_write_entire_file(CC_DEPS, cached, strlen(cached));
+    return cached[0] == '-' ? cached : NULL;
+}
+
+/* read_dep_file -- the prerequisites one .d file records.
+ *
+ * The file is a make rule: the object, a colon, then its sources and headers,
+ * with "\" before each newline of a wrapped list. Only the right-hand side is
+ * wanted, so the scan skips to the first colon that ends a word (a Windows
+ * "C:\..." target has one that does not) and then splits on whitespace,
+ * treating a lone backslash as more whitespace. A path containing a space is
+ * escaped as "\ " by gcc and would split wrongly here; no file in this tree
+ * has one, and the failure mode is an extra rebuild rather than a stale one.
+ *
+ * The tokens point into a buffer reused across calls, so a caller must be
+ * done with them before the next call -- needs_compile() is, immediately.
+ */
+static bool read_dep_file(const char *path, Nob_File_Paths *out) {
+    static Nob_String_Builder sb = {0};
+    char *p;
+    if (nob_file_exists(path) <= 0) return false;
+    sb.count = 0;
+    if (!nob_read_entire_file(path, &sb)) return false;
+    nob_sb_append_null(&sb);
+    p = sb.items;
+    while (*p != '\0' && !(*p == ':' && (p[1] == ' ' || p[1] == '\t' || p[1] == '\n' || p[1] == '\0'))) p++;
+    if (*p == '\0') return false;
+    p++;
+    out->count = 0;
+    while (*p != '\0') {
+        char *tok;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\\') p++;
+        if (*p == '\0') break;
+        tok = p;
+        while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') p++;
+        if (*p != '\0') *p++ = '\0';
+        nob_da_append(out, tok);
+    }
+    return out->count > 0;
+}
+
+/* needs_compile -- is src's object missing, older than src, or older than a
+ * header it was built from? A timestamp we could not read (-1) counts as
+ * "yes" for the same reason as above.
+ *
+ * nob.c is checked by hand because no .d will ever list it: the flags live
+ * in this file, so editing it has to invalidate every object. */
+static Nob_File_Paths dep_items = {0};
+
 static bool needs_compile(const char *src) {
     const char *obj = obj_of(src);
+    if (nob_needs_rebuild1(obj, src) != 0) return true;
+    if (nob_needs_rebuild1(obj, "nob.c") != 0) return true;
+    if (dep_flag() && read_dep_file(dep_of(src), &dep_items)) {
+        return nob_needs_rebuild(obj, dep_items.items, dep_items.count) != 0;
+    }
     collect_deps();
     if (!deps_usable) return true;
-    if (nob_needs_rebuild1(obj, src) != 0) return true;
     return nob_needs_rebuild(obj, deps.items, deps.count) != 0;
 }
 
@@ -959,6 +1120,8 @@ static bool compile_objs(const char **srcs, size_t count) {
         if (!needs_compile(srcs[i])) continue;
         actions++;
         append_common_flags(&cmd);
+        append_src_flags(&cmd, srcs[i]);
+        if (dep_flag()) cmd_append_args(&cmd, dep_flag(), "-MF", dep_of(srcs[i]), NULL);
         if (is_msvc()) {
             /* /Fo takes its path glued on, no separate argument. The .o
              * name (rather than MSVC's usual .obj) is fine and keeps
@@ -1179,30 +1342,39 @@ static void delete_if_exists(const char *path) {
     if (nob_file_exists(path) > 0) nob_delete_file(path);
 }
 
+/* delete_built -- everything compile_objs left behind for one source: the
+ * object and, when the compiler wrote one, its dependency file. */
+static void delete_built(const char *src) {
+    delete_if_exists(obj_of(src));
+    delete_if_exists(dep_of(src));
+}
+
 static bool clean(void) {
     size_t i;
     delete_if_exists(BIN("install"));
     delete_if_exists(BIN("wallpaper"));
     delete_if_exists(BIN("osr"));
     delete_if_exists(BIN("osr-runtime"));
-    delete_if_exists(obj_of("install.c"));
-    delete_if_exists(obj_of("wallpaper.c"));
-    delete_if_exists(obj_of("osr.c"));
-    for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_if_exists(obj_of(posix_srcs[i]));
-    for (i = 0; i < LIB_SRCS_COUNT; i++) delete_if_exists(obj_of(lib_srcs[i]));
+    delete_built("install.c");
+    delete_built("wallpaper.c");
+    delete_built("osr.c");
+    for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_built(posix_srcs[i]);
+    for (i = 0; i < LIB_SRCS_COUNT; i++) delete_built(lib_srcs[i]);
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
-        delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", test_names[i])));
+        delete_built(nob_temp_sprintf("test/unit_c/%s.c", test_names[i]));
     }
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]));
-        delete_if_exists(obj_of(nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i])));
+        delete_built(nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]));
     }
     /* the compiler bookkeeping goes too: with no objects left there is no
      * toolchain to record, and dropping the detection cache is what makes
      * `clean` the way to have a newly installed compiler noticed. */
     delete_if_exists(CC_DETECTED);
     delete_if_exists(CC_STAMP);
+    delete_if_exists(CC_DEPS);
+    delete_if_exists(CC_PROBE_DEP);
     delete_if_exists(CC_PROBE_SRC);
     delete_if_exists(CC_PROBE_OBJ);
     delete_if_exists(CC_PROBE_BIN);
