@@ -24,7 +24,17 @@ set -u
 # moment later. Skip the settle and the next attempt dies with "Another
 # composite manager is already running" — measured on a machine where the glx
 # attempt fails, which is the only machine that ever reaches attempt two.
+# The supervisor of the PREVIOUS run (see the bottom of this file). exec_always
+# runs this script again on every i3 reload, and without this each reload would
+# leave another supervisor behind, all of them racing to restart picom.
+_sup_pid="${XDG_RUNTIME_DIR:-/tmp}/osr-picom-supervisor.pid"
+
 _stop() {
+    if [ -r "$_sup_pid" ]; then
+        _old=$(cat "$_sup_pid" 2>/dev/null || true)
+        [ -n "${_old:-}" ] && kill "$_old" 2>/dev/null || true
+        rm -f "$_sup_pid"
+    fi
     pkill -x picom 2>/dev/null || true
     _n=0
     while pgrep -x picom >/dev/null 2>&1 && [ "$_n" -lt 15 ]; do
@@ -81,23 +91,83 @@ _backend_broken='glx_init ERROR|Failed to enable vsync|Failed to get GLX|GLX_BAD
 # The wait costs nothing on a healthy machine - picom is already compositing
 # throughout the poll, and this script is backgrounded by exec_always.
 _try() {
-    picom "$@" >"$_log" 2>&1 &
+    # This attempt's own file, so the pattern below is matched against THIS
+    # picom's output and not against an error some earlier attempt (or an
+    # earlier crash, now that the log survives restarts) left behind.
+    _cur="${XDG_RUNTIME_DIR:-/tmp}/picom.current"
+    : >"$_cur"
+    printf '=== %s: picom %s ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$_log"
+    picom "$@" >"$_cur" 2>&1 &
     _pid=$!
     _n=0
     while [ "$_n" -lt 20 ]; do
         sleep 1
         _n=$((_n + 1))
-        kill -0 "$_pid" 2>/dev/null || return 1
-        if grep -qE "$_backend_broken" "$_log" 2>/dev/null; then
+        if ! kill -0 "$_pid" 2>/dev/null; then
+            cat "$_cur" >>"$_log"
+            return 1
+        fi
+        if grep -qE "$_backend_broken" "$_cur" 2>/dev/null; then
             kill "$_pid" 2>/dev/null || true
+            cat "$_cur" >>"$_log"
             return 1
         fi
     done
+    cat "$_cur" >>"$_log"
     return 0
 }
 
+# _supervise -- keep the compositor alive for the life of the session.
+#
+# picom is not a program that only fails at startup. Measured on this box, hours
+# into a session:
+#
+#   [ x_create_picture_with_pictfmt_and_pixmap ERROR ] failed to create picture
+#   (X error 8 MATCH request 139 minor 4 serial 85015)
+#
+# - a BadMatch on a RENDER CreatePicture, and picom is gone. Nothing restarted
+# it, because exec_always runs this script once per i3 start or reload, so the
+# session simply lost its compositor: terminal transparency off, shadows gone,
+# rofi opaque. From the desk that reads as "transparency turns itself off
+# sometimes", which names neither picom nor a crash and is why it went
+# unexplained.
+#
+# So the launcher does not exit once picom is up - it waits on it and starts it
+# again, with the backend that was already proven to work in the tiers below.
+#
+# The cap is the other half. A compositor that cannot stay up for five seconds
+# is not going to be fixed by a sixth restart, and a hot restart loop on a
+# machine this slow is worse than no compositor: five failures inside a minute
+# stops the loop and SAYS so, rather than spinning silently until the session
+# ends.
+_supervise() {
+    printf '%s\n' "$$" >"$_sup_pid"
+    _fails=0
+    _window=$(date +%s)
+    while :; do
+        wait "$_pid" 2>/dev/null || true
+        _now=$(date +%s)
+        [ $((_now - _window)) -gt 60 ] && { _window=$_now; _fails=0; }
+        _fails=$((_fails + 1))
+        if [ "$_fails" -gt 5 ]; then
+            printf '=== %s: giving up after %s restarts in under a minute ===\n' \
+                "$(date '+%Y-%m-%d %H:%M:%S')" "$_fails" >>"$_log"
+            command -v notify-send >/dev/null 2>&1 &&
+                notify-send -u critical "Compositor keeps crashing" \
+                    "picom exited 5 times in a minute; not restarting it again. See $_log."
+            rm -f "$_sup_pid"
+            return 1
+        fi
+        printf '=== %s: picom exited - restarting (%s in this minute) ===\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "$_fails" >>"$_log"
+        sleep 2
+        picom "$@" >>"$_log" 2>&1 &
+        _pid=$!
+    done
+}
+
 # 1. the configured path: glx + dual_kawase blur + rounded corners.
-_try && exit 0
+_try && _supervise && exit 0
 
 # 2. no usable GL — on this hardware glx_init fails with GLX_BAD_FB_CONFIG and
 #    picom aborts. xrender cannot do dual_kawase, and picom treats an
@@ -120,7 +190,8 @@ _try && exit 0
 #    1% CPU - and it is only ever paid here, on the fallback path, by a box
 #    that already has no GPU acceleration at all.
 _stop
-_try --backend xrender --blur-method none --no-use-damage && exit 0
+_try --backend xrender --blur-method none --no-use-damage &&
+    _supervise --backend xrender --blur-method none --no-use-damage && exit 0
 
 # 3. neither backend came up. Leave the log where it can be read rather than
 #    looping: the session still works, it is just uncomposited.
