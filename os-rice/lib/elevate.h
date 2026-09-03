@@ -24,7 +24,8 @@
  *
  * Callers must be prepared for a 0 return (prompt declined): elevation is
  * an optimization for the manager route, never the only way to install --
- * see lib/winbin.h for the no-admin fallback.
+ * see lib/build.h's Windows toolkit for the no-admin fallback: everything a
+ * builder installs goes under %LOCALAPPDATA%\\osr, which needs none.
  *
  * C89.
  */

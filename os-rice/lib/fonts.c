@@ -115,6 +115,7 @@ int osr_install_nerd_font(const char *name) {
     char cmd[300];
     char lower[128];
 
+    if (name == NULL || *name == '\0') name = "JetBrainsMono";
     if (osr_font_installed(name)) return 1;
 
     if (osr_have_cmd("scoop")) {
@@ -130,6 +131,22 @@ int osr_install_nerd_font(const char *name) {
     }
 
     return 0;
+}
+
+int osr_fonts_main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "install") == 0) {
+        return osr_install_nerd_font(NULL) ? 0 : 1;
+    }
+    if (argc == 3 && strcmp(argv[1], "install") == 0) {
+        return osr_install_nerd_font(argv[2]) ? 0 : 1;
+    }
+    if (argc == 3 && strcmp(argv[1], "installed") == 0) {
+        return osr_font_installed(argv[2]) ? 0 : 1;
+    }
+    fputs("usage: osr fonts <subcommand> [name]\n\n", stderr);
+    fputs("  install [name]     install a Nerd Font (default: JetBrainsMono)\n", stderr);
+    fputs("  installed <name>   exit 0 when a matching family is registered\n", stderr);
+    return 2;
 }
 
 #else /* !_WIN32 */

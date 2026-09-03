@@ -1128,7 +1128,7 @@ int osr_run_user_capture(char *const argv[], Str *out) { return capture(argv, ou
  *
  * osr_run_step keeps the sh run_step's fatality, which lib/module.h documents
  * as part of the contract: a module must not limp on past a mutation that only
- * half applied. osr_run_step_cmd (lib/winui.h) does NOT end the run, because
+ * half applied. osr_run_step_cmd (lib/ui.h) does NOT end the run, because
  * its own callers -- the package dispatch, the builders -- report and carry
  * on; the difference between the two is exactly this function.
  * ------------------------------------------------------------------------- */
@@ -1350,47 +1350,6 @@ int osr_install_theme_layer(const char *app, const char *name, const char *dst) 
     if (is_temp) remove(str_text(&src));
     str_free(&src);
     return ok;
-}
-
-/* --- services --------------------------------------------------------------
- *
- * One init system, driven through sc.exe. lib/servicemap/ carries no Windows
- * file because there is nothing to map: a Windows service's name IS the name
- * you use, and a logical name that differs per init is a problem the SCM does
- * not have.
- * ------------------------------------------------------------------------- */
-int osr_service_enable(const char *name) {
-    char *argv[6];
-    char start_arg[64];
-
-    if (osr_theme_only()) return osr_theme_only_skip("service_enable");
-
-    if (!osr_is_admin()) {
-        osr_warnf("service '%s': changing a service needs Administrator rights -- skipped", name);
-        return 0;
-    }
-
-    /* `start= auto` with the space after the '=' is sc.exe's own syntax, not
-     * a typo: sc parses `option= value` pairs and rejects `option=value`. */
-    sprintf(start_arg, "start= auto");
-    argv[0] = (char *)"sc";
-    argv[1] = (char *)"config";
-    argv[2] = (char *)name;
-    argv[3] = start_arg;
-    argv[4] = NULL;
-    if (osr_run_quiet(argv) != 0) {
-        osr_warnf("service '%s': could not set it to start automatically", name);
-        return 0;
-    }
-
-    argv[0] = (char *)"sc";
-    argv[1] = (char *)"start";
-    argv[2] = (char *)name;
-    argv[3] = NULL;
-    /* Already running is a non-zero exit and a success: the service is in the
-     * state this asked for, which is the whole of what enable means. */
-    (void)osr_run_quiet(argv);
-    return 1;
 }
 
 #endif /* _WIN32 */

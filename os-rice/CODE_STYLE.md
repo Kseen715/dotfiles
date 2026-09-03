@@ -112,12 +112,12 @@ Good future candidates, only when their interfaces grow or cross another layer:
 - a benchmark run configuration beyond `seconds`, `verbose`, and `announce`;
 - a module execution context if the repeated `repo_root`, `map_path`, `theme`,
   and user data currently passed through install orchestration become shared by
-  several helpers (`install.c:222-324`);
+  several helpers (`lib/install.c`'s runner);
 - a builder request if source builders acquire multiple optional knobs. Keep
   the builder registry table in `lib/build.c` data-driven; do not wrap each
   one-argument builder today;
 - a render/apply request if template, theme, destination, and ownership policy
-  start traveling together across `lib/config.h` and `lib/theme_render.h`.
+  start traveling together across `lib/config.h` and `lib/render.h`.
 
 Existing state types such as `PwrMeter`, `BenchResult`, `UvCaps`, manifest
 records, and theme records already group durable state. They are not optional
@@ -140,8 +140,8 @@ syntax. Use them when they make a stable invariant visible at the call site:
   the caller's file and line.
 
 Existing good uses include `COMMAND_COUNT` in `osr.c`, `MODULE_COUNT` in
-`lib/modules.c`, subsystem limits such as `BENCH_PATH_MAX`, and the assertion
-macros in `test/c_test.h`. Keep count macros next to the array they describe.
+`lib/modules.c`, subsystem limits such as `BENCH_PATH_MAX` and `OSR_PATH_MAX`,
+and the assertion macros in `test/c_test.h`. Keep count macros next to the array they describe.
 Use an enum or a `static const` object when a typed value or debugger visibility
 is more useful than preprocessing.
 

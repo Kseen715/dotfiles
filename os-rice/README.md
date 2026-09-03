@@ -34,8 +34,11 @@ rice is a plain list of what to install.
 > [!success] Status: past MVP
 > The harness (`lib/`, `install.sh`, `osr`, `build/osr`) plus **120 C
 > modules** pass the idempotency matrix on apt/apk/pacman. Every legacy
-> per-distro tree is gone, Windows included — it is now a C core
-> (`install.c`, `lib/win*.c`, `modules/win-*.c`), not a PowerShell tree.
+> per-distro tree is gone, Windows included — and Windows is no longer a
+> second C core either: `build/osr.exe` is built from the same `osr.c`, the
+> same `lib/` units and the same `modules/` files as `build/osr`, with the
+> differences inside those units under one `#ifdef` each. See
+> [[os-rice/DESIGN#13a. The two cores became one|DESIGN 13a]].
 
 ---
 
@@ -43,42 +46,48 @@ rice is a plain list of what to install.
 
 ```text
 os-rice/
-  osr.c                the POSIX core: one binary (build/osr) that nob.c
-                       links from the lib/ units, the same way install.c +
-                       lib/*.c make the Windows core
-  lib/
+  osr.c                the core: ONE binary per host (build/osr,
+                       build/osr.exe) that nob.c links from the lib/ units.
+                       Same file, same units, both systems
+  lib/                 a unit per subsystem. Where the two systems answer a
+                       question differently, BOTH answers are in the file
+                       that owns it, under one #ifdef -- never a second file
     ui.c log.c state.c one unit per shell file that used to be here:
     user.c detect.c    `osr ui`, `osr log`, `osr state`, `osr user`,
     theme.c install.c  `osr detect`, `osr theme`, `osr install`,
     testrun.c          `osr test-run`
-    module.h/.c        the API a POSIX module written in C may call
+    module.h/.c        the API a module written in C may call, and its two
+                       bodies (no sudo and no fork on the Windows side)
     module_runtime.c   compile/cache/load backend for build/osr-runtime
     modules.c          the registry of those modules (`osr module`)
-    common.h/.c        buffer, printf %b, the log line
+    common.h/.c        buffer, printf %b, the log line, the path helpers,
+                       and the handful of questions only a kernel answers
     cmds.h             one declaration per command entry point
     render.c           the {{role}} template renderer, shared with theme.c
     undervolt.c        `osr undervolt cpu` (DESIGN 12)
     uv/                backend.h + generic_opp.c + journal.c
     benchmark.c        `osr benchmark cpu|sensors` (DESIGN 12)
     bench/             cpu.c power.c util.c
-    winui.c winstate.c the WINDOWS core's own ui/state, beside winpkg/
-    winpkg.c winbin.c  winbin/wintweak/elevate - unrelated to the units
-    wintweak.c         above, and never built into the POSIX binary
-    elevate.c
-    pkg.c              pkg_install/installed/refresh/remove + providers
-    build.c            the source: builders (26 of them)
-    fetch.c git.c      download + github_latest; repo / oh-my-zsh helpers
-    service.c          enable_service/disable_service, 4 init systems
+    elevate.c          one privilege prompt per run: sudo -v, or the UAC
+                       relaunch that stands in for it
+    pkg.c              pkg_install/installed/refresh/remove + providers:
+                       native/script/cargo/aur/source, and scoop/choco/winget
+    build.c            the source: builders (26 of them) + the artifact
+                       toolkit a Windows builder assembles out of
+    fetch.c git.c      download + github_latest (curl/wget, or WinINet);
+                       repo / oh-my-zsh helpers
+    service.c          enable_service/disable_service, 4 init systems + SCM
     config.c           seed_once / install_layer / loader block / templates
     apply.c            theme-only apply: the hotkey path, verbs neutralized
     reload.c           tell the running apps to re-read their config
     preflight.c        the require: predicates
-    nerdfont.c gnome.c migrate.c
-    pkgmap/            logical name -> real package(s), per manager
+    fonts.c gnome.c migrate.c wallpaper.c
+    pkgmap/            logical name -> real package(s), per manager --
+                       apt/dnf/pacman/apk/xbps/portage/any, and windows
     servicemap/        logical service -> real unit, per init, where they differ
-  modules/             120 POSIX modules, all C. ONE file per module, never
-    <name>.c           one per OS: a module both systems can have holds
-                       both branches behind #ifdef _WIN32
+  modules/             ONE file per module, never one per OS, and ONE
+    <name>.c           function: int osrm_<name>(void). A module both
+                       systems have differs inside its body, if at all
     win-*.c            the Windows OS passes (see WINDOWS.md)
     win-data/          data files those passes carry
   rices/<name>/        rice.list: which PACKAGES, and which themes
@@ -86,7 +95,8 @@ os-rice/
   install.sh           a two-line shim: exec ./osr install "$@"
   wallpaper.sh         set/query the wallpaper of the current theme
   osr                  front-end CLI, and the `curl | sh` barebone entry
-  osr.ps1 / osr.bat    the Windows front end, mirroring it
+  osr.ps1 / osr.bat    the Windows front end: bootstrap the build, then hand
+                       the command to build/osr.exe
   nob.c                the build script (a C program, not a Makefile)
   test/                lint + hermetic unit tests + docker matrix
     unit_c/            every test: what each unit must DO, stated by name

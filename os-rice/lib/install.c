@@ -673,6 +673,11 @@ static void privilege_warmup(const char *modules) {
     Str copy;
     char *p;
 
+    /* Called once before anything is known and once with the resolved module
+     * list; only the second call can be answered here, because whether this
+     * run needs Administrator is a question about the packages it is going to
+     * install and nothing else. */
+    if (modules == NULL) return;
     if (osr_is_admin()) return;
 
     /* Ask the map, not a guess: elevation is needed only when a package's
@@ -702,10 +707,15 @@ static void privilege_warmup(const char *modules) {
 #else /* !_WIN32 */
 
 static void privilege_warmup(const char *modules) {
+    static int warmed = 0;
     char *argv[3];
     pid_t keeper;
 
-    (void)modules;   /* every step escalates lazily; the ticket covers all */
+    /* The ticket covers every later escalation whatever the module list is, so
+     * the first call is the one that matters and the second is a no-op. */
+    (void)modules;
+    if (warmed) return;
+    warmed = 1;
     if (geteuid() == 0 || !osr_have_cmd("sudo") || !isatty(0)) return;
     argv[0] = (char *)"sudo"; argv[1] = (char *)"-v"; argv[2] = NULL;
     if (osr_run_quiet(argv) != 0) return;
@@ -926,7 +936,10 @@ static int cmd_run(int argc, char **argv) {
      * (§7). VERSION_ID is absent on rolling releases and drops out of the line
      * there. */
     (void)cmd_report("base");
-    privilege_warmup(str_text(&modules));
+    /* POSIX: warm the sudo ticket now, because the DMI probe below needs root
+     * and asking twice is what section 7 exists to prevent. Windows cannot
+     * answer yet -- see the second call, after the manifest resolves. */
+    privilege_warmup(NULL);
     ram_retry();
     (void)cmd_report("hw");
 
@@ -1031,6 +1044,11 @@ static int cmd_run(int argc, char **argv) {
             str_free(&copy);
         }
     }
+
+    /* Windows: now that the module list is known, ask the map whether any of
+     * it needs Administrator, and if so take the one UAC prompt before any
+     * work starts. On POSIX the ticket above already covers it. */
+    privilege_warmup(str_text(&modules));
 
     total = count_words(str_text(&modules));
     sprintf(num, "%ld", total);

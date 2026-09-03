@@ -46,11 +46,16 @@ whole rices.
 A new distro means teaching `pkg.sh` its verbs and adding a `pkgmap`. Most
 modules light up for free.
 
-> [!note] Windows is its own world
-> Different package model, different language. It is **not** PowerShell any
-> more either: it is the C core (`install.c`, `lib/win*.c`, `modules/win-*.c`,
-> `windows.map`). See [[PLAN_UNIVERSAL]]. Do not force it into this
-> abstraction.
+> [!note] Windows is a package model, not a separate world
+> Different package model, different service manager, different way of
+> painting a terminal. It is **not** PowerShell, and it is no longer a
+> separate program either: `build/osr.exe` is built from the same `osr.c`,
+> the same `lib/` units and the same `modules/` files as `build/osr`, and its
+> packages resolve through `lib/pkgmap/windows.map` exactly as a Debian box's
+> resolve through `apt.map`. Where the two systems genuinely differ they
+> differ *inside* a unit, under one `#ifdef`, with both bodies in the file
+> that owns the question — never in a second tree. See
+> [[#13a. The two cores became one|§13a]].
 
 ---
 
@@ -948,10 +953,9 @@ changed is the language the backbone is written in.
 | `lib/install.c` | `install.sh`'s option loop, help, listings, manifest, report | see the runner row below for the rest of it |
 | `lib/testrun.c` | `test/run.sh` | removed outright |
 | `lib/render.c` | the `{{role}}` sed script | shared with `theme.c` |
-| `lib/manifest.c` `theme_list.c` `theme_render.c` `config_copy.c` `net.c` | — | written for the Windows core, already portable |
-| `lib/fetch.c` `git.c` | `lib/net.sh` `git.sh` | the shell tier's downloader and the git/oh-my-zsh helpers; `lib/net.c` stays the landing spot for a future native fetch backend |
+| `lib/fetch.c` `git.c` | `lib/net.sh` `git.sh` | the downloader and the git/oh-my-zsh helpers. `fetch.c` holds both transports — curl/wget and WinINet — plus the two URL parsers above them; it absorbed `lib/net.c`, which was the same three acts under different names |
 | `lib/service.c` | `lib/service.sh` | both verbs on all four inits, and the servicemap lookup they share (`lib/servicemap/<init>.map` then `any.map`) |
-| `lib/preflight.c` `nerdfont.c` | `lib/preflight.sh` `fonts.sh` | the require: predicates and the Nerd Font install; `nerdfont.c` is so named because `lib/fonts.c` is the Windows core's |
+| `lib/preflight.c` `fonts.c` | `lib/preflight.sh` `fonts.sh` | the require: predicates and the Nerd Font install. `fonts.c` absorbed `nerdfont.c`, which existed only because the two cores could not share a name |
 | `lib/gnome.c` `migrate.c` | `lib/gnome.sh` `migrate.sh` | GNOME session detection, freeing a chord off the Shell keys and registering a custom keybinding; and the migrations that patch a seeded, user-owned layer in place. `migrate_replace` takes the old and the new region as text rather than the names of two functions that print them — the fork per region bought a C caller nothing |
 | `lib/reload.c` | `lib/reload.sh` | the reload table: probe first, act second, never fatal, never restart what would lose state |
 | `lib/user.c` (the login shell) | `lib/user.sh` (part) | `osr_set_login_shell` / `osr_register_shell` / the `/etc/passwd` rewrite. They stayed sh only because they WRITE and a write went through the `as_root` shell function; `osr_run_root` is that same escalation without a shell, so `modules/zsh.c` can have them. Each mechanism is tried and the RESULT verified rather than an exit code trusted: chsh -> usermod -> /etc/passwd |
@@ -962,7 +966,7 @@ changed is the language the backbone is written in.
 | `lib/install.c` (the runner) | `install.sh`'s body | the whole orchestration: detection and identity into this process's environment, the theme-only path, the report, the sudo warm-up, the manifest, the module loop, the state write and the closing line. `install.sh` is a shim over `osr install run` — the reason it could not leave the shell was that it SOURCED each module, and no module is a shell script any more. A `.sh` module that appears again still runs, though with no os-rice verbs around it (see [[#D-3. The C harness\|D-3]]) |
 | `lib/theme.c` (the shell half) | `lib/theme.sh` (part) | `osr_resolve_theme` / `osr_unset_theme` / `osr_apply_theme_configs`. The shim existed to `export` OSR_THEME/OSR_THEME_DIR for everything downstream; `setenv` is that, and every child the runner forks inherits it |
 | `lib/apply.c` | `lib/apply.sh` | the whole §6a hotkey path: the two lists it is built out of (the mutating verbs it neutralizes, and the modules that carry a theme layer), and the apply itself — resolve, neutralize every mutating verb for the rest of the process, run the theme-carrying layers with their output on the run log, then the theme's whole-dir configs, the wallpaper and the state write. `osr apply theme <name>` is it, and it stays in a lib rather than in the runner so a test can drive it against a throwaway `$HOME` — the runner resolves `OSR_HOME` from passwd, so a test driving it through the runner would write to the real one |
-| `lib/wallpaper_front.c` | `wallpaper.sh` | the wallpaper front end: the option loop, the current-theme resolution and the four actions (show, `--list`, `--next`, set). The family underneath — resolve, install, record, set-live, library, pick — was already `lib/config.c`'s, so this is the dispatcher around it. Named `wallpaper_front.c` because `lib/wallpaper.c` is the Windows core's own unit. `wallpaper.sh` is a shim over `osr wallpaper`, the same shape `install.sh` has, and stays sh because a picker or a hotkey already names that path |
+| `lib/wallpaper.c` | `wallpaper.sh` | the wallpaper front end: the option loop, the current-theme resolution and the four actions (show, `--list`, `--next`, set). The family underneath — resolve, install, record, set-live, library, pick — is `lib/config.c`'s, so this is the dispatcher around it. It was `wallpaper_front.c` while a second, Windows-only wallpaper unit held the plain name. `wallpaper.sh` is a shim over `osr wallpaper`, the same shape `install.sh` has, and stays sh because a picker or a hotkey already names that path |
 
 ### The tests: the C tier is the ground truth
 
@@ -1008,7 +1012,7 @@ two tiers agreed with each other about something wrong:
 | `native_held` had no xbps branch, so the G2 fence around the only package removal os-rice performs did not exist | neither tier had one, and the test that "covered" it redefined `_native_held` |
 | a wrapped `gsettings list-recursively` line yielded the VALUE as a key name | both tiers did the same wrong thing; the sh test's own comment said "sets nothing" |
 | `compose_block` welded its marker onto a file with no trailing newline, corrupting the user's last line AND the marker | never exercised |
-| `lib/wallpaper_front.c` and `lib/apply.c` printed non-ASCII, violating D-2 | the lint that enforces D-2 only ever scanned `.sh` files, so the rule stopped being enforced the moment the code became C |
+| `lib/wallpaper.c` and `lib/apply.c` printed non-ASCII, violating D-2 | the lint that enforces D-2 only ever scanned `.sh` files, so the rule stopped being enforced the moment the code became C |
 | `provide_datagrip` lost its `OSR_DATAGRIP_PREFIX` override and staged into a hard-coded `/opt` | the shell original made those paths overridable precisely to be testable; the port dropped it, and the parity test worked around it |
 | a missing template role sharing a line with `{{WALLPAPER_PATH}}` was never reported | the shell skipped the whole line (`grep -v`), so the warning that exists to make such a gap obvious stayed silent |
 
@@ -1047,6 +1051,83 @@ simply the behaviour, and the test says why:
   process now, one refresh — and the guard lives in the install path
   (`refresh_once`) exactly where `lib/pkg.sh` put it, so a module that enables
   a repository and calls `pkg_refresh` still gets a real one.
+
+## 13a. The two cores became one
+
+There were two programs. `build/osr` was this one; `build/install.exe` was a
+second C core at the repository root — its own `main`, its own option loop, its
+own module table (`modules.c`), its own package map (`windows.map`), its own
+builder registry (`provide_module.c`), its own log lines and step window
+(`lib/winui.c`), its own state file reader (`lib/winstate.c`), its own theme
+renderer (`lib/theme_render.c`) and its own copy of half a dozen helpers. A
+module that both systems could have was one file with two entirely different
+functions in it, under an `#ifdef`, with different signatures — because the two
+cores had no contract to share.
+
+That is gone. One `osr.c`, one `lib/`, one `modules/`, one registry, one
+`lib/pkgmap/`. `nob.c` builds `build/osr` or `build/osr.exe` from the same
+sources, and the whole of what differs is inside the units.
+
+### What the rule is now
+
+**A subsystem is one file.** Where the two systems answer a question
+differently, both answers live in the file that owns the question, under one
+`#ifdef`, next to each other — never in a second file and never in a second
+tree. `lib/pkg.c` holds the apt/dnf/pacman dispatch and the scoop/choco/winget
+one. `lib/ui.c` holds the ANSI step window and the console-API one. `lib/ui.h`,
+`lib/module.h`, `lib/fetch.h`, `lib/build.h` are each one header over two
+bodies.
+
+**A module is one function.** `int osrm_<name>(void)`, reading its context
+through `osr_mod_*`, registered once in `lib/modules.c`. The Windows modules
+used to take `(repo_root, themes_root, map_path, theme, theme_only)` because
+the Windows core had no module runtime to read those from; `lib/module.c` is
+that runtime on both systems now. `modules/fastfetch.c` is the measure of the
+change: it went from two implementations to one function with a single
+`#ifdef`, over the one thing that genuinely differs (what to fall back to when
+a theme renders nothing).
+
+**A package is a map row.** `lib/pkgmap/windows.map` sits beside `apt.map` and
+`pacman.map` and is reached by the same resolver, with the same `name@facet`
+ranking — `OSR_PKG=windows` names it exactly as `OSR_PKG=apt` names apt's. The
+one-provider-per-row rule that file is written around is a trust boundary
+(scoop, choco and winget are separate namespaces), and it is now enforced by
+the same code that enforces everything else about a row. The one deliberate
+asymmetry: `windows.map` does **not** fall through to `any.map`, because those
+rows name Linux builders and Linux install scripts — reaching one from Windows
+would not be a shared answer, it would be the wrong answer.
+
+**A builder is a registry row.** `provide_wezterm` is one name in
+`lib/build.c`'s table with a POSIX body and a Win32 body, reached by
+`source:provide_wezterm` from either map.
+
+### What genuinely differs, and where it is written down
+
+Six things, and each is documented at the place it happens rather than in a
+porting guide:
+
+| what | where | why |
+| --- | --- | --- |
+| privilege is per PROCESS, not per command | `lib/module.c`, `lib/elevate.h` | there is no `sudo`; a run that needs Administrator relaunches itself once, up front, and everything after is elevated. So `as_root` and `as_user` are the same act — they stay distinct functions because the module still means two different things |
+| there is no `fork` | `lib/module.c`'s `osr_step`, `lib/apply.c`'s `run_layer` | a step's callback runs in this process. The isolation the fork bought is stated where it is lost |
+| a command is a LINE, not a vector | `lib/module.c`'s `win_cmdline` | `CreateProcess` takes one string and the callee re-splits it, so every argv is joined and quoted once, in one place |
+| color may need the console API | `lib/common.c`'s `osr_color_mode` | a Windows 10 console takes ANSI once virtual-terminal processing is on; XP and 7 interpret no escape at all, and printing one would put `ESC[0;36m` in front of every line |
+| there is one init system | `lib/service.c` | the SCM, through `sc.exe`. `lib/servicemap/` carries no `windows.map` because a Windows service's name IS the name you use |
+| nothing re-reads its config on a signal | `lib/reload.c` | Explorer reads its settings at startup. The honest instruction is the one `modules/win-tweaks.c` prints — sign out — not a reload that quietly does nothing |
+
+### What it cost, and what it caught
+
+The merge deleted eleven files outright (`install.c`, `modules.c/h`,
+`provide_module.c/h`, `provide/wezterm.c`, `wallpaper.c`, `lib/win{ui,pkg,bin,
+state,tweak}.{c,h}`, `lib/{manifest,theme_list,theme_render,config_copy,
+nerdfont,net}.{c,h}`) and moved what was in them into the unit that already
+owned the job. What it caught on the way is the usual shape: two
+implementations of one algorithm had drifted. `lib/theme_render.c` and
+`lib/render.c` were the same `{{role}}` substitution written twice;
+`osr_winpkg_lookup` and `osr_pkgmap_resolve` were the same facet ladder written
+twice; `lib/state.c` matched its keys as a regex and `lib/winstate.c` matched
+them literally — and the literal one was right, which is what
+`test/unit_c/state_test.c` had been asserting all along.
 
 ## Not doing (and why)
 

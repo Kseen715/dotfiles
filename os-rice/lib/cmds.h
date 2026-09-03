@@ -1,12 +1,16 @@
-/* lib/cmds.h -- the POSIX harness's commands.
+/* lib/cmds.h -- the harness's commands, on either system.
  *
- * One binary (build/osr) holds all of them, the same way the Windows core
- * links install.c with its lib units; osr.c dispatches on argv[1] and each
- * command lives in its own translation unit, named after the lib/<x>.sh it
- * replaced. Every entry takes the argument vector AFTER the command word and
- * returns the exit status.
+ * One binary per host (build/osr, build/osr.exe) holds all of them: osr.c
+ * dispatches on argv[1] and each command lives in its own translation unit,
+ * named after the lib/<x>.sh it replaced. Every entry takes the argument
+ * vector AFTER the command word and returns the exit status.
  *
- * C89 + POSIX.
+ * A few commands exist on one system only, and they are guarded here rather
+ * than stubbed, so that `osr <name>` on a system without them is an unknown
+ * command instead of one that runs and does nothing. osr.c's table is guarded
+ * to match. Which ones and why is at each declaration.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
 #ifndef OSR_CMDS_H
 #define OSR_CMDS_H
@@ -101,18 +105,28 @@ int osr_git_main(int argc, char **argv);      /* lib/git.sh */
 int osr_service_main(int argc, char **argv);  /* lib/service.sh */
 int osr_preflight_main(int argc, char **argv);/* lib/preflight.sh */
 int osr_fonts_main(int argc, char **argv);    /* lib/fonts.sh */
-int osr_gnome_main(int argc, char **argv);    /* lib/gnome.sh */
 int osr_migrate_main(int argc, char **argv);  /* lib/migrate.sh */
 int osr_apply_main(int argc, char **argv);    /* lib/apply.sh */
 int osr_reload_main(int argc, char **argv);   /* lib/reload.sh */
-/* osr_benchmark_main -- measure the CPU: throughput, power, thermals, clocks.
- * Standalone, and the source of the numbers the undervolt perf gate compares. */
-int osr_benchmark_main(int argc, char **argv);
 
-/* osr_undervolt_main -- CPU voltage offsets. No .sh predecessor: this one is
- * new, and is in C because it pokes MSRs and sysfs byte-blocks and has to
- * survive the machine dying halfway through a write. */
+#ifndef _WIN32
+/* POSIX-only commands, and each for a reason of its own rather than because
+ * nobody got to it:
+ *
+ *   gnome      probes a GNOME session and writes gsettings keys
+ *   benchmark  reads MSRs, sysfs hwmon and cpufreq for power and clocks
+ *   undervolt  writes MSRs and sysfs byte-blocks, and has to survive the
+ *              machine dying halfway through a write
+ *   test-run   runs the suite, which drives the built binary under sh
+ *
+ * None of the four has a Windows analogue that would answer the same question,
+ * and an entry point that returned "not here" would put a command in the help
+ * text that can never do anything. */
+int osr_gnome_main(int argc, char **argv);    /* lib/gnome.sh */
+int osr_benchmark_main(int argc, char **argv);
 int osr_undervolt_main(int argc, char **argv);
+int osr_testrun_main(int argc, char **argv);  /* test/run.sh */
+#endif
 
 /* osr_module_names -- the C modules' names, one per line, for the listing
  * install.sh prints (which merges them with the shell ones). */
@@ -131,6 +145,5 @@ int osr_module_run(const char *name, int theme_only);
  * wallpaper. Its own command rather than a mode of `osr install`, the same
  * separation wallpaper.sh has from install.sh: this is not an install. */
 int osr_wallpaper_main(int argc, char **argv);/* wallpaper.sh */
-int osr_testrun_main(int argc, char **argv);  /* test/run.sh */
 
 #endif /* OSR_CMDS_H */

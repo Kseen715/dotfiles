@@ -727,7 +727,7 @@ int osr_wintweak_apply_services(const osr_wintweak_service *rows, unsigned long 
  * took.
  *
  * enabled == 0 rows: reg-dont-pretty-path.ps1 existed but setup.ps1 never
- * called it. Kept, off, rather than dropped -- see wintweak.h.
+ * called it. Kept, off, rather than dropped -- see the `enabled` field.
  */
 #define ADVANCED "HKCU:Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
 
@@ -816,7 +816,7 @@ static const osr_wintweak_reg g_reg_tweaks[] = {
  *   Fax
  *       Fax support, 5-10 MB RAM. Consequences: none whatsoever. Carried
  *       disabled because setup.ps1 had this line commented out -- see
- *       wintweak.h on why an off row is kept rather than deleted.
+ *       the `enabled` field on why an off row is kept rather than deleted.
  *
  *   wuauserv (Windows Update) -- deliberately NOT disabled
  *       A double-edged one. Turning updates off entirely leaves the

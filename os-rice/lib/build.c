@@ -58,7 +58,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "elevate.h"
-#include "net.h"
+#include "fetch.h"
 #else
 #include <dirent.h>
 #include <fcntl.h>
@@ -3775,11 +3775,6 @@ int osr_place_binary(const char *src_file, const char *dest_dir, const char *exe
         return 0;
     }
     return 1;
-}
-
-int file_exists(const char *path) {
-    DWORD attrs = GetFileAttributesA(path);
-    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
 /* path_contains -- is dir already one of the ';'-separated entries in

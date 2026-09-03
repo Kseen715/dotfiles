@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 
 #include "config.h"
+#include "build.h"
 #include "cmds.h"
 #include "module.h"
 
@@ -561,28 +562,30 @@ static void add_profile(Str *out, const char *path) {
 /* glob_profiles -- the `*.default*` / `*.dev-edition*` fallback, for a profile
  * created before profiles.ini was written. */
 static void glob_profiles(Str *out, const char *root, const char *pattern) {
-    Str pat;
     Str names;
     size_t pos = 0;
     Line line;
 
-    str_init(&pat);
-    str_addz(&pat, root);
-    str_addc(&pat, '/');
-    str_addz(&pat, pattern);
     str_init(&names);
-    osr_list_dir(&names, str_text(&pat), NULL, NULL);
+    osr_list_dir(&names, root, NULL, NULL);
     while (next_line(str_text(&names), names.len, &pos, &line)) {
-        Str full;
-        str_init(&full);
-        str_addz(&full, str_text(&pat));
-        str_addc(&full, '/');
-        str_add(&full, line.start, line.len);
-        add_profile(out, str_text(&full));
-        str_free(&full);
+        Str name, full;
+        str_init(&name);
+        str_add(&name, line.start, line.len);
+        /* `*.default*` is a pattern over the entries, not a directory name --
+         * osr_glob_match is the same `*`-only matcher the release-asset
+         * picker uses, anchored at both ends the way a shell glob is. */
+        if (osr_glob_match(pattern, str_text(&name))) {
+            str_init(&full);
+            str_addz(&full, root);
+            str_addc(&full, '/');
+            str_add(&full, str_text(&name), name.len);
+            add_profile(out, str_text(&full));
+            str_free(&full);
+        }
+        str_free(&name);
     }
     str_free(&names);
-    str_free(&pat);
 }
 
 void osr_mozilla_profiles(Str *out, const char *root) {

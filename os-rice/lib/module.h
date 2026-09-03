@@ -1,26 +1,28 @@
-/* lib/module.h -- the API a Linux module written in C calls.
+/* lib/module.h -- the API a module written in C calls, on either system.
  *
- * A module is one translation unit at modules/<name>.c, registered in
- * lib/modules.c, that installs one thing: package, config, service. That file
- * is the module on every OS, not just this one: a module both systems can
- * have holds a Windows branch too (modules/fastfetch.c), behind #ifdef
- * _WIN32, and only the branch below the #else is what this header describes.
- * This header is everything a POSIX module is allowed to assume. Nothing here needs a shell:
- * the point of writing a module in C is that `osr_run_step` can fork a real
- * function or a real command, where the sh `run_step` could only fork a shell
- * function -- which is the single reason lib/ui.sh still exists.
+ * A module is one translation unit at modules/<name>.c, exporting
+ * `int osrm_<name>(void)` and registered in lib/modules.c, that installs one
+ * thing: package, config, service. ONE file and ONE signature whichever system
+ * it runs on -- that is the point of this header. Where a module needs to
+ * differ it differs inside its body (modules/fastfetch.c has exactly one
+ * #ifdef, over the fallback when a theme renders nothing), and where the
+ * SYSTEMS differ they differ inside lib/module.c, which has a POSIX body and a
+ * Win32 body under this one contract.
+ *
+ * Nothing here needs a shell: the point of writing a module in C is that
+ * `osr_run_step` can fork a real function or a real command, where the sh
+ * `run_step` could only fork a shell function.
  *
  * A module is called with the facts already detected and exported (OSR_PKG,
- * OSR_DISTRO, OSR_USER, OSR_HOME, OSR_THEME, ...), because install.sh runs
+ * OSR_DISTRO, OSR_USER, OSR_HOME, OSR_THEME, ...), because the runner runs
  * `osr module run <name>` after osr_detect and osr_resolve_user. Read them
  * through the accessors below rather than getenv, so a future in-process
  * caller can supply them without an environment.
  *
  * Return 1 for success, 0 for failure. A failing module is reported and the
- * run continues -- one broken module must not abort a whole rice install,
- * same contract as modules.h has on the Windows side.
+ * run continues -- one broken module must not abort a whole rice install.
  *
- * C89 + POSIX.
+ * C89 + POSIX, and C89 + Win32.
  */
 #ifndef OSR_MODULE_H
 #define OSR_MODULE_H
@@ -205,6 +207,16 @@ int osr_pkg_installed(const char *name);
  * dependencies call this rather than the plain form. test_command may be NULL,
  * which means "the name itself". */
 int osr_pkg_need(const char *name, const char *test_command);
+
+#ifdef _WIN32
+/* osr_pkg_needs_admin -- would installing these names prompt for elevation?
+ * Asked once, before any work, so the one privilege prompt a run needs happens
+ * up front rather than partway through -- the same reason the POSIX runner
+ * warms its sudo credential at the top instead of mid-loop. There is no POSIX
+ * counterpart because there is nothing to ask: sudo escalates per command and
+ * the ticket is warmed unconditionally. */
+int osr_pkg_needs_admin(char **names, int count);
+#endif
 
 /* osr_pkg_native_installed -- the native package database's answer for a REAL
  * package name, with no pkgmap resolution in front of it (_native_installed).

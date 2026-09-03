@@ -1,5 +1,5 @@
-/* test/unit_c/wintweak_test.c -- lib/wintweak.c's parsers and the two
- * policy tables in modules/win-tweaks.c.
+/* test/unit_c/wintweak_test.c -- modules/win-tweaks.c: its key parser and its
+ * two policy tables.
  *
  * Deliberately touches nothing: not one assertion here calls a verb that
  * writes a registry value, stops a service or deletes a path. Those cannot
@@ -15,8 +15,25 @@
  * desktop.
  */
 #include "../c_test.h"
-#include "../../lib/wintweak.h"
-#include "../../modules/src/common.h"
+
+/* Included, not linked: the tables and the parser are the module's own, and
+ * this file is built as a unity -- itself plus what it reads plus the log
+ * lines that reads calls -- linking against nothing. Any other arrangement
+ * would define the module twice, and it is also what lets these assertions
+ * reach rows a header does not export.
+ *
+ * lib/common.c comes with it because win-tweaks.c says things (osr_warnf when
+ * a service is missing), and lib/elevate.c because the module's entry point
+ * asks whether the run is elevated -- neither because this test calls either.
+ * The stubs below stand in for the module runtime, which a unity build has no
+ * reason to pull in whole: nothing here runs a module. */
+#include "../../lib/common.c"
+#include "../../lib/elevate.c"
+
+int osr_theme_only(void) { return 0; }
+int osr_theme_only_skip(const char *verb) { (void)verb; return 1; }
+
+#include "../../modules/win-tweaks.c"
 
 #include <string.h>
 

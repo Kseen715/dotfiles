@@ -2,7 +2,7 @@
  * Platform-independent: exercises only the code outside net.c's #ifdef _WIN32.
  */
 #include "../c_test.h"
-#include "../../lib/net.h"
+#include "../../lib/fetch.h"
 
 static void test_url_filename(void) {
     char out[64];

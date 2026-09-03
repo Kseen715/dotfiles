@@ -198,71 +198,74 @@ static void cmd_append_args(Nob_Cmd *cmd, ...) {
     va_end(ap);
 }
 
-static const char *lib_srcs[] = {
-    "lib/net.c",
-    "lib/winpkg.c",
-    "lib/winbin.c",
-    "lib/elevate.c",
-    "lib/manifest.c",
-    "lib/winui.c",
-    "lib/winstate.c",
-    "lib/theme_list.c",
-    "lib/theme_render.c",
-    "lib/config_copy.c",
-    "lib/fonts.c",
-    "lib/wallpaper.c",
-    "lib/wintweak.c",
-    "provide_module.c",
-    "modules.c",
-    "modules/src/common.c",
-    "modules/pwsh.c",
-    "modules/oh-my-posh.c",
-    "modules/win-tweaks.c",
-    "modules/win-update.c",
-    "modules/win-debloat.c",
-#ifdef _WIN32
-    /* Modules that exist on BOTH systems are one file holding both branches
-     * (modules/<name>.c, never modules/<os>/<name>.c) -- and the two branches
-     * export the same osrm_<name> with their own tier's signature, so exactly
-     * one core may have the object: the Windows core here, the POSIX harness
-     * in posix_srcs below. Everything above this line is Windows-only code
-     * whose POSIX branch is a stub, which is why those rows are unconditional
-     * (test/unit_c/wintweak_test.c reads win-tweaks.c's tables on a Linux CI
-     * host, and only gets to because that object is built there).
-     *
-     * Split on the HOST, like the -DWINVER flags and the -lwininet line
-     * further down: this script has always assumed the host it runs on is the
-     * system it builds for. */
-    "modules/fastfetch.c",
-    "modules/wezterm.c",
-    "modules/starship.c",
-#endif
-};
-#define LIB_SRCS_COUNT (sizeof(lib_srcs) / sizeof(lib_srcs[0]))
-
-/* posix_srcs -- the POSIX harness core. One binary, build/osr, linked from
- * osr.c (the dispatcher) plus one translation unit per lib/<x>.sh that has
- * been rewritten -- the same arrangement as the Windows core's install.c plus
- * its lib units, and the reason the remaining sh files need no build step of
- * their own: they just exec build/osr.
+/* --- what gets compiled, and where it goes -------------------------------
  *
- * POSIX-only by design (unistd, termios, glob, sudo), so the whole binary is
- * skipped on a Windows host, where the sh side does not run at all.
+ * Three lists, and which one a unit is in says what kind of unit it is.
+ *
+ * core_srcs      compiled on every host. Either the unit is plain C89 (the
+ *                string kit, the manifest and map parsers, the renderers), or
+ *                it holds both systems' bodies under one #ifdef -- which is
+ *                what makes it ONE unit rather than two files with the same
+ *                job. lib/pkg.c, lib/module.c, lib/ui.c and lib/detect.c are
+ *                all of the second kind.
+ * posix_srcs     the subsystems that exist only on POSIX: a GNOME session,
+ *                MSRs and sysfs hwmon, the fork-based fetch layer, the suite
+ *                runner, and the ~120 modules that install X11/Wayland
+ *                programs.
+ * win_srcs       the subsystems that exist only on Windows: process
+ *                elevation, and the modules whose program or whose OS pass is
+ *                Windows-only.
+ *
+ * There used to be two lists linking two different programs -- install.exe
+ * from lib_srcs, build/osr from posix_srcs -- with their own module tables and
+ * their own log lines. One program now, one command table, one registry.
  */
-static const char *posix_srcs[] = {
+static const char *core_srcs[] = {
     "lib/common.c",
-    "lib/ui.c",
     "lib/log.c",
+    "lib/ui.c",
     "lib/state.c",
     "lib/user.c",
     "lib/detect.c",
     "lib/theme.c",
+    "lib/render.c",
     "lib/install.c",
+    "lib/module.c",
+    "lib/modules.c",
+    "lib/pkg.c",
+    "lib/build.c",
+    "lib/config.c",
+    "lib/apply.c",
+    "lib/preflight.c",
+    "lib/reload.c",
+    "lib/migrate.c",
+    "lib/git.c",
+    "lib/service.c",
+    "lib/fonts.c",
+    "lib/wallpaper.c",
+    "lib/elevate.c",
+    /* lib/fetch.c holds both transports and the two URL parsers above them;
+     * it was lib/net.c and lib/fetch.c, one per system, publishing different
+     * names for the same three acts. */
+    "lib/fetch.c",
+    /* The vendored YAML parser's implementation (thirdparty/yaml.h). Core
+     * rather than static-only: config parsing is what it is here for, and
+     * that lives in the runtime host too. */
+    "lib/yaml.c",
+    /* Modules both systems have. */
+    "modules/fastfetch.c",
+    "modules/starship.c",
+    "modules/wezterm.c",
+};
+#define CORE_SRCS_COUNT (sizeof(core_srcs) / sizeof(core_srcs[0]))
+
+static const char *posix_srcs[] = {
+    "lib/gnome.c",
     "lib/testrun.c",
     "lib/benchmark.c",
-    /* lib/bench/ -- CPU measurement. Unconditional: every architecture has a
-     * throughput number worth taking, and the power layer degrades to "no
-     * sensor" rather than to a wrong reading. */
+    /* lib/bench/ -- CPU measurement. Unconditional within this list: every
+     * architecture has a throughput number worth taking, and the power layer
+     * degrades to "no sensor" rather than to a wrong reading. */
     "lib/bench/cpu.c",
     "lib/bench/power.c",
     "lib/bench/util.c",
@@ -275,29 +278,6 @@ static const char *posix_srcs[] = {
     "lib/uv/backend.c",
     "lib/uv/generic_opp.c",
     "lib/uv/journal.c",
-    "lib/render.c",
-    "lib/module.c",
-    "lib/pkg.c",
-    "lib/build.c",
-    "lib/config.c",
-    "lib/wallpaper_front.c",
-    "lib/git.c",
-    "lib/service.c",
-    "lib/preflight.c",
-    "lib/nerdfont.c",
-    "lib/gnome.c",
-    "lib/migrate.c",
-    "lib/apply.c",
-    "lib/reload.c",
-    /* lib/fetch.c is lib/net.sh; lib/net.c comes with it for the shared
-     * header parsers (its I/O half is the Windows one, stubbed here). */
-    "lib/fetch.c",
-    "lib/net.c",
-    /* The vendored YAML parser's implementation (thirdparty/yaml.h). Core
-     * rather than static-only: config parsing is what it is here for, and
-     * that lives in the runtime host too. */
-    "lib/yaml.c",
-    "lib/modules.c",
     "modules/alacritty.c",
     "modules/amnezia-vpn.c",
     "modules/arandr.c",
@@ -400,8 +380,8 @@ static const char *posix_srcs[] = {
     "modules/viewers.c",
     "modules/vlc.c",
     "modules/vmware-init.c",
-    "modules/vscode.c",
     "modules/vscode-insiders.c",
+    "modules/vscode.c",
     "modules/waybar.c",
     "modules/waydroid.c",
     "modules/wayland.c",
@@ -417,38 +397,71 @@ static const char *posix_srcs[] = {
     "modules/zig.c",
     "modules/zip.c",
     "modules/zsh.c",
-#ifndef _WIN32
-    /* the other half of the split described in lib_srcs: this file's POSIX
-     * branch is the Linux fastfetch module, its Windows branch is the Windows
-     * one, and only one of them is ever in a binary. */
-    "modules/fastfetch.c",
-    "modules/wezterm.c",
-    "modules/starship.c",
-#endif
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
-/* Entries before modules/alacritty.c are the runtime core. Keep this count at
- * the boundary above: runtime builds compile these units plus
- * lib/module_runtime.c, while static builds compile the whole list. */
-#define POSIX_CORE_SRCS_COUNT 35
+
+static const char *win_srcs[] = {
+    "modules/oh-my-posh.c",
+    "modules/pwsh.c",
+    "modules/win-debloat.c",
+    "modules/win-tweaks.c",
+    "modules/win-update.c",
+};
+#define WIN_SRCS_COUNT (sizeof(win_srcs) / sizeof(win_srcs[0]))
+
+/* HOST_SRCS -- the list for the system being built for. nob.c has always
+ * assumed the host it runs on is the system it builds for (see the -DWINVER
+ * flags and the -lwininet line further down), and this is the same
+ * assumption. */
+#ifdef _WIN32
+#define HOST_SRCS win_srcs
+#define HOST_SRCS_COUNT WIN_SRCS_COUNT
+#else
+#define HOST_SRCS posix_srcs
+#define HOST_SRCS_COUNT POSIX_SRCS_COUNT
+#endif
+
+/* The runtime host (D-4a) compiles every unit EXCEPT the modules, plus
+ * lib/module_runtime.c, and loads a module's object on demand instead. So the
+ * two counts below are "how many entries of each list come before its modules"
+ * -- the modules are last in both, which is what makes that a count rather
+ * than a filter.
+ *
+ * Keep them at the boundary when adding a unit: a non-module added after the
+ * modules would be silently left out of the runtime host, and the failure is a
+ * link error naming whatever osr.c dispatches to it. */
+#define CORE_NO_MODULES_COUNT  (CORE_SRCS_COUNT - 3)
+#define POSIX_NO_MODULES_COUNT (POSIX_SRCS_COUNT - 119)
 #define POSIX_RUNTIME_SRC "lib/module_runtime.c"
 
+/* test_names -- tests that LINK against the built objects, and so run on
+ * whichever host builds. Everything here is a pure unit reached through a
+ * public header: a URL parser, an asset matcher. Nothing in this list touches
+ * a registry, a network or a package manager.
+ *
+ * unity_test_names -- tests that link nothing and INCLUDE what they read
+ * instead, because what they read is static to its unit. They run everywhere
+ * too; the difference is only how they are put together, and it is forced --
+ * linking them against the object built from the same source would define it
+ * twice. */
 static const char *test_names[] = {
-    "net_parse_test", "winpkg_test", "winbin_test", "manifest_test", "theme_render_test",
-    "config_copy_test", "wintweak_test",
+    "net_parse_test", "artifact_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
+
+static const char *unity_test_names[] = {
+    "wintweak_test",
+};
+#define UNITY_TEST_COUNT (sizeof(unity_test_names) / sizeof(unity_test_names[0]))
 
 /* posix_test_names -- tests of the POSIX-only units, which cannot be linked
  * the way the ones above are.
  *
- * The tests in test_names link against every lib_srcs object, and lib/winui.c
- * is one of them -- it defines osr_info/osr_warn, and so does lib/common.c on
- * the POSIX side. The two are alternative implementations of the same five log
- * lines for the two cores, so they can never appear in one binary. A test of
- * lib/uv/* therefore includes the .c files it needs directly (a unity build)
+ * A test of lib/uv/* includes the .c files it needs directly (a unity build)
  * and links nothing else at all, which is also why these tests can reach
- * static helpers the header does not export.
+ * static helpers the header does not export. The behaviour tests below do the
+ * same for a different reason: they drive build/osr as a subprocess, so they
+ * must not be linked to any of it.
  */
 static const char *posix_test_names[] = {
     "uv_journal_test", "bench_test",
@@ -1105,15 +1118,24 @@ static bool needs_compile(const char *src) {
     return nob_needs_rebuild(obj, deps.items, deps.count) != 0;
 }
 
+/* host_objs -- every object that goes into the one binary: main's, the core's,
+ * and this system's own list. Returns how many were written. */
+static size_t host_objs(const char **objs, const char *main_src) {
+    size_t count = 0;
+    size_t i;
+    objs[count++] = obj_of(main_src);
+    for (i = 0; i < CORE_SRCS_COUNT; i++) objs[count++] = obj_of(core_srcs[i]);
+    for (i = 0; i < HOST_SRCS_COUNT; i++) objs[count++] = obj_of(HOST_SRCS[i]);
+    return count;
+}
+
 /* needs_link -- is bin missing or older than any object linked into it?
  * Called only after compile_objs() has flushed, so the objects' mtimes
  * are final by the time we look at them. */
 static bool needs_link(const char *bin, const char *main_src) {
-    const char *objs[LIB_SRCS_COUNT + 1];
-    size_t i;
-    objs[0] = obj_of(main_src);
-    for (i = 0; i < LIB_SRCS_COUNT; i++) objs[i + 1] = obj_of(lib_srcs[i]);
-    return nob_needs_rebuild(bin, objs, LIB_SRCS_COUNT + 1) != 0;
+    const char *objs[CORE_SRCS_COUNT + POSIX_SRCS_COUNT + WIN_SRCS_COUNT + 1];
+    size_t count = host_objs(objs, main_src);
+    return nob_needs_rebuild(bin, objs, count) != 0;
 }
 
 /* compile_objs -- one gcc -c per source, all started at once (nob caps the
@@ -1150,7 +1172,8 @@ static bool compile_objs(const char **srcs, size_t count) {
 
 static void append_lib_objs(Nob_Cmd *cmd) {
     size_t i;
-    for (i = 0; i < LIB_SRCS_COUNT; i++) nob_cmd_append(cmd, obj_of(lib_srcs[i]));
+    for (i = 0; i < CORE_SRCS_COUNT; i++) nob_cmd_append(cmd, obj_of(core_srcs[i]));
+    for (i = 0; i < HOST_SRCS_COUNT; i++) nob_cmd_append(cmd, obj_of(HOST_SRCS[i]));
 }
 
 /* Windows-only link libs -- the sources' POSIX branches (see lib/net.c's
@@ -1176,41 +1199,20 @@ static void append_common_libs(Nob_Cmd *cmd) {
 #endif
 }
 
-/* link_posix -- link the POSIX harness core: osr.c's object plus every
- * lib/osr_*.c object, and none of the Windows core's objects or link
- * libraries. Nothing here includes a Windows header, and nothing there is
- * reachable from ./osr. */
-static bool link_posix(const char *bin) {
+/* link_runtime -- the runtime-module host, built in one compiler invocation.
+ * Its object set differs from the static host only by a preprocessor
+ * definition, so compiling source-to-binary avoids mixing incompatible objects
+ * in build/obj while leaving the ordinary static build unchanged. POSIX only:
+ * it dlopens what it compiles. */
+static bool link_runtime(const char *bin) {
     Nob_Cmd cmd = {0};
-    const char *objs[POSIX_SRCS_COUNT + 1];
-    size_t i;
-    objs[0] = obj_of("osr.c");
-    for (i = 0; i < POSIX_SRCS_COUNT; i++) objs[i + 1] = obj_of(posix_srcs[i]);
-    if (nob_needs_rebuild(bin, objs, POSIX_SRCS_COUNT + 1) == 0) return true;
-    actions++;
-    append_common_flags(&cmd);
-    if (is_msvc()) {
-        nob_cmd_append(&cmd, nob_temp_sprintf("/Fe%s", bin));
-    } else {
-        cmd_append_args(&cmd, "-o", bin, NULL);
-    }
-    for (i = 0; i < POSIX_SRCS_COUNT + 1; i++) nob_cmd_append(&cmd, objs[i]);
-    if (timing) return run_timed(&cmd, bin);
-    return nob_cmd_run(&cmd);
-}
-
-/* link_posix_runtime -- build the small host in one compiler invocation. Its
- * object set differs from the static host only by a preprocessor definition,
- * so separate source-to-binary compilation avoids mixing incompatible objects
- * in build/obj while keeping the ordinary static build unchanged. */
-static bool link_posix_runtime(const char *bin) {
-    Nob_Cmd cmd = {0};
-    const char *inputs[POSIX_CORE_SRCS_COUNT + 3];
+    const char *inputs[CORE_NO_MODULES_COUNT + POSIX_NO_MODULES_COUNT + 2];
     size_t count = 0;
     size_t i;
 
     inputs[count++] = "osr.c";
-    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) inputs[count++] = posix_srcs[i];
+    for (i = 0; i < CORE_NO_MODULES_COUNT; i++) inputs[count++] = core_srcs[i];
+    for (i = 0; i < POSIX_NO_MODULES_COUNT; i++) inputs[count++] = posix_srcs[i];
     inputs[count++] = POSIX_RUNTIME_SRC;
     collect_deps();
     if (nob_needs_rebuild(bin, inputs, count) == 0 &&
@@ -1224,7 +1226,8 @@ static bool link_posix_runtime(const char *bin) {
      * options (-Wl takes the flags with no comma: -Wl,arg is a lone token). */
     cmd_append_args(&cmd, "-DOSR_RUNTIME_MODULES=1",
                     is_lcc() ? "-Wl-E" : "-rdynamic", "-o", bin, "osr.c", NULL);
-    for (i = 0; i < POSIX_CORE_SRCS_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
+    for (i = 0; i < CORE_NO_MODULES_COUNT; i++) nob_cmd_append(&cmd, core_srcs[i]);
+    for (i = 0; i < POSIX_NO_MODULES_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
     cmd_append_args(&cmd, POSIX_RUNTIME_SRC, "-ldl", NULL);
     if (timing) return run_timed(&cmd, bin);
     return nob_cmd_run(&cmd);
@@ -1253,8 +1256,10 @@ static bool link_exe(const char *bin, const char *main_src, Nob_Procs *procs) {
     }
 }
 
-/* link_standalone -- one object, no lib objects, no Windows link libraries:
- * the unity-built POSIX tests described at posix_test_names. */
+/* link_standalone -- one object and no lib objects: the unity-built tests,
+ * which include their subject rather than linking it. The system link
+ * libraries still go on, because a unity that includes a unit calling
+ * RegCreateKeyEx needs them as much as the real binary does. */
 static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *procs) {
     Nob_Cmd cmd = {0};
     const char *obj = obj_of(main_src);
@@ -1267,6 +1272,7 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
         cmd_append_args(&cmd, "-o", bin, NULL);
     }
     nob_cmd_append(&cmd, obj);
+    append_common_libs(&cmd);
     if (timing) return run_timed(&cmd, bin);
     {
         Nob_Cmd_Opt opt = {0};
@@ -1293,6 +1299,7 @@ static bool run_test(const char *name) {
 
 static bool build_tests(void) {
     const char *srcs[TEST_COUNT];
+    const char *usrcs[UNITY_TEST_COUNT];
     const char *psrcs[POSIX_TEST_COUNT];
     Nob_Procs procs = {0};
     size_t i;
@@ -1302,6 +1309,16 @@ static bool build_tests(void) {
     for (i = 0; i < TEST_COUNT; i++) {
         const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]);
         if (!link_exe(bin, srcs[i], &procs)) return false;
+    }
+    if (!nob_procs_flush(&procs)) return false;
+
+    for (i = 0; i < UNITY_TEST_COUNT; i++) {
+        usrcs[i] = nob_temp_sprintf("test/unit_c/%s.c", unity_test_names[i]);
+    }
+    if (!compile_objs(usrcs, UNITY_TEST_COUNT)) return false;
+    for (i = 0; i < UNITY_TEST_COUNT; i++) {
+        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, unity_test_names[i]);
+        if (!link_standalone(bin, usrcs[i], &procs)) return false;
     }
     if (!nob_procs_flush(&procs)) return false;
 
@@ -1336,6 +1353,9 @@ static bool run_all_tests(void) {
     for (i = 0; i < TEST_COUNT; i++) {
         if (!run_test(test_names[i])) ok = false;
     }
+    for (i = 0; i < UNITY_TEST_COUNT; i++) {
+        if (!run_test(unity_test_names[i])) ok = false;
+    }
 #ifndef _WIN32
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         if (!run_test(posix_test_names[i])) ok = false;
@@ -1358,18 +1378,19 @@ static void delete_built(const char *src) {
 
 static bool clean(void) {
     size_t i;
-    delete_if_exists(BIN("install"));
-    delete_if_exists(BIN("wallpaper"));
     delete_if_exists(BIN("osr"));
     delete_if_exists(BIN("osr-runtime"));
-    delete_built("install.c");
-    delete_built("wallpaper.c");
     delete_built("osr.c");
+    for (i = 0; i < CORE_SRCS_COUNT; i++) delete_built(core_srcs[i]);
     for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_built(posix_srcs[i]);
-    for (i = 0; i < LIB_SRCS_COUNT; i++) delete_built(lib_srcs[i]);
+    for (i = 0; i < WIN_SRCS_COUNT; i++) delete_built(win_srcs[i]);
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", test_names[i]));
+    }
+    for (i = 0; i < UNITY_TEST_COUNT; i++) {
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, unity_test_names[i]));
+        delete_built(nob_temp_sprintf("test/unit_c/%s.c", unity_test_names[i]));
     }
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]));
@@ -1424,30 +1445,23 @@ static bool cc_toolchain_check(void) {
 
 /* build_all -- every shared object plus the two program objects compiled in
  * one parallel batch, then both binaries linked from them. */
+/* build_all -- one binary, build/osr. Every object it needs compiled in one
+ * parallel batch, then linked. */
 static bool build_all(void) {
-    const char *srcs[LIB_SRCS_COUNT + 2 + POSIX_SRCS_COUNT + 1];
+    const char *srcs[CORE_SRCS_COUNT + HOST_SRCS_COUNT + 1];
     size_t count = 0;
     Nob_Procs procs = {0};
     size_t i;
 
     if (!cc_toolchain_check()) return false;
 
-    for (i = 0; i < LIB_SRCS_COUNT; i++) srcs[count++] = lib_srcs[i];
-    srcs[count++] = "install.c";
-    srcs[count++] = "wallpaper.c";
-#ifndef _WIN32
     srcs[count++] = "osr.c";
-    for (i = 0; i < POSIX_SRCS_COUNT; i++) srcs[count++] = posix_srcs[i];
-#endif
+    for (i = 0; i < CORE_SRCS_COUNT; i++) srcs[count++] = core_srcs[i];
+    for (i = 0; i < HOST_SRCS_COUNT; i++) srcs[count++] = HOST_SRCS[i];
 
     if (!compile_objs(srcs, count)) return false;
-    if (!link_exe(BIN("install"), "install.c", &procs)) return false;
-    if (!link_exe(BIN("wallpaper"), "wallpaper.c", &procs)) return false;
-    if (!nob_procs_flush(&procs)) return false;
-#ifndef _WIN32
-    if (!link_posix(BIN("osr"))) return false;
-#endif
-    return true;
+    if (!link_exe(BIN("osr"), "osr.c", &procs)) return false;
+    return nob_procs_flush(&procs);
 }
 
 static bool build_runtime(void) {
@@ -1457,7 +1471,7 @@ static bool build_runtime(void) {
 #else
     if (!cc_toolchain_check()) return false;
     if (!mkdir_if_needed(BUILD_DIR)) return false;
-    return link_posix_runtime(BIN("osr-runtime"));
+    return link_runtime(BIN("osr-runtime"));
 #endif
 }
 
@@ -1729,7 +1743,13 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(subcommand, "test") == 0) {
-        if (!build_all() || !build_runtime()) return 1;
+        if (!build_all()) return 1;
+#ifndef _WIN32
+        /* The runtime host is a POSIX output (it dlopens what it compiles), so
+         * it is built here only where it exists -- and it is built at all
+         * because test/runtime_modules.sh drives it. */
+        if (!build_runtime()) return 1;
+#endif
         return run_all_tests() ? 0 : 1;
     }
     if (strcmp(subcommand, "clean") == 0) {
