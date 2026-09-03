@@ -201,15 +201,20 @@ use the static output.
 
 ### Working
 
+GCC is the reference compiler, but the harness builds and tests against TCC, GCC and Clang. Other compilers are treated as rudimentary, and are not expected to pass the test suite.
+All compilers are tested with `nob -t` (synchronous, no parallelism, with time measurement).
+
+Lower x = faster.
+
 | Compiler | OS | Arch | Notes | Compilation time |
 |---|---|---|---|---|
-| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 1.18s |
-| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386(x86) | - | ~2.11x |
-| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | ~3.56x |
-| clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | ~9.99x |
-| gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | ~10.75x |
-| gcc 15.2.0 `-m32` | GNU Linux | i386(x86) | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | ~11.47x |
-| zig 0.14.1 cc clang 20.1.8 | GNU Linux | x86_64 | Ladder 4 priority | ~19.33x |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 0.072x |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386(x86) | - | 0.287x |
+| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | 0.381x |
+| clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | 0.810x |
+| gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | _13.893s_ |
+| gcc 15.2.0 `-m32` | GNU Linux | i386(x86) | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | 1.007x |
+| zig 0.14.1 cc clang 20.1.8 | GNU Linux | x86_64 | Ladder 4 priority | 1.854x |
 
 ### In testing
 
