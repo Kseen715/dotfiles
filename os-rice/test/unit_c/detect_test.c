@@ -133,6 +133,85 @@ int main(void) {
     is("OSR_CPU_CORES", "4",
        "cpu: with no topology reported, cores fall back to the thread count");
 
+    /* An ARM SoC: lscpu's model name is the CORE, and reporting "Cortex-A72"
+     * to somebody asking what CPU a Pi has is the wrong answer. The device
+     * tree names the chip. */
+    tool("lscpu",
+        "Architecture:            aarch64\n"
+        "Vendor ID:               ARM\n"
+        "Model name:              Cortex-A72\n"
+        "CPU(s):                  4\n", 0);
+    osr_sb_write(&sb, "dt/compatible", "brcm,bcm2711", 0644);
+    point("OSR_DEVICETREE", "dt");
+    facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 Cortex-A72",
+       "cpu: the device-tree SoC is prefixed to the ARM core name");
+    osr_sb_env(&sb, "OSR_DEVICETREE", "");
+
+    /* An ARM SoC: lscpu names the CPU CORE, which is not what "what CPU is
+     * this" means -- the chip is only in the device tree. And a heterogeneous
+     * chip has one lscpu model name for two kinds of core, so the mix comes
+     * from the per-processor parts in /proc/cpuinfo. */
+    point("OSR_DEVICETREE", "dt");
+    osr_sb_write(&sb, "dt/compatible", "brcm,bcm2711", 0644);
+    tool("lscpu",
+        "Architecture:            aarch64\n"
+        "Vendor ID:               ARM\n"
+        "Model name:              Cortex-A72\n"
+        "CPU(s):                  4\n", 0);
+    facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 Cortex-A72",
+       "cpu: the SoC from the device tree names the chip, the core follows it");
+
+    /* An ARM core name carries no clock the way an Intel brand string does,
+     * so the speed has to come off lscpu's own max. */
+    tool("lscpu",
+        "Architecture:            aarch64\n"
+        "Model name:              Cortex-A72\n"
+        "CPU(s):                  4\n"
+        "CPU max MHz:             1800.0000\n", 0);
+    facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 Cortex-A72 @ 1.80GHz",
+       "cpu: with no clock in the model name the lscpu max is appended");
+
+    /* The Intel brand string already ends in "@ 3.90GHz" -- appending lscpu's
+     * turbo max on top of it would print the speed twice. */
+    tool("lscpu",
+        "Architecture:            x86_64\n"
+        "Model name:              Intel(R) Core(TM) i3-7100 CPU @ 3.90GHz\n"
+        "CPU(s):                  4\n"
+        "CPU max MHz:             3900.0000\n", 0);
+    facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 Intel(R) Core(TM) i3-7100 CPU @ 3.90GHz",
+       "cpu: a model name that already states its clock is left alone");
+
+    osr_sb_write(&sb, "cpuinfo",
+        "processor\t: 0\nCPU implementer\t: 0x41\nCPU part\t: 0xd05\n"
+        "processor\t: 1\nCPU implementer\t: 0x41\nCPU part\t: 0xd05\n"
+        "processor\t: 2\nCPU implementer\t: 0x41\nCPU part\t: 0xd0b\n"
+        "processor\t: 3\nCPU implementer\t: 0x41\nCPU part\t: 0xd0b\n", 0644);
+    point("OSR_CPUINFO", "cpuinfo");
+    tool("lscpu",
+        "Architecture:            aarch64\n"
+        "Model name:              Cortex-A55\n"
+        "CPU(s):                  4\n", 0);
+    facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 2x Cortex-A55 + 2x Cortex-A76",
+       "cpu: a big.LITTLE chip reports both core types with their counts");
+
+    /* x86: no CPU part lines at all, and no device tree. Nothing may touch
+     * the model name lscpu gave. */
+    osr_sb_write(&sb, "cpuinfo", "processor\t: 0\nmodel name\t: Intel(R) Core(TM) i7-9700K\n", 0644);
+    osr_sb_env(&sb, "OSR_DEVICETREE", "");
+    tool("lscpu",
+        "Architecture:            x86_64\n"
+        "Model name:              Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz\n"
+        "CPU(s):                  8\n", 0);
+    facts("cpu");
+    contains("OSR_CPU_MODEL", "i7-9700K",
+       "cpu: with no ARM parts and no device tree the lscpu model stands");
+    osr_sb_env(&sb, "OSR_CPUINFO", "");
+
     /* ================================================================
      * 2. GPU
      * ================================================================ */
@@ -168,6 +247,32 @@ int main(void) {
     is("OSR_GPU_VENDOR", "AMD",
        "gpu: with no lspci, the vendor comes from the sysfs DRM PCI id");
     is("OSR_GPU_COUNT", "1", "gpu: and the device is still counted");
+    osr_sb_env(&sb, "OSR_DRM", "");
+
+    /* An SoC GPU is on no PCI bus at all, so it has neither an lspci line nor
+     * a sysfs vendor id -- only a device-tree name. A Pi 4 exposes it as two
+     * DRM nodes, display and render core, which are one GPU. */
+    tool("lspci", "", 1);
+    osr_sb_write(&sb, "soc/card0/device/of_node/compatible", "brcm,2711-v3d", 0644);
+    osr_sb_write(&sb, "soc/card1/device/of_node/compatible", "brcm,bcm2711-vc5", 0644);
+    point("OSR_DRM", "soc");
+    facts("gpu");
+    is("OSR_GPU_VENDOR", "Broadcom",
+       "gpu: with no PCI device, the vendor comes from the device tree");
+    is("OSR_GPU_MODEL", "Broadcom bcm2711-vc5",
+       "gpu: the display node names the GPU, not the render core");
+    is("OSR_GPU_COUNT", "1", "gpu: and both nodes count as the one SoC GPU");
+    /* An SoC GPU: no PCI at all, so no vendor id either -- the DRM node is
+     * named by its device-tree compatible. The Pi 4 exposes its display and
+     * render cores as two nodes of one GPU. */
+    osr_sb_write(&sb, "drm2/card0/device/of_node/compatible", "brcm,2711-v3d\n", 0644);
+    osr_sb_write(&sb, "drm2/card1/device/of_node/compatible", "brcm,bcm2711-vc5\n", 0644);
+    point("OSR_DRM", "drm2");
+    facts("gpu");
+    is("OSR_GPU_VENDOR", "Broadcom",
+       "gpu: an SoC GPU is named from its device-tree compatible");
+    is("OSR_GPU_MODEL", "Broadcom bcm2711-vc5", "gpu: the display node names it");
+    is("OSR_GPU_COUNT", "1", "gpu: its two DRM nodes are one GPU");
     osr_sb_env(&sb, "OSR_DRM", "");
 
     /* ================================================================

@@ -42,6 +42,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
+#include <ctype.h>
 #include <glob.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -200,6 +201,13 @@ static const char *norm_gpu(const char *text) {
         contains(text, "QXL")) return "QEMU";
     if (contains(text, "Microsoft") || contains(text, "Hyper-V")) return "Microsoft";
     if (contains(text, "Cirrus")) return "Cirrus";
+    /* Device-tree compatible strings, for SoCs with no PCI GPU at all: the
+     * Pi's "brcm,bcm2711-vc5", a Mali "arm,mali-g52", "qcom,adreno". */
+    if (contains(text, "brcm") || contains(text, "Broadcom") ||
+        contains(text, "vc4") || contains(text, "vc5") || contains(text, "v3d")) return "Broadcom";
+    if (contains(text, "mali") || contains(text, "arm,")) return "ARM";
+    if (contains(text, "qcom") || contains(text, "adreno")) return "Qualcomm";
+    if (contains(text, "img,") || contains(text, "powervr")) return "Imagination";
     return "Unknown";
 }
 
@@ -328,6 +336,172 @@ static void detect_init(Facts *f) {
     else                                           str_addz(&f->etc_default, "/etc/default");
 }
 
+/* dt_soc -- the SoC name from the device tree's `compatible` list, "" on a
+ * box without one (every PC). The list runs most-specific first
+ * ("raspberrypi,4-model-b" then "brcm,bcm2711"), so the LAST entry is the
+ * chip; its vendor prefix is dropped and the rest upper-cased: "BCM2711". */
+static int dt_soc(Str *out) {
+    char *buf;
+    size_t len;
+    const char *last;
+    const char *chip;
+    Str path;
+
+    str_init(&path);
+    str_addz(&path, env_str("OSR_DEVICETREE", "/proc/device-tree"));
+    str_addz(&path, "/compatible");
+    buf = slurp(str_text(&path), &len);
+    str_free(&path);
+    if (buf == NULL) return 0;
+    /* NUL-separated, and usually NUL-terminated: step back off the trailer. */
+    while (len > 0 && buf[len - 1] == '\0') len--;
+    last = buf;
+    {
+        size_t i;
+        for (i = 0; i + 1 < len; i++)
+            if (buf[i] == '\0') last = buf + i + 1;
+    }
+    chip = strchr(last, ',');
+    chip = (chip != NULL) ? chip + 1 : last;
+    while (*chip != '\0') { str_addc(out, (char)toupper((unsigned char)*chip)); chip++; }
+    free(buf);
+    return out->len > 0;
+}
+
+/* arm_core_name -- the marketing name for a "CPU part" id as /proc/cpuinfo
+ * prints it, for ARM's own implementer (0x41). Other implementers (Apple,
+ * Qualcomm's own cores) get no table: an unnamed part turns the whole
+ * heterogeneous report off rather than printing a raw hex id at somebody. */
+static const char *arm_core_name(const char *part) {
+    static const char *table[] = {
+        "0xd03", "Cortex-A53",  "0xd04", "Cortex-A35",  "0xd05", "Cortex-A55",
+        "0xd07", "Cortex-A57",  "0xd08", "Cortex-A72",  "0xd09", "Cortex-A73",
+        "0xd0a", "Cortex-A75",  "0xd0b", "Cortex-A76",  "0xd0c", "Neoverse-N1",
+        "0xd0d", "Cortex-A77",  "0xd40", "Neoverse-V1", "0xd41", "Cortex-A78",
+        "0xd44", "Cortex-X1",   "0xd46", "Cortex-A510", "0xd47", "Cortex-A710",
+        "0xd48", "Cortex-X2",   "0xd49", "Neoverse-N2", "0xd4d", "Cortex-A715",
+        "0xd4e", "Cortex-X3",   "0xd4f", "Neoverse-V2", "0xd80", "Cortex-A520",
+        "0xd81", "Cortex-A720", "0xd82", "Cortex-X4",   NULL, NULL
+    };
+    int i;
+    for (i = 0; table[i] != NULL; i += 2)
+        if (strcmp(table[i], part) == 0) return table[i + 1];
+    return NULL;
+}
+
+/* cpuinfo_field -- the value of `key` on one /proc/cpuinfo line, lower-cased
+ * ("CPU part\t: 0xD08" -> "0xd08"), or 0 when the line is a different key. */
+static int cpuinfo_field(Str *out, const char *line, const char *key) {
+    const char *p = line;
+    size_t klen = strlen(key);
+
+    if (strncmp(p, key, klen) != 0) return 0;
+    p += klen;
+    while (*p == ' ' || *p == '\t') p++;
+    if (*p != ':') return 0;
+    p++;
+    while (*p == ' ' || *p == '\t') p++;
+    str_reset(out);
+    while (*p != '\0' && *p != ' ' && *p != '\t')
+        str_addc(out, (char)tolower((unsigned char)*p++));
+    return out->len > 0;
+}
+
+/* cpu_core_types -- big.LITTLE. lscpu reports ONE "Model name" for a chip
+ * whose cores are not all the same part ("Cortex-A55" on an eight-core RK3588
+ * that is four A55s and four A76s), so the per-processor "CPU part" lines in
+ * /proc/cpuinfo are the only place the mix shows. Groups them in first-seen
+ * order and rewrites the model as "4x Cortex-A55 + 4x Cortex-A76"; a
+ * homogeneous box keeps whatever lscpu said, and any part not in the table
+ * (or a non-ARM implementer) leaves the model alone. */
+static void cpu_core_types(Facts *f) {
+    char *info;
+    size_t len, pos = 0;
+    Line line;
+    const char *names[8];
+    long counts[8];
+    int ngroups = 0;
+    int arm = 1;
+    Str l, val;
+    int i;
+
+    info = slurp(env_str("OSR_CPUINFO", "/proc/cpuinfo"), &len);
+    if (info == NULL) return;
+    str_init(&l);
+    str_init(&val);
+    while (arm && next_line(info, len, &pos, &line)) {
+        const char *name;
+        str_reset(&l);
+        str_add(&l, line.start, line.len);
+        if (cpuinfo_field(&val, str_text(&l), "CPU implementer")) {
+            if (strcmp(str_text(&val), "0x41") != 0) arm = 0;
+            continue;
+        }
+        if (!cpuinfo_field(&val, str_text(&l), "CPU part")) continue;
+        name = arm_core_name(str_text(&val));
+        if (name == NULL) { arm = 0; break; }
+        for (i = 0; i < ngroups; i++)
+            if (strcmp(names[i], name) == 0) break;
+        if (i == ngroups) {
+            if (ngroups == 8) { arm = 0; break; }   /* nothing real has 8 kinds */
+            names[ngroups] = name;
+            counts[ngroups] = 0;
+            ngroups++;
+        }
+        counts[i]++;
+    }
+    str_free(&val);
+    str_free(&l);
+    free(info);
+
+    if (!arm || ngroups < 2) return;
+    str_reset(&f->cpu_model);
+    for (i = 0; i < ngroups; i++) {
+        if (i > 0) str_addz(&f->cpu_model, " + ");
+        str_addl(&f->cpu_model, counts[i]);
+        str_addz(&f->cpu_model, "x ");
+        str_addz(&f->cpu_model, names[i]);
+    }
+}
+
+/* On an ARM SoC lscpu's "Model name" is the CPU CORE ("Cortex-A72"), not the
+ * chip anyone means when they ask what the CPU is. Prefix the chip from the
+ * device tree: "BCM2711 Cortex-A72". */
+static void cpu_soc_name(Facts *f) {
+    Str soc;
+    str_init(&soc);
+    if (dt_soc(&soc)) {
+        if (f->cpu_model.len > 0) { str_addc(&soc, ' '); str_addz(&soc, str_text(&f->cpu_model)); }
+        str_reset(&f->cpu_model);
+        str_addz(&f->cpu_model, str_text(&soc));
+    }
+    str_free(&soc);
+}
+
+/* cpu_clock -- "CPU max MHz: 1800.0000" -> " @ 1.80GHz", appended only when
+ * the model name does not already carry a clock. Intel and most AMD brand
+ * strings do ("... CPU @ 3.90GHz"); an ARM core name never does, which is why
+ * the Pi printed no speed at all. Integer math on the MHz whole part, so
+ * 1800 -> 1.80 and 3893 -> 3.89. On a heterogeneous chip lscpu reports one
+ * max, the fastest cluster's -- the honest reading of "how fast is this". */
+static void cpu_clock(Facts *f, const char *lscpu) {
+    Str mhz;
+    long v;
+
+    if (contains(str_text(&f->cpu_model), "GHz") ||
+        contains(str_text(&f->cpu_model), "MHz")) return;
+    str_init(&mhz);
+    if (field_after(&mhz, lscpu, "CPU max MHz:") && mhz.len > 0) {
+        v = strtol(str_text(&mhz), NULL, 10);
+        if (v > 0) {
+            char buf[64];
+            sprintf(buf, " @ %ld.%02ldGHz", v / 1000, (v % 1000) / 10);
+            str_addz(&f->cpu_model, buf);
+        }
+    }
+    str_free(&mhz);
+}
+
 static void detect_cpu(Facts *f) {
     char *cpu;
     Str tmp;
@@ -335,6 +509,8 @@ static void detect_cpu(Facts *f) {
     str_reset(&f->cpu_arch);
     str_addz(&f->cpu_arch, str_text(&f->arch));
     if (!have_cmd("lscpu", NULL)) {
+        cpu_core_types(f);
+        cpu_soc_name(f);
         if (f->cpu_cores == 0) f->cpu_cores = f->cpu_threads;
         return;
     }
@@ -371,6 +547,9 @@ static void detect_cpu(Facts *f) {
         f->cpu_cores = per * sockets;
     }
     str_free(&tmp);
+    cpu_core_types(f);
+    cpu_soc_name(f);
+    cpu_clock(f, cpu);
     free(cpu);
     if (f->cpu_cores == 0) f->cpu_cores = f->cpu_threads;
 }
@@ -572,6 +751,34 @@ static void gpu_from_sysfs(const char *id, void *ctx) {
     f->gpu_count++;
 }
 
+/* gpu_from_dt -- a DRM device with no PCI vendor id, named by its device-tree
+ * `compatible` ("brcm,bcm2711-vc5"): an SoC GPU. Display and render cores are
+ * separate DRM nodes of ONE such GPU (a Pi 4 shows both bcm2711-vc5 and
+ * 2711-v3d), so count one and let the display node's name win over the render
+ * core's. ponytail: one SoC GPU assumed; nothing ships two. */
+static void gpu_from_dt(const char *compat, void *ctx) {
+    Facts *f = (Facts *)ctx;
+    const char *tag = norm_gpu(compat);
+    const char *chip = strchr(compat, ',');
+
+    if (strcmp(tag, "Unknown") == 0) return;
+    chip = (chip != NULL) ? chip + 1 : compat;
+    if (f->gpu_count > 0) {
+        if (contains(chip, "v3d") || !contains(str_text(&f->gpu_devices), "v3d")) return;
+        str_reset(&f->gpu_vendor);
+        str_reset(&f->gpu_model);
+        str_reset(&f->gpu_devices);
+    }
+    uniq_add(&f->gpu_vendor, tag);
+    str_addz(&f->gpu_model, tag);
+    str_addc(&f->gpu_model, ' ');
+    str_addz(&f->gpu_model, chip);
+    str_addz(&f->gpu_devices, tag);
+    str_addc(&f->gpu_devices, '|');
+    str_addz(&f->gpu_devices, chip);
+    f->gpu_count = 1;
+}
+
 static void npu_from_sysfs(const char *id, void *ctx) {
     Facts *f = (Facts *)ctx;
     const char *n;
@@ -679,6 +886,10 @@ static void detect_gpu(Facts *f) {
     if (f->gpu_vendor.len == 0) {
         each_vendor_id(env_str("OSR_DRM", "/sys/class/drm"), "card*/device/vendor",
                        gpu_from_sysfs, f);
+    }
+    if (f->gpu_vendor.len == 0) {
+        each_vendor_id(env_str("OSR_DRM", "/sys/class/drm"), "card*/device/of_node/compatible",
+                       gpu_from_dt, f);
     }
 }
 
