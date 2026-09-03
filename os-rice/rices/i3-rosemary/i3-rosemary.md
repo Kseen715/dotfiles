@@ -72,7 +72,7 @@ desaturated neutral. Keep it that way when adding modules.
 | `config/gtk-{2,3,4}.0/*`, `xsettingsd/*`, `qt{5,6}ct/*` | `~/.config/...` |
 | `config/betterlockscreen/*` | `~/.config/betterlockscreen/` |
 | `lightdm/lightdm-gtk-greeter.conf.tmpl` | `/etc/lightdm/` (root — the greeter has no home) |
-| `lightdm/gtk-greeter.css.tmpl` | `/var/lib/lightdm/.config/gtk-3.0/gtk.css` (the greeter's own GTK user sheet) |
+| `config/lightdm/gtk-greeter.css` | `/var/lib/lightdm/.config/gtk-3.0/gtk.css` — square-cornered copy of the dotfiles template (this rice rounds nothing, and the greeter runs before any compositor) |
 | `config/{ghostty,wezterm,btop,serie}/*`, `starship.palette.toml`, `zsh/90-theme.zsh` | terminal + shell |
 | `config/micro/{settings.json,rosemary.micro}` | merged over the dotfiles micro base |
 | `config/evolution/gsettings.conf` | applied with `gsettings` (key-by-key) |

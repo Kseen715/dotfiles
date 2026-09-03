@@ -61,6 +61,16 @@ static void did_not(const char *needle, const char *label) {
     osr_refute_log(&sb, needle, label);
 }
 
+/* said / did_not_say -- the module's own report. A root-owned file goes out
+ * through `tee`, so the LOG records the path and never the content: what was
+ * decided is only visible in what the module said about it. */
+static void said(const char *needle, const char *label) {
+    osr_assert_true(strstr(osr_sb_capture_both(&sb), needle) != NULL, label);
+}
+static void did_not_say(const char *needle, const char *label) {
+    osr_assert_true(strstr(osr_sb_capture_both(&sb), needle) == NULL, label);
+}
+
 static void run_module(const char *name) {
     osr_sb_reset(&sb);
     osr_sb_run_core(&sb, "module", "run", name, (const char *)NULL);
@@ -185,6 +195,79 @@ int main(void) {
     osr_sb_env(&sb, "OSR_THEME_DIR", hs_text(&p));
     osr_sb_rm(&sb, "home");
     osr_sb_mkdir(&sb, "home");
+    /* --- xorg: glamor, and why the quirk has to be STICKY -----------------
+     *
+     * glamor renders inside the X server, so on a gen4/gen5 Intel iGPU - where
+     * Mesa can only give it a GL 2.1 context - a hang is not a slow window, it
+     * is the session dying. Turning it off is the fix.
+     *
+     * The trap, and this is a REGRESSION TEST for a real one: with accel off,
+     * glamor never loads, never reports a context and never appears in a
+     * backtrace, so every piece of evidence for the fix disappears BECAUSE THE
+     * FIX IS WORKING. A run that treats that as "not needed any more" removes
+     * the option, glamor comes back, and the next window map takes X down with
+     * it. Measured on the box this was written for: nine i915 GPU hangs owned
+     * by Xorg in a single boot, and a session that died on $mod+Return. */
+    osr_sb_mkdir(&sb, "xorgconf");
+    hs_path(&p, hs_text(&sb.root), "xorgconf");
+    osr_sb_env(&sb, "OSR_XORGCONF_DIR", hs_text(&p));
+    osr_sb_write(&sb, "xorgconf/20-gpu-quirks.conf",
+        "# Managed by os-rice (modules/xorg.c) - GPU stability quirks.\n"
+        "Section \"Device\"\n"
+        "    Identifier \"osr-gpu0\"\n"
+        "    Driver \"modesetting\"\n"
+        "    Option \"AccelMethod\" \"none\"\n"
+        "EndSection\n", 0644);
+    osr_sb_env(&sb, "OSR_KERNEL_LOG", "");
+    run_module("xorg");
+    did_not("rm -f",
+        "xorg: an applied glamor quirk is never removed for lack of evidence - "
+        "the silence IS the fix working");
+    said("already disabled on this machine",
+        "xorg: and the run says the quirk stands because it is already applied, "
+        "not because it re-proved the crash");
+
+    /* The kernel's record of the crash, for a box that has not been fixed yet:
+     * the Xorg log cannot show this one - the server does not know it hung. */
+    osr_sb_rm(&sb, "xorgconf/20-gpu-quirks.conf");
+    osr_sb_write(&sb, "kernel.log",
+        "i915 0000:00:02.0: [drm] GPU HANG: ecode 5:1:020fff7f, in Xorg [6117]\n",
+        0644);
+    hs_path(&p, hs_text(&sb.root), "kernel.log");
+    osr_sb_env(&sb, "OSR_KERNEL_LOG", hs_text(&p));
+    run_module("xorg");
+    said("GPU hang owned by Xorg",
+        "xorg: a GPU hang owned by Xorg turns 2D acceleration off - the Xorg "
+        "log cannot show this one, the server does not know it hung");
+    said("disabling X 2D acceleration",
+        "xorg: and that is what it does about it");
+
+    /* A hang owned by some OTHER process is a client's problem, not glamor's. */
+    osr_sb_rm(&sb, "xorgconf/20-gpu-quirks.conf");
+    osr_sb_write(&sb, "kernel.log",
+        "i915 0000:00:02.0: [drm] GPU HANG: ecode 5:1:020fff7f, in firefox [900]\n",
+        0644);
+    run_module("xorg");
+    did_not_say("disabling X 2D acceleration",
+        "xorg: a hang owned by a CLIENT is not glamor's doing and changes "
+        "nothing - the server is not what hung");
+
+    /* And the operator can always ask for the acceleration back. */
+    osr_sb_write(&sb, "xorgconf/20-gpu-quirks.conf",
+        "# Managed by os-rice (modules/xorg.c) - GPU stability quirks.\n"
+        "Section \"Device\"\n"
+        "    Option \"AccelMethod\" \"none\"\n"
+        "EndSection\n", 0644);
+    osr_sb_env(&sb, "OSR_X_DISABLE_GLAMOR", "0");
+    run_module("xorg");
+    said("leaving X 2D acceleration on",
+        "xorg: OSR_X_DISABLE_GLAMOR=0 gives 2D acceleration back - stickiness "
+        "is a default, not a one-way door");
+    ran("rm -f",
+        "xorg: and the file it wrote is taken away again");
+    osr_sb_env(&sb, "OSR_X_DISABLE_GLAMOR", "");
+    osr_sb_env(&sb, "OSR_KERNEL_LOG", "");
+
     /* --- xorg: the nouveau blacklist -------------------------------------
      *
      * modules/xorg.c turns OFF two things on old hardware, and this is the

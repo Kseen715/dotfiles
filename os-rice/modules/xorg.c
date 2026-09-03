@@ -56,9 +56,9 @@ static const char *const INPUT_CONF =
     "    Option \"DisableWhileTyping\" \"true\"\n"
     "EndSection\n";
 
-#define QUIRKS_HEADER "# Managed by os-rice (modules/xorg.sh) - GPU stability quirks.\n"
-#define QUIRKS_CONF   "/etc/X11/xorg.conf.d/20-gpu-quirks.conf"
-#define INPUT_PATH    "/etc/X11/xorg.conf.d/30-input.conf"
+#define QUIRKS_HEADER "# Managed by os-rice (modules/xorg.c) - GPU stability quirks.\n"
+#define QUIRKS_FILE   "/20-gpu-quirks.conf"
+#define INPUT_FILE    "/30-input.conf"
 #define NOUVEAU_HEADER "# Managed by os-rice (modules/xorg.c) - GPU stability quirks.\n"
 #define NOUVEAU_FILE   "/blacklist-nouveau.conf"
 
@@ -144,6 +144,63 @@ static int glamor_old_gl(const char *path) {
  * Optimus power-down DSM either, so the dGPU may stay powered where nouveau's
  * runtime PM would have parked it. On a GPU that never initialised that trade
  * is obviously right - but it is a trade, not a free win. */
+/* xorg_conf_path -- a file under /etc/X11/xorg.conf.d, with the directory
+ * overridable ($OSR_XORGCONF_DIR) so a test asserts on its own tree. */
+static void xorg_conf_path(Str *out, const char *file) {
+    str_addz(out, env_str("OSR_XORGCONF_DIR", "/etc/X11/xorg.conf.d"));
+    str_addz(out, file);
+}
+
+/* glamor_gpu_hang -- the kernel's own record of the crash this option
+ * prevents: glamor renders INSIDE the X server, so a hung render ring owned by
+ * Xorg is X doing GPU work it cannot finish.
+ *
+ *   i915 0000:00:02.0: [drm] GPU HANG: ecode 5:1:020fff7f, in Xorg [6117]
+ *
+ * Measured on the gen5 laptop after the option had been dropped: nine hangs in
+ * one boot, each resetting the server, which from the desk looks like "opening
+ * a terminal kills my session". The Xorg log says nothing about it - the
+ * server does not know it hung - so this signature exists because the other
+ * three cannot see this failure at all. */
+static int glamor_gpu_hang(void) {
+    static const char *const fixed[] = {
+        "/var/log/dmesg.log",
+        "/var/log/socklog/kernel/current",
+        "/var/log/kern.log",
+        NULL
+    };
+    const char *named[2];
+    const char *const *logs = fixed;
+    size_t i;
+
+    named[0] = env_str("OSR_KERNEL_LOG", "");
+    named[1] = NULL;
+    if (named[0][0] != '\0') logs = named;
+
+    for (i = 0; logs[i] != NULL; i++) {
+        char *buf;
+        size_t len;
+        const char *at;
+        int hit = 0;
+        buf = slurp(logs[i], &len);
+        if (buf == NULL) continue;
+        at = buf;
+        while (!hit && (at = strstr(at, "GPU HANG")) != NULL) {
+            const char *eol = strchr(at, '\n');
+            size_t n = (eol != NULL) ? (size_t)(eol - at) : strlen(at);
+            Str line;
+            str_init(&line);
+            str_add(&line, at, n);
+            hit = strstr(str_text(&line), "in Xorg") != NULL;
+            str_free(&line);
+            at += 8;
+        }
+        free(buf);
+        if (hit) return 1;
+    }
+    return 0;
+}
+
 /* nouveau_conf -- /etc/modprobe.d/blacklist-nouveau.conf, with the directory
  * overridable the same way lib/service.c lets OSR_SV_DIR move /etc/sv: a test
  * of what this writes must not need /etc, and a box with a modprobe.d
@@ -425,7 +482,7 @@ int osrm_xorg(void) {
         "dbus", "dbus-x11", "polkit", "libnotify", NULL
     };
     static const char *const elogind[] = { "elogind", NULL };
-    Str dir, src, dst, body, why;
+    Str dir, src, dst, body, why, quirks;
     char *argv[5];
     int ok;
 
@@ -505,8 +562,25 @@ int osrm_xorg(void) {
      * so a run that does nothing can be told apart from a run that found
      * nothing. */
     str_init(&body); str_init(&why);
-    if (strcmp(env_str("OSR_X_DISABLE_GLAMOR", "0"), "1") == 0) {
+    str_init(&quirks); xorg_conf_path(&quirks, QUIRKS_FILE);
+    if (strcmp(env_str("OSR_X_DISABLE_GLAMOR", ""), "1") == 0) {
         str_addz(&why, "OSR_X_DISABLE_GLAMOR=1 was set");
+    } else if (strcmp(env_str("OSR_X_DISABLE_GLAMOR", ""), "0") == 0) {
+        /* The one way to get the option back off: asking for it. */
+        osr_info("OSR_X_DISABLE_GLAMOR=0 - leaving X 2D acceleration on");
+    } else if (log_has(str_text(&quirks), "AccelMethod")) {
+        /* STICKY, and this is the whole reason the branch exists. Once accel
+         * is off, glamor never loads, never reports a context, never appears in
+         * a backtrace - so all three evidence checks below go quiet BECAUSE THE
+         * FIX IS WORKING, and a run that read that as "not needed any more"
+         * would hand the crash back on the next install. Measured exactly that
+         * way: the Device section disappeared from a box that needed it, glamor
+         * came back on a gen5 iGPU, and the session then died every time a
+         * window mapped. An applied quirk stays applied until asked otherwise. */
+        str_addz(&why, "it is already disabled on this machine (glamor cannot "
+                       "log evidence for its own absence)");
+    } else if (glamor_gpu_hang()) {
+        str_addz(&why, "the kernel logged a GPU hang owned by Xorg");
     } else if (glamor_old_gl("/var/log/Xorg.0.log") || glamor_old_gl("/var/log/Xorg.0.log.old")) {
         str_addz(&why, "glamor reported a pre-GL-3 context in the Xorg log");
     } else if (log_has("/var/log/Xorg.0.log.old", "libglamoregl")
@@ -551,7 +625,7 @@ int osrm_xorg(void) {
         str_init(&want);
         str_addz(&want, QUIRKS_HEADER);
         str_addz(&want, str_text(&body));
-        have = slurp(QUIRKS_CONF, &hlen);
+        have = slurp(str_text(&quirks), &hlen);
         if (have != NULL) {
             /* `[ "$(cat ...)" = "..." ]`: a command substitution drops the
              * trailing newline on both sides, so compare without it. */
@@ -562,19 +636,22 @@ int osrm_xorg(void) {
             free(have);
         }
         if (current) {
-            osr_infof("%s already current, skipping", QUIRKS_CONF);
+            osr_infof("%s already current, skipping", str_text(&quirks));
         } else {
-            osr_infof("installing %s", QUIRKS_CONF);
+            osr_infof("installing %s", str_text(&quirks));
             argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
-            argv[2] = (char *)"/etc/X11/xorg.conf.d"; argv[3] = NULL;
+            argv[2] = (char *)env_str("OSR_XORGCONF_DIR", "/etc/X11/xorg.conf.d");
+            argv[3] = NULL;
             (void)osr_run_root(argv);
-            (void)osr_write_root(QUIRKS_CONF, str_text(&want));
-            osr_warnf("X must be restarted (log out) for %s to take effect", QUIRKS_CONF);
+            (void)osr_write_root(str_text(&quirks), str_text(&want));
+            osr_warnf("X must be restarted (log out) for %s to take effect",
+                      str_text(&quirks));
         }
         str_free(&want);
-    } else if (file_exists(QUIRKS_CONF)) {
-        osr_infof("no GPU quirks needed on this machine - removing %s", QUIRKS_CONF);
-        argv[0] = (char *)"rm"; argv[1] = (char *)"-f"; argv[2] = (char *)QUIRKS_CONF;
+    } else if (file_exists(str_text(&quirks))) {
+        osr_infof("no GPU quirks needed on this machine - removing %s",
+                  str_text(&quirks));
+        argv[0] = (char *)"rm"; argv[1] = (char *)"-f"; argv[2] = quirks.p;
         argv[3] = NULL;
         (void)osr_run_root(argv);
     }
@@ -588,14 +665,17 @@ int osrm_xorg(void) {
      * us,ru with alt+shift toggle, plus tap-to-click and natural scroll on
      * touchpads. Written only if absent: a machine's input config is machine
      * territory. */
-    if (!file_exists(INPUT_PATH)) {
-        osr_infof("installing %s", INPUT_PATH);
+    str_reset(&dst); xorg_conf_path(&dst, INPUT_FILE);
+    if (!file_exists(str_text(&dst))) {
+        osr_infof("installing %s", str_text(&dst));
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
-        argv[2] = (char *)"/etc/X11/xorg.conf.d"; argv[3] = NULL;
+        argv[2] = (char *)env_str("OSR_XORGCONF_DIR", "/etc/X11/xorg.conf.d");
+        argv[3] = NULL;
         (void)osr_run_root(argv);
-        (void)osr_write_root(INPUT_PATH, INPUT_CONF);
+        (void)osr_write_root(str_text(&dst), INPUT_CONF);
     }
 
-    str_free(&dir); str_free(&src); str_free(&dst); str_free(&body); str_free(&why);
+    str_free(&dir); str_free(&src); str_free(&dst); str_free(&body);
+    str_free(&why); str_free(&quirks);
     return ok;
 }
