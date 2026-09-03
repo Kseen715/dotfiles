@@ -116,6 +116,7 @@ static bool mkdir_if_needed(const char *path) {
  *   TCC      build/obj/lib_yaml.o                    0.412s
  *   LD       build/osr                               0.088s
  *   total                                            3.907s
+ *   size     build/osr                                1.2M
  *
  * The numbers are only meaningful if one command runs at a time, so timing
  * also serialises the build: an async batch shares the machine, and each
@@ -130,6 +131,11 @@ static bool mkdir_if_needed(const char *path) {
  */
 static bool timing = false;
 static double timed_total = 0.0;
+
+/* timed_bin -- the last program run_timed() linked, so the total block can
+ * end with how big the thing we just built actually is. Objects are skipped:
+ * the interesting number is the executable, not its parts. */
+static char timed_bin[512];
 
 /* now_secs -- a monotonic-ish clock in seconds. Not clock(), which counts
  * this process's CPU time and would report ~0 for a compiler that runs in a
@@ -158,8 +164,43 @@ static char pending_echo[512];
  * ran; registered with atexit() because main() returns from a dozen places
  * and the total is worth printing after every one of them. Silent when
  * nothing was rebuilt, so an up-to-date tree still prints nothing. */
+/* file_size -- bytes in `path`, or -1. fopen/fseek/ftell rather than stat():
+ * one spelling that compiles on both hosts and in C89, for a number printed
+ * once per run. */
+static long file_size(const char *path) {
+    long n;
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) return -1;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return -1; }
+    n = ftell(f);
+    fclose(f);
+    return n;
+}
+
+/* human_size -- 1.2M / 340K / 512B, du -h style: one significant fraction is
+ * all anyone reads off a size line. sprintf, not snprintf, which nob.c's C89
+ * backend cannot count on; the longest output here is a dozen characters and
+ * every caller passes at least 32. */
+static void human_size(char *buf, long bytes) {
+    static const char units[] = "BKMG";
+    double v = (double)bytes;
+    int u = 0;
+    while (v >= 1024.0 && units[u + 1] != '\0') { v /= 1024.0; u++; }
+    if (u == 0) sprintf(buf, "%ldB", bytes);
+    else sprintf(buf, "%.1f%c", v, units[u]);
+}
+
 static void report_timed_total(void) {
-    if (timed_total > 0.0) fprintf(stderr, "  %-8s %-37s %8.3fs\n", "total", "", timed_total);
+    long bytes;
+    if (timed_total <= 0.0) return;
+    fprintf(stderr, "  %-8s %-37s %8.3fs\n", "total", "", timed_total);
+    if (timed_bin[0] == '\0') return;
+    bytes = file_size(timed_bin);
+    if (bytes >= 0) {
+        char size[32];
+        human_size(size, bytes);
+        fprintf(stderr, "  %-8s %-37s %8s\n", "size", timed_bin, size);
+    }
 }
 
 /* run_timed -- run one command, print what it cost. Synchronous by
@@ -172,7 +213,14 @@ static bool run_timed(Nob_Cmd *cmd, const char *what) {
     ok = nob_cmd_run(cmd);
     {
         double secs = now_secs() - start;
+        size_t len = what != NULL ? strlen(what) : 0;
         timed_total += secs;
+        /* remember the program, not the object it was made of */
+        if (ok && len >= 2 && len < sizeof(timed_bin) &&
+            strcmp(what + len - 2, ".o") != 0 &&
+            (len < 4 || strcmp(what + len - 4, ".obj") != 0)) {
+            strcpy(timed_bin, what);
+        }
         if (pending_echo[0] != '\0') {
             fprintf(stderr, "%-48s %8.3fs\n", pending_echo, secs);
         } else {
