@@ -44,6 +44,12 @@ exec_always --no-startup-id autorandr --change
 exec_always --no-startup-id ~/.config/picom/launch.sh
 # dwindle-style splits: no more manually toggling split h/v before every window.
 exec_always --no-startup-id autotiling
+# A floor under tile size. i3 halves forever, and past a certain count the
+# rects go degenerate (measured: 7x4, then an underflowed 7x4294967289), which
+# takes picom down with a RENDER BadMatch - the whole session loses its
+# compositor because one more terminal was opened. Below the floor the
+# container becomes tabbed instead of splitting again. See the script header.
+exec_always --no-startup-id ~/.config/i3/scripts/min-tile.sh
 exec_always --no-startup-id ~/.config/polybar/launch.sh
 exec --no-startup-id dunst
 exec --no-startup-id nm-applet

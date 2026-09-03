@@ -160,7 +160,14 @@ _supervise() {
         fi
         printf '=== %s: picom exited - restarting (%s in this minute) ===\n' \
             "$(date '+%Y-%m-%d %H:%M:%S')" "$_fails" >>"$_log"
-        sleep 2
+        # _stop, not `sleep 2`: the X server releases _NET_WM_CM_S0 when it
+        # processes the dead client's DISCONNECT, which lands AFTER the process
+        # is gone. Restarting before that and the new picom dies immediately
+        # with "Another composite manager is already running" - which then
+        # counts against the restart budget, so a compositor that crashed once
+        # burns through all five retries in ten seconds and gives up. Measured
+        # exactly that way.
+        _stop
         picom "$@" >>"$_log" 2>&1 &
         _pid=$!
     done
