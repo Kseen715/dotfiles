@@ -244,6 +244,22 @@ int osr_pkg_remove_step(const char *desc, const char *const names[]);
  * repository); every install path already refreshes on its own. */
 void osr_pkg_refresh(void);
 
+/* osr_pkg_nonfree -- make this box's nonfree/restricted packages installable,
+ * and say so. Some distros ship the redistributable-but-nonfree blobs (Intel's
+ * microcode, unrar, some firmware) in a repository that is off until somebody
+ * turns it on -- Void's void-repo-nonfree is the one this exists for. Turning
+ * a repository on is a user-visible act and belongs to nobody module in
+ * particular, so it lives here, is announced with the `reason` the caller
+ * gives, and can be declined once for the whole run with OSR_NONFREE=0.
+ *
+ * Returns 1 when a nonfree package can now be installed (already true on a
+ * distro whose default repos carry them), 0 when it cannot -- declined, or the
+ * repo could not be enabled. A 0 means "do not install that package": the name
+ * would not resolve, and the resulting "package not found" names the wrong
+ * cause. Idempotent: the repo package is installed only when missing, and the
+ * index is refreshed once after it lands. */
+int osr_pkg_nonfree(const char *reason);
+
 /* osr_pkg_aur_helper -- "paru", "yay", or "" (_osr_aur_helper). Resolved at
  * call time, not during detection: paru is often BUILT mid-run. A module needs
  * it only to pass flags no `aur:` row can carry (curseforge's --skipchecksums). */
@@ -257,6 +273,16 @@ void osr_pkgmap_resolve(Str *out, const char *name);
  * URI with different signed-by keys is what apt 3.0 refuses to parse at all,
  * taking every later apt call on the box down with it. */
 void osr_apt_prune_bootstrap_lists(void);
+
+/* --- boot ----------------------------------------------------------------- */
+/* osr_initramfs_regen -- rebuild the boot initramfs, for a change that takes
+ * effect ONLY from there: an early-loaded CPU microcode blob, or a modprobe
+ * blacklist that has to be honoured before the root filesystem is mounted (the
+ * driver is otherwise autoloaded from the initramfs and the blacklist on disk
+ * is read too late). Picks the generator the distro actually installed. Not
+ * fatal when there is none: a machine that boots without an initramfs needs no
+ * rebuild, and saying so is better than failing a module over it. */
+int osr_initramfs_regen(void);
 
 /* --- services ------------------------------------------------------------- */
 /* osr_service_enable -- enable + start a service under whatever init this box

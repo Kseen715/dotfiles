@@ -392,6 +392,7 @@ static const char *posix_srcs[] = {
     "modules/lacc.c",
     "modules/lcc.c",
     "modules/lightdm.c",
+    "modules/logging.c",
     "modules/loupe.c",
     "modules/luminance.c",
     "modules/mako.c",
@@ -527,7 +528,7 @@ static const char *posix_test_names[] = {
      * box -- which is why they belong here rather than with the tests that
      * link the lib objects: a black-box test of what a unit must do should
      * not break when the unit is renamed or split. */
-    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test", "reload_test", "migrate_test", "zsh_test", "gnome_test", "gnome_modules_test", "detect_test", "gpu_drivers_test", "audio_test", "swap_test", "log_test", "ui_test", "state_test", "testrun_test", "user_test", "theme_test", "theme_layers_test", "wallpaper_test", "config_test", "terminals_test", "build_test", "apps_test", "desktop_test", "install_test", "modules_test", "yaml_test"
+    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test", "reload_test", "migrate_test", "zsh_test", "gnome_test", "gnome_modules_test", "logging_test", "detect_test", "gpu_drivers_test", "audio_test", "swap_test", "log_test", "ui_test", "state_test", "testrun_test", "user_test", "theme_test", "theme_layers_test", "wallpaper_test", "config_test", "terminals_test", "build_test", "apps_test", "desktop_test", "install_test", "modules_test", "yaml_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 

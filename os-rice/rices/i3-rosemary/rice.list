@@ -37,6 +37,11 @@ git-base
 openssh
 zip
 networkmanager
+# Before anything that can wedge the box. Void runs no syslog daemon and
+# overwrites /var/log/dmesg.log at each boot, so without this a hard lock leaves
+# nothing to read afterwards - and that is only fixable in advance.
+logging
+cpu-microcodes
 
 # --- X session core -----------------------------------------------------------
 # xorg installs the server, the X utils, dbus, a seat manager (elogind only where
@@ -134,7 +139,10 @@ flatpak
 # files), so a `--module` install lands themed too, not only a full rice run.
 
 # Not listed on purpose:
-#   pipewire, pacman-multilib, dkms, cpu-microcodes, gpu-drivers  Arch-only
+#   pipewire, pacman-multilib, dkms, gpu-drivers                  Arch-only
+#     (cpu-microcodes moved into the list above: it works on xbps and apt
+#     now that the module enables Void's nonfree repo itself and rebuilds
+#     the initramfs, which is the only place microcode is ever loaded)
 #   discord, gradia, localsend, onlyoffice                       Flatpak on both
 #     targets (Void packages none of them; Debian only onlyoffice, via a vendor
 #     repo the `flatpak` module makes unnecessary)

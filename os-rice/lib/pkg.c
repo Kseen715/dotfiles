@@ -672,6 +672,44 @@ void osr_apt_prune_bootstrap_lists(void) {
  * difference could not show; the runner is one process now, and it can. */
 static int refreshed = 0;
 
+/* osr_pkg_nonfree -- see lib/module.h.
+ *
+ * Only xbps has anything to do here. Arch's nonfree lives in the same repos,
+ * Debian/Ubuntu carry non-free as a COMPONENT this layer does not manage (and
+ * whose packages resolve through pkgmap rows instead), and the rpm distros
+ * have their own third-party repos that are a bigger decision than one blob.
+ * Saying so per manager is the point: a caller gets a yes/no, not a guess. */
+int osr_pkg_nonfree(const char *reason) {
+    static const char *const repo[] = { "void-repo-nonfree", NULL };
+    static int decided = 0;   /* 0 unknown, 1 available, -1 refused */
+
+    if (strcmp(osr_mod_pkg(), "xbps") != 0) return 1;
+    if (decided != 0) return decided > 0;
+
+    if (strcmp(env_str("OSR_NONFREE", "1"), "1") != 0) {
+        osr_warnf("OSR_NONFREE=0 - not enabling void-repo-nonfree for %s",
+                  reason != NULL ? reason : "a nonfree package");
+        decided = -1;
+        return 0;
+    }
+    if (osr_pkg_installed("void-repo-nonfree")) {
+        decided = 1;
+        return 1;
+    }
+    osr_warnf("%s is nonfree on Void - enabling void-repo-nonfree "
+              "(decline with OSR_NONFREE=0)",
+              reason != NULL ? reason : "the package");
+    if (!osr_pkg_install_step("Enabling void-repo-nonfree", repo)) {
+        osr_warn("could not enable void-repo-nonfree");
+        decided = -1;
+        return 0;
+    }
+    /* The index does not know about the repository that was just enabled. */
+    osr_pkg_refresh();
+    decided = 1;
+    return 1;
+}
+
 void osr_pkg_refresh(void) {
     const char *mgr;
     char *argv[8];
@@ -1492,6 +1530,9 @@ static void refresh_path(void) {
  * is this process's view of the environment, so that is what the same verb
  * means on this side -- and it is called from the same place, right after an
  * install, exactly as pkg.ps1 called Update-SessionEnvironment. */
+/* osr_pkg_nonfree -- no nonfree repository to enable on Windows. */
+int osr_pkg_nonfree(const char *reason) { (void)reason; return 1; }
+
 void osr_pkg_refresh(void) {
     refresh_one_scope(HKEY_LOCAL_MACHINE,
         "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");

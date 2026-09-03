@@ -250,6 +250,41 @@ int osr_run_root_quiet_in(char *const argv[], int in_fd) {
 
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
 
+/* osr_initramfs_regen -- see lib/module.h.
+ *
+ * One generator per distro family and no overlap in practice: dracut (Void,
+ * Fedora, RHEL), mkinitcpio (Arch), update-initramfs (Debian/Ubuntu). dracut is
+ * tried first because a box that has both dracut and update-initramfs (Debian
+ * with dracut installed) boots the dracut image. `-P`/`-k all` rebuild EVERY
+ * installed kernel, not just the running one: the blacklist or the microcode
+ * has to be in the image the next boot picks, which after a kernel upgrade is
+ * not the one running now. */
+int osr_initramfs_regen(void) {
+    char *argv[5];
+
+    if (osr_theme_only()) return osr_theme_only_skip("initramfs regeneration");
+
+    if (osr_have_cmd("dracut")) {
+        osr_info("Rebuilding the initramfs (dracut)");
+        argv[0] = (char *)"dracut"; argv[1] = (char *)"--force"; argv[2] = NULL;
+        return osr_run_root(argv) == 0;
+    }
+    if (osr_have_cmd("mkinitcpio")) {
+        osr_info("Rebuilding the initramfs (mkinitcpio)");
+        argv[0] = (char *)"mkinitcpio"; argv[1] = (char *)"-P"; argv[2] = NULL;
+        return osr_run_root(argv) == 0;
+    }
+    if (osr_have_cmd("update-initramfs")) {
+        osr_info("Rebuilding the initramfs (update-initramfs)");
+        argv[0] = (char *)"update-initramfs"; argv[1] = (char *)"-u";
+        argv[2] = (char *)"-k"; argv[3] = (char *)"all"; argv[4] = NULL;
+        return osr_run_root(argv) == 0;
+    }
+    osr_warn("no initramfs generator found (dracut/mkinitcpio/update-initramfs) - "
+             "skipping the rebuild");
+    return 1;
+}
+
 /* persist_cap -- keep a file capability across package upgrades.
  *
  * dpkg and pacman REPLACE a program's file rather than editing it, and the
@@ -1080,6 +1115,9 @@ int osr_run_user_quiet_in(char *const argv[], int in_fd) { return run_quiet_in(a
 int osr_run_root_quiet_in(char *const argv[], int in_fd) { return run_quiet_in(argv, in_fd); }
 
 int osr_have_cmd(const char *name) { return osr_path_lookup(name, NULL); }
+
+/* osr_initramfs_regen -- Windows has no initramfs; nothing to rebuild. */
+int osr_initramfs_regen(void) { return 1; }
 
 /* osr_setcap -- POSIX file capabilities have no Windows equivalent: a
  * privilege here belongs to a token, not to a file, so there is nothing to

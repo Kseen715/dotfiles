@@ -185,6 +185,190 @@ int main(void) {
     osr_sb_env(&sb, "OSR_THEME_DIR", hs_text(&p));
     osr_sb_rm(&sb, "home");
     osr_sb_mkdir(&sb, "home");
+    /* --- xorg: the nouveau blacklist -------------------------------------
+     *
+     * modules/xorg.c turns OFF two things on old hardware, and this is the
+     * third and heaviest: a kernel module. The case is an Optimus laptop whose
+     * discrete GPU nouveau half-initialises and then drives nothing - the panel
+     * hangs off the iGPU - which makes it an unused driver on a GPU it could
+     * not set up, and the piece most likely to take the machine down.
+     *
+     * os-rice runs on other people's machines, so what this must NEVER do is
+     * the larger half of the specification: taking nouveau off a box that is
+     * USING it leaves no display driver at all. Every guard below is asserted
+     * on its own, with the other four satisfied, so a regression in any one of
+     * them fails a named line rather than being masked by the others.
+     *
+     * The fixtures are the sandbox's own tree (OSR_DRM, OSR_XORG_LOG,
+     * OSR_KERNEL_LOG, OSR_MODPROBE_DIR) - nothing here reads this machine's
+     * sysfs or writes its /etc. */
+    osr_sb_mkdir(&sb, "modprobe.d");
+    hs_path(&p, hs_text(&sb.root), "modprobe.d");
+    osr_sb_env(&sb, "OSR_MODPROBE_DIR", hs_text(&p));
+    /* A two-GPU tree: card0 is nouveau, card1 is i915. sysfs states the bound
+     * driver in the device's uevent, which is what the module reads. */
+    osr_sb_mkdir(&sb, "drm");
+    osr_sb_mkdir(&sb, "drm/card0");
+    osr_sb_mkdir(&sb, "drm/card0/device");
+    osr_sb_write(&sb, "drm/card0/device/uevent", "DRIVER=nouveau\n", 0644);
+    osr_sb_mkdir(&sb, "drm/card1");
+    osr_sb_mkdir(&sb, "drm/card1/device");
+    osr_sb_write(&sb, "drm/card1/device/uevent", "DRIVER=i915\n", 0644);
+    hs_path(&p, hs_text(&sb.root), "drm");
+    osr_sb_env(&sb, "OSR_DRM", hs_text(&p));
+    /* An empty /sys/module: the proprietary driver is not loaded. Pointed at
+     * the sandbox so a developer's own NVIDIA box cannot answer this. */
+    osr_sb_mkdir(&sb, "sysmod");
+    hs_path(&p, hs_text(&sb.root), "sysmod");
+    osr_sb_env(&sb, "OSR_SYSMOD", hs_text(&p));
+    /* X opened the OTHER card. */
+    osr_sb_write(&sb, "xorg.log",
+        "(II) modeset(0): using drv /dev/dri/card1\n", 0644);
+    hs_path(&p, hs_text(&sb.root), "xorg.log");
+    osr_sb_env(&sb, "OSR_XORG_LOG", hs_text(&p));
+    osr_sb_write(&sb, "kernel.log",
+        "nouveau 0000:01:00.0: drm: failed to create ce channel, -22\n", 0644);
+    hs_path(&p, hs_text(&sb.root), "kernel.log");
+    osr_sb_env(&sb, "OSR_KERNEL_LOG", hs_text(&p));
+    osr_sb_stub_body(&sb, "dracut",
+        "printf 'dracut %s\\n' \"$*\" >>\"$LOG\"\nexit 0\n");
+    osr_sb_env(&sb, "OSR_GPU_COUNT", "2");
+    osr_sb_env(&sb, "OSR_GPU_VENDOR", "NVIDIA Intel");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|GF108\nIntel|Core Processor\n");
+
+    /* The machine it was written for: hybrid, Fermi, X on the other card, and
+     * nouveau logged a failure. */
+    run_module("xorg");
+    ran("blacklist-nouveau.conf",
+        "xorg: the Optimus/Fermi box whose nouveau failed gets the blacklist");
+    ran("dracut",
+        "xorg: and the initramfs is rebuilt - the module is autoloaded from "
+        "there, where the on-disk blacklist has not been read yet");
+
+    /* GUARD 1: one GPU. Same evidence, same chip, and it must not fire: this
+     * is the box where nouveau IS the display driver. */
+    osr_sb_env(&sb, "OSR_GPU_COUNT", "1");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: a single-GPU box is never blacklisted, however bad the log looks "
+        "- it would leave the machine with no display driver at all");
+    osr_sb_env(&sb, "OSR_GPU_COUNT", "2");
+
+    /* GUARD 2: a modern chip. Kepler and up are maintained, Turing+ runs on
+     * GSP firmware, and both are used for render offload - a stray error line
+     * is not a licence to take a working driver away. */
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|TU106\nIntel|Core Processor\n");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: a modern NVIDIA card is left alone even with the same evidence "
+        "- nouveau is maintained there and somebody is using it");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|GK107\nIntel|Core Processor\n");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: and the line is drawn at Fermi - Kepler is already on the "
+        "maintained side of it");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|\nIntel|Core Processor\n");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: an unrecognised codename counts as modern, not as ancient - "
+        "unknown means newer than this lspci far more often than older");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|GF108\nIntel|Core Processor\n");
+
+    /* GUARD 4: X is on the nouveau card. The strongest "somebody is using
+     * this" signal there is, and it vetoes. */
+    osr_sb_write(&sb, "xorg.log",
+        "(II) modeset(0): using drv /dev/dri/card0\n", 0644);
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: when X is running ON the nouveau card, nothing is blacklisted");
+    /* An unreadable Xorg log is an unanswerable question, and an unanswerable
+     * question is a no. */
+    osr_sb_write(&sb, "xorg.log", "(II) modeset(0): no drm device here\n", 0644);
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: nor when the log cannot say which card X opened - no answer is "
+        "not a yes");
+    osr_sb_write(&sb, "xorg.log",
+        "(II) modeset(0): using drv /dev/dri/card1\n", 0644);
+
+    /* And nouveau bound to nothing at all: there is no driver to disable. */
+    osr_sb_write(&sb, "drm/card0/device/uevent", "DRIVER=nvidia\n", 0644);
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: with the proprietary driver bound instead, gpu-drivers.c owns "
+        "that machine and this writes nothing");
+    osr_sb_write(&sb, "drm/card0/device/uevent", "DRIVER=nouveau\n", 0644);
+
+    /* GUARD 3: the proprietary module is loaded, so nouveau is not what is in
+     * charge and modules/gpu-drivers.c owns that machine. */
+    osr_sb_mkdir(&sb, "sysmod/nvidia");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: a box running the proprietary nvidia module is left entirely "
+        "alone");
+    osr_sb_rm(&sb, "sysmod/nvidia");
+
+    /* GUARD 5: a clean log. Every other guard passes here. */
+    osr_sb_write(&sb, "kernel.log",
+        "nouveau 0000:01:00.0: drm: VRAM: 1024 MiB\n", 0644);
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: a nouveau that came up clean is left alone - the rule is "
+        "evidence, not a table of PCI IDs");
+    osr_sb_write(&sb, "kernel.log",
+        "nouveau 0000:01:00.0: drm: failed to create ce channel, -22\n", 0644);
+
+    /* THE LOOP THIS MUST NOT BE. Once the blacklist works, nouveau binds
+     * nothing and logs nothing - so guards 4 and 5 stop matching BY
+     * CONSTRUCTION. A run that read that as "no longer needed" would delete
+     * its own file and hand the driver back, every single install. */
+    osr_sb_write(&sb, "modprobe.d/blacklist-nouveau.conf",
+        "# Managed by os-rice (modules/xorg.c) - GPU stability quirks.\n"
+        "blacklist nouveau\n", 0644);
+    osr_sb_write(&sb, "drm/card0/device/uevent", "DRIVER=\n", 0644);
+    osr_sb_write(&sb, "kernel.log", "", 0644);
+    run_module("xorg");
+    did_not("rm -f",
+        "xorg: a blacklist that is WORKING is not mistaken for one that is no "
+        "longer needed - the absent driver is the effect, not a change of mind");
+    osr_sb_write(&sb, "drm/card0/device/uevent", "DRIVER=nouveau\n", 0644);
+    osr_sb_write(&sb, "kernel.log",
+        "nouveau 0000:01:00.0: drm: failed to create ce channel, -22\n", 0644);
+
+    /* It goes when something positively says so: the box has no NVIDIA GPU any
+     * more (a card swap, or the same rice on a different machine). */
+    osr_sb_env(&sb, "OSR_GPU_VENDOR", "Intel");
+    run_module("xorg");
+    ran("rm -f",
+        "xorg: and IS removed once there is no NVIDIA GPU to blacklist -- the "
+        "file does not outlive the hardware");
+    osr_sb_env(&sb, "OSR_GPU_VENDOR", "NVIDIA Intel");
+
+    /* Both overrides, in both directions: the operator outranks all five. */
+    osr_sb_env(&sb, "OSR_BLACKLIST_NOUVEAU", "0");
+    run_module("xorg");
+    did_not("blacklist-nouveau",
+        "xorg: OSR_BLACKLIST_NOUVEAU=0 forbids it even on the machine it was "
+        "written for");
+    osr_sb_env(&sb, "OSR_BLACKLIST_NOUVEAU", "1");
+    osr_sb_env(&sb, "OSR_GPU_COUNT", "1");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "NVIDIA|TU106\n");
+    osr_sb_write(&sb, "kernel.log", "", 0644);
+    run_module("xorg");
+    ran("blacklist-nouveau.conf",
+        "xorg: OSR_BLACKLIST_NOUVEAU=1 forces it with no evidence, a modern "
+        "chip and no second GPU - the operator outranks the heuristic");
+
+    osr_sb_env(&sb, "OSR_BLACKLIST_NOUVEAU", "");
+    osr_sb_env(&sb, "OSR_GPU_COUNT", "");
+    osr_sb_env(&sb, "OSR_GPU_VENDOR", "");
+    osr_sb_env(&sb, "OSR_GPU_DEVICES", "");
+    osr_sb_env(&sb, "OSR_KERNEL_LOG", "");
+    osr_sb_env(&sb, "OSR_XORG_LOG", "");
+    osr_sb_env(&sb, "OSR_DRM", "");
+    osr_sb_env(&sb, "OSR_MODPROBE_DIR", "");
+    osr_sb_rm(&sb, "bin/dracut");
+
     run_module("i3");
 
     ran("i3",   "i3: the window manager is installed");

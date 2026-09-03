@@ -141,6 +141,7 @@ int osrm_keyring(void);
 int osrm_lacc(void);
 int osrm_lcc(void);
 int osrm_lightdm(void);
+int osrm_logging(void);
 int osrm_loupe(void);
 int osrm_luminance(void);
 int osrm_mako(void);
@@ -283,6 +284,7 @@ static const ModuleRow modules[] = {
     { "lacc",            "x11+wayland", 0, MODULE_RUN(osrm_lacc) },
     { "lcc",             "x11+wayland", 0, MODULE_RUN(osrm_lcc) },
     { "lightdm",         "x11",         1, MODULE_RUN(osrm_lightdm) },
+    { "logging",         "x11+wayland", 0, MODULE_RUN(osrm_logging) },
     { "loupe",           "x11+wayland", 0, MODULE_RUN(osrm_loupe) },
     { "luminance",       "wayland",     0, MODULE_RUN(osrm_luminance) },
     { "mako",            "wayland",     1, MODULE_RUN(osrm_mako) },

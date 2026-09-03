@@ -190,8 +190,12 @@ lib32-libva-intel-driver =
 amd-ucode = linux-firmware-amd
 # Intel's microcode blob is redistributable-but-nonfree and lives in
 # void-repo-nonfree, which is opt-in and off on a stock install (see the header).
-# Empty RHS = skip rather than turn that repo on behind the user's back.
-intel-ucode =
+# The row is here anyway, unlike every other nonfree package: modules/
+# cpu-microcodes.c enables that repo itself, announcing it and honouring
+# OSR_MICROCODE_NONFREE=0, so the name resolves by the time it is installed. The
+# map's rule is unchanged - nothing here turns a repo on; the module does, where
+# it can be declined.
+intel-ucode = intel-ucode
 
 # --- GPaste (modules/gpaste.c) ------------------------------------------------
 # Void packages libgpaste only - no daemon, no CLI, no Shell extension - so the

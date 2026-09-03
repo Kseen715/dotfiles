@@ -328,6 +328,54 @@ int main(void) {
     run_module("cpu-microcodes");
     ran("intel-ucode", "cpu-microcodes: an Intel CPU gets the Intel one");
     did_not("amd-ucode", "cpu-microcodes: and not the AMD one");
+
+    /* Installing the package is only half of it. Microcode is loaded before the
+     * root filesystem exists, so a blob that never reaches the initramfs is
+     * loaded on no boot at all -- which is how a box ran for years on
+     * `microcode: Current revision: 0x2` with intel-ucode installed. */
+    osr_sb_stub_body(&sb, "dracut", "printf 'dracut %s\\n' \"$*\" >>\"$LOG\"\nexit 0\n");
+    run_module("cpu-microcodes");
+    ran("dracut --force",
+        "cpu-microcodes: and the initramfs is rebuilt -- the only place the CPU "
+        "ever reads a microcode blob from");
+
+    /* Void keeps the Intel blob in a repo that is off by default, so the
+     * install used to be a silent no-op there. The module turns that repo on
+     * ITSELF, which is a user-visible act and therefore announced and
+     * declinable -- rather than a pkgmap row doing it behind the user's back. */
+    osr_sb_env(&sb, "OSR_PKG", "xbps");
+    osr_sb_env(&sb, "OSR_DISTRO", "void");
+    osr_sb_env(&sb, "OSR_ID_LIKE", "");
+    /* xbps-query answers "not installed" so both steps actually run; the
+     * installer logs its argv like every other manager stub here. */
+    osr_sb_stub_body(&sb, "xbps-query", "exit 1\n");
+    osr_sb_stub_body(&sb, "xbps-install",
+        "printf 'xbps-install %s\\n' \"$*\" >>\"$LOG\"\nexit 0\n");
+    run_module("cpu-microcodes");
+    ran("void-repo-nonfree",
+        "cpu-microcodes: on Void the package layer enables the nonfree repo "
+        "first - the module asks for it, it does not own it");
+    ran("intel-ucode",
+        "cpu-microcodes: so the blob resolves to a package that exists");
+    said("nonfree",
+        "cpu-microcodes: and the run says it turned a nonfree repo on");
+
+    osr_sb_env(&sb, "OSR_NONFREE", "0");
+    run_module("cpu-microcodes");
+    did_not("void-repo-nonfree",
+        "cpu-microcodes: OSR_NONFREE=0 leaves the repo alone - one switch for "
+        "every nonfree package, not a per-module knob");
+    did_not("intel-ucode",
+        "cpu-microcodes: and installs nothing out of it");
+    said("OSR_NONFREE=0",
+        "cpu-microcodes: declining is reported, not silent");
+    osr_sb_env(&sb, "OSR_NONFREE", "");
+    osr_sb_rm(&sb, "bin/dracut");
+    osr_sb_rm(&sb, "bin/xbps-install");
+    osr_sb_rm(&sb, "bin/xbps-query");
+    osr_sb_env(&sb, "OSR_PKG", "apt");
+    osr_sb_env(&sb, "OSR_DISTRO", "ubuntu");
+    osr_sb_env(&sb, "OSR_ID_LIKE", "debian");
     osr_sb_env(&sb, "OSR_CPU_VENDOR", "");
 
     /* ================================================================
