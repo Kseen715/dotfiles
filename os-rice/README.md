@@ -208,55 +208,55 @@ Lower x = faster. The ratio is against **that host's** gcc.
 
 #### x86_64
 
-| Compiler | OS | Notes | Compilation time |
-| --- | --- | --- | --- |
-| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.072x |
-| [lacc](https://github.com/larmel/lacc) | GNU Linux | `osr module lacc`. C89 by design, own assembler and ELF writer. Needs the preprocessor patch the module ships | 0.190x |
-| [cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/) | GNU Linux | `osr module cproc`. Accepts every flag `nob` emits, `-std=c89` included; QBE is built into the same prefix. QBE's arm64 backend does not carry over: on aarch64 it compiles a hello world but every os-rice unit dies in the kernel headers - `/usr/include/aarch64-linux-gnu/asm/sigcontext.h:81:2: error: no type in struct member declaration` | 0.340x |
-| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | - | 0.381x |
-| clang 21.1.8 | GNU Linux | - | 0.810x |
-| gcc 15.2.0 | GNU Linux | - | **BASELINE** |
-| zig 0.14.1 cc clang 20.1.8 | GNU Linux | - | 1.854x |
+| Compiler | OS | Notes | _Compilation time_ | Output size |
+| --- | --- | --- | --- | --- |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.062x | 1.033x |
+| [lacc](https://github.com/larmel/lacc) | GNU Linux | `osr module lacc`. C89 by design, own assembler and ELF writer. Needs the preprocessor patch the module ships | 0.166x | 1.730x |
+| [cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/) | GNU Linux | `osr module cproc`. Accepts every flag `nob` emits, `-std=c89` included; QBE is built into the same prefix. QBE's arm64 backend does not carry over: on aarch64 it compiles a hello world but every os-rice unit dies in the kernel headers - `/usr/include/aarch64-linux-gnu/asm/sigcontext.h:81:2: error: no type in struct member declaration` | 0.315x | 0.910x |
+| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | - | 0.368x | 1.038x |
+| [clang](https://clang.llvm.org/) 21.1.8 | GNU Linux | - | 0.682x | 0.935x |
+| [gcc](https://gcc.gnu.org/) 15.2.0 | GNU Linux | - | **BASE** | **BASE** |
+| [zig](https://ziglang.org/) 0.14.1 cc clang 20.1.8 | GNU Linux | - | 1.579x | 2.395x |
 
 #### x86 / i386
 
-| Compiler | OS |  Notes | Compilation time |
-| --- | --- | --- | --- |
-| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | `osr module lcc` | _16.234s_ |
-| gcc 15.2.0 `-m32` | GNU Linux | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | **BASELINE** |
+| Compiler | OS |  Notes | _Compilation time_ | Output size |
+| --- | --- | --- | --- | --- |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | `osr module lcc` | 0.350x | 0.799x |
+| [gcc](https://gcc.gnu.org/) 15.2.0 `-m32` | GNU Linux | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | **BASE** | **BASE** |
 
 #### aarch64 / arm64 / armv8
 
-| Compiler | OS | Notes | Compilation time |
-| --- | --- | --- | --- |
-| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.083x |
-| gcc 13.3.0 | GNU Linux | - | **BASELINE** |
+| Compiler | OS | Notes | _Compilation time_ | Output size |
+| --- | --- | --- | --- | --- |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.083x | |
+| [gcc](https://gcc.gnu.org/) 13.3.0 | GNU Linux | - | **BASE** | |
 
 ### In testing
 
 | Compiler | OS | Arch | Notes |
 | --- | --- | --- | --- |
-| [xcc](https://github.com/tyfkda/xcc) | GNU Linux | x86_64, aarch64, riscv64, wasm | `osr module xcc` Ships its own libc instead of using the host headers, and it has no `<dirent.h>`: `Cannot open file: <dirent.h>`. The driver locates `cc1`/`cpp`/`as`/`ld` relative to `argv[0]`, so the module installs an exec wrapper rather than a symlink. Its aarch64 backend was checked on the Pi: the module builds, the hello world passes, and the tree still stops at the same `<dirent.h>` |
 | [SmallerC](https://github.com/alexfru/SmallerC) | GNU Linux, DOS, Windows | i386(x86), 16-bit x86 | `osr module smallerc` 32-bit only, own libc, no `<dirent.h>`, and the driver rejects `-std=c89`, `-O2` and `-pedantic`. Its prefix is compiled in (`-DPATH_PREFIX`), so `make` and `make install` get the same one, or every compile ends in `smlrpp: not found` |
-| [shecc](https://github.com/sysprog21/shecc) | GNU Linux | ARMv7-A, RV32IM | `osr module shecc` No x86-64 backend at all, so on an x86 box it is a cross compiler whose output cannot run. On the aarch64 Pi its ARMv7 output _does_ run, directly on the kernel's 32-bit compat layer and with no qemu - after a `chmod +x`, which shecc does not do to its own output. It still cannot build the tree: it ignores host headers in favour of its own libc, so any TU with `#include <stdio.h>` aborts (SIGABRT, no diagnostic printed at all), and every os-rice unit does. Only the stage-0 compiler is installed either way: `make` also builds the self-hosted stage 1 and 2 and needs `qemu-arm` for them (`Warning: failed to build the stage 1 and stage 2 compilers due to missing qemu-arm`) |
-| [arocc](https://github.com/Vexu/arocc) | GNU Linux | x86_64 | `osr module arocc` Front end only so far: even a hello world ends at `fatal error: TODO CodeGen.genVar`. It tracks Zig master and needs 0.17.0-dev or newer to build - on Zig 0.14 the build stops at `error: no field named 'debug' in enum 'builtin.OptimizeMode'` |
-| [Cuik](https://github.com/RealNeGate/Cuik) | GNU Linux | x86_64 | `osr module cuik` Alpha. No `-std` switch and it rejects the warning flags `nob` emits; its preprocessor expands the predefined `linux` macro inside a header name, so `#include <linux/limits.h>` becomes `couldn't find file: 1/limits.h`. The build itself needs LuaJIT specifically (Lua 5.4 rejects `build.lua`'s `0x...u` suffixes and its `unpack`), plus ninja, nasm, clang and lld - the `cuik-build-deps` pkgmap row |
 | mingw-w64 | Windows | - | Windows PE target; cannot be judged from a Linux box |
 | [OrangeC](https://github.com/LADSoft/OrangeC) | Windows | - | Windows PE target; same |
-| [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | GNU Linux | i386(x86) | An LLVM obfuscating backend rather than a compiler in its own right |
-| [CompCert](https://github.com/AbsInt/CompCert) | GNU Linux | x86_64 | No distro package, and the GitHub releases carry no binaries, so there is nothing to install short of the Coq/opam source build. Note also the INRIA license: free for research and evaluation, paid for commercial use |
-| [amacc](https://github.com/jserv/amacc) | GNU Linux | ARM32 | `osr module amacc` ARM-only JIT: it compiles a C subset and runs it in-process, and the driver itself is a 32-bit ARM binary, so the module installs the `arm-cross` row (`gcc-arm-linux-gnueabihf` + `qemu-user`, both demanded by upstream's `mk/arm.mk` before it will build). On the aarch64 Pi the driver runs natively on the 32-bit compat layer once `libc6:armhf` is present, and the module's wrapper falls back to `qemu-arm -L /usr/arm-linux-gnueabihf` where it does not - which is also how an x86_64 host gets it. JIT mode passes upstream's 27 tests; its ELF-output mode does not survive here (bus error natively, `Inconsistency detected by ld.so: rtld.c: 1280` under qemu-arm). It cannot build os-rice: the C subset is far short of the tree, and `-c` is not one of its flags (`usage: amacc [-s] [-o object] file`) |
 
 ### Not working
 
 | Compiler | OS | Arch | Notes |
 | --- | --- | --- | --- |
-| [chibicc](https://github.com/rui314/chibicc) | GNU Linux | - | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
-| [faucc](https://github.com/FAU-AS-MOS/FAUcc) | GNU Linux | - | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
+| [amacc](https://github.com/jserv/amacc) | GNU Linux | ARM32 | `osr module amacc` ARM-only JIT: it compiles a C subset and runs it in-process, and the driver itself is a 32-bit ARM binary, so the module installs the `arm-cross` row (`gcc-arm-linux-gnueabihf` + `qemu-user`, both demanded by upstream's `mk/arm.mk` before it will build). On the aarch64 Pi the driver runs natively on the 32-bit compat layer once `libc6:armhf` is present, and the module's wrapper falls back to `qemu-arm -L /usr/arm-linux-gnueabihf` where it does not - which is also how an x86_64 host gets it. JIT mode passes upstream's 27 tests; its ELF-output mode does not survive here (bus error natively, `Inconsistency detected by ld.so: rtld.c: 1280` under qemu-arm). It cannot build os-rice: the C subset is far short of the tree, and `-c` is not one of its flags (`usage: amacc [-s] [-o object] file`) |
+| [arocc](https://github.com/Vexu/arocc) | GNU Linux | x86_64 | `osr module arocc` Front end only so far: even a hello world ends at `fatal error: TODO CodeGen.genVar`. It tracks Zig master and needs 0.17.0-dev or newer to build - on Zig 0.14 the build stops at `error: no field named 'debug' in enum 'builtin.OptimizeMode'` |
+| [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | GNU Linux | i386(x86) | An LLVM obfuscating backend rather than a compiler in its own right |
 | [bcc](https://github.com/realchonk/bcc) | GNU Linux | - | Does not have libc implementation |
+| [chibicc](https://github.com/rui314/chibicc) | GNU Linux | - | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
+| [CompCert](https://github.com/AbsInt/CompCert) | GNU Linux | x86_64 | No distro package, and the GitHub releases carry no binaries, so there is nothing to install short of the Coq/opam source build. Note also the INRIA license: free for research and evaluation, paid for commercial use |
+| [Cuik](https://github.com/RealNeGate/Cuik) | GNU Linux | x86_64 | `osr module cuik` Alpha. No `-std` switch and it rejects the warning flags `nob` emits; its preprocessor expands the predefined `linux` macro inside a header name, so `#include <linux/limits.h>` becomes `couldn't find file: 1/limits.h`. The build itself needs LuaJIT specifically (Lua 5.4 rejects `build.lua`'s `0x...u` suffixes and its `unpack`), plus ninja, nasm, clang and lld - the `cuik-build-deps` pkgmap row |
+| [faucc](https://github.com/FAU-AS-MOS/FAUcc) | GNU Linux | - | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
 | [sdcc](https://sdcc.sourceforge.net/) | GNU Linux | - | Targets only microprocessors |
-| [wrecc](https://github.com/PhilippRados/wrecc) | - | - | Unfinished |
+| [shecc](https://github.com/sysprog21/shecc) | GNU Linux | ARMv7-A, RV32IM | `osr module shecc` No x86-64 backend at all, so on an x86 box it is a cross compiler whose output cannot run. On the aarch64 Pi its ARMv7 output _does_ run, directly on the kernel's 32-bit compat layer and with no qemu - after a `chmod +x`, which shecc does not do to its own output. It still cannot build the tree: it ignores host headers in favour of its own libc, so any TU with `#include <stdio.h>` aborts (SIGABRT, no diagnostic printed at all), and every os-rice unit does. Only the stage-0 compiler is installed either way: `make` also builds the self-hosted stage 1 and 2 and needs `qemu-arm` for them (`Warning: failed to build the stage 1 and stage 2 compilers due to missing qemu-arm`) |
 | [ts-c-compiler](https://github.com/Mati365/ts-c-compiler) | - | - | Unfinished; support only 16 bit x86 |
+| [wrecc](https://github.com/PhilippRados/wrecc) | - | - | Unfinished |
+| [xcc](https://github.com/tyfkda/xcc) | GNU Linux | x86_64, aarch64, riscv64, wasm | `osr module xcc` Ships its own libc instead of using the host headers, and it has no `<dirent.h>`: `Cannot open file: <dirent.h>`. The driver locates `cc1`/`cpp`/`as`/`ld` relative to `argv[0]`, so the module installs an exec wrapper rather than a symlink. Its aarch64 backend was checked on the Pi: the module builds, the hello world passes, and the tree still stops at the same `<dirent.h>` |
 
 ## How it works
 
