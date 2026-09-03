@@ -407,6 +407,38 @@ static int cpuinfo_field(Str *out, const char *line, const char *key) {
     return out->len > 0;
 }
 
+/* str_add_ghz -- kHz as the two-decimal GHz everybody quotes: 1800000 ->
+ * "1.80GHz". Integer math (no float in this unit), truncating, because a
+ * clock rounded up reads as a spec the chip does not have. */
+static void str_add_ghz(Str *s, long khz) {
+    char buf[64];
+    sprintf(buf, "%ld.%02ldGHz", khz / 1000000, (khz % 1000000) / 10000);
+    str_addz(s, buf);
+}
+
+/* cpu_max_khz -- cpu<n>'s policy maximum, 0 when cpufreq is absent (a VM, a
+ * kernel with no scaling driver). $OSR_SYSCPU points the tree elsewhere for
+ * the tests. */
+static long cpu_max_khz(long cpu) {
+    Str path;
+    char *buf;
+    size_t len;
+    long khz = 0;
+
+    str_init(&path);
+    str_addz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"));
+    str_addz(&path, "/cpu");
+    str_addl(&path, cpu);
+    str_addz(&path, "/cpufreq/cpuinfo_max_freq");
+    buf = slurp(str_text(&path), &len);
+    str_free(&path);
+    if (buf != NULL) {
+        khz = strtol(buf, NULL, 10);
+        free(buf);
+    }
+    return khz;
+}
+
 /* cpu_core_types -- big.LITTLE. lscpu reports ONE "Model name" for a chip
  * whose cores are not all the same part ("Cortex-A55" on an eight-core RK3588
  * that is four A55s and four A76s), so the per-processor "CPU part" lines in
@@ -420,6 +452,8 @@ static void cpu_core_types(Facts *f) {
     Line line;
     const char *names[8];
     long counts[8];
+    long khz[8];
+    long cpu = -1;
     int ngroups = 0;
     int arm = 1;
     Str l, val;
@@ -431,8 +465,15 @@ static void cpu_core_types(Facts *f) {
     str_init(&val);
     while (arm && next_line(info, len, &pos, &line)) {
         const char *name;
+        long one;
         str_reset(&l);
         str_add(&l, line.start, line.len);
+        /* "processor : 2" opens each block; the part lines below it are that
+         * CPU's, and its number is what indexes the cpufreq tree. */
+        if (cpuinfo_field(&val, str_text(&l), "processor")) {
+            cpu = strtol(str_text(&val), NULL, 10);
+            continue;
+        }
         if (cpuinfo_field(&val, str_text(&l), "CPU implementer")) {
             if (strcmp(str_text(&val), "0x41") != 0) arm = 0;
             continue;
@@ -446,9 +487,14 @@ static void cpu_core_types(Facts *f) {
             if (ngroups == 8) { arm = 0; break; }   /* nothing real has 8 kinds */
             names[ngroups] = name;
             counts[ngroups] = 0;
+            khz[ngroups] = 0;
             ngroups++;
         }
         counts[i]++;
+        /* Every CPU in a cluster shares one policy, so any member's maximum is
+         * the cluster's; take the highest seen in case a board pins one. */
+        one = cpu >= 0 ? cpu_max_khz(cpu) : 0;
+        if (one > khz[i]) khz[i] = one;
     }
     str_free(&val);
     str_free(&l);
@@ -461,6 +507,13 @@ static void cpu_core_types(Facts *f) {
         str_addl(&f->cpu_model, counts[i]);
         str_addz(&f->cpu_model, "x ");
         str_addz(&f->cpu_model, names[i]);
+        /* Per cluster, because the whole point of big.LITTLE is that the two
+         * halves do not run at the same speed; a single "CPU max MHz" from
+         * lscpu would report the big cluster's for both. */
+        if (khz[i] > 0) {
+            str_addz(&f->cpu_model, " @ ");
+            str_add_ghz(&f->cpu_model, khz[i]);
+        }
     }
 }
 
@@ -494,9 +547,8 @@ static void cpu_clock(Facts *f, const char *lscpu) {
     if (field_after(&mhz, lscpu, "CPU max MHz:") && mhz.len > 0) {
         v = strtol(str_text(&mhz), NULL, 10);
         if (v > 0) {
-            char buf[64];
-            sprintf(buf, " @ %ld.%02ldGHz", v / 1000, (v % 1000) / 10);
-            str_addz(&f->cpu_model, buf);
+            str_addz(&f->cpu_model, " @ ");
+            str_add_ghz(&f->cpu_model, v * 1000);
         }
     }
     str_free(&mhz);

@@ -191,13 +191,28 @@ int main(void) {
         "processor\t: 2\nCPU implementer\t: 0x41\nCPU part\t: 0xd0b\n"
         "processor\t: 3\nCPU implementer\t: 0x41\nCPU part\t: 0xd0b\n", 0644);
     point("OSR_CPUINFO", "cpuinfo");
+    /* Two clusters, two policies -- one lscpu "CPU max MHz" would report the
+     * big one's speed for the little cores too. */
+    osr_sb_write(&sb, "syscpu/cpu0/cpufreq/cpuinfo_max_freq", "1800000\n", 0644);
+    osr_sb_write(&sb, "syscpu/cpu1/cpufreq/cpuinfo_max_freq", "1800000\n", 0644);
+    osr_sb_write(&sb, "syscpu/cpu2/cpufreq/cpuinfo_max_freq", "2400000\n", 0644);
+    osr_sb_write(&sb, "syscpu/cpu3/cpufreq/cpuinfo_max_freq", "2400000\n", 0644);
+    point("OSR_SYSCPU", "syscpu");
     tool("lscpu",
         "Architecture:            aarch64\n"
         "Model name:              Cortex-A55\n"
         "CPU(s):                  4\n", 0);
     facts("cpu");
+    is("OSR_CPU_MODEL", "BCM2711 2x Cortex-A55 @ 1.80GHz + 2x Cortex-A76 @ 2.40GHz",
+       "cpu: a big.LITTLE chip reports both core types, counts and per-cluster clocks");
+
+    /* No cpufreq at all (a VM, a kernel with no scaling driver): the core mix
+     * still stands, without inventing a speed for it. */
+    osr_sb_env(&sb, "OSR_SYSCPU", "/nonexistent");
+    facts("cpu");
     is("OSR_CPU_MODEL", "BCM2711 2x Cortex-A55 + 2x Cortex-A76",
-       "cpu: a big.LITTLE chip reports both core types with their counts");
+       "cpu: with no cpufreq the core mix prints without clocks");
+    point("OSR_SYSCPU", "syscpu");
 
     /* x86: no CPU part lines at all, and no device tree. Nothing may touch
      * the model name lscpu gave. */
