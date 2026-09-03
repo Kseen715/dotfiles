@@ -216,7 +216,7 @@ Lower x = faster. The ratio is against **that host's** gcc.
 | [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | - | 0.368x | 1.038x |
 | [clang](https://clang.llvm.org/) 21.1.8 | GNU Linux | - | 0.682x | 0.935x |
 | [gcc](https://gcc.gnu.org/) 15.2.0 | GNU Linux | - | **BASE** | **BASE** |
-| [zig](https://ziglang.org/) 0.14.1 cc clang 20.1.8 | GNU Linux | - | 1.579x | 2.395x |
+| [zig](https://ziglang.org/) 0.14.1 clang 20.1.8 | GNU Linux | - | 1.579x | 2.395x |
 
 #### x86 / i386
 
@@ -229,8 +229,10 @@ Lower x = faster. The ratio is against **that host's** gcc.
 
 | Compiler | OS | Notes | _Compilation time_ | Output size |
 | --- | --- | --- | --- | --- |
-| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.083x | |
-| [gcc](https://gcc.gnu.org/) 13.3.0 | GNU Linux | - | **BASE** | |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.078x | 1.207x |
+| [gcc](https://gcc.gnu.org/) 13.3.0 | GNU Linux | - | **BASE** | **BASE** |
+| [clang](https://clang.llvm.org/) 18.1.3 | GNU Linux | - | 0.811x | 0.922x |
+| [zig](https://ziglang.org/) 0.16.0 clang 21.1.0 | GNU Linux | - | 1.642x | 2.693x |
 
 ### In testing
 
