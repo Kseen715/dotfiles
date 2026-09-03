@@ -97,7 +97,26 @@ _try() {
         sleep 1
         _n=$((_n + 1))
         if ! kill -0 "$_pid" 2>/dev/null; then
-            printf '(exited within %ss)\n' "$_n" >>"$_cur"
+            # HOW it exited decides, not THAT it exited. A terminal you closed
+            # yourself is gone within the probe window too, and $mod+Return is
+            # not supposed to answer that by opening a different terminal and
+            # telling you the first one "could not start" - which is exactly
+            # what a bare liveness test did: close three terminals with $mod+q
+            # and three xterms opened behind them.
+            #
+            # i3's kill sends WM_DELETE_WINDOW, the client shuts down, and the
+            # status is 0: it ran, and it is finished. A terminal that could
+            # not START exits NON-ZERO (alacritty exits 1 with no GL context),
+            # and that is the only case the fallback chain exists for.
+            wait "$_pid"
+            _rc=$?
+            if [ "$_rc" -eq 0 ]; then
+                printf '(ran, then exited cleanly after %ss - closed, not failed)\n' \
+                    "$_n" >>"$_cur"
+                cat "$_cur" >>"$_log"
+                return 0
+            fi
+            printf '(exited within %ss, status %s)\n' "$_n" "$_rc" >>"$_cur"
             cat "$_cur" >>"$_log"
             return 1
         fi
