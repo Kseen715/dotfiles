@@ -741,6 +741,83 @@ static char *dmi17(const char *cmd_prefix) {
     return out;
 }
 
+/* ram_edac -- what the memory-controller driver itself knows, from
+ * /sys/devices/system/edac/mc. It is the only per-module evidence a box
+ * without DMI has: one mc* directory per controller (read as a channel), one
+ * dimm* per populated rank, dimm_mem_type naming the technology ("LPDDR4").
+ * ARM servers and SoCs with an EDAC driver have it; a Pi has the mc directory
+ * with nothing under it, which is what ram_soc is for. */
+static void ram_edac(Facts *f) {
+    const char *root = env_str("OSR_EDAC", "/sys/devices/system/edac/mc");
+    Str p;
+    glob_t g;
+    size_t i;
+
+    str_init(&p);
+    str_addz(&p, root);
+    str_addz(&p, "/mc*/dimm*/dimm_mem_type");
+    if (glob(str_text(&p), 0, NULL, &g) == 0) {
+        for (i = 0; i < g.gl_pathc; i++) {
+            char *buf;
+            size_t len;
+            buf = slurp(g.gl_pathv[i], &len);
+            if (buf == NULL) continue;
+            buf[strcspn(buf, "\r\n")] = '\0';
+            f->ram_sticks++;
+            if (f->ram_type.len == 0 && buf[0] != '\0' && strncmp(buf, "Unknown", 7) != 0)
+                str_addz(&f->ram_type, buf);
+            free(buf);
+        }
+        globfree(&g);
+    }
+    str_free(&p);
+    if (f->ram_sticks == 0) return;
+    str_init(&p);
+    str_addz(&p, root);
+    str_addz(&p, "/mc*");
+    if (glob(str_text(&p), 0, NULL, &g) == 0) {
+        f->ram_channels = (long)g.gl_pathc;
+        globfree(&g);
+    }
+    str_free(&p);
+}
+
+/* ram_soc -- soldered memory has no DMI record, no SPD and (on a Pi) no EDAC
+ * driver: nothing on the running box reports its type or rating. `dmidecode`
+ * says "No SMBIOS nor DMI entry point found", lshw prints the size and
+ * nothing else, and the firmware reports the SDRAM clock as 0. The SoC fixes
+ * both facts, so name them from the chip the device tree already gave us.
+ * Datasheet values; a chip that is not in the table is left empty rather than
+ * guessed at, and a probe that DID find something is never overwritten.
+ * ponytail: a table, not a probe -- add a row when a board turns up. */
+static void ram_soc(Facts *f) {
+    static const char *table[] = {
+        "BCM2835",   "LPDDR2",  "400",
+        "BCM2836",   "LPDDR2",  "400",
+        "BCM2837",   "LPDDR2",  "900",
+        "BCM2837B0", "LPDDR2",  "900",
+        "BCM2711",   "LPDDR4",  "3200",
+        "BCM2712",   "LPDDR4X", "4267",
+        NULL, NULL, NULL
+    };
+    Str soc;
+    int i;
+
+    str_init(&soc);
+    if (dt_soc(&soc)) {
+        for (i = 0; table[i] != NULL; i += 3) {
+            if (strcmp(table[i], str_text(&soc)) != 0) continue;
+            if (f->ram_type.len == 0) str_addz(&f->ram_type, table[i + 1]);
+            if (f->ram_speed.len == 0) {
+                str_addz(&f->ram_speed, table[i + 2]);
+                str_addz(&f->ram_speed, "MT/s");
+            }
+            break;
+        }
+    }
+    str_free(&soc);
+}
+
 static void detect_ram(Facts *f) {
     char *mi;
     size_t len;
@@ -874,6 +951,12 @@ static void detect_ram(Facts *f) {
         str_free(&field);
         free(dmi);
     }
+
+    /* No DMI, or a DMI that named no module: fall back to the kernel's own
+     * memory-controller view, then to what the SoC itself determines. Each
+     * only fills what is still empty. */
+    if (f->ram_sticks == 0) ram_edac(f);
+    if (f->ram_type.len == 0 || f->ram_speed.len == 0) ram_soc(f);
 }
 
 /* sysfs_vendor_ids -- the "$dir"/<glob>/device/vendor files, in glob order. */

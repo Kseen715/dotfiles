@@ -392,6 +392,38 @@ int main(void) {
        "ram: the type is empty rather than invented when DMI says nothing");
     is("OSR_RAM_STICKS", "0",
        "ram: an unprivileged dmidecode's banner is not parsed as a stick");
+
+    /* An ARM SoC: dmidecode reports no DMI entry point at all, so the type
+     * and rating can only come from the chip -- a Pi 4's LPDDR4 is soldered
+     * and reads nowhere else (its firmware reports the SDRAM clock as 0). */
+    tool("dmidecode", "# No SMBIOS nor DMI entry point found, sorry.\n", 1);
+    osr_sb_write(&sb, "dt/compatible", "brcm,bcm2711", 0644);
+    point("OSR_DEVICETREE", "dt");
+    facts("ram");
+    is("OSR_RAM_TYPE", "LPDDR4", "ram: the SoC names its soldered memory");
+    is("OSR_RAM_SPEED", "3200MT/s", "ram: and its rating");
+    is("OSR_RAM_STICKS", "0", "ram: soldered memory is not counted as sticks");
+
+    /* A chip the table does not know stays empty rather than inheriting the
+     * previous row's answer. */
+    osr_sb_write(&sb, "dt/compatible", "nvidia,tegra234", 0644);
+    facts("ram");
+    is("OSR_RAM_TYPE", "", "ram: an unknown SoC is not guessed at");
+
+    /* EDAC wins over the SoC table where the memory controller has a driver:
+     * it is the box's own report, per module, and it also gives the counts. */
+    osr_sb_write(&sb, "dt/compatible", "brcm,bcm2711", 0644);
+    osr_sb_write(&sb, "edac/mc0/dimm0/dimm_mem_type", "Unbuffered-DDR4\n", 0644);
+    osr_sb_write(&sb, "edac/mc1/dimm0/dimm_mem_type", "Unbuffered-DDR4\n", 0644);
+    point("OSR_EDAC", "edac");
+    facts("ram");
+    is("OSR_RAM_TYPE", "Unbuffered-DDR4", "ram: EDAC names the type without DMI");
+    is("OSR_RAM_STICKS", "2", "ram: one stick per populated EDAC dimm");
+    is("OSR_RAM_CHANNELS", "2", "ram: one channel per EDAC controller");
+    is("OSR_RAM_SPEED", "3200MT/s",
+       "ram: EDAC has no speed, so the SoC still fills that one in");
+    osr_sb_env(&sb, "OSR_EDAC", "");
+    osr_sb_env(&sb, "OSR_DEVICETREE", "");
     osr_sb_env(&sb, "OSR_MEMINFO", "");
 
     /* ================================================================
