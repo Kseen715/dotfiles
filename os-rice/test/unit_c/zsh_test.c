@@ -86,6 +86,20 @@ static const char *LEGACY_ENV_V2 =
     "    fi\n"
     "fi\n";
 
+/* The ~/.zshrc oh-my-zsh's own installer writes. The line that matters is the
+ * `source $ZSH/oh-my-zsh.sh`: os-rice's 10-omz.zsh sources the framework too,
+ * with the rice's plugin list, so a box that had omz installed by hand loads
+ * all of it TWICE - measured at 195 ms per shell against 127 ms with the
+ * duplicate gone. */
+static const char *STOCK_OMZ_ZSHRC =
+    "export ZSH=\"$HOME/.oh-my-zsh\"\n"
+    "ZSH_THEME=\"robbyrussell\"\n"
+    "plugins=(git)\n"
+    "\n"
+    "source $ZSH/oh-my-zsh.sh\n"
+    "\n"
+    "alias mine='echo user content'\n";
+
 /* read_rel -- a sandbox file's contents. The caller frees. */
 static char *read_rel(const char *rel) {
     HStr path;
@@ -115,6 +129,7 @@ static void old_install(const char *env_layer, const char *local_layer) {
     osr_sb_mkdir(&sb, "home");
     osr_sb_write(&sb, RCDIR "/00-env.zsh", env_layer, 0644);
     osr_sb_write(&sb, RCDIR "/99-local.zsh", local_layer, 0644);
+    osr_sb_write(&sb, "home/.zshrc", STOCK_OMZ_ZSHRC, 0644);
     /* The account already uses zsh, so the login-shell path is a no-op (SS2)
      * and this test never goes near a real chsh. */
     {
@@ -208,6 +223,23 @@ int main(void) {
         "agent per shell because it never wrote $SSH_ENV");
     holds(RCDIR "/30-tools.zsh", "unfunction nvm",
         "30-tools.zsh is installed to replace both of them, lazily");
+
+    /* The duplicate framework init. This is the single largest thing wrong
+     * with a hand-installed omz under this rice: the whole framework, its 21
+     * lib files and a compinit, all of it twice per shell. */
+    lacks("home/.zshrc", "\nsource $ZSH/oh-my-zsh.sh",
+        ".zshrc: the duplicate oh-my-zsh init is commented out - the rice's "
+        "10-omz.zsh is what loads the framework, with the plugin list");
+    holds("home/.zshrc", "# source $ZSH/oh-my-zsh.sh",
+        ".zshrc: and left in place as a comment, because it is the user's file "
+        "and uncommenting it is how they take omz back");
+    holds("home/.zshrc", "alias mine='echo user content'",
+        ".zshrc: everything else the user put there survives");
+    holds("home/.zshrc", "os-rice:loader",
+        ".zshrc: and the loader block is still installed");
+    osr_assert_log(&sb, "zcompile",
+        "the startup files are byte-compiled - zsh reparses every layer on "
+        "every start, and one of them is 39 KB of framework glue");
 
     {
         char *backup = read_rel(RCDIR "/00-env.zsh.pre-migrate");

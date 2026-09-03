@@ -66,6 +66,36 @@ static const char *const MIG_LOCAL_OLD =
 #pragma GCC diagnostic pop
 #endif
 
+/* The stock ~/.zshrc that oh-my-zsh's installer writes sources the framework
+ * itself. os-rice's 10-omz.zsh sources it too - with the rice's plugin list,
+ * its own $ZSH_COMPDUMP and the autocomplete settings that have to be in place
+ * BEFORE the framework loads - so a box that had omz installed by hand
+ * initialises the whole thing TWICE: 21 lib files, five plugins and a compinit,
+ * all of it a second time, and every one of those plugins re-registering its
+ * completions. Measured on a 2010 laptop: 195 ms per shell against 127 ms with
+ * the duplicate gone, which is 35% of the startup cost of every terminal.
+ *
+ * The line is commented rather than deleted: ~/.zshrc is the user's file, this
+ * is a two-line explanation of where its framework went, and uncommenting it is
+ * how somebody who wants omz loaded from there gets it back. */
+/* Both needles START WITH A NEWLINE, and that is load-bearing: the replacement
+ * keeps the original line as a comment, so a needle that was not anchored to
+ * the start of a line would match inside its own comment on the next run and
+ * migrate the file again, forever. */
+static const char *const MIG_OMZ_DUP_V1 =
+    "\nsource $ZSH/oh-my-zsh.sh\n";
+
+static const char *const MIG_OMZ_DUP_V2 =
+    "\nsource \"$ZSH/oh-my-zsh.sh\"\n";
+
+static const char *const MIG_OMZ_DUP_NEW =
+    "\n# Disabled by os-rice: ~/.config/osr/zsh/rc.d/10-omz.zsh sources oh-my-zsh\n"
+    "# with the rice's plugin list. Sourcing it here as well loaded the whole\n"
+    "# framework twice - two compinits and 26 plugin/lib sources per shell,\n"
+    "# measured at 195 ms against 127 ms. Uncomment to take omz back from the\n"
+    "# rice layer; nothing else in os-rice reads this line.\n"
+    "# source $ZSH/oh-my-zsh.sh\n";
+
 static const char *const MIG_BREW_V1 =
     "# Homebrew shell environment (machine-specific), only if installed.\n"
     "if command -v brew >/dev/null 2>&1; then\n"
@@ -168,17 +198,70 @@ static int migrate_layers(void *ctx) {
         (void)osr_migrate_stale(str_text(&env), "command -v brew",
                                 "a `command -v brew` PATH probe (44.5 ms/shell under WSL)");
 
-    /* 3. Additive, so it needs no exact match: without it PATH accumulates
+    /* 3. The duplicate oh-my-zsh init in a hand-installed ~/.zshrc. Both
+     *    spellings the installer has used, and a warning when neither matched
+     *    but the line is still there in some third form. */
+    {
+        Str rc;
+        str_init(&rc);
+        str_addz(&rc, osr_mod_home()); str_addz(&rc, "/.zshrc");
+        if (!osr_migrate_replace(str_text(&rc), "duplicate oh-my-zsh init -> 10-omz.zsh",
+                                 MIG_OMZ_DUP_V1, MIG_OMZ_DUP_NEW)
+            && !osr_migrate_replace(str_text(&rc), "duplicate oh-my-zsh init -> 10-omz.zsh",
+                                    MIG_OMZ_DUP_V2, MIG_OMZ_DUP_NEW))
+            (void)osr_migrate_stale(str_text(&rc), "^[^#]*(source|\\.) .*oh-my-zsh\\.sh",
+                                    "a second oh-my-zsh init (68 ms/shell: the "
+                                    "framework, its libs and compinit, all twice)");
+        str_free(&rc);
+    }
+
+    /* 4. Additive, so it needs no exact match: without it PATH accumulates
      *    duplicates from anything that prepends unconditionally later. */
     (void)osr_migrate_append(str_text(&env), "typeset -U path",
                              "typeset -U path PATH", MIG_TYPESET);
 
-    /* 4. Additive too: without ~/.local/bin on PATH the prompt cannot find
+    /* 5. Additive too: without ~/.local/bin on PATH the prompt cannot find
      *    ccver (modules/starship.c) and lcc is invisible. */
     (void)osr_migrate_append(str_text(&env), "\\.local/bin",
                              "~/.local/bin on PATH", MIG_LOCALBIN);
 
     str_free(&dir); str_free(&local); str_free(&env);
+    return 1;
+}
+
+/* zcompile_layers -- byte-compile everything a shell parses at startup.
+ *
+ * zsh parses its scripts on every start, and this setup hands it a lot of text:
+ * the rc.d layers (one is 39 KB of framework glue), oh-my-zsh's 21 lib files,
+ * and the plugin scripts. `zcompile` writes a .zwc beside each file, and zsh
+ * prefers it automatically whenever it is not older than the source - so this
+ * is a pure cache: nothing reads it if it goes stale, and deleting every .zwc
+ * only makes shells slower again. Measured on the 2010 laptop: 126 ms -> 108 ms.
+ *
+ * Runs at install time rather than from the rc: recompiling on every start
+ * would cost what it saves, and a shell must never write to files it also
+ * sources - two shells opening at once would then race over the same .zwc.
+ *
+ * Best-effort. A missing zsh, an unwritable oh-my-zsh (a system-wide install,
+ * a read-only /usr) or a file removed mid-run is not a reason to fail the
+ * module: every one of them just means shells stay as fast as they were. */
+static int zcompile_layers(void *ctx) {
+    char *argv[4];
+    (void)ctx;
+
+    argv[0] = (char *)"zsh";
+    argv[1] = (char *)"-fc";
+    argv[2] = (char *)
+        "for f in ~/.zshrc ~/.zshenv "
+        "~/.config/osr/zsh/rc.d/*.zsh(N) "
+        "$ZSH/oh-my-zsh.sh(N) $ZSH/lib/*.zsh(N) "
+        "$ZSH/plugins/*/*.plugin.zsh(N) $ZSH/custom/plugins/*/*.zsh(N); do "
+        "  [[ -f $f && -w ${f:h} ]] || continue; "
+        "  [[ -f $f.zwc && $f.zwc -nt $f ]] && continue; "
+        "  zcompile -R -- $f.zwc $f 2>/dev/null; "
+        "done";
+    argv[3] = NULL;
+    (void)osr_run_user_quiet(argv);
     return 1;
 }
 
@@ -284,6 +367,10 @@ int osrm_zsh(void) {
     str_reset(&dst);
     str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.zshenv");
     ok = osr_install_zsh_zshenv(str_text(&dst)) && ok;
+
+    /* Byte-compile last: every layer and the loader are on disk by now, so one
+     * pass covers them all. */
+    ok = osr_step("Byte-compiling the zsh startup files", zcompile_layers, NULL) && ok;
 
     /* Default login shell -> zsh, only when it isn't already (§2). No package
      * manager does this for us, and chsh is not everywhere, so
