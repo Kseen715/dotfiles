@@ -1,10 +1,22 @@
-/* lib/fetch.h -- the C port of lib/net.sh: fetching a URL through whichever
- * downloader the box has, and the version lookups built on it.
+/* lib/fetch.h -- downloads: fetch a URL through whatever transport this system
+ * has, and the version lookups built on that.
  *
- * Distinct from lib/net.h on purpose. net.h is the NATIVE fetch layer (WinInet
- * today, sockets one day) plus the pure header parsers; this is the shell
- * tier's layer, whose semantics are "run curl/wget the way lib/net.sh ran it".
- * The parsers are shared: this file uses net.h's.
+ * ONE HEADER, and the transport is not part of the contract. POSIX runs
+ * curl or wget the way lib/net.sh ran them, installing one when the box has
+ * neither; Windows calls WinINet, which is already there and already knows the
+ * machine's proxy. A caller asks for a URL and gets bytes.
+ *
+ * Two layers, and the difference is worth keeping straight:
+ *
+ *   osr_fetch_*   the verbs a module or builder uses. They log, they respect
+ *                 the theme-only flag, and they fail the way this tree fails.
+ *   osr_download / osr_fetch_to_buffer / osr_final_url
+ *                 the raw transport underneath, answering in OSR_NET_*. A
+ *                 caller wants these only when it needs the status code
+ *                 itself.
+ *
+ * The parsers are pure string handling with no I/O and no OS dependency, which
+ * is why they are asserted on whichever host runs the suite.
  */
 #ifndef OSR_FETCH_H
 #define OSR_FETCH_H
@@ -12,6 +24,50 @@
 #include <sys/types.h>
 
 #include "common.h"
+
+/* --- the raw transport, and the parsers over it -------------------------- */
+
+#define OSR_NET_OK          0
+#define OSR_NET_ERR       (-1)
+#define OSR_NET_UNSUPPORTED (-2)  /* platform has no fetch backend yet */
+
+/* --- pure parsers: no I/O, portable, unit-testable everywhere ------------ */
+
+/* osr_url_filename -- last path segment of url, query string stripped.
+ * Port of the _dl_name derivation in lib/net.sh's osr_download().
+ */
+void osr_url_filename(const char *url, char *out, unsigned long out_sz);
+
+/* osr_parse_content_length -- scan a raw HTTP header block (CRLF-separated,
+ * as HttpQueryInfo(HTTP_QUERY_RAW_HEADERS_CRLF) or a plain HEAD response
+ * returns it) for the last Content-Length value. Returns -1 if absent.
+ * Port of _osr_remote_size's sed pattern in lib/net.sh.
+ */
+long osr_parse_content_length(const char *header_block);
+
+/* osr_parse_location -- last Location: value in a raw header block, or ""
+ * when none is present. Port of osr_final_url's sed pattern in lib/net.sh.
+ */
+void osr_parse_location(const char *header_block, char *out, unsigned long out_sz);
+
+/* --- network I/O: implemented per platform ------------------------------- */
+
+/* osr_net_available -- 1 if a fetch backend exists on this build, else 0. */
+int osr_net_available(void);
+
+/* osr_download -- fetch url to dest_path. Returns OSR_NET_*. */
+int osr_download(const char *url, const char *dest_path);
+
+/* osr_fetch_to_buffer -- fetch url into a malloc'd buffer (caller frees).
+ * *out_buf is NULL and *out_len is 0 on failure.
+ */
+int osr_fetch_to_buffer(const char *url, char **out_buf, unsigned long *out_len);
+
+/* osr_remote_size -- Content-Length of url via HEAD, or -1 if unknown. */
+long osr_remote_size(const char *url);
+
+/* osr_final_url -- where url resolves after redirects. Returns OSR_NET_*. */
+int osr_final_url(const char *url, char *out, unsigned long out_sz);
 
 /* osr_fetch_backend -- "curl", "wget", "busybox-wget", or "" (osr_downloader). */
 const char *osr_fetch_backend(void);

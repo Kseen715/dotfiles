@@ -23,7 +23,7 @@
 #include "../lib/common.h"
 #include "../lib/cmds.h"
 #include "../lib/config.h"
-#include "../lib/nerdfont.h"
+#include "../lib/fonts.h"
 #include "../lib/render.h"
 
 #include <stddef.h>

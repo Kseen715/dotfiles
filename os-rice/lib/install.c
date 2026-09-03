@@ -24,9 +24,18 @@
  * test/unit_c/install_test.c. One place where it deliberately improves on the
  * sh original is documented at cmd_parse_args.
  *
- * C89 + POSIX.
+ * ONE RUNNER, on both systems. Three of its steps have no counterpart off
+ * POSIX and say so where they are: the sudo warm-up (which is really "ask for
+ * the one privilege prompt this run needs, up front" -- the same intent, a
+ * different mechanism, see privilege_warmup), the DMI re-probe (DMI is a
+ * Linux-side reading of SMBIOS), and the `.sh` coexistence path (a shell
+ * module is a POSIX thing).
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "common.h"
 #include "cmds.h"
@@ -35,15 +44,18 @@
 #include "module.h"
 #include "preflight.h"
 #include "reload.h"
+#include "elevate.h"
 
+#include <time.h>
+
+#ifndef _WIN32
 #include <fcntl.h>
-#include <glob.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
+#endif
 
 /* ---------------------------------------------------------------------
  * the two listings
@@ -55,92 +67,50 @@ static const char *osr_root(void) { return env_str("OSR_ROOT", "."); }
 
 /* list_dir -- the shared shape of list_rices/list_modules:
  *
- *     for f in "$OSR_ROOT"/<pattern>; do
+ *     for f in the entries of "$OSR_ROOT"/<dir>; do
  *         [ -f <marker> ] || continue
  *         printf '  %s\n' <name>
  *     done
  *
- * GLOB_NOCHECK because POSIX sh has no nullglob: an empty rices/ leaves the
- * pattern itself in the loop variable, whose marker file then does not
- * exist, so nothing is printed either way.
+ * osr_list_dir is what the shell's glob was: sorted, dotfiles skipped, and
+ * empty rather than an error when the directory is not there -- which is what
+ * GLOB_NOCHECK plus the marker test amounted to.
  */
-static void list_dir(const char *pattern, const char *marker, const char *strip_suffix) {
-    Str path;
-    Str out;
-    glob_t g;
-    size_t i;
+static void list_dir(const char *dir, const char *marker, const char *strip_suffix) {
+    Str path, names, out;
+    size_t pos = 0;
+    Line line;
 
     str_init(&path);
     str_addz(&path, osr_root());
     str_addc(&path, '/');
-    str_addz(&path, pattern);
-    if (glob(str_text(&path), GLOB_NOCHECK, NULL, &g) != 0) { str_free(&path); return; }
+    str_addz(&path, dir);
+
+    str_init(&names);
+    osr_list_dir(&names, str_text(&path), marker, strip_suffix);
     str_free(&path);
 
     str_init(&out);
-    for (i = 0; i < g.gl_pathc; i++) {
-        Str name;
-        if (marker != NULL) {
-            Str probe;
-            int ok;
-            str_init(&probe);
-            str_addz(&probe, g.gl_pathv[i]);
-            str_addc(&probe, '/');
-            str_addz(&probe, marker);
-            ok = file_exists(str_text(&probe));
-            str_free(&probe);
-            if (!ok) continue;
-        } else if (!file_exists(g.gl_pathv[i])) {
-            continue;
-        }
-        str_init(&name);
-        base_of(&name, g.gl_pathv[i]);
-        if (strip_suffix != NULL) {
-            size_t sl = strlen(strip_suffix);
-            if (name.len >= sl && strcmp(name.p + name.len - sl, strip_suffix) == 0) {
-                name.len -= sl;              /* ${_b%.sh} */
-                name.p[name.len] = '\0';
-            }
-        }
+    while (next_line(str_text(&names), names.len, &pos, &line)) {
         str_addz(&out, "  ");
-        str_add(&out, str_text(&name), name.len);
+        str_add(&out, line.start, line.len);
         str_addc(&out, '\n');
-        str_free(&name);
     }
-    globfree(&g);
+    str_free(&names);
     out_flush(&out);
     str_free(&out);
 }
 
 /* collect_dir -- list_dir's names, into out instead of stdout. */
-static void collect_dir(Str *out, const char *pattern, const char *strip_suffix) {
+static void collect_dir(Str *out, const char *dir, const char *strip_suffix) {
     Str path;
-    glob_t g;
-    size_t i;
 
     str_init(&path);
     str_addz(&path, osr_root());
     str_addc(&path, '/');
-    str_addz(&path, pattern);
-    if (glob(str_text(&path), GLOB_NOCHECK, NULL, &g) != 0) { str_free(&path); return; }
+    str_addz(&path, dir);
+    osr_list_dir(out, str_text(&path), NULL, strip_suffix);
     str_free(&path);
-    for (i = 0; i < g.gl_pathc; i++) {
-        Str name;
-        if (!file_exists(g.gl_pathv[i])) continue;
-        str_init(&name);
-        base_of(&name, g.gl_pathv[i]);
-        if (strip_suffix != NULL) {
-            size_t sl = strlen(strip_suffix);
-            if (name.len >= sl && strcmp(name.p + name.len - sl, strip_suffix) == 0) {
-                name.len -= sl;
-                name.p[name.len] = '\0';
-            }
-        }
-        str_add(out, str_text(&name), name.len);
-        str_addc(out, '\n');
-        str_free(&name);
-    }
-    globfree(&g);
 }
 
 static int by_name(const void *a, const void *b) {
@@ -161,7 +131,7 @@ static void cmd_list_modules(void) {
     size_t i;
 
     str_init(&all);
-    collect_dir(&all, "modules/*.sh", ".sh");
+    collect_dir(&all, "modules", ".sh");
     osr_module_names(&all);
 
     while (next_line(str_text(&all), all.len, &pos, &line)) {
@@ -477,9 +447,21 @@ static void opt(Str *s, const char *lead, const char *var, const char *tail) {
     str_addz(s, tail);
 }
 
+/* kernel_release -- `uname -r` on POSIX; on Windows the closest true statement
+ * is the build number, which is the version everything else there is keyed on
+ * and what a support answer asks for. Appended to out, nothing appended when
+ * there is no answer. */
+static void kernel_release(Str *out) {
+#ifdef _WIN32
+    str_addz(out, env_str("OSR_VERSION", ""));
+#else
+    struct utsname u;
+    if (uname(&u) == 0) str_addz(out, u.release);
+#endif
+}
+
 static void report_base(Str *out) {
     Str l;
-    struct utsname u;
 
     str_init(&l);
     str_addz(&l, "distro=");
@@ -499,7 +481,7 @@ static void report_base(Str *out) {
 
     str_reset(&l);
     str_addz(&l, "kernel=");
-    if (uname(&u) == 0) str_addz(&l, u.release); /* sh: $(uname -r) */
+    kernel_release(&l);                          /* sh: $(uname -r) */
     info_line(out, str_text(&l));
 
     str_reset(&l);
@@ -669,14 +651,71 @@ static void list_themes(void) {
     str_free(&all);
 }
 
-/* sudo_warmup -- warm the sudo credential for the whole run so escalating steps
- * do not each prompt (§7). Best-effort and interactive-only: root-for-root and
- * non-root user-space rices (§8) need no sudo, and CI/containers run as root --
- * so a missing TTY is never fatal here; steps escalate lazily via as_root. */
-static void sudo_warmup(void) {
+/* privilege_warmup -- ask for whatever privilege this run needs ONCE, before
+ * any work, so that no step prompts mid-loop (section 7).
+ *
+ * The same intent on both systems, two mechanisms, because the two systems
+ * grant privilege differently. POSIX warms a sudo CREDENTIAL and keeps it
+ * warm, while every step still runs as the user and escalates per command.
+ * Windows has no credential to warm: privilege belongs to the process, so the
+ * equivalent is to relaunch this run elevated (lib/elevate.h) -- once, up
+ * front, and only when something actually needs it.
+ *
+ * Best-effort on both. A declined prompt is not fatal: on POSIX the steps
+ * escalate lazily through as_root anyway, and on Windows the per-user routes
+ * (scoop, a source: builder writing under %LOCALAPPDATA%) still work.
+ */
+#ifdef _WIN32
+
+static void privilege_warmup(const char *modules) {
+    char **names;
+    size_t count = 0;
+    Str copy;
+    char *p;
+
+    /* Called once before anything is known and once with the resolved module
+     * list; only the second call can be answered here, because whether this
+     * run needs Administrator is a question about the packages it is going to
+     * install and nothing else. */
+    if (modules == NULL) return;
+    if (osr_is_admin()) return;
+
+    /* Ask the map, not a guess: elevation is needed only when a package's
+     * manager is missing and its installer is machine-wide, or when a source:
+     * builder declares that its recipe ends in one. */
+    str_init(&copy);
+    str_addz(&copy, modules);
+    names = (char **)malloc((count_words(modules) + 1) * sizeof *names);
+    if (names == NULL) osr_die_oom();
+    p = copy.p;
+    while (*p != '\0') {
+        while (*p != '\0' && is_space(*p)) *p++ = '\0';
+        if (*p == '\0') break;
+        names[count++] = p;
+        while (*p != '\0' && !is_space(*p)) p++;
+    }
+    names[count] = NULL;
+
+    if (count > 0 && osr_pkg_needs_admin(names, (int)count)) {
+        osr_elevate_now("some packages need a package manager that only an "
+                        "Administrator can install.");
+    }
+    free(names);
+    str_free(&copy);
+}
+
+#else /* !_WIN32 */
+
+static void privilege_warmup(const char *modules) {
+    static int warmed = 0;
     char *argv[3];
     pid_t keeper;
 
+    /* The ticket covers every later escalation whatever the module list is, so
+     * the first call is the one that matters and the second is a no-op. */
+    (void)modules;
+    if (warmed) return;
+    warmed = 1;
     if (geteuid() == 0 || !osr_have_cmd("sudo") || !isatty(0)) return;
     argv[0] = (char *)"sudo"; argv[1] = (char *)"-v"; argv[2] = NULL;
     if (osr_run_quiet(argv) != 0) return;
@@ -712,11 +751,19 @@ static void sudo_warmup(void) {
     }
 }
 
+#endif /* _WIN32 */
+
 /* ram_retry -- the RAM line needs DMI (type/speed/slots) and DMI needs root, so
  * the probe is re-run after the sudo warm-up. Only worth installing dmidecode
  * where SMBIOS exists at all: the entry point is present-but-unreadable for
  * non-root, and most ARM SoCs have no DMI tables. */
 static void ram_retry(void) {
+#ifdef _WIN32
+    /* GlobalMemoryStatusEx needs no privilege and there is nothing to re-ask
+     * once a prompt has been answered. The stick/type/speed detail would come
+     * from SMBIOS, which nothing here reads yet. */
+    return;
+#else
     static const char *const dmi[] = { "dmidecode", NULL };
 
     if (env_long("OSR_RAM_STICKS", 0) != 0) return;
@@ -731,6 +778,7 @@ static void ram_retry(void) {
         if (pid > 0) { int st; (void)waitpid(pid, &st, 0); }
     }
     osr_detect_export("ram");
+#endif
 }
 
 /* run_sh_module -- the coexistence path: hand a `.sh` module to a shell.
@@ -738,12 +786,21 @@ static void ram_retry(void) {
  * Nothing is sourced around it (see above): the facts reach it through the
  * environment, and the verbs no longer exist as shell functions. */
 static int run_sh_module(const char *path) {
+#ifdef _WIN32
+    /* There is no shell to hand it to, and inventing one would mean shipping a
+     * PowerShell dependency this core exists to remove. A module here is a
+     * registry row or it is nothing. */
+    osr_warnf("module not found: %s -- a module is a C unit registered in "
+              "lib/modules.c, and there is no shell tier on this system", path);
+    return 0;
+#else
     char *argv[4];
     argv[0] = (char *)"sh";
     argv[1] = (char *)path;
     argv[2] = NULL;
     argv[3] = NULL;
     return osr_run(argv) == 0;
+#endif
 }
 
 /* run_one -- one manifest entry, whichever tier owns it. The core wins where
@@ -760,7 +817,7 @@ static void run_one(const char *mod, long *n) {
     {
         char num[32];
         sprintf(num, "%ld", *n);
-        setenv("OSR_STEP_N", num, 1);
+        osr_setenv("OSR_STEP_N", num);
     }
     str_init(&msg);
     str_addz(&msg, "module: ");
@@ -835,11 +892,11 @@ static int cmd_run(int argc, char **argv) {
     char num[32];
 
     parse_args(&a, argc, argv);
-    if (a.verbose) setenv("OSR_VERBOSE", "1", 1);
+    if (a.verbose) osr_setenv("OSR_VERBOSE", "1");
 
     if (strcmp(a.action, "usage") == 0)        { cmd_usage(); return 0; }
     if (strcmp(a.action, "list") == 0)         { printf("Available rices:\n");
-                                                 list_dir("rices/*/", "rice.list", NULL);
+                                                 list_dir("rices", "rice.list", NULL);
                                                  return 0; }
     if (strcmp(a.action, "list-themes") == 0)  { printf("Available themes:\n");
                                                  list_themes(); return 0; }
@@ -879,7 +936,10 @@ static int cmd_run(int argc, char **argv) {
      * (§7). VERSION_ID is absent on rolling releases and drops out of the line
      * there. */
     (void)cmd_report("base");
-    sudo_warmup();
+    /* POSIX: warm the sudo ticket now, because the DMI probe below needs root
+     * and asking twice is what section 7 exists to prevent. Windows cannot
+     * answer yet -- see the second call, after the manifest resolves. */
+    privilege_warmup(NULL);
     ram_retry();
     (void)cmd_report("hw");
 
@@ -934,11 +994,11 @@ static int cmd_run(int argc, char **argv) {
         str_addz(&list, osr_root());
         str_addz(&list, "/rices/");
         str_addz(&list, str_text(&rice));
-        setenv("OSR_RICE_DIR", str_text(&list), 1);
+        osr_setenv("OSR_RICE_DIR", str_text(&list));
         str_addz(&list, "/rice.list");
         if (!file_exists(str_text(&list)))
             osr_die("rice not found: %s (try --list)", str_text(&rice));
-        setenv("OSR_RICE", str_text(&rice), 1);
+        osr_setenv("OSR_RICE", str_text(&rice));
         if (!read_manifest(&modules, &requires_, str_text(&list)))
             osr_die("rice not found: %s (try --list)", str_text(&rice));
         str_free(&list);
@@ -985,10 +1045,15 @@ static int cmd_run(int argc, char **argv) {
         }
     }
 
+    /* Windows: now that the module list is known, ask the map whether any of
+     * it needs Administrator, and if so take the one UAC prompt before any
+     * work starts. On POSIX the ticket above already covers it. */
+    privilege_warmup(str_text(&modules));
+
     total = count_words(str_text(&modules));
     sprintf(num, "%ld", total);
-    setenv("OSR_STEP_TOTAL", num, 1);
-    setenv("OSR_STEP_N", "0", 1);
+    osr_setenv("OSR_STEP_TOTAL", num);
+    osr_setenv("OSR_STEP_N", "0");
 
     each_word(str_text(&modules), run_word, &n);
 
@@ -1040,7 +1105,7 @@ int osr_install_main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(argv[1], "list-rices") == 0) {
-        list_dir("rices/*/", "rice.list", NULL);
+        list_dir("rices", "rice.list", NULL);
         return 0;
     }
     if (strcmp(argv[1], "list-modules") == 0) {

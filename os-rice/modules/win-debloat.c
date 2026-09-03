@@ -25,11 +25,9 @@
  *
  * C89.
  */
-#include "src/common.h"
-
+#include "../lib/module.h"
 #include "../lib/elevate.h"
-#include "../lib/winbin.h"
-#include "../lib/winui.h"
+#include "../lib/build.h"
 
 #include <stddef.h>
 
@@ -42,37 +40,33 @@
  * non-elevated run of either just fails deeper in, after the download.
  */
 static int run_vendor_tool(const char *name, const char *url, const char *what) {
-    osr_info("%s: %s", name, what);
-    osr_info("%s: this runs code fetched from %s -- read it there if you have "
+    osr_infof("%s: %s", name, what);
+    osr_infof("%s: this runs code fetched from %s -- read it there if you have "
              "not before", name, url);
 
     if (!osr_elevate_now("this tool makes machine-wide changes.")) {
-        osr_warn("%s: needs Administrator rights -- skipped", name);
+        osr_warnf("%s: needs Administrator rights -- skipped", name);
         return 0;
     }
 
-    if (!osr_winbin_run_script(url, name)) {
-        osr_warn("%s: the vendor script did not complete", name);
+    if (!osr_run_install_script(url, name)) {
+        osr_warnf("%s: the vendor script did not complete", name);
         return 0;
     }
-    osr_success("%s: finished", name);
+    osr_successf("%s: finished", name);
     return 1;
 }
 
-int osrm_win_debloat(const char *repo_root, const char *themes_root, const char *map_path,
-                       const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme;
-    if (theme_only) return 1;
+int osrm_win_debloat(void) {
+    if (osr_theme_only()) return osr_theme_only_skip("win-debloat");
 
     return run_vendor_tool("win-debloat", "https://debloat.raphi.re/",
                            "Raphire's Win11Debloat -- removes preinstalled apps and "
                            "the bulk of Microsoft's advertising surfaces");
 }
 
-int osrm_win_winutil(const char *repo_root, const char *themes_root, const char *map_path,
-                       const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme;
-    if (theme_only) return 1;
+int osrm_win_winutil(void) {
+    if (osr_theme_only()) return osr_theme_only_skip("win-winutil");
 
     return run_vendor_tool("win-winutil", "https://christitus.com/win",
                            "Chris Titus Tech's WinUtil -- an interactive tweak/install "
@@ -81,16 +75,9 @@ int osrm_win_winutil(const char *repo_root, const char *themes_root, const char 
 
 #else /* !_WIN32 */
 
-int osrm_win_debloat(const char *repo_root, const char *themes_root, const char *map_path,
-                       const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme; (void)theme_only;
-    return 0;
-}
-
-int osrm_win_winutil(const char *repo_root, const char *themes_root, const char *map_path,
-                       const char *theme, int theme_only) {
-    (void)repo_root; (void)themes_root; (void)map_path; (void)theme; (void)theme_only;
-    return 0;
-}
+/* Both vendors ship a PowerShell script that rewrites a Windows install.
+ * Nothing to hand them here. */
+int osrm_win_debloat(void) { return 0; }
+int osrm_win_winutil(void) { return 0; }
 
 #endif /* _WIN32 */

@@ -1,33 +1,62 @@
-/* lib/pkg.c -- the C port of lib/pkg.sh: name resolution through lib/pkgmap/,
- * the native installer for every package manager, and the provider-tagged
- * install methods (§4).
+/* lib/pkg.c -- name resolution through lib/pkgmap/, and the installer behind
+ * every method a row can name.
  *
- * Split out of lib/module.c, where the native half lived while it was the only
- * half. The shape is lib/pkg.sh's own: pkg_install expands each logical name
- * through the map, batches everything native into ONE install command, then
- * dispatches the provider rows in manifest order -- two passes, because the
- * native batch carries the downloaders and toolchains (curl, rust) a provider
- * row may need.
+ * The shared half is the MAP: one row format, one @facet ranking, one
+ * resolution order, over lib/pkgmap/<manager>.map. Which manager that is comes
+ * from OSR_PKG -- apt, dnf, pacman, apk, xbps, portage, and `windows` for the
+ * one map whose rows name scoop/choco/winget ids instead of distro package
+ * names. Nothing about a row's SHAPE differs between the two systems, which is
+ * why windows.map lives in lib/pkgmap/ next to the others rather than in a
+ * tree of its own, and why the lookup below is written once.
  *
- * Providers implemented here: script: (a piped installer), cargo: (a crate,
- * binstall first), aur: (paru/yay) and source: (a builder in lib/build.c).
+ * The two bodies further down are the DISPATCH, because that is where the
+ * systems genuinely differ:
  *
- * `osr pkg <verb>` exposes the same verbs as a command, which is what lets
+ *   POSIX    the native manager batches everything into one install command,
+ *            then the provider rows run in manifest order -- script: (a piped
+ *            installer), cargo: (a crate), aur: (paru/yay), source: (a builder
+ *            in lib/build.c). Two passes, because the native batch carries the
+ *            downloaders and toolchains a provider row may need.
+ *   Windows  each row names ONE provider and that provider is used: scoop,
+ *            choco or winget by id, source: for a builder, script: for a
+ *            vendor's own installer. There is no batch and no fallback chain;
+ *            see the one-provider rule at the head of lib/pkgmap/windows.map
+ *            for why falling through to another manager is a trust boundary
+ *            rather than a convenience.
+ *
+ * `osr pkg <verb>` exposes the verbs as a command on both, which is what lets
  * test/unit_c/pkg_test.c drive every one of them over a stubbed PATH.
  *
- * C89 + POSIX.
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _XOPEN_SOURCE 700
+#endif
 
 #include "common.h"
 #include "cmds.h"
 #include "module.h"
 #include "fetch.h"
 #include "build.h"
+#include "ui.h"
 
+/* OSR_ANY_MAP -- is there a manager-independent map to fall through to? See
+ * the comment on OSR_MAP_PATH in osr_pkgmap_resolve. */
+#ifdef _WIN32
+#define OSR_ANY_MAP 0
+#else
+#define OSR_ANY_MAP 1
+#endif
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "elevate.h"
+#else
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 /* --- packages ------------------------------------------------------------- */
 
@@ -194,7 +223,17 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
     str_init(&key);
     str_init(&map);
 
-    /* The two map paths, rebuilt per probe: <manager>.map then any.map. */
+    /* The map paths, rebuilt per probe: <manager>.map, then any.map.
+     *
+     * any.map holds the rows that are the same whichever Linux package manager
+     * is in play -- a `source:` builder, a vendor script -- and windows.map
+     * deliberately does NOT fall through to it. Those rows name Linux
+     * builders and Linux install scripts; reaching one from Windows would not
+     * be a shared answer, it would be the wrong answer, and the map's whole
+     * job is that a package's source is decided in advance rather than fallen
+     * into. So on Windows there is one map, and a name with no row in it is a
+     * gap to fix rather than a lookup to continue. */
+    #define OSR_MAP_FILES (OSR_ANY_MAP ? 2 : 1)
     #define OSR_MAP_PATH(which) do {                                  \
         str_reset(&map);                                              \
         str_addz(&map, env_str("OSR_LIB", "lib"));                    \
@@ -226,7 +265,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
                 str_addz(&key, name);
                 str_addc(&key, '@');
                 str_add(&key, version, plen);
-                for (j = 0; j < 2; j++) {
+                for (j = 0; j < OSR_MAP_FILES; j++) {
                     OSR_MAP_PATH(j);
                     if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
                 }
@@ -236,7 +275,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
         }
 
         if (stage == 3) {
-            for (j = 0; j < 2; j++) {
+            for (j = 0; j < OSR_MAP_FILES; j++) {
                 OSR_MAP_PATH(j);
                 if (map_lookup_range(out, str_text(&map), name, version)) { done = 1; break; }
             }
@@ -248,17 +287,63 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
         if (stage == 0) { str_addc(&key, '@'); str_addz(&key, codename); }
         if (stage == 1) { str_addc(&key, '@'); str_addz(&key, version); }
         if (stage == 4) { str_addc(&key, '@'); str_addz(&key, arch); }
-        for (j = 0; j < 2; j++) {
+        for (j = 0; j < OSR_MAP_FILES; j++) {
             OSR_MAP_PATH(j);
             if (map_lookup(out, str_text(&map), str_text(&key))) { done = 1; break; }
         }
     }
     #undef OSR_MAP_PATH
+    #undef OSR_MAP_FILES
 
     str_free(&key);
     str_free(&map);
     if (!done) str_addz(out, name);          /* not listed -> unchanged */
 }
+
+/* --- what a row's right-hand side says ------------------------------------
+ *
+ * A resolved spec carries its install method as a `<method>:` prefix, and each
+ * method owns its own idempotency probe -- which is the point of tagging them:
+ * "is this installed" has a different answer for a crate, an AUR package, a
+ * curl-piped installer and a winget id, and none of them is the native package
+ * database.
+ *
+ * A spec with no prefix is a native package name (or several), which is
+ * section 1's "no identity rows": an unlisted name passes through unchanged.
+ *
+ * scoop/choco/winget are the three Windows managers, and they are tagged
+ * rather than native because on that side there is no ONE native manager to
+ * be the default -- which of the three serves a package is exactly what a
+ * windows.map row exists to say. They are recognised on both systems so that
+ * a row in the wrong map is reported as an unknown method rather than taken
+ * for a package literally named "winget:Something".
+ */
+typedef enum {
+    M_NATIVE = 0, M_SCRIPT, M_SOURCE, M_CARGO, M_AUR,
+    M_SCOOP, M_CHOCO, M_WINGET, M_OTHER
+} Method;
+
+static Method spec_method(const char *rhs) {
+    if (strncmp(rhs, "script:", 7) == 0) return M_SCRIPT;
+    if (strncmp(rhs, "source:", 7) == 0) return M_SOURCE;
+    if (strncmp(rhs, "cargo:", 6) == 0)  return M_CARGO;
+    if (strncmp(rhs, "aur:", 4) == 0)    return M_AUR;
+    if (strncmp(rhs, "scoop:", 6) == 0)  return M_SCOOP;
+    if (strncmp(rhs, "choco:", 6) == 0)  return M_CHOCO;
+    if (strncmp(rhs, "winget:", 7) == 0) return M_WINGET;
+    /* The providers lib/pkg.sh names but does not implement either (G1 is
+     * still open): repo:, tarball:, brew:, flatpak:. */
+    if (strchr(rhs, ':') != NULL && strncmp(rhs, "http", 4) != 0) return M_OTHER;
+    return M_NATIVE;
+}
+
+/* spec_arg -- the text after the method tag. */
+static const char *spec_arg(const char *rhs) {
+    const char *p = strchr(rhs, ':');
+    return p != NULL ? p + 1 : rhs;
+}
+
+#ifndef _WIN32
 
 /* native_installed -- the per-manager probe _native_installed used. */
 int osr_pkg_native_installed(const char *pkg) {
@@ -642,32 +727,10 @@ static void refresh_once(void) {
 }
 
 /* --- the provider methods (§4) ---------------------------------------------
- *
- * A resolved spec carries its install method as a `<method>:` prefix, and each
- * method owns its own idempotency probe -- which is the point of tagging them:
- * "is this installed" has a different answer for a crate, an AUR package and a
- * curl-piped installer, and none of them is the native package database.
+ * The method tags, spec_method and spec_arg are in the shared half above:
+ * what a row's right-hand side SAYS is one question on both systems, and only
+ * what is then done about it differs.
  */
-typedef enum {
-    M_NATIVE = 0, M_SCRIPT, M_SOURCE, M_CARGO, M_AUR, M_OTHER
-} Method;
-
-static Method spec_method(const char *rhs) {
-    if (strncmp(rhs, "script:", 7) == 0) return M_SCRIPT;
-    if (strncmp(rhs, "source:", 7) == 0) return M_SOURCE;
-    if (strncmp(rhs, "cargo:", 6) == 0)  return M_CARGO;
-    if (strncmp(rhs, "aur:", 4) == 0)    return M_AUR;
-    /* The providers lib/pkg.sh names but does not implement either (G1 is
-     * still open): repo:, tarball:, brew:, flatpak:. */
-    if (strchr(rhs, ':') != NULL && strncmp(rhs, "http", 4) != 0) return M_OTHER;
-    return M_NATIVE;
-}
-
-/* spec_arg -- the text after the method tag. */
-static const char *spec_arg(const char *rhs) {
-    const char *p = strchr(rhs, ':');
-    return p != NULL ? p + 1 : rhs;
-}
 
 /* --- script: (a piped installer) -------------------------------------------
  * Spec: script:<url> [args...] -- the args are forwarded to the installer.
@@ -1178,6 +1241,19 @@ int osr_pkg_install_step_try(const char *desc, const char *const names[]) {
     return osr_step_try(desc, pkg_install_thunk, (void *)names);
 }
 
+/* osr_pkg_need -- see lib/module.h. The probe is a command rather than a
+ * package name, which is the whole of the difference. */
+int osr_pkg_need(const char *name, const char *test_command) {
+    const char *names[2];
+    const char *probe = (test_command != NULL && *test_command != '\0') ? test_command : name;
+
+    if (osr_have_cmd(probe)) return 1;
+    names[0] = name;
+    names[1] = NULL;
+    if (!osr_pkg_install(names)) return 0;
+    return osr_have_cmd(probe);
+}
+
 
 /* --- the command surface --------------------------------------------------
  *
@@ -1312,3 +1388,591 @@ int osr_pkg_main(int argc, char **argv) {
     }
     return pkg_usage();
 }
+
+#else /* _WIN32 */
+
+/* --- the Windows dispatch --------------------------------------------------
+ *
+ * ONE PROVIDER PER ROW, AND IT IS USED. This is the rule the whole windows.map
+ * file exists to enforce, and it is a trust boundary rather than a stylistic
+ * preference: scoop, choco and winget are independent namespaces, and the
+ * manager a project does NOT ship to is exactly where its name is still free
+ * for someone else to claim. Falling through from a missing manager to the
+ * next one would turn "the intended source is unavailable" into "install
+ * whatever else answers to this name" -- a different publisher's software,
+ * silently. So a row names one provider, that provider is used, and a row
+ * naming two is a map error rather than a chain.
+ *
+ * A MISSING MANAGER IS INSTALLED, NOT ROUTED AROUND, which is what makes the
+ * rule above affordable: scoop comes from get.scoop.sh per-user, choco from
+ * community.chocolatey.org, winget from asheroto/winget-install. The last two
+ * need Administrator, so the run elevates once, up front -- the Windows
+ * equivalent of install.sh's `sudo -v` warm-up.
+ * ------------------------------------------------------------------------- */
+
+/* refresh_one_scope -- copy every value under an Environment registry key
+ * (HKLM's Machine scope or HKCU's User scope) into this process's own
+ * environment. C port of common.ps1's Update-SessionEnvironment: a package
+ * manager that just installed something (oh-my-posh setting POSH_THEMES_PATH,
+ * say) only writes the registry -- this process would never see it without
+ * reading it back out, which normally means a new shell. PATH itself is
+ * skipped here and rebuilt separately below, since the running value is
+ * Machine;User joined, not either alone.
+ */
+static void refresh_one_scope(HKEY root, const char *subkey) {
+    HKEY key;
+    DWORD index;
+    char name[256];
+    char value[4096];
+
+    if (RegOpenKeyExA(root, subkey, 0, KEY_READ, &key) != ERROR_SUCCESS) return;
+
+    index = 0;
+    for (;;) {
+        DWORD name_len = (DWORD)sizeof(name);
+        DWORD value_len = (DWORD)sizeof(value);
+        DWORD type;
+        LONG rc = RegEnumValueA(key, index, name, &name_len, NULL, &type, (BYTE *)value, &value_len);
+        if (rc == ERROR_NO_MORE_ITEMS) break;
+        if (rc != ERROR_SUCCESS) break;
+
+        /* RegEnumValueA does not guarantee a null terminator for a REG_SZ
+         * value that was stored without one -- force one within bounds. */
+        if (value_len >= sizeof(value)) value_len = sizeof(value) - 1;
+        value[value_len] = '\0';
+
+        if ((type == REG_SZ || type == REG_EXPAND_SZ) && _stricmp(name, "Path") != 0) {
+            SetEnvironmentVariableA(name, value);
+        }
+        index++;
+    }
+
+    RegCloseKey(key);
+}
+
+/* osr_reg_read_str -- one REG_SZ value into out, 1 on success (non-empty).
+ * Shared with lib/detect.c, which reads the Windows version facets out of the
+ * same hive. */
+int osr_reg_read_str(void *root, const char *subkey, const char *value,
+                     char *out, unsigned long out_sz) {
+    HKEY key;
+    DWORD len;
+    LONG rc;
+
+    out[0] = '\0';
+    if (RegOpenKeyExA((HKEY)root, subkey, 0, KEY_READ, &key) != ERROR_SUCCESS) return 0;
+
+    len = (DWORD)out_sz - 1;
+    rc = RegQueryValueExA(key, value, NULL, NULL, (BYTE *)out, &len);
+    RegCloseKey(key);
+
+    if (rc != ERROR_SUCCESS) { out[0] = '\0'; return 0; }
+    if (len >= out_sz) len = (DWORD)out_sz - 1;
+    out[len] = '\0';
+    return out[0] != '\0';
+}
+
+static void refresh_path(void) {
+    char machine[4096];
+    char user[4096];
+    char joined[8192];
+
+    osr_reg_read_str(HKEY_LOCAL_MACHINE,
+        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+        "Path", machine, sizeof(machine));
+    osr_reg_read_str(HKEY_CURRENT_USER, "Environment", "Path", user, sizeof(user));
+
+    sprintf(joined, "%s;%s", machine, user);
+    SetEnvironmentVariableA("Path", joined);
+}
+
+/* osr_pkg_refresh -- on POSIX this brings the package INDEX up to date. There
+ * is no shared index here: each of the three managers keeps its own and
+ * refreshes it on its own schedule. What does need refreshing after an install
+ * is this process's view of the environment, so that is what the same verb
+ * means on this side -- and it is called from the same place, right after an
+ * install, exactly as pkg.ps1 called Update-SessionEnvironment. */
+void osr_pkg_refresh(void) {
+    refresh_one_scope(HKEY_LOCAL_MACHINE,
+        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+    refresh_one_scope(HKEY_CURRENT_USER, "Environment");
+    refresh_path();
+}
+
+/* --- the managers ---------------------------------------------------------- */
+
+/* mgr_exe -- the command a method's manager is invoked as, which is also the
+ * name it is looked for on PATH under. NULL for a method that is not one of
+ * the three. */
+static const char *mgr_exe(Method m) {
+    switch (m) {
+        case M_SCOOP:  return "scoop";
+        case M_CHOCO:  return "choco";
+        case M_WINGET: return "winget";
+        default:       return NULL;
+    }
+}
+
+/* mgr_bootstrap_needs_admin -- can this manager be installed without
+ * elevation? Only scoop can: it deploys per-user under %USERPROFILE%. choco
+ * writes C:\ProgramData and winget's prerequisites are machine-wide packages,
+ * so both need Administrator to INSTALL THE MANAGER -- note that installing
+ * packages with an already-present winget usually does not. */
+static int mgr_bootstrap_needs_admin(Method m) { return m != M_SCOOP; }
+
+/* bootstrap_scoop -- scoop's own documented installer (scoop.sh /
+ * ScoopInstaller/Install). It deploys per-user under %USERPROFILE%\scoop and
+ * needs no elevation; from an elevated run it refuses unless -RunAsAdmin is
+ * passed, so both forms are covered. The admin variant uses a script block so
+ * it can take that parameter without nesting quotes inside the already-quoted
+ * -Command argument. */
+static void bootstrap_scoop(void) {
+    if (osr_is_admin()) {
+        osr_run_step_cmd("installing scoop (elevated)",
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+            "\"& ([scriptblock]::Create((irm get.scoop.sh))) -RunAsAdmin\"");
+    } else {
+        osr_run_step_cmd("installing scoop (no admin required)",
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+            "\"irm get.scoop.sh | iex\"");
+    }
+}
+
+/* bootstrap_choco -- the install one-liner from chocolatey.org/install. The
+ * TLS 1.2 opt-in (3072) is part of it: the script is fetched by .NET's
+ * WebClient, whose default protocol set is older than what
+ * community.chocolatey.org accepts. */
+static int bootstrap_choco(void) {
+    if (!osr_is_admin()) {
+        osr_warnf("choco is not installed, and its installer requires Administrator rights.");
+        osr_warnf("  or run this yourself in an Administrator PowerShell:");
+        osr_warnf("  Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object "
+                  "System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))");
+        osr_warnf("  https://chocolatey.org/install");
+        return 0;
+    }
+    osr_run_step_cmd("installing chocolatey",
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        "\"[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; "
+        "iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))\"");
+    return 1;
+}
+
+/* bootstrap_winget -- winget ships with Windows 11 and current Windows 10 (as
+ * part of App Installer), so reaching here means an image that never got it.
+ * Microsoft's documented route for that case is the Store, with no supported
+ * command-line installer, so this uses asheroto/winget-install, which installs
+ * the prerequisites (VCLibs, UI.Xaml) plus App Installer itself. Fetched from
+ * the project's own release asset rather than its URL shortener, so the
+ * command says what it runs. Needs elevation, and Windows 10 1809+ -- older
+ * builds cannot run winget at all. */
+static int bootstrap_winget(void) {
+    if (!osr_is_admin()) {
+        osr_warnf("winget is not installed, and installing it requires Administrator rights.");
+        osr_warnf("  or run this yourself in an Administrator PowerShell:");
+        osr_warnf("  irm https://github.com/asheroto/winget-install/releases/latest/download/"
+                  "winget-install.ps1 | iex");
+        osr_warnf("  https://github.com/asheroto/winget-install");
+        return 0;
+    }
+    osr_run_step_cmd("installing winget (App Installer + prerequisites)",
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        "\"irm https://github.com/asheroto/winget-install/releases/latest/download/"
+        "winget-install.ps1 | iex\"");
+    return 1;
+}
+
+/* ensure_manager -- 1 if the manager this row names is usable, installing it
+ * from its own vendor installer if it is not there. A missing manager is
+ * installed, never substituted -- see this section's header. */
+static int ensure_manager(Method m) {
+    const char *exe = mgr_exe(m);
+    char reason[200];
+
+    if (exe == NULL) return 0;
+    if (osr_have_cmd(exe)) return 1;
+
+    if (mgr_bootstrap_needs_admin(m) && !osr_is_admin()) {
+        sprintf(reason, "%s is not installed, and installing it needs Administrator rights.", exe);
+        /* A declined prompt is not fatal here: the bootstrap_* below prints
+         * the command to run by hand, and the caller reports the failure. */
+        (void)osr_elevate_now(reason);
+    }
+
+    switch (m) {
+        case M_SCOOP:  bootstrap_scoop(); break;
+        case M_CHOCO:  if (!bootstrap_choco()) return 0; break;
+        case M_WINGET: if (!bootstrap_winget()) return 0; break;
+        default: return 0;
+    }
+
+    osr_pkg_refresh();
+    if (osr_have_cmd(exe)) return 1;
+
+    osr_warnf("%s is still not on PATH after installing it -- a new shell may be needed", exe);
+    return 0;
+}
+
+/* ensure_bucket -- `scoop bucket add <b>`, tolerated when the bucket is
+ * already present (scoop exits non-zero in that case, which is not an error
+ * here). A genuinely failed add surfaces as the install below not finding the
+ * manifest, which is the message worth showing. */
+static void ensure_bucket(const char *bucket) {
+    char cmd[300];
+    char desc[200];
+    sprintf(cmd, "scoop bucket add %s || exit /b 0", bucket);
+    sprintf(desc, "scoop bucket %s", bucket);
+    osr_run_step_cmd(desc, cmd);
+}
+
+/* split_scoop_id -- a scoop id may carry its bucket as `extras/wezterm`. The
+ * bucket is added before the install; a bare id must therefore be in `main`,
+ * which scoop installs by default. */
+static void split_scoop_id(const char *id, char *bucket, unsigned long bucket_sz,
+                           char *name, unsigned long name_sz) {
+    const char *slash = strchr(id, '/');
+
+    bucket[0] = '\0';
+    if (slash == NULL) { osr_copy_bounded(name, name_sz, id); return; }
+    if ((unsigned long)(slash - id) < bucket_sz) {
+        memcpy(bucket, id, (size_t)(slash - id));
+        bucket[slash - id] = '\0';
+    }
+    osr_copy_bounded(name, name_sz, slash + 1);
+}
+
+/* --- the module-facing verbs ----------------------------------------------- */
+
+/* osr_pkg_native_installed -- there is no one native database to ask. The
+ * honest probe for "is this program here" on this side is whether its command
+ * resolves, which is also what every caller of this actually wants to know. */
+int osr_pkg_native_installed(const char *pkg) { return osr_have_cmd(pkg); }
+
+/* install_one -- one logical name, through the one provider its row names. */
+static int install_one(const char *name, const char *test_command) {
+    Str rhs;
+    Method m;
+    const char *arg;
+    const char *tc = (test_command != NULL && *test_command != '\0') ? test_command : name;
+    char cmd[900];
+    char desc[600];
+    int ok = 0;
+
+    /* Idempotency, section 2: already there is success, and is the common case
+     * on a rerun. */
+    if (osr_have_cmd(tc)) return 1;
+
+    str_init(&rhs);
+    osr_pkgmap_resolve(&rhs, name);
+    m = spec_method(str_text(&rhs));
+    arg = spec_arg(str_text(&rhs));
+
+    /* An unlisted name resolves to itself, which on the other side means "a
+     * native package of that name". There is no such thing here: every install
+     * route is a row, so a name with no row is a gap in the map and saying so
+     * is the whole value of this branch. */
+    if (m == M_NATIVE) {
+        osr_warnf("no lib/pkgmap/windows.map row for '%s' (this machine: %s / %s / %s)",
+                  name, env_str("OSR_CODENAME", "?"), env_str("OSR_VERSION_ID", "?"),
+                  env_str("OSR_ARCH", "?"));
+        str_free(&rhs);
+        return 0;
+    }
+
+    switch (m) {
+    case M_SOURCE:
+        /* A builder does whatever the package actually takes: resolve a
+         * version, install its own build dependencies through this same map,
+         * clone, compile, place several binaries. lib/build.c owns them on
+         * both systems. */
+        if (!osr_build_has(arg)) {
+            osr_warnf("source builder '%s' is not defined for %s -- add it to "
+                      "lib/build.c's registry", arg, name);
+            break;
+        }
+        osr_infof("building %s from source (%s)", name, arg);
+        ok = osr_build_run(arg);
+        if (!ok) osr_warnf("source build failed for %s", name);
+        break;
+
+    case M_SCRIPT:
+        /* The vendor's own installer, the route a project means by "paste this
+         * line into a shell". Per-user: a script that needs Administrator
+         * belongs behind a source: builder that can declare so, rather than
+         * failing halfway through. */
+        ok = osr_run_install_script(arg, name);
+        if (!ok) break;
+        if (!osr_have_cmd(tc)) {
+            osr_warnf("%s: the install script finished but '%s' is not on PATH yet -- "
+                      "open a new shell", name, tc);
+        }
+        break;
+
+    case M_SCOOP:
+    case M_CHOCO:
+    case M_WINGET:
+        if (!ensure_manager(m)) {
+            osr_warnf("  %-14s skipped: the map provides it through %s, which is not "
+                      "installed and could not be installed", name, mgr_exe(m));
+            break;
+        }
+        if (m == M_SCOOP) {
+            char bucket[96];
+            char id[256];
+            split_scoop_id(arg, bucket, sizeof(bucket), id, sizeof(id));
+            if (bucket[0] != '\0') ensure_bucket(bucket);
+            sprintf(cmd, "scoop install %s", id);
+        } else if (m == M_CHOCO) {
+            sprintf(cmd, "choco install %s -y", arg);
+        } else {
+            /* --id ... -e: exact id, and --source winget so a user's extra
+             * source cannot answer for it. Without -e winget accepts a
+             * substring match across name/id/moniker, which would reopen the
+             * ambiguity this map exists to close. */
+            sprintf(cmd, "winget install --id %s -e --source winget "
+                         "--accept-source-agreements --accept-package-agreements", arg);
+        }
+        sprintf(desc, "%s via %s (%s)", name, mgr_exe(m), arg);
+        if (osr_run_step_cmd(desc, cmd) != 0) break;
+
+        osr_pkg_refresh();
+        ok = 1;
+        if (!osr_have_cmd(tc)) {
+            /* The manager reported success but the command is not visible yet
+             * -- an installer that only writes PATH for new sessions (MSIX
+             * packages do this). Report the install, not a failure. */
+            osr_warnf("%s installed, but '%s' is not on PATH yet -- open a new shell",
+                      name, tc);
+        }
+        break;
+
+    default:
+        osr_warnf("lib/pkgmap/windows.map row for '%s' names a method this build does "
+                  "not know (%s) -- a row names one of scoop:, choco:, winget:, "
+                  "source: or script:", name, str_text(&rhs));
+        break;
+    }
+
+    str_free(&rhs);
+    return ok;
+}
+
+/* osr_pkg_need -- see lib/module.h. install_one already takes the probe, so
+ * this is the shape it was written for. */
+int osr_pkg_need(const char *name, const char *test_command) {
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_install");
+    return install_one(name, test_command);
+}
+
+int osr_pkg_install(const char *const names[]) {
+    size_t i;
+    int ok = 1;
+
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_install");
+
+    /* No batching pass: there is no single manager to hand a list to, and the
+     * three that exist are not interchangeable. One name, one row, one
+     * provider -- in manifest order, which is the dependency graph (section 4). */
+    for (i = 0; names[i] != NULL; i++) {
+        if (!install_one(names[i], NULL)) ok = 0;
+    }
+    return ok;
+}
+
+int osr_pkg_installed(const char *name) {
+    Str rhs;
+    Method m;
+    int yes;
+
+    str_init(&rhs);
+    osr_pkgmap_resolve(&rhs, name);
+    m = spec_method(str_text(&rhs));
+    str_free(&rhs);
+
+    /* Every method here ends in a program on PATH -- a manager's shim, a
+     * builder's placed binary, a vendor script's install -- so that is the one
+     * probe, rather than three managers' databases that would each answer for
+     * only their own. */
+    yes = osr_have_cmd(name);
+    (void)m;
+    return yes;
+}
+
+/* osr_pkg_remove -- each manager owns what it installed, so removal has to go
+ * back through the row that installed it. A source: or script: row has nothing
+ * to remove with: a builder's output is only ever overwritten in place, which
+ * is the cost the map's header names as the reason managers stay preferred. */
+int osr_pkg_remove(const char *const names[]) {
+    size_t i;
+    int ok = 1;
+
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_remove");
+
+    for (i = 0; names[i] != NULL; i++) {
+        Str rhs;
+        Method m;
+        const char *arg;
+        char cmd[600];
+        char desc[600];
+
+        str_init(&rhs);
+        osr_pkgmap_resolve(&rhs, names[i]);
+        m = spec_method(str_text(&rhs));
+        arg = spec_arg(str_text(&rhs));
+
+        if (mgr_exe(m) == NULL) {
+            osr_warnf("pkg_remove skips %s (%s): only a manager can remove what it "
+                      "installed", names[i], str_text(&rhs));
+            str_free(&rhs);
+            continue;
+        }
+        if (!osr_have_cmd(mgr_exe(m))) {
+            osr_infof("%s not installed - nothing to remove", names[i]);
+            str_free(&rhs);
+            continue;
+        }
+
+        if (m == M_SCOOP) {
+            char bucket[96];
+            char id[256];
+            split_scoop_id(arg, bucket, sizeof(bucket), id, sizeof(id));
+            sprintf(cmd, "scoop uninstall %s", id);
+        } else if (m == M_CHOCO) {
+            sprintf(cmd, "choco uninstall %s -y", arg);
+        } else {
+            sprintf(cmd, "winget uninstall --id %s -e --accept-source-agreements", arg);
+        }
+        sprintf(desc, "removing %s via %s", names[i], mgr_exe(m));
+        if (osr_run_step_cmd(desc, cmd) != 0) ok = 0;
+        str_free(&rhs);
+    }
+    return ok;
+}
+
+static int pkg_install_thunk(void *ctx) {
+    return osr_pkg_install((const char *const *)ctx);
+}
+
+static int pkg_remove_thunk(void *ctx) {
+    return osr_pkg_remove((const char *const *)ctx);
+}
+
+int osr_pkg_install_step(const char *desc, const char *const names[]) {
+    return osr_step(desc, pkg_install_thunk, (void *)names);
+}
+
+int osr_pkg_install_step_try(const char *desc, const char *const names[]) {
+    return osr_step_try(desc, pkg_install_thunk, (void *)names);
+}
+
+int osr_pkg_remove_step(const char *desc, const char *const names[]) {
+    return osr_step(desc, pkg_remove_thunk, (void *)names);
+}
+
+/* osr_pkg_cargo -- the cargo: provider on its own, exposed because a source:
+ * builder may want it as a fallback. cargo behaves the same here as anywhere;
+ * what differs is only that there is no `sudo -u` in front of it. */
+int osr_pkg_cargo(const char *name, const char *crate) {
+    char cmd[600];
+
+    if (osr_theme_only()) return osr_theme_only_skip("pkg_cargo");
+    if (osr_have_cmd(name)) return 1;
+    if (!osr_have_cmd("cargo")) {
+        osr_warnf("%s needs the Rust toolchain (cargo) -- install `rustup` first", name);
+        return 0;
+    }
+    sprintf(cmd, "cargo install %s --locked", crate);
+    if (osr_run_step_cmd(name, cmd) != 0) return 0;
+    return 1;
+}
+
+/* No AUR here, and nothing to prune: both are one distro family's problem.
+ * They are defined rather than omitted so that a module reads the same on
+ * both systems. */
+const char *osr_pkg_aur_helper(void) { return ""; }
+void osr_apt_prune_bootstrap_lists(void) { }
+
+/* osr_pkg_needs_admin -- would installing these names prompt for elevation?
+ * Asked once, before any work, so the UAC prompt happens up front instead of
+ * partway through a run -- the same reason install.sh warms the sudo
+ * credential at the top rather than mid-loop.
+ *
+ * True for a name whose manager is missing and whose installer needs
+ * Administrator, or whose source: builder declares that it does. A builder
+ * declares it for itself in lib/build.c's registry: only the builder knows
+ * whether its recipe ends in a system-wide installer, and guessing from the
+ * outside would be wrong in both directions. script: rows are per-user by
+ * definition (see lib/pkgmap/windows.map).
+ */
+int osr_pkg_needs_admin(char **names, int count) {
+    int i;
+
+    for (i = 0; i < count; i++) {
+        Str rhs;
+        Method m;
+        const char *arg;
+        int needs = 0;
+
+        str_init(&rhs);
+        osr_pkgmap_resolve(&rhs, names[i]);
+        m = spec_method(str_text(&rhs));
+        arg = spec_arg(str_text(&rhs));
+
+        if (m == M_SOURCE) {
+            needs = osr_build_needs_admin(arg);
+        } else if (mgr_exe(m) != NULL) {
+            needs = !osr_have_cmd(mgr_exe(m)) && mgr_bootstrap_needs_admin(m);
+        }
+        str_free(&rhs);
+        if (needs) return 1;
+    }
+    return 0;
+}
+
+/* --- the command surface --------------------------------------------------- */
+
+static int pkg_usage(void) {
+    fputs("usage: osr pkg <subcommand> [args]\n\n", stderr);
+    fputs("  install <names...>  resolve each name and run the provider its row names\n", stderr);
+    fputs("  remove <names...>   ask the manager that installed it to remove it\n", stderr);
+    fputs("  installed <name>    exit 0 when its command resolves\n", stderr);
+    fputs("  map <name>          what lib/pkgmap resolves that name to\n", stderr);
+    fputs("  refresh             re-read the environment from the registry\n", stderr);
+    return 2;
+}
+
+int osr_pkg_main(int argc, char **argv) {
+    if (argc < 2) return pkg_usage();
+
+    if (strcmp(argv[1], "map") == 0 && argc == 3) {
+        Str out;
+        str_init(&out);
+        osr_pkgmap_resolve(&out, argv[2]);
+        str_addc(&out, '\n');
+        out_flush(&out);
+        str_free(&out);
+        return 0;
+    }
+    if (strcmp(argv[1], "installed") == 0 && argc == 3) {
+        return osr_pkg_installed(argv[2]) ? 0 : 1;
+    }
+    if (strcmp(argv[1], "refresh") == 0 && argc == 2) {
+        osr_pkg_refresh();
+        return 0;
+    }
+    if ((strcmp(argv[1], "install") == 0 || strcmp(argv[1], "remove") == 0) && argc > 2) {
+        const char **names = (const char **)malloc((size_t)(argc - 1) * sizeof *names);
+        int ok;
+        int i;
+        if (names == NULL) osr_die_oom();
+        for (i = 2; i < argc; i++) names[i - 2] = argv[i];
+        names[argc - 2] = NULL;
+        ok = (strcmp(argv[1], "install") == 0) ? osr_pkg_install(names)
+                                               : osr_pkg_remove(names);
+        free((void *)names);
+        return ok ? 0 : 1;
+    }
+    return pkg_usage();
+}
+
+#endif /* _WIN32 */

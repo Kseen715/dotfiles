@@ -35,7 +35,9 @@
  *
  * C89 + POSIX.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "common.h"
 #include "cmds.h"
@@ -43,18 +45,6 @@
 #include "module.h"
 
 #include "render.h"
-
-#include <glob.h>
-/* tcc (0.9.27) reports __STDC_VERSION__ as C99 whatever -std= asks for, so
- * glibc's regex.h takes the branch that sizes regexec's __pmatch with a VLA
- * parameter -- which tcc then cannot parse ("'__nmatch' undeclared"). The
- * header leaves this macro as the override hook; empty is its own pre-C99
- * spelling, and that size was only ever documentation. */
-#ifndef _REGEX_NELTS
-#define _REGEX_NELTS(n)
-#endif
-#include <regex.h>
-#include <unistd.h>
 
 static const char *osr_root(void) { return env_str("OSR_ROOT", "."); }
 
@@ -188,25 +178,37 @@ void osr_theme_read_lines(Str *out, const char *path) {
 }
 
 /* match_prefix -- the sed `s|^<key>:[[:space:]]*||p` shape: does this directive
- * start with "<key>:"? If so, out points at the value (whitespace skipped).
- * The key goes through a BRE, as it did through sed. */
+ * start with "<key>:"? If so, *value points at the value, whitespace skipped.
+ *
+ * Written out rather than compiled as a BRE. The pattern was a regular
+ * expression only because the shell original reached it through sed, and it
+ * uses no metacharacter beyond [[:space:]]* -- while <regex.h> is POSIX-only,
+ * and this unit is one of the ones both cores compile. */
 static int match_prefix(const char *directive, const char *key, const char **value) {
-    regex_t re;
-    regmatch_t m;
-    Str pat;
-    int ok;
+    size_t key_len = strlen(key);
 
-    str_init(&pat);
-    str_addc(&pat, '^');
-    str_addz(&pat, key);
-    str_addz(&pat, ":[[:space:]]*");
-    ok = regcomp(&re, str_text(&pat), 0) == 0;
-    str_free(&pat);
-    if (!ok) return 0;
-    ok = regexec(&re, directive, 1, &m, 0) == 0;
-    if (ok) *value = directive + m.rm_eo;
-    regfree(&re);
-    return ok;
+    if (strncmp(directive, key, key_len) != 0) return 0;
+    if (directive[key_len] != ':') return 0;
+    directive += key_len + 1;
+    while (is_space(*directive)) directive++;
+    *value = directive;
+    return 1;
+}
+
+/* match_color_role -- `s|^color:[[:space:]]*<role>[[:space:]][[:space:]]*||p`,
+ * the other shape, and the reason the space after the role is REQUIRED rather
+ * than optional: without it `accent` would also match the `accent_red` row.
+ * Returns the value, or NULL when this directive is not that role's. */
+static const char *match_color_role(const char *directive, const char *role) {
+    const char *value;
+    size_t role_len = strlen(role);
+
+    if (!match_prefix(directive, "color", &value)) return NULL;
+    if (strncmp(value, role, role_len) != 0) return NULL;
+    value += role_len;
+    if (!is_space(*value)) return NULL;
+    while (is_space(*value)) value++;
+    return value;
 }
 
 /* --- the readers ---------------------------------------------------------- */
@@ -215,28 +217,15 @@ static int match_prefix(const char *directive, const char *key, const char **val
 /* osr_theme_list -- every theme name, one per line. A theme is a directory
  * under themes/ that carries a theme.list; anything else in there is not one. */
 void osr_theme_list(Str *out) {
-    Str pattern;
-    glob_t g;
-    size_t i;
+    Str dir;
 
-    str_init(&pattern);
-    str_addz(&pattern, osr_root());
-    str_addz(&pattern, "/themes/*/");
-    if (glob(str_text(&pattern), GLOB_NOCHECK, NULL, &g) != 0) { str_free(&pattern); return; }
-    str_free(&pattern);
-
-    for (i = 0; i < g.gl_pathc; i++) {
-        Str probe;
-        str_init(&probe);
-        str_addz(&probe, g.gl_pathv[i]);
-        str_addz(&probe, "theme.list");         /* the glob keeps its slash */
-        if (file_exists(str_text(&probe))) {
-            base_of(out, g.gl_pathv[i]);
-            str_addc(out, '\n');
-        }
-        str_free(&probe);
-    }
-    globfree(&g);
+    str_init(&dir);
+    str_addz(&dir, osr_root());
+    str_addz(&dir, "/themes");
+    /* "carries a theme.list" is the definition, not a convention: a stray
+     * folder under themes/ is not a theme and is not offered as one. */
+    osr_list_dir(out, str_text(&dir), "theme.list", NULL);
+    str_free(&dir);
 }
 
 static int cmd_list(void) {
@@ -355,34 +344,24 @@ static int cmd_configs(const char *name) {
  * keeps `accent` from matching `accent_red`. */
 static int cmd_color(const char *name, const char *role) {
     Str manifest;
-    Str pat;
     Str out;
     Directives d;
-    regex_t re;
     size_t i;
     int found = 0;
 
     str_init(&manifest);
     path_of(&manifest, "themes", name, "theme.list");
-    str_init(&pat);
-    str_addz(&pat, "^color:[[:space:]]*");
-    str_addz(&pat, role);
-    str_addz(&pat, "[[:space:]][[:space:]]*");
     str_init(&out);
-    if (regcomp(&re, str_text(&pat), 0) == 0) {
-        if (theme_lines(&d, str_text(&manifest))) {
-            for (i = 0; i < d.count && !found; i++) {
-                regmatch_t m;
-                if (regexec(&re, str_text(&d.items[i]), 1, &m, 0) == 0) {
-                    str_addz(&out, str_text(&d.items[i]) + m.rm_eo);
-                    found = 1;
-                }
+    if (theme_lines(&d, str_text(&manifest))) {
+        for (i = 0; i < d.count && !found; i++) {
+            const char *value = match_color_role(str_text(&d.items[i]), role);
+            if (value != NULL) {
+                str_addz(&out, value);
+                found = 1;
             }
-            directives_free(&d);
         }
-        regfree(&re);
+        directives_free(&d);
     }
-    str_free(&pat);
     out_flush(&out);
     str_free(&out);
     str_free(&manifest);
@@ -709,35 +688,25 @@ static void swatch(Str *out, const char *name) {
     path_of(&manifest, "themes", name, "theme.list");
     str_init(&value);
     for (i = 0; i < SWATCH_ROLE_COUNT; i++) {
-        Str pat;
         Directives d;
         size_t j;
         int found = 0;
-        regex_t re;
 
         if (strcmp(swatch_roles[i], "-") == 0) {
             str_addz(out, "\033[0m  ");
             continue;
         }
-        str_init(&pat);
-        str_addz(&pat, "^color:[[:space:]]*");
-        str_addz(&pat, swatch_roles[i]);
-        str_addz(&pat, "[[:space:]][[:space:]]*");
         str_reset(&value);
-        if (regcomp(&re, str_text(&pat), 0) == 0) {
-            if (theme_lines(&d, str_text(&manifest))) {
-                for (j = 0; j < d.count && !found; j++) {
-                    regmatch_t m;
-                    if (regexec(&re, str_text(&d.items[j]), 1, &m, 0) == 0) {
-                        str_addz(&value, str_text(&d.items[j]) + m.rm_eo);
-                        found = 1;
-                    }
+        if (theme_lines(&d, str_text(&manifest))) {
+            for (j = 0; j < d.count && !found; j++) {
+                const char *v = match_color_role(str_text(&d.items[j]), swatch_roles[i]);
+                if (v != NULL) {
+                    str_addz(&value, v);
+                    found = 1;
                 }
-                directives_free(&d);
             }
-            regfree(&re);
+            directives_free(&d);
         }
-        str_free(&pat);
         /* `case "$_sw_hex" in \#??????) ;; *) continue ;; esac` */
         if (!found || value.len != 7 || value.p[0] != '#') continue;
         str_addz(out, "\033[48;2;");
@@ -773,34 +742,14 @@ void osr_theme_menu(Str *out) {
     size_t pos = 0;
     Line line;
     FILE *tty;
+    FILE *tty_out;
     const char *dflt = env_str("OSR_DEFAULT_THEME", "xin");
     char answer[128];
     size_t i;
 
     /* the theme list, as `set -- $(osr_themes)` produced it */
-    {
-        Str pattern;
-        glob_t g;
-        str_init(&pattern);
-        str_addz(&pattern, osr_root());
-        str_addz(&pattern, "/themes/*/");
-        str_init(&names);
-        if (glob(str_text(&pattern), GLOB_NOCHECK, NULL, &g) == 0) {
-            for (i = 0; i < g.gl_pathc; i++) {
-                Str probe;
-                str_init(&probe);
-                str_addz(&probe, g.gl_pathv[i]);
-                str_addz(&probe, "theme.list");
-                if (file_exists(str_text(&probe))) {
-                    base_of(&names, g.gl_pathv[i]);
-                    str_addc(&names, '\n');
-                }
-                str_free(&probe);
-            }
-            globfree(&g);
-        }
-        str_free(&pattern);
-    }
+    str_init(&names);
+    osr_theme_list(&names);
     while (next_line(names.p != NULL ? names.p : "", names.len, &pos, &line)) {
         if (line.len == 0) continue;
         if (count == cap) {
@@ -822,7 +771,7 @@ void osr_theme_menu(Str *out) {
         return;
     }
 
-    tty = fopen("/dev/tty", "r+");
+    tty = osr_tty_open(&tty_out);
     str_init(&prompt);
     str_addz(&prompt, "Select a theme:\n");
     for (i = 0; i < count; i++) {
@@ -843,14 +792,15 @@ void osr_theme_menu(Str *out) {
     str_addz(&prompt, "Enter number [default ");
     str_addz(&prompt, dflt);
     str_addz(&prompt, "]: ");
-    if (tty != NULL) {
-        fwrite(str_text(&prompt), 1, prompt.len, tty);
-        fflush(tty);
+    if (tty_out != NULL) {
+        fwrite(str_text(&prompt), 1, prompt.len, tty_out);
+        fflush(tty_out);
     }
     str_free(&prompt);
 
     answer[0] = '\0';
     if (tty == NULL || fgets(answer, (int)sizeof(answer), tty) == NULL) answer[0] = '\0';
+    if (tty_out != NULL && tty_out != tty) fclose(tty_out);
     if (tty != NULL) fclose(tty);
     answer[strcspn(answer, "\r\n")] = '\0';
 
@@ -901,7 +851,7 @@ void osr_resolve_theme(const char *want) {
         if (!osr_theme_exists(want))
             osr_die("no such theme: '%s' (see: osr themes)", want);
         str_addz(&pick, want);
-    } else if (isatty(0) && isatty(1) && access("/dev/tty", R_OK) == 0) {
+    } else if (osr_interactive()) {
         osr_theme_menu(&pick);
     } else {
         str_addz(&pick, env_str("OSR_DEFAULT_THEME", "xin"));
@@ -911,8 +861,8 @@ void osr_resolve_theme(const char *want) {
     str_addz(&dir, osr_root());
     str_addz(&dir, "/themes/");
     str_addz(&dir, str_text(&pick));
-    setenv("OSR_THEME", str_text(&pick), 1);
-    setenv("OSR_THEME_DIR", str_text(&dir), 1);
+    osr_setenv("OSR_THEME", str_text(&pick));
+    osr_setenv("OSR_THEME_DIR", str_text(&dir));
     osr_infof("theme: %s", str_text(&pick));
     str_free(&pick); str_free(&dir);
 }
@@ -924,8 +874,8 @@ void osr_resolve_theme(const char *want) {
  * `[ -n "$OSR_THEME_DIR" ]`, so empty-and-exported is the value that makes them
  * all decline, and nothing is asked of the user for an answer nothing consumes. */
 void osr_unset_theme(void) {
-    setenv("OSR_THEME", "", 1);
-    setenv("OSR_THEME_DIR", "", 1);
+    osr_setenv("OSR_THEME", "");
+    osr_setenv("OSR_THEME_DIR", "");
 }
 
 /* osr_apply_theme_configs -- drop the whole config/ dirs the current theme

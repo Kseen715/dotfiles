@@ -1,32 +1,41 @@
-/* lib/modules.c -- the registry of Linux modules written in C.
+/* lib/modules.c -- the registry: every module written in C, on either system.
  *
- * A rice manifest names modules and install.sh runs each one. A module is
- * either a shell script under modules (there are none left -- see DESIGN 11a)
- * or a C
- * function registered here (modules/<name>.c, the POSIX branch of it where
- * the file also has a Windows one). install.sh asks `osr module has <name>`
- * and, when the answer is yes, runs `osr module run <name>` instead of
- * sourcing the script -- so the two kinds coexist and a rice.list never has
- * to know which is which.
+ * A rice manifest names modules and the runner runs each one. A module is
+ * modules/<name>.c exporting `int osrm_<name>(void)`, registered in the one
+ * table below, and everything it may call is lib/module.h.
  *
- * Writing one in C buys what the sh tier cannot have: `osr_step` can
- * fork a FUNCTION of this program, where the shell run_step could
- * only fork a shell function. Everything a module may call is lib/module.h.
+ * ONE TABLE. There used to be two -- this one, and a second at the repository
+ * root that the Windows core dispatched through with a different signature
+ * (repo_root, themes_root, map_path, theme, theme_only). That second table
+ * existed because the Windows core had no module runtime to read those from;
+ * lib/module.c is that runtime now, on both systems, so a module reads its
+ * context through osr_mod_* like every other and the two tables are one.
+ *
+ * WHICH ROWS ARE GUARDED, and why guarded rather than split: a module that
+ * only one system can run is still one file in modules/ with an empty branch
+ * for the other (modules/win-tweaks.c, modules/flameshot.c). The guard here is
+ * about the REGISTRY, and it says something narrower -- do not offer this name
+ * on a system where running it would do nothing. `osr module has flameshot`
+ * answering yes on Windows and then installing nothing is worse than answering
+ * no, because the runner's next move depends on the answer.
  *
  * The `session` field is the C form of a .sh module's `# session:` first line
  * (x11 / wayland / x11+wayland), which is what lets `grep -l` answer "what
- * breaks if I move this rice to Wayland" without reading every module.
+ * breaks if I move this rice to Wayland" without reading every module. Windows
+ * rows carry `windows`, which is the same kind of statement.
  *
- *   osr module list           every C module, one per line
- *   osr module has <name>     exit 0 when this tier owns that name
+ *   osr module list           every module, one per line
+ *   osr module has <name>     exit 0 when this build owns that name
  *   osr module session <name> its session marker
  *   osr module themable <name>  exit 0 when it consumes the theme
  *   osr module run <name>     install it
- *   osr module run --theme-only <name>   only its theme layer (§6a)
+ *   osr module run --theme-only <name>   only its theme layer (section 6a)
  *
- * C89 + POSIX.
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "common.h"
 #include "cmds.h"
@@ -49,10 +58,30 @@ typedef struct {
 #define MODULE_RUN(fn) fn
 #endif
 
+/* Modules both systems have. */
+int osrm_fastfetch(void);
+int osrm_starship(void);
+int osrm_wezterm(void);
+
+#ifdef _WIN32
+/* Windows-only: the app modules whose program is Windows-only, and the
+ * win- group, which is not app modules at all -- one OS-level pass each
+ * over the machine itself. See modules/WINDOWS.md. */
+int osrm_pwsh(void);
+int osrm_oh_my_posh(void);
+int osrm_win_tweaks(void);
+int osrm_win_update(void);
+int osrm_win_debloat(void);
+int osrm_win_winutil(void);
+#else
+/* POSIX-only: every one of these installs a program that assumes an X11 or
+ * Wayland desktop, a systemd/openrc unit, or a distro package manager. */
 int osrm_alacritty(void);
+int osrm_amacc(void);
 int osrm_amnezia_vpn(void);
 int osrm_arandr(void);
 int osrm_archives(void);
+int osrm_arocc(void);
 int osrm_audio(void);
 int osrm_avahi(void);
 int osrm_benchmark(void);
@@ -63,7 +92,9 @@ int osrm_celluloid(void);
 int osrm_cliphist(void);
 int osrm_codecs(void);
 int osrm_copyq(void);
+int osrm_cproc(void);
 int osrm_cpu_microcodes(void);
+int osrm_cuik(void);
 int osrm_curseforge(void);
 int osrm_datagrip(void);
 int osrm_discord(void);
@@ -74,7 +105,6 @@ int osrm_docker(void);
 int osrm_dunst(void);
 int osrm_easyeffects(void);
 int osrm_evolution(void);
-int osrm_fastfetch(void);
 int osrm_fcitx5(void);
 int osrm_feh(void);
 int osrm_firefox(void);
@@ -108,6 +138,7 @@ int osrm_inxi(void);
 int osrm_kate(void);
 int osrm_kdeconnect(void);
 int osrm_keyring(void);
+int osrm_lacc(void);
 int osrm_lcc(void);
 int osrm_lightdm(void);
 int osrm_loupe(void);
@@ -139,7 +170,8 @@ int osrm_rofi(void);
 int osrm_rust(void);
 int osrm_sddm(void);
 int osrm_serie(void);
-int osrm_starship(void);
+int osrm_shecc(void);
+int osrm_smallerc(void);
 int osrm_steam(void);
 int osrm_swap(void);
 int osrm_swaylock(void);
@@ -159,10 +191,10 @@ int osrm_waybar(void);
 int osrm_waydroid(void);
 int osrm_wayland(void);
 int osrm_waylock(void);
-int osrm_wezterm(void);
 int osrm_wleave(void);
 int osrm_wlogout(void);
 int osrm_wofi(void);
+int osrm_xcc(void);
 int osrm_xdg(void);
 int osrm_xorg(void);
 int osrm_yandex_browser(void);
@@ -171,12 +203,26 @@ int osrm_zen_browser(void);
 int osrm_zig(void);
 int osrm_zip(void);
 int osrm_zsh(void);
+#endif
 
 static const ModuleRow modules[] = {
+#ifdef _WIN32
+    { "fastfetch",       "windows",     1, MODULE_RUN(osrm_fastfetch) },
+    { "oh-my-posh",      "windows",     1, MODULE_RUN(osrm_oh_my_posh) },
+    { "pwsh",            "windows",     0, MODULE_RUN(osrm_pwsh) },
+    { "starship",        "windows",     1, MODULE_RUN(osrm_starship) },
+    { "wezterm",         "windows",     1, MODULE_RUN(osrm_wezterm) },
+    { "win-debloat",     "windows",     0, MODULE_RUN(osrm_win_debloat) },
+    { "win-tweaks",      "windows",     0, MODULE_RUN(osrm_win_tweaks) },
+    { "win-update",      "windows",     0, MODULE_RUN(osrm_win_update) },
+    { "win-winutil",     "windows",     0, MODULE_RUN(osrm_win_winutil) }
+#else
     { "alacritty",       "x11+wayland", 1, MODULE_RUN(osrm_alacritty) },
+    { "amacc",           "x11+wayland", 0, MODULE_RUN(osrm_amacc) },
     { "amnezia-vpn",     "x11+wayland", 0, MODULE_RUN(osrm_amnezia_vpn) },
     { "arandr",          "x11",         0, MODULE_RUN(osrm_arandr) },
     { "archives",        "x11+wayland", 0, MODULE_RUN(osrm_archives) },
+    { "arocc",           "x11+wayland", 0, MODULE_RUN(osrm_arocc) },
     { "audio",           "x11+wayland", 0, MODULE_RUN(osrm_audio) },
     { "avahi",           "x11+wayland", 0, MODULE_RUN(osrm_avahi) },
     { "benchmark",       "x11+wayland", 0, MODULE_RUN(osrm_benchmark) },
@@ -187,7 +233,9 @@ static const ModuleRow modules[] = {
     { "cliphist",        "wayland",     1, MODULE_RUN(osrm_cliphist) },
     { "codecs",          "x11+wayland", 0, MODULE_RUN(osrm_codecs) },
     { "copyq",           "x11",         1, MODULE_RUN(osrm_copyq) },
+    { "cproc",           "x11+wayland", 0, MODULE_RUN(osrm_cproc) },
     { "cpu-microcodes",  "x11+wayland", 0, MODULE_RUN(osrm_cpu_microcodes) },
+    { "cuik",            "x11+wayland", 0, MODULE_RUN(osrm_cuik) },
     { "curseforge",      "x11+wayland", 0, MODULE_RUN(osrm_curseforge) },
     { "datagrip",        "x11+wayland", 0, MODULE_RUN(osrm_datagrip) },
     { "discord",         "x11+wayland", 0, MODULE_RUN(osrm_discord) },
@@ -232,6 +280,7 @@ static const ModuleRow modules[] = {
     { "kate",            "x11+wayland", 1, MODULE_RUN(osrm_kate) },
     { "kdeconnect",      "x11+wayland", 0, MODULE_RUN(osrm_kdeconnect) },
     { "keyring",         "x11+wayland", 0, MODULE_RUN(osrm_keyring) },
+    { "lacc",            "x11+wayland", 0, MODULE_RUN(osrm_lacc) },
     { "lcc",             "x11+wayland", 0, MODULE_RUN(osrm_lcc) },
     { "lightdm",         "x11",         1, MODULE_RUN(osrm_lightdm) },
     { "loupe",           "x11+wayland", 0, MODULE_RUN(osrm_loupe) },
@@ -263,6 +312,8 @@ static const ModuleRow modules[] = {
     { "rust",            "x11+wayland", 0, MODULE_RUN(osrm_rust) },
     { "sddm",            "x11+wayland", 1, MODULE_RUN(osrm_sddm) },
     { "serie",           "x11+wayland", 1, MODULE_RUN(osrm_serie) },
+    { "shecc",           "x11+wayland", 0, MODULE_RUN(osrm_shecc) },
+    { "smallerc",        "x11+wayland", 0, MODULE_RUN(osrm_smallerc) },
     { "starship",        "x11+wayland", 1, MODULE_RUN(osrm_starship) },
     { "steam",           "x11+wayland", 0, MODULE_RUN(osrm_steam) },
     { "swap",            "x11+wayland", 0, MODULE_RUN(osrm_swap) },
@@ -287,6 +338,7 @@ static const ModuleRow modules[] = {
     { "wleave",          "wayland",     1, MODULE_RUN(osrm_wleave) },
     { "wlogout",         "wayland",     1, MODULE_RUN(osrm_wlogout) },
     { "wofi",            "wayland",     1, MODULE_RUN(osrm_wofi) },
+    { "xcc",             "x11+wayland", 0, MODULE_RUN(osrm_xcc) },
     { "xdg",             "x11+wayland", 0, MODULE_RUN(osrm_xdg) },
     { "xorg",            "x11",         1, MODULE_RUN(osrm_xorg) },
     { "yandex-browser",  "x11+wayland", 0, MODULE_RUN(osrm_yandex_browser) },
@@ -295,6 +347,7 @@ static const ModuleRow modules[] = {
     { "zig",             "x11+wayland", 0, MODULE_RUN(osrm_zig) },
     { "zip",             "x11+wayland", 0, MODULE_RUN(osrm_zip) },
     { "zsh",             "x11+wayland", 1, MODULE_RUN(osrm_zsh) }
+#endif
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 

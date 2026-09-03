@@ -25,7 +25,7 @@
 #include "../lib/common.h"
 #include "../lib/config.h"
 #include "../lib/render.h"
-#include "../lib/nerdfont.h"
+#include "../lib/fonts.h"
 
 #include <stddef.h>
 #include <unistd.h>

@@ -1,33 +1,44 @@
-/* lib/fonts.h -- Nerd Font install, C port of windows-rice/src/fonts.ps1's
- * Install-NerdFont (the scoop/choco half only).
+/* lib/fonts.h -- Nerd Font installation, the C port of lib/fonts.sh.
  *
- * NOT ported: fonts.ps1's manual GitHub-zip-download-and-register fallback
- * for a machine with neither scoop nor choco (downloads a release asset,
- * extracts it, registers each .ttf via the Shell.Application COM copy).
- * That's a real, sizable feature on its own (HTTP + zip extraction + font
- * registration) with no data source yet for "which asset for which font"
- * beyond scraping the GitHub release JSON osr_fetch_to_buffer (lib/net.h)
- * could fetch -- a known, documented gap, not a silent omission. scoop and
- * choco cover the realistic case this session's dev machine and most
- * users are in.
+ * Icons and glyphs are a shared cosmetic asset several modules need (foot,
+ * starship, wezterm, oh-my-posh), so the logic lives in one unit rather than
+ * being pasted per module.
  *
- * C89.
+ * BEST-EFFORT BY CONTRACT, on both systems: a font is cosmetic, so every
+ * failure warns and lets the module carry on rather than aborting a rice or
+ * breaking the rerun contract (DESIGN section 2). Idempotent: an already
+ * registered family is a skip, and a skip is a success.
+ *
+ * lib/fonts.c holds the two bodies. They differ more than most, because
+ * "install a font" is two different acts: a directory of files plus an index
+ * on POSIX, a registered object handed to a package manager on Windows. What
+ * a caller sees is the same one call either way.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
 #ifndef OSR_FONTS_H
 #define OSR_FONTS_H
 
-/* osr_font_installed -- 1 if a font family whose name contains `name`
- * (case-insensitive substring, matches fonts.ps1's own [regex]::Escape
- * match) is already installed, else 0.
- */
-int osr_font_installed(const char *name);
-
 /* osr_install_nerd_font -- ensure the Nerd Font variant of `name` (e.g.
- * "JetBrainsMono") is installed: skip if osr_font_installed already says
- * yes, else try scoop's nerd-fonts bucket, else choco. Returns 1 on
- * success (already-installed counts as success), 0 if neither manager is
- * available or both attempts failed.
+ * "JetBrainsMono") is installed. NULL or "" means the default, JetBrainsMono.
+ *
+ * POSIX: fetch the release zip from ryanoasis/nerd-fonts, unpack it into the
+ * user's font directory and refresh fontconfig, all as OSR_USER (user-space,
+ * section 8). Always returns 1 -- see the best-effort contract above.
+ *
+ * Windows: hand it to scoop's nerd-fonts bucket, else to choco. Returns 1 on
+ * success (already-installed counts), 0 when neither manager is available or
+ * both attempts failed.
  */
 int osr_install_nerd_font(const char *name);
+
+/* osr_font_installed -- is a font family whose name CONTAINS `name` already
+ * registered? A substring match, case-insensitively, because the installed
+ * family carries decoration the caller does not know about ("JetBrainsMono
+ * Nerd Font Mono"). Windows only: the POSIX body asks fontconfig from inside
+ * osr_install_nerd_font and has no reason to publish the probe. */
+#ifdef _WIN32
+int osr_font_installed(const char *name);
+#endif
 
 #endif /* OSR_FONTS_H */

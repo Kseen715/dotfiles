@@ -1,8 +1,18 @@
-/* lib/service.c -- C port of lib/service.sh. See lib/service.h.
+/* lib/service.c -- enable a service under whatever init this machine runs. See
+ * lib/service.h.
  *
- * C89 + POSIX.
+ * The logical-name lookup through lib/servicemap/ is shared: "which real
+ * service does `bluetooth` mean here" is one question, and its answer is a map
+ * row on every system. Only the enabling itself has two bodies, and the
+ * Windows one is short because there is exactly one service manager and there
+ * has been since NT -- lib/servicemap/ carries no windows.map for the same
+ * reason, since a Windows service's name IS the name you use.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +21,7 @@
 #include "service.h"
 #include "cmds.h"
 #include "module.h"
+#include "elevate.h"
 
 /* map_line_value -- if line is `<key> = <value>`, append the value to out and
  * return 1. Leading space is skipped, a trailing ` #comment` is dropped, and
@@ -81,6 +92,93 @@ void osr_service_resolve(Str *out, const char *name) {
     str_free(&path);
     str_addz(out, name);
 }
+
+#ifdef _WIN32
+
+/* osr_service_enable -- set it to start automatically, then start it.
+ *
+ * `start= auto` with the space AFTER the '=' is sc.exe's own syntax, not a
+ * typo: sc parses `option= value` pairs and rejects `option=value`.
+ *
+ * Both steps need Administrator, and neither is worth failing a whole module
+ * over: a rice that could not enable a service still installed the program.
+ * The declined case says so once rather than per service. */
+int osr_service_enable(const char *name) {
+    Str svc;
+    char *argv[5];
+    int ok;
+
+    if (osr_theme_only()) return osr_theme_only_skip("enable_service");
+
+    str_init(&svc);
+    osr_service_resolve(&svc, name);
+
+    if (!osr_is_admin()) {
+        osr_warnf("service '%s': changing a service needs Administrator rights -- skipped",
+                  str_text(&svc));
+        str_free(&svc);
+        return 0;
+    }
+
+    argv[0] = (char *)"sc";
+    argv[1] = (char *)"config";
+    argv[2] = svc.p;
+    argv[3] = (char *)"start= auto";
+    argv[4] = NULL;
+    ok = osr_run_quiet(argv) == 0;
+    if (!ok) osr_warnf("service '%s': could not set it to start automatically", str_text(&svc));
+
+    argv[1] = (char *)"start";
+    argv[2] = svc.p;
+    argv[3] = NULL;
+    /* Already running exits non-zero and is a success: the service is in the
+     * state this asked for, which is the whole of what enable means. */
+    (void)osr_run_quiet(argv);
+
+    str_free(&svc);
+    return ok;
+}
+
+/* osr_service_disable -- stop it, then set it never to start. In that order,
+ * for the same reason the POSIX body stops before disabling: disabling a
+ * running service changes nothing until the next boot, and the point of the
+ * verb is that it is off NOW. `start= disabled` is sc.exe's spelling. */
+int osr_service_disable(const char *name) {
+    Str svc;
+    char *argv[5];
+    int ok;
+
+    if (osr_theme_only()) return osr_theme_only_skip("disable_service");
+
+    str_init(&svc);
+    osr_service_resolve(&svc, name);
+
+    if (!osr_is_admin()) {
+        osr_warnf("service '%s': changing a service needs Administrator rights -- skipped",
+                  str_text(&svc));
+        str_free(&svc);
+        return 0;
+    }
+
+    argv[0] = (char *)"sc";
+    argv[1] = (char *)"stop";
+    argv[2] = svc.p;
+    argv[3] = NULL;
+    /* Not running is a non-zero exit and the state this asked for. */
+    (void)osr_run_quiet(argv);
+
+    argv[1] = (char *)"config";
+    argv[2] = svc.p;
+    argv[3] = (char *)"start= disabled";
+    argv[4] = NULL;
+    ok = osr_run_quiet(argv) == 0;
+    if (!ok) osr_warnf("service '%s': could not disable it", str_text(&svc));
+
+    str_free(&svc);
+    return ok;
+}
+
+#else /* !_WIN32 */
 
 int osr_service_enable(const char *name) {
     Str svc;
@@ -213,6 +311,8 @@ int osr_service_disable(const char *name) {
     return rc;
 }
 
+#endif /* _WIN32 */
+
 static int service_usage(void) {
     fputs("usage: osr service <subcommand> [args]\n\n", stderr);
     fputs("  resolve <name>   this init's real unit name\n", stderr);
@@ -220,6 +320,7 @@ static int service_usage(void) {
     fputs("  disable <name>   stop + disable\n", stderr);
     return 2;
 }
+
 
 int osr_service_main(int argc, char **argv) {
     if (argc < 2) return service_usage();

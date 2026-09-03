@@ -1,10 +1,16 @@
-/* lib/preflight.c -- C port of lib/preflight.sh. See lib/preflight.h.
+/* lib/preflight.c -- the rice preconditions. See lib/preflight.h.
  *
- * C89 + POSIX.
+ * Os-common: every predicate is a question about the detected facts or about
+ * whether a path exists, and both are answered the same way wherever this
+ * runs. What differs is only which answers a given machine gives, which is
+ * lib/detect.c's business.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
-#include <glob.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -20,26 +26,30 @@ static int env_eq(const char *name, const char *value) {
 }
 
 /* gpu_present -- a render node under OSR_DRI (which the tests override, the
- * same way OSR_DRM works in detect.sh), or a count detect.sh already took. */
+ * same way OSR_DRM works in the detector), or a count detection already took.
+ *
+ * The count is asked first, and it is what answers on a system with no
+ * /dev/dri at all: the render node is Linux's way of saying "there is a GPU
+ * here", not the only way. */
 static int gpu_present(void) {
-    Str pattern;
-    glob_t g;
-    int found;
+    Str dir, names;
+    size_t pos = 0;
+    Line line;
+    int found = 0;
 
     if (env_long("OSR_GPU_COUNT", 0) > 0) return 1;
 
-    str_init(&pattern);
-    str_addz(&pattern, env_str("OSR_DRI", "/dev/dri"));
-    str_addz(&pattern, "/renderD*");
-    found = 0;
-    if (glob(str_text(&pattern), 0, NULL, &g) == 0) {
-        size_t i;
-        for (i = 0; i < g.gl_pathc; i++) {
-            if (file_exists(g.gl_pathv[i]) || dir_exists(g.gl_pathv[i])) { found = 1; break; }
-        }
-        globfree(&g);
+    str_init(&dir);
+    str_addz(&dir, env_str("OSR_DRI", "/dev/dri"));
+    str_init(&names);
+    osr_list_dir(&names, str_text(&dir), NULL, NULL);
+    while (!found && next_line(str_text(&names), names.len, &pos, &line)) {
+        /* `renderD*` -- the render nodes, not card* (which a headless
+         * framebuffer also has) and not by-path/. */
+        if (line.len > 7 && memcmp(line.start, "renderD", 7) == 0) found = 1;
     }
-    str_free(&pattern);
+    str_free(&names);
+    str_free(&dir);
     return found;
 }
 

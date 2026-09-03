@@ -1,21 +1,65 @@
-/* lib/build.c -- lib/build.sh's source: providers.
+/* lib/build.c -- the `source:` providers: one builder per package a manager
+ * cannot serve on some target, plus the toolkit they are written against.
  *
- * Each builder resolves its own version (osr_github_latest, G4) and arch
- * (OSR_ARCH / OSR_ARCH_DEB, G8), so the pkgmap row and the rice list stay
- * logic-free. Idempotency is owned by the caller's `command -v <name>` probe
- * (§2, §4) -- except where a builder says otherwise, which is fzf: an old
- * distro fzf satisfies that probe and would never be replaced, so the version
- * re-check lives in the builder.
+ * A builder is named by a pkgmap row -- `lsd@jammy = source:provide_lsd_deb`,
+ * `wezterm@arm64 = source:provide_wezterm` -- and lib/pkg.c looks that name up
+ * in the registry at the bottom of this file. Why a function and not a URL: a
+ * URL can only ever say "download this", while a builder can resolve a
+ * version, pick an asset per architecture, install its own build dependencies
+ * back through the same map, clone with submodules, run a compiler, retry a
+ * different way, and place several binaries at the end. The map row stays
+ * logic-free either way; the logic lives here, in one named place per package.
  *
- * The plumbing a shell got for free -- mktemp, find, rm -rf -- is done in
- * process here rather than forked, since that is the point of the port. The
- * commands that MATTER (the download, tar, install, apt-get) are the same
- * argv the sh original ran, in the same order, which is what the parity test
- * compares.
+ * Idempotency belongs to the CALLER, not the builder: lib/pkg.c probes whether
+ * the program is already there and never enters a builder that has no work to
+ * do. An unknown builder name is a map error, reported as such, never a silent
+ * skip.
  *
- * C89 + POSIX.
+ * THREE PARTS, in this order:
+ *
+ *   1. the artifact helpers -- which release asset to take, what kind of file
+ *      it is, how to read a builder's spec. Pure string work with no I/O in
+ *      it, shared by both systems, and unit-tested on whichever host happens
+ *      to run the suite (test/unit_c/winbin_test.c).
+ *   2. the POSIX builders -- 26 of them, plus both archive primitives. Each
+ *      resolves its own version (osr_github_latest) and architecture, so the
+ *      pkgmap row and the rice list stay logic-free. The plumbing a shell got
+ *      for free -- mktemp, find, rm -rf -- is done in process rather than
+ *      forked, since that is the point of the port; the commands that MATTER
+ *      (the download, tar, install, apt-get) are the same argv the sh original
+ *      ran, in the same order.
+ *   3. the Windows builders and the toolkit under them -- fetch a release
+ *      asset, unpack it, find the executable, put a directory on PATH, hand a
+ *      file to a vendor installer. Everything they write goes under
+ *      %LOCALAPPDATA%\osr, so a builder needs no elevation unless it chooses
+ *      to run a system-wide installer and says so in the registry.
+ *
+ * A builder returns 1 for success. The failure paths lib/build.sh spelled
+ * `error ...` are osr_die on the POSIX side, same as there: a half-installed
+ * program is not something to limp on from. The Windows builders warn and
+ * return 0 instead, because their caller already has a "report it and carry
+ * on" contract -- see lib/pkg.c.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
+
+#include "build.h"
+#include "cmds.h"
+#include "fetch.h"
+#include "module.h"
+#include "ui.h"
+
+#include <stdarg.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "elevate.h"
+#include "fetch.h"
+#else
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -23,11 +67,203 @@
 #include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
-#include "build.h"
-#include "cmds.h"
-#include "fetch.h"
-#include "module.h"
+/* ===========================================================================
+ * 1. the artifact helpers
+ *
+ * No I/O, so the rules that decide WHICH file gets downloaded and WHAT it is
+ * can be asserted without a network -- and on any host, which is why they sit
+ * above the split rather than inside the Windows body that is their only
+ * caller today.
+ * ======================================================================== */
+
+int osr_glob_match(const char *pattern, const char *text) {
+    const char *p = pattern;
+    const char *t = text;
+    const char *star = NULL;
+    const char *retry = NULL;
+
+    while (*t != '\0') {
+        if (*p == '*') {
+            star = p;
+            p++;
+            retry = t;
+        } else if (*p == *t) {
+            p++;
+            t++;
+        } else if (star != NULL) {
+            /* backtrack: let the last '*' swallow one more character */
+            p = star + 1;
+            retry++;
+            t = retry;
+        } else {
+            return 0;
+        }
+    }
+
+    while (*p == '*') p++;
+    return *p == '\0';
+}
+
+/* basename_of -- the part of a URL after the last '/'. */
+static const char *basename_of(const char *url) {
+    const char *slash = strrchr(url, '/');
+    return (slash != NULL) ? slash + 1 : url;
+}
+
+/* cat_bounded -- append src to dst, or refuse and leave dst untouched when
+ * it would not fit. Every path and command below is assembled with this
+ * rather than sprintf: the inputs are filesystem paths whose lengths are
+ * only known at runtime, and a silently truncated path is a command that
+ * acts on the wrong file. Returns 1 when the append happened.
+ */
+static int cat_bounded(char *dst, unsigned long dst_sz, const char *src) {
+    unsigned long dst_len = (unsigned long)strlen(dst);
+    unsigned long src_len = (unsigned long)strlen(src);
+
+    if (dst_len + src_len >= dst_sz) return 0;
+    memcpy(dst + dst_len, src, src_len + 1);
+    return 1;
+}
+
+/* ends_with_ci -- case-insensitive suffix test, without depending on a
+ * platform's _stricmp in this portable half of the file. */
+static int ends_with_ci(const char *text, const char *suffix) {
+    unsigned long tlen = (unsigned long)strlen(text);
+    unsigned long slen = (unsigned long)strlen(suffix);
+    unsigned long i;
+
+    if (slen > tlen) return 0;
+    text += tlen - slen;
+
+    for (i = 0; i < slen; i++) {
+        char a = text[i];
+        char b = suffix[i];
+        if (a >= 'A' && a <= 'Z') a = (char)(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = (char)(b - 'A' + 'a');
+        if (a != b) return 0;
+    }
+    return 1;
+}
+
+osr_artifact_kind osr_artifact_kind_of_file(const char *filename) {
+    if (ends_with_ci(filename, ".zip")) return OSR_ARTIFACT_ZIP;
+    if (ends_with_ci(filename, ".msi")) return OSR_ARTIFACT_MSI;
+    /* A bare .exe is assumed to be the program, not an installer: that is
+     * what vendors publish alongside archives, and a builder that means
+     * otherwise says so with an explicit `setup,` kind (whose silent
+     * switches it must supply anyway). */
+    if (ends_with_ci(filename, ".exe")) return OSR_ARTIFACT_EXE;
+    return OSR_ARTIFACT_AUTO;
+}
+
+int osr_parse_artifact_spec(const char *spec, osr_artifact_kind *kind,
+                          char *args, unsigned long args_sz,
+                          char *source, unsigned long source_sz) {
+    static const struct { const char *name; osr_artifact_kind kind; } kinds[] = {
+        { "zip",   OSR_ARTIFACT_ZIP },
+        { "exe",   OSR_ARTIFACT_EXE },
+        { "msi",   OSR_ARTIFACT_MSI },
+        { "setup", OSR_ARTIFACT_SETUP }
+    };
+    const char *colon;
+    const char *comma;
+    unsigned long head_len;
+    unsigned long name_len;
+    unsigned long i;
+
+    *kind = OSR_ARTIFACT_AUTO;
+    args[0] = '\0';
+    source[0] = '\0';
+
+    if (spec == NULL || spec[0] == '\0') return 0;
+
+    /* The kind, if present, is the text before the first ':'. A plain URL
+     * puts "https" there and a gh source puts "gh", neither of which is a
+     * kind -- so an unprefixed spec falls through untouched. */
+    colon = strchr(spec, ':');
+    if (colon != NULL) {
+        head_len = (unsigned long)(colon - spec);
+        comma = memchr(spec, ',', head_len);
+        name_len = (comma != NULL) ? (unsigned long)(comma - spec) : head_len;
+
+        for (i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++) {
+            if (name_len != (unsigned long)strlen(kinds[i].name)) continue;
+            if (strncmp(spec, kinds[i].name, name_len) != 0) continue;
+
+            *kind = kinds[i].kind;
+
+            /* `setup,/S,/NORESTART:` -- the switches after the kind become
+             * the installer's arguments, one per comma. */
+            if (comma != NULL) {
+                unsigned long args_len = head_len - name_len - 1;
+                if (args_len >= args_sz) return 0;
+                memcpy(args, comma + 1, args_len);
+                args[args_len] = '\0';
+                for (i = 0; i < args_len; i++) {
+                    if (args[i] == ',') args[i] = ' ';
+                }
+            }
+
+            spec = colon + 1;
+            break;
+        }
+    }
+
+    if (spec[0] == '\0' || strlen(spec) >= source_sz) return 0;
+    strcpy(source, spec);
+    return 1;
+}
+
+int osr_pick_release_asset(const char *json, const char *pattern,
+                          char *out, unsigned long out_sz) {
+    static const char key[] = "\"browser_download_url\"";
+    const char *p = json;
+
+    out[0] = '\0';
+
+    for (;;) {
+        const char *start;
+        const char *end;
+        unsigned long len;
+
+        p = strstr(p, key);
+        if (p == NULL) return 0;
+        p += sizeof(key) - 1;
+
+        /* ... "browser_download_url" : "https://..." -- tolerate any
+         * spacing between the key, the colon and the value. */
+        while (*p == ' ' || *p == '\t' || *p == ':') p++;
+        if (*p != '"') continue;
+
+        start = p + 1;
+        end = strchr(start, '"');
+        if (end == NULL) return 0;
+
+        len = (unsigned long)(end - start);
+        if (len < out_sz) {
+            memcpy(out, start, len);
+            out[len] = '\0';
+            /* Matching the filename, never the whole URL, so a pattern can
+             * never be satisfied by something in the host or path. */
+            if (osr_glob_match(pattern, basename_of(out))) return 1;
+            out[0] = '\0';
+        }
+
+        p = end + 1;
+    }
+}
+
+/* -------------------------------------------------------------------------
+ * the toolkit itself -- Windows only.
+ * ---------------------------------------------------------------------- */
+
+#ifndef _WIN32
+
+/* ===========================================================================
+ * 2. the POSIX builders
+ * ======================================================================== */
 
 /* --- small local plumbing -------------------------------------------------- */
 
@@ -3308,3 +3544,664 @@ int osr_build_main(int argc, char **argv) {
     }
     return build_usage();
 }
+
+#else /* _WIN32 */
+
+/* ===========================================================================
+ * 3. the Windows builders, and the toolkit under them
+ *
+ * Everything here writes under %LOCALAPPDATA%\osr -- `bin\<name>` for
+ * installed executables, `src\<name>` for source trees a builder compiles in
+ * -- and PATH changes go to HKCU. So a builder needs no elevation at all
+ * unless it chooses to run a system-wide installer (osr_run_installer), and
+ * the registry at the bottom is where it says so, once, for lib/pkg.c to ask
+ * before any work starts.
+ *
+ * Nothing in this section is a provider itself and nothing here is reached
+ * from a map row. That distinction matters: a provider is a decision the map
+ * makes, while these are the moving parts a builder assembles out of. Adding a
+ * helper here can never change how a package is resolved.
+ * ======================================================================== */
+
+/* osr_join -- build a path or command line from pieces, NULL-terminated.
+ * Returns 0 (leaving dst empty) if the result would not fit, because a
+ * truncated path is a command that acts on the wrong file. Builders use this
+ * instead of sprintf: the pieces are runtime paths whose length the compiler
+ * cannot check. */
+static int osr_join(char *dst, unsigned long dst_sz, const char *first, ...) {
+    va_list ap;
+    const char *piece;
+    unsigned long len;
+
+    dst[0] = '\0';
+    len = 0;
+
+    va_start(ap, first);
+    for (piece = first; piece != NULL; piece = va_arg(ap, const char *)) {
+        unsigned long piece_len = (unsigned long)strlen(piece);
+        if (len + piece_len >= dst_sz) {
+            va_end(ap);
+            dst[0] = '\0';
+            return 0;
+        }
+        memcpy(dst + len, piece, piece_len + 1);
+        len += piece_len;
+    }
+    va_end(ap);
+
+    return 1;
+}
+
+/* osr_dir -- %LOCALAPPDATA%\osr\<sub>\<name>. Per-user by construction: no
+ * Program Files, no HKLM, no admin.
+ */
+static int osr_dir(const char *sub, const char *name, char *out, unsigned long out_sz) {
+    char base[MAX_PATH];
+
+    if (GetEnvironmentVariableA("LOCALAPPDATA", base, (DWORD)sizeof(base)) == 0) {
+        if (GetEnvironmentVariableA("USERPROFILE", base, (DWORD)sizeof(base)) == 0) return 0;
+        strcat(base, "\\AppData\\Local");
+    }
+
+    out[0] = '\0';
+    if (!cat_bounded(out, out_sz, base)) return 0;
+    if (!cat_bounded(out, out_sz, "\\osr\\")) return 0;
+    if (!cat_bounded(out, out_sz, sub)) return 0;
+    if (!cat_bounded(out, out_sz, "\\")) return 0;
+    if (!cat_bounded(out, out_sz, name)) return 0;
+    return 1;
+}
+
+int osr_bin_dir(const char *name, char *out, unsigned long out_sz) {
+    return osr_dir("bin", name, out, out_sz);
+}
+
+int osr_src_dir(const char *name, char *out, unsigned long out_sz) {
+    return osr_dir("src", name, out, out_sz);
+}
+
+int osr_artifact_url(const char *source, char *url_out, unsigned long url_sz) {
+    char api[300];
+    char repo[200];
+    const char *pattern;
+    const char *sep;
+    char *json;
+    unsigned long json_len;
+    int ok;
+
+    if (strncmp(source, "gh:", 3) != 0) {
+        if (strlen(source) >= url_sz) return 0;
+        strcpy(url_out, source);
+        return 1;
+    }
+
+    /* gh:<owner>/<repo>:<pattern> */
+    sep = strchr(source + 3, ':');
+    if (sep == NULL) {
+        osr_warnf("source '%s' is missing its asset pattern", source);
+        return 0;
+    }
+    if ((unsigned long)(sep - (source + 3)) >= sizeof(repo)) return 0;
+    memcpy(repo, source + 3, (unsigned long)(sep - (source + 3)));
+    repo[sep - (source + 3)] = '\0';
+    pattern = sep + 1;
+
+    api[0] = '\0';
+    if (!cat_bounded(api, sizeof(api), "https://api.github.com/repos/") ||
+        !cat_bounded(api, sizeof(api), repo) ||
+        !cat_bounded(api, sizeof(api), "/releases/latest")) return 0;
+
+    json = NULL;
+    json_len = 0;
+    if (osr_fetch_to_buffer(api, &json, &json_len) != OSR_NET_OK || json == NULL) {
+        osr_warnf("could not reach %s to find the latest release", api);
+        return 0;
+    }
+
+    ok = osr_pick_release_asset(json, pattern, url_out, url_sz);
+    free(json);
+
+    if (!ok) osr_warnf("no asset matching '%s' in the latest %s release", pattern, repo);
+    return ok;
+}
+
+int osr_fetch_artifact(const char *url, char *path_out, unsigned long path_sz) {
+    char temp_dir[MAX_PATH];
+    char filename[MAX_PATH];
+
+    osr_url_filename(url, filename, sizeof(filename));
+    if (filename[0] == '\0') {
+        osr_warnf("nothing to download -- no filename in %s", url);
+        return 0;
+    }
+
+    if (GetTempPathA((DWORD)sizeof(temp_dir), temp_dir) == 0) return 0;
+
+    path_out[0] = '\0';
+    if (!cat_bounded(path_out, path_sz, temp_dir) ||
+        !cat_bounded(path_out, path_sz, filename)) return 0;
+
+    if (osr_download(url, path_out) != OSR_NET_OK) {
+        osr_warnf("download failed: %s", url);
+        return 0;
+    }
+    return 1;
+}
+
+int osr_unzip(const char *archive, const char *dest_dir) {
+    char cmd[1600];
+    char desc[300];
+    int ok;
+
+    /* Expand-Archive when the host has PowerShell 5+, else the
+     * Shell.Application COM route that has worked since well before it.
+     * Both attempts in one command so a single step covers them. */
+    cmd[0] = '\0';
+    ok = cat_bounded(cmd, sizeof(cmd),
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+            "\"$ErrorActionPreference='Stop'; "
+            "New-Item -ItemType Directory -Force -Path '")
+       && cat_bounded(cmd, sizeof(cmd), dest_dir)
+       && cat_bounded(cmd, sizeof(cmd), "' | Out-Null; try { Expand-Archive -LiteralPath '")
+       && cat_bounded(cmd, sizeof(cmd), archive)
+       && cat_bounded(cmd, sizeof(cmd), "' -DestinationPath '")
+       && cat_bounded(cmd, sizeof(cmd), dest_dir)
+       && cat_bounded(cmd, sizeof(cmd), "' -Force } catch { $s = New-Object -ComObject "
+                                        "Shell.Application; $s.NameSpace('")
+       && cat_bounded(cmd, sizeof(cmd), dest_dir)
+       && cat_bounded(cmd, sizeof(cmd), "').CopyHere($s.NameSpace('")
+       && cat_bounded(cmd, sizeof(cmd), archive)
+       && cat_bounded(cmd, sizeof(cmd), "').Items(), 16) }\"");
+    if (!ok) return 0;
+
+    desc[0] = '\0';
+    cat_bounded(desc, sizeof(desc), "extracting ");
+    cat_bounded(desc, sizeof(desc), basename_of(archive));
+
+    return osr_run_step_cmd(desc, cmd) == 0;
+}
+
+int osr_find_exe_dir(const char *root, const char *exe_name, int depth,
+                            char *out, unsigned long out_sz) {
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    char pattern[MAX_PATH];
+    char child[MAX_PATH];
+    int found;
+
+    if (depth < 0) return 0;
+    pattern[0] = '\0';
+    if (!cat_bounded(pattern, sizeof(pattern), root) ||
+        !cat_bounded(pattern, sizeof(pattern), "\\*")) return 0;
+
+    h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+
+    found = 0;
+    do {
+        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0) continue;
+
+        child[0] = '\0';
+        if (!cat_bounded(child, sizeof(child), root) ||
+            !cat_bounded(child, sizeof(child), "\\") ||
+            !cat_bounded(child, sizeof(child), fd.cFileName)) continue;
+
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+            if (osr_find_exe_dir(child, exe_name, depth - 1, out, out_sz)) {
+                found = 1;
+                break;
+            }
+        } else if (_stricmp(fd.cFileName, exe_name) == 0) {
+            if (strlen(root) < out_sz) { strcpy(out, root); found = 1; }
+            break;
+        }
+    } while (FindNextFileA(h, &fd));
+
+    FindClose(h);
+    return found;
+}
+
+int osr_place_binary(const char *src_file, const char *dest_dir, const char *exe_name) {
+    char dest[MAX_PATH];
+
+    dest[0] = '\0';
+    if (!cat_bounded(dest, sizeof(dest), dest_dir) ||
+        !cat_bounded(dest, sizeof(dest), "\\") ||
+        !cat_bounded(dest, sizeof(dest), exe_name)) return 0;
+
+    /* osr_copy_file creates the parent tree, so a builder never has to. */
+    if (!osr_copy_file(src_file, dest)) {
+        osr_warnf("failed to place %s", dest);
+        return 0;
+    }
+    return 1;
+}
+
+/* path_contains -- is dir already one of the ';'-separated entries in
+ * path_value? Case-insensitive, and a trailing backslash does not make an
+ * entry different, so a re-run does not append a second copy.
+ */
+static int path_contains(const char *path_value, const char *dir) {
+    const char *p = path_value;
+    unsigned long dir_len = (unsigned long)strlen(dir);
+
+    while (*p != '\0') {
+        const char *end = strchr(p, ';');
+        unsigned long len = (end != NULL) ? (unsigned long)(end - p) : (unsigned long)strlen(p);
+
+        while (len > 0 && p[len - 1] == '\\') len--;
+        if (len == dir_len && _strnicmp(p, dir, len) == 0) return 1;
+
+        if (end == NULL) break;
+        p = end + 1;
+    }
+    return 0;
+}
+
+void osr_add_to_path(const char *dir) {
+    HKEY key;
+    DWORD type;
+    DWORD len;
+    char current[8192];
+    char updated[8192];
+    char process_path[16384];
+
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Environment", 0,
+                      KEY_READ | KEY_SET_VALUE, &key) == ERROR_SUCCESS) {
+        current[0] = '\0';
+        type = REG_EXPAND_SZ;
+        len = (DWORD)sizeof(current) - 1;
+
+        if (RegQueryValueExA(key, "Path", NULL, &type, (BYTE *)current, &len) == ERROR_SUCCESS) {
+            if (len >= sizeof(current)) len = (DWORD)sizeof(current) - 1;
+            current[len] = '\0';
+        } else {
+            current[0] = '\0';
+            type = REG_EXPAND_SZ;
+        }
+        if (type != REG_SZ && type != REG_EXPAND_SZ) type = REG_EXPAND_SZ;
+
+        updated[0] = '\0';
+        if (!path_contains(current, dir) &&
+            cat_bounded(updated, sizeof(updated), current) &&
+            (current[0] == '\0' || cat_bounded(updated, sizeof(updated), ";")) &&
+            cat_bounded(updated, sizeof(updated), dir)) {
+
+            if (RegSetValueExA(key, "Path", 0, type, (const BYTE *)updated,
+                               (DWORD)strlen(updated) + 1) == ERROR_SUCCESS) {
+                /* Without this, already-running shells keep the old PATH
+                 * until they restart. */
+                SendMessageTimeoutA(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
+                                    (LPARAM)"Environment", SMTO_ABORTIFHUNG, 1000, NULL);
+            }
+        }
+        RegCloseKey(key);
+    }
+
+    if (GetEnvironmentVariableA("Path", process_path, (DWORD)sizeof(process_path)) > 0) {
+        if (!path_contains(process_path, dir) &&
+            strlen(process_path) + 1 + strlen(dir) < sizeof(process_path)) {
+            strcat(process_path, ";");
+            strcat(process_path, dir);
+            SetEnvironmentVariableA("Path", process_path);
+        }
+    }
+}
+
+int osr_run_installer(osr_artifact_kind kind, const char *file,
+                             const char *args, const char *name) {
+    char cmd[900];
+    char desc[300];
+    int ok;
+
+    if (!osr_is_admin() && !osr_elevate_now("this package installs through a system-wide "
+                                            "installer, which needs Administrator rights.")) {
+        osr_warnf("%s needs Administrator to run its installer -- skipped", name);
+        return 0;
+    }
+
+    cmd[0] = '\0';
+    if (kind == OSR_ARTIFACT_MSI) {
+        /* /qn silent, /norestart so a package can never reboot the machine
+         * out from under a rice that is still running. */
+        ok = cat_bounded(cmd, sizeof(cmd), "msiexec /i \"")
+          && cat_bounded(cmd, sizeof(cmd), file)
+          && cat_bounded(cmd, sizeof(cmd), "\" /qn /norestart");
+    } else {
+        ok = cat_bounded(cmd, sizeof(cmd), "\"")
+          && cat_bounded(cmd, sizeof(cmd), file)
+          && cat_bounded(cmd, sizeof(cmd), "\"");
+        if (ok && args != NULL && args[0] != '\0') {
+            ok = cat_bounded(cmd, sizeof(cmd), " ") && cat_bounded(cmd, sizeof(cmd), args);
+        }
+    }
+    if (!ok) return 0;
+
+    desc[0] = '\0';
+    cat_bounded(desc, sizeof(desc), name);
+    cat_bounded(desc, sizeof(desc), ": running the vendor installer");
+
+    return osr_run_step_cmd(desc, cmd) == 0;
+}
+
+int osr_run_install_script(const char *url, const char *name) {
+    char cmd[900];
+    char desc[300];
+    int ok;
+
+    /* `irm <url> | iex` is what a vendor means by "paste this line into a
+     * shell", and is the same shape lib/pkg.sh's _via_script uses on Linux
+     * (fetch to stdout, pipe to the interpreter). */
+    cmd[0] = '\0';
+    ok = cat_bounded(cmd, sizeof(cmd),
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command \"irm ")
+      && cat_bounded(cmd, sizeof(cmd), url)
+      && cat_bounded(cmd, sizeof(cmd), " | iex\"");
+    if (!ok) return 0;
+
+    desc[0] = '\0';
+    cat_bounded(desc, sizeof(desc), name);
+    cat_bounded(desc, sizeof(desc), ": running the vendor install script");
+
+    if (osr_run_step_cmd(desc, cmd) != 0) return 0;
+    osr_pkg_refresh();
+    return 1;
+}
+
+int osr_install_artifact(const char *spec, const char *name, const char *test_command) {
+    char source[600];
+    char args[200];
+    char url[600];
+    char filename[MAX_PATH];
+    char download_path[MAX_PATH];
+    char dest_dir[MAX_PATH];
+    char exe_dir[MAX_PATH];
+    char exe_name[MAX_PATH];
+    osr_artifact_kind kind;
+
+    if (!osr_net_available()) {
+        osr_warnf("no download backend on this build -- cannot fetch %s", name);
+        return 0;
+    }
+    if (!osr_parse_artifact_spec(spec, &kind, args, sizeof(args), source, sizeof(source))) {
+        osr_warnf("artifact spec for %s is malformed: %s", name, spec);
+        return 0;
+    }
+    if (!osr_artifact_url(source, url, sizeof(url))) return 0;
+    if (!osr_bin_dir(name, dest_dir, sizeof(dest_dir))) {
+        osr_warnf("cannot determine %%LOCALAPPDATA%% -- no place to install %s", name);
+        return 0;
+    }
+
+    osr_infof("%s: fetching %s", name, url);
+    if (!osr_fetch_artifact(url, download_path, sizeof(download_path))) return 0;
+
+    osr_url_filename(url, filename, sizeof(filename));
+
+    exe_name[0] = '\0';
+    if (!cat_bounded(exe_name, sizeof(exe_name), test_command) ||
+        !cat_bounded(exe_name, sizeof(exe_name), ".exe")) return 0;
+
+    /* The spec may state the kind; otherwise the extension of whatever was
+     * actually downloaded decides -- which for a gh: source is the only
+     * thing that knows, since the asset name is not visible until it
+     * resolves. */
+    if (kind == OSR_ARTIFACT_AUTO) kind = osr_artifact_kind_of_file(filename);
+    if (kind == OSR_ARTIFACT_AUTO) {
+        osr_warnf("%s: downloaded '%s', whose kind is not recognised -- name it "
+                 "explicitly (zip:/exe:/msi:/setup,<switches>:)", name, filename);
+        return 0;
+    }
+
+    if (kind == OSR_ARTIFACT_MSI || kind == OSR_ARTIFACT_SETUP) {
+        /* A vendor installer decides its own layout, so there is nothing to
+         * place and nothing to add to PATH -- only to re-read the
+         * environment it changed and check the command showed up. */
+        if (!osr_run_installer(kind, download_path, args, name)) return 0;
+
+        osr_pkg_refresh();
+        if (osr_have_cmd(test_command)) return 1;
+
+        osr_warnf("%s: the installer reported success but '%s' is not on PATH yet -- "
+                 "open a new shell", name, test_command);
+        return 1;
+    }
+
+    if (kind == OSR_ARTIFACT_ZIP) {
+        if (!osr_unzip(download_path, dest_dir)) {
+            osr_warnf("could not extract %s", filename);
+            return 0;
+        }
+        if (!osr_find_exe_dir(dest_dir, exe_name, 3, exe_dir, sizeof(exe_dir))) {
+            osr_warnf("%s not found anywhere in %s", exe_name, filename);
+            return 0;
+        }
+    } else {
+        /* A portable .exe is the program itself, published under a name that
+         * describes the build (posh-windows-amd64.exe) rather than the
+         * command it provides -- so it is placed under the command's name. */
+        if (!osr_place_binary(download_path, dest_dir, exe_name)) return 0;
+        strcpy(exe_dir, dest_dir);
+    }
+
+    osr_add_to_path(exe_dir);
+
+    if (osr_have_cmd(test_command)) return 1;
+
+    osr_warnf("%s was placed in %s but '%s' still does not resolve", name, exe_dir, test_command);
+    return 0;
+}
+
+/* provide_wezterm -- build WezTerm from source, the route upstream documents
+ * (https://wezterm.org/install/source.html), and the same recipe as the POSIX
+ * builder of that name above: clone with submodules, then `cargo build
+ * --release`. Two bodies rather than one with branches inside it, because
+ * every step differs in its mechanics -- where the build deps come from, how
+ * the compiled binaries are placed, how the tree is removed -- while the
+ * recipe they spell is the same one.
+ *
+ * Heavy (a full Rust workspace compile), which is why on Windows it is NOT the
+ * route everywhere the way it is on Linux: lib/pkgmap/windows.map sends x86_64
+ * to winget and reaches this builder only for arm64, where upstream publishes
+ * no build at all and so no manager has anything to offer.
+ *
+ * Prerequisites, from upstream's own page: Rust via rustup and specifically
+ * the MSVC toolchain ("the only supported way to build wezterm"), git for the
+ * clone, and Strawberry Perl, which OpenSSL's build needs on Windows. They are
+ * installed through the map rather than assumed, the same way the POSIX
+ * builder opens with `pkg_install build git`.
+ *
+ * Idempotency is lib/pkg.c's probe, not this builder's.
+ */
+
+/* wezterm_prepare_source -- get a buildable checkout into `src`, reusing one
+ * that is already there.
+ *
+ * A failed build KEEPS the checkout, so a retry resumes instead of paying for
+ * a second full compile after a transient network or registry blip -- the same
+ * contract as the POSIX builder. Only a successful install cleans up.
+ */
+static int wezterm_prepare_source(const char *src) {
+    char cmd[OSR_CMD_MAX];
+    char marker[OSR_PATH_MAX];
+
+    if (!osr_join(marker, sizeof(marker), src, "\\Cargo.toml", NULL)) return 0;
+
+    if (file_exists(marker)) {
+        osr_infof("reusing the existing wezterm checkout (%s) -- rebuild is incremental", src);
+    } else {
+        /* --branch=main is what upstream documents for a source build, and the
+         * submodules (vendored freetype/harfbuzz/...) are not optional. */
+        if (!osr_join(cmd, sizeof(cmd),
+                "git clone --depth=1 --branch=main --recursive "
+                "https://github.com/wezterm/wezterm.git \"", src, "\"", NULL)) return 0;
+        if (osr_run_step_cmd("cloning wezterm", cmd) != 0) {
+            osr_warnf("failed to clone wezterm");
+            return 0;
+        }
+    }
+
+    /* Re-run even for a reused checkout: a clone interrupted partway through
+     * its submodules leaves a tree that looks complete but will not build. */
+    if (!osr_join(cmd, sizeof(cmd), "git -C \"", src, "\" submodule update --init --recursive",
+                  NULL)) return 0;
+    if (osr_run_step_cmd("wezterm submodules", cmd) != 0) {
+        osr_warnf("wezterm submodule checkout failed");
+        return 0;
+    }
+
+    return 1;
+}
+
+static int provide_wezterm(void) {
+    /* wezterm.exe is the CLI, wezterm-gui.exe the terminal a user actually
+     * launches, and the mux server is what `wezterm connect` talks to.
+     * Upstream ships all three, so installing only the first would look like
+     * success and behave like a broken install. */
+    static const char *const binaries[3] = {
+        "wezterm.exe", "wezterm-gui.exe", "wezterm-mux-server.exe"
+    };
+    char src[OSR_PATH_MAX];
+    char bin_dir[OSR_PATH_MAX];
+    char built[OSR_PATH_MAX];
+    char cmd[OSR_CMD_MAX];
+    unsigned long i;
+    int placed;
+
+    /* Build dependencies, through the map so their ids live in one file.
+     * cargo rather than rustup as the probe: rustup is the installer, cargo is
+     * what this build needs on PATH. */
+    if (!osr_pkg_need("git", "git")) {
+        osr_warnf("wezterm needs git to fetch its source");
+        return 0;
+    }
+    if (!osr_pkg_need("rustup", "cargo")) {
+        osr_warnf("wezterm needs the Rust toolchain (rustup) to build");
+        return 0;
+    }
+    /* OpenSSL's build script shells out to perl on Windows; without it the
+     * compile dies deep inside a dependency with an unhelpful message. */
+    if (!osr_pkg_need("strawberryperl", "perl")) {
+        osr_warnf("wezterm needs Strawberry Perl to build OpenSSL");
+        return 0;
+    }
+
+    if (!osr_src_dir("wezterm", src, sizeof(src))) return 0;
+    if (!osr_bin_dir("wezterm", bin_dir, sizeof(bin_dir))) return 0;
+
+    if (!wezterm_prepare_source(src)) return 0;
+
+    /* The long pole: a full Rust workspace compile. --release because a debug
+     * wezterm is unusably slow. */
+    if (!osr_join(cmd, sizeof(cmd), "cargo build --release --manifest-path \"", src,
+                  "\\Cargo.toml\"", NULL)) return 0;
+    if (osr_run_step_cmd("compiling wezterm (this takes a while)", cmd) != 0) {
+        osr_warnf("wezterm build failed (checkout kept at %s -- rerun to resume)", src);
+        return 0;
+    }
+
+    placed = 0;
+    for (i = 0; i < 3; i++) {
+        if (!osr_join(built, sizeof(built), src, "\\target\\release\\", binaries[i], NULL)) continue;
+        if (!file_exists(built)) continue;
+        if (osr_place_binary(built, bin_dir, binaries[i])) placed++;
+    }
+
+    if (placed == 0) {
+        osr_warnf("wezterm compiled but no binaries turned up in %s\\target\\release "
+                  "(checkout kept -- rerun to resume)", src);
+        return 0;
+    }
+
+    osr_add_to_path(bin_dir);
+
+    if (!osr_have_cmd("wezterm")) {
+        osr_warnf("wezterm was built into %s but 'wezterm' still does not resolve", bin_dir);
+        return 0;
+    }
+
+    /* Only a successful install throws the tree away. */
+    if (osr_join(cmd, sizeof(cmd), "rmdir /s /q \"", src, "\"", NULL)) {
+        osr_run_step_cmd("removing the wezterm build tree", cmd);
+    }
+
+    osr_successf("  %-14s built from source (%d binaries)", "wezterm", placed);
+    return 1;
+}
+
+/* --- the registry ----------------------------------------------------------
+ *
+ * The name here is what a pkgmap row writes after `source:`. Keeping it an
+ * explicit table rather than deriving it from the function name means a typo
+ * in a map is caught as "unknown builder" instead of resolving to nothing.
+ *
+ * needs_admin is declared per builder because only the builder knows whether
+ * its recipe ends in a system-wide installer, and guessing from the outside
+ * would be wrong in both directions. lib/pkg.c asks before any work so that
+ * the UAC prompt happens once, up front.
+ * ------------------------------------------------------------------------ */
+
+typedef struct {
+    const char *name;
+    int (*fn)(void);
+    int needs_admin;
+} Builder;
+
+static const Builder builders[] = {
+    { "provide_wezterm", provide_wezterm, 0 }
+};
+#define BUILDER_COUNT (sizeof(builders) / sizeof(builders[0]))
+
+static const Builder *lookup(const char *fn) {
+    size_t i;
+    for (i = 0; i < BUILDER_COUNT; i++) {
+        if (strcmp(builders[i].name, fn) == 0) return &builders[i];
+    }
+    return NULL;
+}
+
+int osr_build_has(const char *fn) { return lookup(fn) != NULL; }
+
+int osr_build_needs_admin(const char *fn) {
+    const Builder *b = lookup(fn);
+    return (b != NULL) ? b->needs_admin : 0;
+}
+
+int osr_build_run(const char *fn) {
+    const Builder *b = lookup(fn);
+
+    if (osr_theme_only()) return osr_theme_only_skip("provide_*");
+    if (b == NULL) return 0;
+    return b->fn();
+}
+
+/* --- the command ----------------------------------------------------------- */
+
+static int build_usage(void) {
+    fputs("usage: osr build <subcommand> [args]\n\n", stderr);
+    fputs("  list             the builders this build carries\n", stderr);
+    fputs("  has <fn>         whether this builder exists here\n", stderr);
+    fputs("  run <fn>         run it\n", stderr);
+    return 2;
+}
+
+int osr_build_main(int argc, char **argv) {
+    size_t i;
+
+    if (argc < 2) return build_usage();
+    if (strcmp(argv[1], "list") == 0 && argc == 2) {
+        for (i = 0; i < BUILDER_COUNT; i++) printf("%s\n", builders[i].name);
+        return 0;
+    }
+    if (strcmp(argv[1], "has") == 0 && argc == 3) return osr_build_has(argv[2]) ? 0 : 1;
+    if (strcmp(argv[1], "run") == 0 && argc == 3) {
+        if (!osr_build_has(argv[2])) {
+            fprintf(stderr, "osr build: no such builder: %s\n", argv[2]);
+            return 1;
+        }
+        return osr_build_run(argv[2]) ? 0 : 1;
+    }
+    return build_usage();
+}
+
+#endif /* _WIN32 */

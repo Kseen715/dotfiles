@@ -1,17 +1,25 @@
-/* lib/apply.c -- the portable half of lib/apply.sh. See lib/apply.h.
+/* lib/apply.c -- the theme-only apply. See lib/apply.h.
  *
- * C89 + POSIX.
+ * The whole unit is os-common except for run_layer, which forks; the reason
+ * that one function has two bodies is stated at it.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <dirent.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
 #include <time.h>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #include "module.h"
 
@@ -225,10 +233,18 @@ static void module_path(Str *out, const char *name) {
 /* run_layer -- one module's theme pass, with its output on the run log.
  *
  * A single broken module must not abort a theme switch and leave the desktop
- * half-painted, so this forks: a module's osr_die kills only its layer. Its
- * chatter goes to $OSR_LOG rather than the terminal, because the interesting
- * output of a theme apply is the one success line. */
+ * half-painted. On POSIX that is bought with a fork: a module's osr_die kills
+ * only its layer, and its chatter goes to $OSR_LOG rather than the terminal,
+ * because the interesting output of a theme apply is the one success line.
+ *
+ * There is no fork on Windows, so the layer runs in this process and an
+ * osr_die inside it ends the whole apply. That is a real difference and worth
+ * naming rather than hiding: the isolation is what the fork was FOR. It is
+ * survivable here because a theme pass has had every mutating verb neutralized
+ * before it starts (osr_set_theme_only) -- what is left is file copying, whose
+ * failure paths warn and return rather than dying. */
 static int run_layer(const char *name) {
+#ifndef _WIN32
     pid_t pid;
     int status;
 
@@ -247,6 +263,9 @@ static int run_layer(const char *name) {
     }
     if (waitpid(pid, &status, 0) < 0) return 0;
     return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#else
+    return osr_module_run(name, 1);
+#endif
 }
 
 int osr_apply_theme(const char *name) {
@@ -265,14 +284,14 @@ int osr_apply_theme(const char *name) {
 
     str_init(&rice);
     osr_state_get(&rice, "rice");
-    setenv("OSR_RICE", str_text(&rice), 1);
+    osr_setenv("OSR_RICE", str_text(&rice));
     if (rice.len > 0) {
         Str dir;
         str_init(&dir);
         str_addz(&dir, env_str("OSR_ROOT", "."));
         str_addz(&dir, "/rices/");
         str_addz(&dir, str_text(&rice));
-        setenv("OSR_RICE_DIR", str_text(&dir), 1);
+        osr_setenv("OSR_RICE_DIR", str_text(&dir));
         str_free(&dir);
     }
 
@@ -282,8 +301,8 @@ int osr_apply_theme(const char *name) {
         if (line.len > 0) total++;
 
     sprintf(num, "%lu", (unsigned long)total);
-    setenv("OSR_STEP_TOTAL", num, 1);
-    setenv("OSR_STEP_N", "0", 1);
+    osr_setenv("OSR_STEP_TOTAL", num);
+    osr_setenv("OSR_STEP_N", "0");
 
     str_init(&msg);
     str_addz(&msg, "applying theme '");
@@ -306,7 +325,7 @@ int osr_apply_theme(const char *name) {
         if (line.len == 0) continue;
         n++;
         sprintf(num, "%lu", (unsigned long)n);
-        setenv("OSR_STEP_N", num, 1);
+        osr_setenv("OSR_STEP_N", num);
         str_init(&mod);
         str_add(&mod, line.start, line.len);
         {

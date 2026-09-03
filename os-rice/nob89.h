@@ -665,24 +665,45 @@ void nob_go_rebuild_urself(int argc, char **argv, const char *source_path)
     cc = getenv("CC");
     if (cc == NULL || cc[0] == '\0') cc = "cc";
 
+    /* Rebuild in the compiler's own default mode and let nob.c pick its
+     * backend from __STDC_VERSION__, rather than pinning -DNOB89 here. The
+     * pin was sticky in the worst way: once a C89 host (or one stray
+     * `-DNOB89`) produced a nob, every later self-rebuild carried the flag
+     * forward, so a nob on a perfectly good C99 host kept running this
+     * serial backend and the build never used more than one core. $CC
+     * selects the compiler nob *spawns*; nothing but this line selects the
+     * backend nob itself is built with.
+     *
+     * A real C89 compiler reports __STDC_VERSION__ < 199901L and lands on
+     * this header anyway -- and unforced, it lands there in C89 mode, where
+     * `typedef int bool` is what nob.c's `bool (*)(Nob_Walk_Entry)`
+     * callbacks are checked against. (That is what -std=c89 used to buy:
+     * -DNOB89 dragged this header into a gnu17 compile, glibc's
+     * <stdbool.h> made `bool` _Bool, and the callbacks stopped matching
+     * Nob_Walk_Func. No define, no mismatch, no flag.)
+     *
+     * The fallback below covers the one host the default mode can lose:
+     * a compiler modern enough to claim C99 but not to digest nob.h. */
     memset(&cmd, 0, sizeof(cmd));
     nob_cmd_append(&cmd, cc);
-    nob_cmd_append(&cmd, "-DNOB89");
-    /* -std=c89 is load-bearing, not cosmetic -- except for faucc, which
-     * does not accept the flag at all, and lcc, whose driver reads it as a
-     * linker input on a link line. Without it the rebuild runs in the
-     * compiler's default (gnu17) mode, where the <sys/types.h> this header
-     * includes drags in glibc's <stdbool.h>; `bool` is then _Bool instead
-     * of this file's `typedef int bool`, so nob.c's
-     * `bool (*)(Nob_Walk_Entry)` callbacks no longer match Nob_Walk_Func
-     * (`int (*)`) and gcc>=14 rejects the mismatch as an error. Forcing
-     * C89 keeps every signature in this header's C90 contract. (lcc gets
-     * C89 anyway: its driver's cpp line already pins -std=c89.) */
-    if (!nob89_cc_is_faucc(cc) && !nob89_cc_is_lcc(cc)) nob_cmd_append(&cmd, "-std=c89");
     nob_cmd_append(&cmd, "-o");
     nob_cmd_append(&cmd, self);
     nob_cmd_append(&cmd, source_path);
-    if (!nob_cmd_run(&cmd)) exit(1);
+    if (!nob_cmd_run(&cmd)) {
+        /* Default mode could not build nob.c. Retry pinned to this
+         * backend, which is what got us here and is known to work. faucc
+         * does not accept -std=c89 at all, and lcc's driver reads it as a
+         * linker input on a link line; both already compile as C89. */
+        nob_log(NOB_WARNING, "rebuild failed in %s's default mode; retrying with -DNOB89", cc);
+        memset(&cmd, 0, sizeof(cmd));
+        nob_cmd_append(&cmd, cc);
+        nob_cmd_append(&cmd, "-DNOB89");
+        if (!nob89_cc_is_faucc(cc) && !nob89_cc_is_lcc(cc)) nob_cmd_append(&cmd, "-std=c89");
+        nob_cmd_append(&cmd, "-o");
+        nob_cmd_append(&cmd, self);
+        nob_cmd_append(&cmd, source_path);
+        if (!nob_cmd_run(&cmd)) exit(1);
+    }
 
 #ifdef _WIN32
     exit((int)_spawnv(_P_WAIT, self, (const char *const *)argv));

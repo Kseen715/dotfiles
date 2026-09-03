@@ -1,10 +1,8 @@
-/* osr.c -- the POSIX harness core: one binary holding what used to be
+/* osr.c -- the harness core: one binary holding what used to be
  * lib/{ui,log,state,user,detect,theme}.sh, install.sh's text and decisions,
- * and the test runner.
- *
- * Same shape as the Windows core (install.c + its lib units linked into one
- * build/install.exe): nob.c compiles each lib/osr_*.c and links them here,
- * and this file only dispatches on the command word.
+ * and the test runner. Built as build/osr on POSIX and build/osr.exe on
+ * Windows, from the same sources: nob.c compiles each lib unit and links it
+ * here, and this file only dispatches on the command word.
  *
  *   osr ui …        the live step window, the palette, the step counter
  *   osr log …       the five log lines
@@ -13,6 +11,7 @@
  *   osr detect …    the distro/hardware facts, as shell assignments
  *   osr theme …     themes as objects: discovery, manifest, palette
  *   osr install …   install.sh's help, listings, option loop, manifest, report
+ *   osr module …    the modules written in C
  *   osr pkg …       package resolution, the native installer, the providers
  *   osr net …       downloads, redirect resolution, github_latest
  *   osr build …     the source: provider builders
@@ -22,23 +21,33 @@
  *   osr wallpaper … set or query the current theme's wallpaper (wallpaper.sh)
  *   osr test-run …  the test suite runner
  *
- * The remaining .sh files are `osr`, `install.sh` and `wallpaper.sh` -- entry
- * points people, scripts, pickers and hotkeys already type. `osr` is also the
- * one file that runs before a compiler is a given: its self-bootstrap block is
- * what `bootstrap.sh` used to be. Nothing in
- * lib/ is sourced by any of them any more: `startup_env` below is what
- * lib/ui.sh's shell-level state became, and it belongs here because the
- * process that has to make those decisions once, for every child it forks,
- * is this one.
+ * ONE BINARY, TWO SYSTEMS. There used to be two cores: this one, and
+ * install.exe -- a separate program at the repository root with its own module
+ * table, its own package map, its own log lines and its own option loop. They
+ * are the same program now. What differs between the systems is inside the lib
+ * units (lib/pkg.c dispatches to scoop/choco/winget instead of apt/dnf,
+ * lib/ui.c paints with the console API instead of ANSI), never in the shape of
+ * the tool, and the command table below is guarded only where a command has
+ * nothing to do on a system -- see lib/cmds.h.
  *
- * C89 + POSIX.
+ * The remaining .sh files are `osr`, `install.sh` and `wallpaper.sh` -- entry
+ * points people, scripts, pickers and hotkeys already type -- plus osr.ps1 and
+ * osr.bat, which are the same two lines for a Windows shell. `osr` is also the
+ * one file that runs before a compiler is a given: its self-bootstrap block is
+ * what `bootstrap.sh` used to be. Nothing in lib/ is sourced by any of them any
+ * more: `startup_env` below is what lib/ui.sh's shell-level state became, and
+ * it belongs here because the process that has to make those decisions once,
+ * for every child it forks, is this one.
+ *
+ * C89 + POSIX, and C89 + Win32.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "lib/common.h"
 #include "lib/cmds.h"
-
-#include <unistd.h>
+#include "lib/elevate.h"
 
 typedef struct {
     const char *name;
@@ -54,7 +63,7 @@ static const Command commands[] = {
     { "detect",   osr_detect_main,  "distro + hardware facts, as shell assignments" },
     { "theme",    osr_theme_main,   "theme discovery, manifest, palette" },
     { "install",  osr_install_main, "install.sh's text, option loop and manifest" },
-    { "module",   osr_module_main,  "the Linux modules written in C" },
+    { "module",   osr_module_main,  "the modules written in C" },
     { "pkg",      osr_pkg_main,     "resolve, install and probe packages" },
     { "net",      osr_net_main,     "fetch a URL, resolve a GitHub tag" },
     { "build",    osr_build_main,   "the source: builders (lib/build.sh)" },
@@ -63,14 +72,19 @@ static const Command commands[] = {
     { "service",  osr_service_main, "enable/disable a service on any init" },
     { "preflight", osr_preflight_main, "rice preconditions, before any mutation" },
     { "fonts",    osr_fonts_main,   "install a Nerd Font" },
-    { "gnome",    osr_gnome_main,   "GNOME session probe and custom keybindings" },
     { "migrate",  osr_migrate_main, "patch a seeded, user-owned layer in place" },
     { "apply",    osr_apply_main,   "the lists a theme-only apply is built out of" },
     { "reload",   osr_reload_main,  "tell the running apps to re-read their config" },
+    { "wallpaper", osr_wallpaper_main, "set or query the current theme's wallpaper" },
+#ifndef _WIN32
+    /* The four that have no Windows answer -- a GNOME session, MSRs, sysfs
+     * hwmon, and a suite that drives this binary under sh. lib/cmds.h says
+     * why each. */
+    { "gnome",    osr_gnome_main,   "GNOME session probe and custom keybindings" },
     { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
     { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
-    { "wallpaper", osr_wallpaper_main, "set or query the current theme's wallpaper" },
     { "test-run", osr_testrun_main, "run the test suite" }
+#endif
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
 
@@ -81,8 +95,47 @@ static int usage(void) {
         fprintf(stderr, "  %-9s %s\n", commands[i].name, commands[i].blurb);
     }
     fputs("\nThis is the harness core, not the CLI: the user-facing front end\n", stderr);
-    fputs("is ./osr, which calls into these.\n", stderr);
+    fputs("is ./osr (osr.ps1 on Windows), which calls into these.\n", stderr);
     return 2;
+}
+
+/* resolve_roots -- OSR_ROOT, OSR_LIB and OSR_DOTFILES, when nothing set them.
+ *
+ * The `osr` launcher sets all three before running this, and on that path
+ * nothing here happens. What this covers is the binary run directly --
+ * `build/osr install …`, a test driving it, and every Windows invocation,
+ * where the launcher is a two-line .ps1 that has no reason to know the layout.
+ *
+ * The layout is the one nob.c writes: every binary lands in <os-rice>/build/,
+ * so the tree root is the parent of the directory holding this executable, and
+ * the dotfiles checkout is the parent of that. Derived rather than compiled in,
+ * because a clone can sit anywhere.
+ */
+static void resolve_roots(const char *argv0) {
+    char exe_dir[OSR_PATH_MAX];
+    char root[OSR_PATH_MAX];
+    char buf[OSR_PATH_MAX];
+
+    if (env_is_set("OSR_ROOT") && env_is_set("OSR_LIB") && env_is_set("OSR_DOTFILES")) return;
+
+    osr_dirname(argv0, exe_dir, sizeof(exe_dir));
+    osr_dirname(exe_dir, root, sizeof(root));
+    /* Run from the tree itself rather than from build/ (a test, a developer):
+     * there is no parent to climb to, so take the directory as it stands. */
+    if (!osr_path_join(buf, sizeof(buf), root, "lib") || !dir_exists(buf)) {
+        osr_copy_bounded(root, sizeof(root), exe_dir);
+    }
+
+    if (!env_is_set("OSR_ROOT")) osr_setenv("OSR_ROOT", root);
+    if (!env_is_set("OSR_LIB")) {
+        if (osr_path_join(buf, sizeof(buf), env_str("OSR_ROOT", root), "lib")) {
+            osr_setenv("OSR_LIB", buf);
+        }
+    }
+    if (!env_is_set("OSR_DOTFILES")) {
+        osr_dirname(env_str("OSR_ROOT", root), buf, sizeof(buf));
+        osr_setenv("OSR_DOTFILES", buf);
+    }
 }
 
 /* startup_env -- the shell-level state lib/ui.sh used to establish before any
@@ -108,7 +161,7 @@ static void startup_env(void) {
     pal = osr_palette_values(query_fd());
     for (i = 0; i < OSR_PALETTE_COUNT; i++) {
         if (!env_is_set(osr_palette_names[i])) {
-            setenv(osr_palette_names[i], pal[i], 1);
+            osr_setenv(osr_palette_names[i], pal[i]);
         }
     }
 
@@ -116,13 +169,12 @@ static void startup_env(void) {
      * spelled it ${TMPDIR:-/tmp}/os-rice-$$.log. */
     if (!env_is_set("OSR_LOG")) {
         Str log;
-        const char *tmpdir = env_str("TMPDIR", "/tmp");
         str_init(&log);
-        str_addz(&log, tmpdir);
+        str_addz(&log, osr_tmpdir());
         str_addz(&log, "/os-rice-");
-        str_addl(&log, (long)getpid());
+        str_addl(&log, osr_pid());
         str_addz(&log, ".log");
-        setenv("OSR_LOG", str_text(&log), 1);
+        osr_setenv("OSR_LOG", str_text(&log));
         str_free(&log);
     }
 
@@ -130,14 +182,23 @@ static void startup_env(void) {
      * total before its loop and bumps N per module; these are the floors that
      * make `osr log info` print no prefix rather than "[0/0] " when nothing
      * set them. */
-    if (!env_is_set("OSR_STEP_N")) setenv("OSR_STEP_N", "0", 1);
-    if (!env_is_set("OSR_STEP_TOTAL")) setenv("OSR_STEP_TOTAL", "0", 1);
-    if (!env_is_set("OSR_TAIL_LINES")) setenv("OSR_TAIL_LINES", "5", 1);
+    if (!env_is_set("OSR_STEP_N")) osr_setenv("OSR_STEP_N", "0");
+    if (!env_is_set("OSR_STEP_TOTAL")) osr_setenv("OSR_STEP_TOTAL", "0");
+    if (!env_is_set("OSR_TAIL_LINES")) osr_setenv("OSR_TAIL_LINES", "5");
 }
 
 int main(int argc, char **argv) {
     size_t i;
+
+    resolve_roots(argv[0]);
     startup_env();
+    /* Remember how this run was invoked, before any work, so that a step
+     * needing more privilege than it has can relaunch this exact run with it
+     * rather than failing (lib/elevate.h). On POSIX that costs nothing and
+     * changes nothing; on Windows it is what makes one UAC prompt cover a
+     * whole install. */
+    osr_elevate_init(argc, argv);
+
     if (argc < 2) return usage();
     for (i = 0; i < COMMAND_COUNT; i++) {
         if (strcmp(argv[1], commands[i].name) == 0) {

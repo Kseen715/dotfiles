@@ -1,10 +1,9 @@
-/* lib/render.c -- see lib/render.h. C89 + POSIX. */
-#define _POSIX_C_SOURCE 200809L
-
+/* lib/render.c -- see lib/render.h. C89, on either system: the substitution
+ * is plain text work, and the only two things it asks of the host -- where a
+ * scratch file goes and what this process's id is -- come from lib/common.h.
+ */
 #include "render.h"
 #include "module.h"
-
-#include <unistd.h>
 
 /* apply_rules -- every rule over the whole buffer, in order. lib/config.sh ran
  * `sed -f <script>`, which applies rule 1 to a line, then rule 2 to the
@@ -216,11 +215,11 @@ int osr_theme_source(Str *out, const char *app, const char *name, int *is_temp) 
         Str base;
         int ok;
         str_init(&tmp);
-        str_addz(&tmp, env_str("TMPDIR", "/tmp"));
+        str_addz(&tmp, osr_tmpdir());
         str_addz(&tmp, "/osr-theme-");
         str_addz(&tmp, app);
         str_addc(&tmp, '-');
-        str_addl(&tmp, (long)getpid());
+        str_addl(&tmp, osr_pid());
         str_addc(&tmp, '-');
         str_init(&base);
         base_of(&base, name);

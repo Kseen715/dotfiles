@@ -12,7 +12,7 @@
  * modules it protects are still `.sh`, so lib/apply.sh keeps it, and this unit
  * supplies the two lists it and osr_apply_theme are built out of. The C module
  * tier does not need the stubbing at all -- lib/install.c drives its own
- * theme-only pass by calling only the config verbs (see modules.h).
+ * theme-only pass by calling only the config verbs.
  *
  * C89 + POSIX.
  */

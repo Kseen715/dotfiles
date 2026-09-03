@@ -1,0 +1,56 @@
+lacc: let a function-like macro invocation span a newline.
+
+lacc's preprocessor required the '(' of an invocation to be on the same line
+as the macro name. C89 3.8.3 does not: the invocation is a token sequence,
+not a line, and glibc's <signal.h> writes one across two lines, so an
+unpatched lacc stops with
+
+  (/usr/include/signal.h, 369) error: Expected { but got
+  __attribute_deprecated_msg__.
+
+Newlines are skipped only outside a directive, where the line really is the
+unit. Upstream's test suite is unchanged by this (260 pass, the same 6 fail
+as without it). Applied by modules/lacc.c with `git apply`.
+
+diff --git a/src/preprocessor/preprocess.c b/src/preprocessor/preprocess.c
+index 0478761..6753614 100644
+--- a/src/preprocessor/preprocess.c
++++ b/src/preprocessor/preprocess.c
+@@ -118,13 +118,27 @@ static void read_Pragma_invocation(TokenArray *line)
+  * makes the expression balanced. Read lines until full macro invocation
+  * is included.
+  */
+-static void read_macro_invocation(TokenArray *line, const struct macro *macro)
++static void read_macro_invocation(
++    TokenArray *line,
++    const struct macro *macro,
++    int directive)
+ {
+     int nesting;
+     struct token t;
+     assert(macro->type == FUNCTION_LIKE);
+ 
+     t = get_token();
++    if (!directive) {
++        /*
++         * The '(' of an invocation may sit on a later line than the
++         * macro name (C89 3.8.3: the invocation is a token sequence,
++         * not a line). glibc's <signal.h> writes exactly that, and
++         * without this the name is left unexpanded.
++         */
++        while (t.token == NEWLINE) {
++            t = get_token();
++        }
++    }
+     array_push_back(line, t);
+     if (t.token != '(')
+         /*
+@@ -283,7 +297,7 @@ static int read_complete_line(TokenArray *line, struct token t, int directive)
+                     macros += 1;
+                     if (def->type == FUNCTION_LIKE) {
+                         array_push_back(line, t);
+-                        read_macro_invocation(line, def);
++                        read_macro_invocation(line, def, directive);
+                     } else {
+                         array_push_back(line, t);
+                     }

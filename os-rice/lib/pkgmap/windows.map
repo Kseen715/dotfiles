@@ -1,11 +1,26 @@
-# os-rice/windows.map — logical package name -> the ONE provider that installs
-# it on this machine.
+# lib/pkgmap/windows.map — logical package name -> the ONE provider that
+# installs it on this machine.
+#
+# This file sits beside apt.map and pacman.map and is read by the same
+# resolver, in the same format, with the same @facet ranking: `windows` is
+# what OSR_PKG holds here, exactly as `apt` is what it holds on a Debian box.
+# What differs is only which providers a row may name, because there is no one
+# native manager on this system to be the default -- which of the three serves
+# a package is precisely what a row exists to say.
 #
 # Format:  <name>[@facet] = <provider>
 #
 #   provider := scoop:<id>  | choco:<id> | winget:<id>
-#             | source:<builder>          a C function in provide_module.c
+#             | source:<builder>          a builder in lib/build.c
 #             | script:<url>              the vendor's own install script
+#
+# THIS MAP DOES NOT FALL THROUGH TO any.map, and that is the one deliberate
+# difference from every other map here. any.map holds the rows that are the
+# same whichever LINUX package manager is in play -- a source: builder that
+# compiles for POSIX, a vendor script that pipes into sh. Reaching one of those
+# from Windows would not be a shared answer, it would be the wrong answer, and
+# the whole point of a map is that a package's source is decided in advance
+# rather than fallen into. A name with no row here is a gap to fix.
 #
 # ONE PROVIDER PER ROW. This is the rule the whole file exists to enforce, not
 # a stylistic preference. scoop, choco and winget are independent namespaces:
@@ -42,15 +57,20 @@
 # visible in one place — instead of by a runtime scramble. See wezterm below
 # for the worked example.
 #
-# THE source: PROVIDER (see provide_module.h) names a C function in
-# provide_module.c, exactly as `source:provide_wezterm` in lib/pkgmap/any.map
-# names a shell function in lib/build.sh. A URL can only ever say "download
-# this"; a builder can resolve a version, pick an asset per architecture,
-# install its own build dependencies through this very map, clone with
-# submodules, run a compiler, and place several binaries at the end. Reach for
-# it whenever the install is more than a fetch — and note the cost, because it
-# is why managers stay preferred: a manager can upgrade and remove what it
-# installed, while a builder's output is only ever overwritten in place.
+# The facets come from `osr detect`, out of the registry and a couple of system
+# calls, and they carry the SAME NAMES the Linux side uses -- which is what
+# lets one resolver read both maps. OSR_ARCH is x86_64 | arm64 | x86 on either
+# system.
+#
+# THE source: PROVIDER names a builder in lib/build.c's registry -- the same
+# registry, and often the same builder, that `source:provide_wezterm` in
+# any.map names. A URL can only ever say "download this"; a builder can resolve
+# a version, pick an asset per architecture, install its own build dependencies
+# through this very map, clone with submodules, run a compiler, and place
+# several binaries at the end. Reach for it whenever the install is more than a
+# fetch — and note the cost, because it is why managers stay preferred: a
+# manager can upgrade and remove what it installed, while a builder's output is
+# only ever overwritten in place.
 #
 # THE script: PROVIDER runs a vendor's own install script (`irm <url> | iex`),
 # the route a project means by "paste this line into a shell". Per-user: a
@@ -83,9 +103,11 @@ pwsh       = winget:Microsoft.PowerShell
 # manifest, which declares a single x64 installer — and upstream publishes no
 # Windows arm64 release asset at all, so there is no artifact for arm64 to
 # download from anywhere. What is left is what upstream documents for exactly
-# this case: build it (wezterm.org/install/source.html). provide/wezterm.c does
-# that, and installs its own git/rust/perl prerequisites through this map on
-# the way. It is a long compile, which is precisely why only arm64 pays for it.
+# this case: build it (wezterm.org/install/source.html). provide_wezterm in
+# lib/build.c does that, and installs its own git/rust/perl prerequisites
+# through this map on the way. It is a long compile, which is precisely why
+# only arm64 pays for it -- the POSIX maps reach the same builder name for
+# every target, because there no manager ships wezterm at all.
 #
 # No bare `wezterm` row: upstream has no 32-bit build either, so an x86 machine
 # should get "no windows.map row for wezterm", not a silent wrong answer.
@@ -107,10 +129,10 @@ starship   = winget:Starship.Starship
 fastfetch  = scoop:fastfetch
 
 # --- build dependencies ------------------------------------------------------
-# Not rices in themselves: these exist so provide/*.c builders can install what
-# they need through the map (osr_winpkg_install) instead of hardcoding ids, the
-# same way lib/build.sh's builders open with `pkg_install build git`. All three
-# are what provide/wezterm.c requires per wezterm.org/install/source.html.
+# Not rices in themselves: these exist so a builder can install what it needs
+# through the map (osr_pkg_need) instead of hardcoding ids, the same way the
+# POSIX builders open with `pkg_install build git`. All three are what
+# provide_wezterm requires per wezterm.org/install/source.html.
 
 git            = winget:Git.Git
 rustup         = winget:Rustlang.Rustup

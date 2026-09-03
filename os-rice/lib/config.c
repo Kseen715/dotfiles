@@ -15,14 +15,19 @@
  *
  * C89 + POSIX.
  */
+#ifndef _WIN32
 #define _XOPEN_SOURCE 700
 #include <fcntl.h>
-#include <glob.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+#include <sys/stat.h>
 
 #include "config.h"
+#include "build.h"
 #include "cmds.h"
 #include "module.h"
 
@@ -41,7 +46,7 @@ static void tmp_path(Str *out, const char *stem, const char *suffix) {
     str_addz(out, tmp_root());
     str_addc(out, '/');
     str_addz(out, stem);
-    str_addl(out, (long)getpid());
+    str_addl(out, osr_pid());
     str_addz(out, suffix);
 }
 
@@ -139,9 +144,7 @@ static int line_is(const Line *l, const char *text) {
 /* --- seeded layers --------------------------------------------------------- */
 
 int osr_seed_once(const char *src, const char *dst) {
-    struct stat st;
-
-    if (lstat(dst, &st) == 0) {                  /* `[ -e ]`: a dangling symlink counts */
+    if (osr_path_taken(dst)) {                   /* `[ -e ]`: a dangling symlink counts */
         osr_infof("keeping existing %s (seeded once)", dst);
         return 1;
     }
@@ -150,10 +153,9 @@ int osr_seed_once(const char *src, const char *dst) {
 }
 
 int osr_seed_empty(const char *dst) {
-    struct stat st;
     char *argv[3];
 
-    if (lstat(dst, &st) == 0) return 1;
+    if (osr_path_taken(dst)) return 1;
     mkdir_parent(dst);
     argv[0] = (char *)"touch"; argv[1] = (char *)dst; argv[2] = NULL;
     return osr_run_user(argv) == 0;
@@ -300,38 +302,46 @@ static const char PY_MERGE[] =
     "import json, sys\n"
     "base = json.load(open(sys.argv[1]))\n"
     "base.update(json.load(open(sys.argv[2])))\n"
-    "json.dump(base, sys.stdout, indent=2, ensure_ascii=False)\n"
-    "sys.stdout.write(\"\\n\")\n";
+    "out = open(sys.argv[3], \"w\")\n"
+    "json.dump(base, out, indent=2, ensure_ascii=False)\n"
+    "out.write(\"\\n\")\n";
 
-/* py_merge -- run it with the script on stdin and stdout on the temp file, the
- * `python3 - "$base" "$frag" >"$tmp" <<'PYEOF'` redirection pair. */
+/* py_merge -- run it over base and frag, leaving the merged JSON in out_path.
+ *
+ * The sh original fed the script to `python3 -` on stdin, through a heredoc.
+ * That needed a fork to write into, so instead the script is written to a
+ * temp file and named on the command line -- which is the same invocation
+ * from python's point of view, works with no fork at all, and makes the
+ * failing command something a reader can run by hand.
+ */
 static int py_merge(const char *base, const char *frag, const char *out_path) {
-    int fds[2];
-    int out_fd;
-    pid_t pid;
-    int status;
+    Str script;
+    char *argv[6];
+    FILE *fp;
+    int rc;
 
-    out_fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (out_fd < 0) return 0;
-    if (pipe(fds) != 0) { close(out_fd); return 0; }
-    pid = fork();
-    if (pid < 0) { close(fds[0]); close(fds[1]); close(out_fd); return 0; }
-    if (pid == 0) {
-        char *argv[5];
-        dup2(fds[0], 0);
-        dup2(out_fd, 1);
-        close(fds[0]); close(fds[1]); close(out_fd);
-        argv[0] = (char *)"python3"; argv[1] = (char *)"-";
-        argv[2] = (char *)base; argv[3] = (char *)frag; argv[4] = NULL;
-        execvp(argv[0], argv);
-        _exit(127);
-    }
-    close(fds[0]);
-    close(out_fd);
-    if (write(fds[1], PY_MERGE, sizeof(PY_MERGE) - 1) < 0) { /* reported by the exit status */ }
-    close(fds[1]);
-    if (waitpid(pid, &status, 0) < 0) return 0;
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    str_init(&script);
+    str_addz(&script, osr_tmpdir());
+    str_addz(&script, "/osr-json-merge-");
+    str_addl(&script, osr_pid());
+    str_addz(&script, ".py");
+
+    fp = fopen(str_text(&script), "wb");
+    if (fp == NULL) { str_free(&script); return 0; }
+    fwrite(PY_MERGE, 1, sizeof(PY_MERGE) - 1, fp);
+    fclose(fp);
+
+    argv[0] = (char *)"python3";
+    argv[1] = script.p;
+    argv[2] = (char *)base;
+    argv[3] = (char *)frag;
+    argv[4] = (char *)out_path;
+    argv[5] = NULL;
+    rc = osr_run_quiet(argv);
+
+    remove(str_text(&script));
+    str_free(&script);
+    return rc == 0;
 }
 
 int osr_compose_json_config(const char *base, const char *frag, const char *dst) {
@@ -552,19 +562,30 @@ static void add_profile(Str *out, const char *path) {
 /* glob_profiles -- the `*.default*` / `*.dev-edition*` fallback, for a profile
  * created before profiles.ini was written. */
 static void glob_profiles(Str *out, const char *root, const char *pattern) {
-    Str pat;
-    glob_t g;
-    size_t i;
+    Str names;
+    size_t pos = 0;
+    Line line;
 
-    str_init(&pat);
-    str_addz(&pat, root);
-    str_addc(&pat, '/');
-    str_addz(&pat, pattern);
-    if (glob(str_text(&pat), 0, NULL, &g) == 0) {
-        for (i = 0; i < g.gl_pathc; i++) add_profile(out, g.gl_pathv[i]);
-        globfree(&g);
+    str_init(&names);
+    osr_list_dir(&names, root, NULL, NULL);
+    while (next_line(str_text(&names), names.len, &pos, &line)) {
+        Str name, full;
+        str_init(&name);
+        str_add(&name, line.start, line.len);
+        /* `*.default*` is a pattern over the entries, not a directory name --
+         * osr_glob_match is the same `*`-only matcher the release-asset
+         * picker uses, anchored at both ends the way a shell glob is. */
+        if (osr_glob_match(pattern, str_text(&name))) {
+            str_init(&full);
+            str_addz(&full, root);
+            str_addc(&full, '/');
+            str_add(&full, str_text(&name), name.len);
+            add_profile(out, str_text(&full));
+            str_free(&full);
+        }
+        str_free(&name);
     }
-    str_free(&pat);
+    str_free(&names);
 }
 
 void osr_mozilla_profiles(Str *out, const char *root) {
@@ -714,23 +735,31 @@ int osr_is_image(const char *path) {
 }
 
 void osr_theme_wallpapers(Str *out, const char *theme_dir) {
-    Str pat;
-    glob_t g;
-    size_t i;
+    Str dir;
+    Str names;
+    size_t pos = 0;
+    Line line;
 
     if (theme_dir == NULL || *theme_dir == '\0') return;
-    str_init(&pat);
-    str_addz(&pat, theme_dir);
-    str_addz(&pat, "/wallpapers/*");
-    if (glob(str_text(&pat), 0, NULL, &g) == 0) {
-        for (i = 0; i < g.gl_pathc; i++) {
-            if (!osr_is_image(g.gl_pathv[i])) continue;
-            str_addz(out, g.gl_pathv[i]);
+    str_init(&dir);
+    str_addz(&dir, theme_dir);
+    str_addz(&dir, "/wallpapers");
+    str_init(&names);
+    osr_list_dir(&names, str_text(&dir), NULL, NULL);
+    while (next_line(str_text(&names), names.len, &pos, &line)) {
+        Str full;
+        str_init(&full);
+        str_addz(&full, str_text(&dir));
+        str_addc(&full, '/');
+        str_add(&full, line.start, line.len);
+        if (osr_is_image(str_text(&full))) {
+            str_add(out, str_text(&full), full.len);
             str_addc(out, '\n');
         }
-        globfree(&g);
+        str_free(&full);
     }
-    str_free(&pat);
+    str_free(&names);
+    str_free(&dir);
 }
 
 /* first_line -- the `| head -n 1 | tr -d '\n'` at the end of
@@ -847,6 +876,34 @@ int osr_install_wallpaper_layer(const char *src, const char *dst) {
     return ok;
 }
 
+/* osr_wallpaper_set_live -- paint the image on the desktop right now.
+ *
+ * Best effort on both systems, and never fatal: a container, an ssh session
+ * or a CI host has nothing to paint, and that is not a failure (section 9) --
+ * the recorded path above is still the answer, and the next real session picks
+ * it up.
+ *
+ * POSIX asks the session which setter it has; Windows has exactly one, and it
+ * is a system call rather than a program.
+ */
+#ifdef _WIN32
+
+void osr_wallpaper_set_live(const char *img) {
+    /* SPI_SETDESKWALLPAPER wants an absolute path, which both callers already
+     * hold (osr_install_wallpaper_file's own return, or the caller-resolved
+     * path handed to osr_choose_wallpaper). JPG and PNG work from Vista on;
+     * XP takes only BMP -- a known format gap on the older reach targets.
+     *
+     * A 0 return is the headless case: an RDP or service session has no
+     * desktop to paint, which is the same non-failure as no setter on POSIX. */
+    if (!SystemParametersInfoA(SPI_SETDESKWALLPAPER, 0, (PVOID)img,
+                               SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)) {
+        osr_infof("no desktop to paint (headless session) - recorded %s", img);
+    }
+}
+
+#else /* !_WIN32 */
+
 void osr_wallpaper_set_live(const char *img) {
     char *argv[5];
 
@@ -873,6 +930,8 @@ void osr_wallpaper_set_live(const char *img) {
         osr_infof("no wallpaper setter (headless) - recorded %s", img);
     }
 }
+
+#endif /* _WIN32 */
 
 void osr_wallpaper_record(const char *img) {
     Str dir, file, line;
@@ -930,8 +989,6 @@ void osr_wallpaper_library(Str *out) {
     Str seen, theme, pat, base;
     size_t pos = 0;
     Line l;
-    glob_t g;
-    size_t i;
 
     str_init(&seen);
     str_init(&base);
@@ -956,19 +1013,32 @@ void osr_wallpaper_library(Str *out) {
      * this half accretes into a library across themes. */
     str_init(&pat);
     str_addz(&pat, osr_mod_home());
-    str_addz(&pat, "/Pictures/Wallpapers/*");
-    if (glob(str_text(&pat), 0, NULL, &g) == 0) {
-        for (i = 0; i < g.gl_pathc; i++) {
-            if (!osr_is_image(g.gl_pathv[i])) continue;
-            str_reset(&base);
-            base_of(&base, g.gl_pathv[i]);
-            if (seen_basename(&seen, str_text(&base))) continue;
-            str_addc(&seen, '|');
-            str_add(&seen, str_text(&base), base.len);
-            str_addz(out, g.gl_pathv[i]);
-            str_addc(out, '\n');
+    str_addz(&pat, "/Pictures/Wallpapers");
+    {
+        Str names;
+        size_t lpos = 0;
+        Line line;
+        str_init(&names);
+        osr_list_dir(&names, str_text(&pat), NULL, NULL);
+        while (next_line(str_text(&names), names.len, &lpos, &line)) {
+            Str full;
+            str_init(&full);
+            str_addz(&full, str_text(&pat));
+            str_addc(&full, '/');
+            str_add(&full, line.start, line.len);
+            if (osr_is_image(str_text(&full))) {
+                str_reset(&base);
+                base_of(&base, str_text(&full));
+                if (!seen_basename(&seen, str_text(&base))) {
+                    str_addc(&seen, '|');
+                    str_add(&seen, str_text(&base), base.len);
+                    str_add(out, str_text(&full), full.len);
+                    str_addc(out, '\n');
+                }
+            }
+            str_free(&full);
         }
-        globfree(&g);
+        str_free(&names);
     }
     str_free(&pat);
     str_free(&base);
@@ -988,8 +1058,8 @@ static void absolute(Str *out, const char *path) {
     dir_of(&dir, path);
     str_init(&base);
     base_of(&base, path);
-    if (realpath(str_text(&dir), buf) != NULL) str_addz(out, buf);
-    else                                       str_addz(out, str_text(&dir));
+    if (osr_absolute_dir(str_text(&dir), buf, sizeof(buf))) str_addz(out, buf);
+    else                                                    str_addz(out, str_text(&dir));
     str_addc(out, '/');
     str_add(out, str_text(&base), base.len);
     str_free(&dir);
