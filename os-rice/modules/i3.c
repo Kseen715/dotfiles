@@ -44,7 +44,7 @@ int osrm_i3(void) {
         "xclip", NULL
     };
     /* The helper scripts the bindings call: power menu, volume/brightness OSD. */
-    static const char *const scripts[] = { "rofi-powermenu.sh", "osd.sh", "layout.sh", "min-tile.sh", NULL };
+    static const char *const scripts[] = { "rofi-powermenu.sh", "osd.sh", "layout.sh", "min-tile.py", NULL };
     Str dir, src, dst, layer;
     char *argv[6];
     size_t i;

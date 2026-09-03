@@ -49,7 +49,7 @@ exec_always --no-startup-id autotiling
 # takes picom down with a RENDER BadMatch - the whole session loses its
 # compositor because one more terminal was opened. Below the floor the
 # container becomes tabbed instead of splitting again. See the script header.
-exec_always --no-startup-id ~/.config/i3/scripts/min-tile.sh
+exec_always --no-startup-id ~/.config/i3/scripts/min-tile.py
 exec_always --no-startup-id ~/.config/polybar/launch.sh
 exec --no-startup-id dunst
 exec --no-startup-id nm-applet
