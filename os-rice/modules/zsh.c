@@ -101,6 +101,16 @@ static const char *const MIG_BREW_NEW =
 #pragma GCC diagnostic pop
 #endif
 
+static const char *const MIG_LOCALBIN =
+    "# ~/.local/bin holds the small binaries os-rice compiles (ccver for the starship\n"
+    "# prompt, lcc). Debian/Ubuntu add it from ~/.profile, which is bash-login only\n"
+    "# and zsh never reads, so it has to be here. Self-contained: the helpers above\n"
+    "# are unset by the time this block runs on an already-seeded file.\n"
+    "case \":$PATH:\" in\n"
+    "    *\":$HOME/.local/bin:\"*) ;;\n"
+    "    *) [ -d \"$HOME/.local/bin\" ] && export PATH=\"$HOME/.local/bin:$PATH\" ;;\n"
+    "esac\n";
+
 static const char *const MIG_TYPESET =
     "# Keep $path unique for good. The guards above only cover this file; anything\n"
     "# that prepends unconditionally later (brew shellenv, /etc/profile) would still\n"
@@ -162,6 +172,11 @@ static int migrate_layers(void *ctx) {
      *    duplicates from anything that prepends unconditionally later. */
     (void)osr_migrate_append(str_text(&env), "typeset -U path",
                              "typeset -U path PATH", MIG_TYPESET);
+
+    /* 4. Additive too: without ~/.local/bin on PATH the prompt cannot find
+     *    ccver (modules/starship.c) and lcc is invisible. */
+    (void)osr_migrate_append(str_text(&env), "\\.local/bin",
+                             "~/.local/bin on PATH", MIG_LOCALBIN);
 
     str_free(&dir); str_free(&local); str_free(&env);
     return 1;

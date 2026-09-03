@@ -186,15 +186,33 @@ static const char *ci_find(const char *hay, size_t n, const char *needle) {
     return NULL;
 }
 
-/* font_registered -- fontconfig already knows this family. The sh probe was
- * `fc-list | grep -qi "<name>.*Nerd"`: the name and then "Nerd" later ON THE
- * SAME LINE, both case-insensitive, because `.` never matches a newline. */
+/* family_in -- the family name and then "Nerd" later in the same text, both
+ * case-insensitive. The sh probe was `fc-list | grep -qi "<name>.*Nerd"`, and
+ * `.` never matches a newline, so this is per line -- and it reads a font
+ * FILENAME (JetBrainsMonoNerdFont-Bold.ttf) the same way. */
+static int family_in(const char *s, size_t len, const char *name) {
+    const char *at = ci_find(s, len, name);
+    if (at == NULL) return 0;
+    at += strlen(name);
+    return ci_find(at, (size_t)(s + len - at), "Nerd") != NULL;
+}
+
+/* any_line_matches -- newline-separated text, one family_in probe per line. */
+static int any_line_matches(const Str *text, const char *name) {
+    size_t pos = 0;
+    Line line;
+
+    while (next_line(str_text(text), text->len, &pos, &line)) {
+        if (family_in(line.start, line.len, name)) return 1;
+    }
+    return 0;
+}
+
+/* font_registered -- fontconfig already knows this family. */
 static int font_registered(const char *name) {
     char *argv[2];
     Str listing;
-    size_t pos = 0;
-    Line line;
-    int hit = 0;
+    int hit;
 
     if (!osr_have_cmd("fc-list")) return 0;
 
@@ -202,14 +220,24 @@ static int font_registered(const char *name) {
     argv[1] = NULL;
     str_init(&listing);
     (void)osr_run_user_capture(argv, &listing);
-
-    while (!hit && next_line(str_text(&listing), listing.len, &pos, &line)) {
-        const char *at = ci_find(line.start, line.len, name);
-        if (at == NULL) continue;
-        at += strlen(name);
-        hit = ci_find(at, (size_t)(line.start + line.len - at), "Nerd") != NULL;
-    }
+    hit = any_line_matches(&listing, name);
     str_free(&listing);
+    return hit;
+}
+
+/* font_unpacked -- the files this function itself installed are already in the
+ * font directory. fontconfig is the RIGHT answer, but it is not always there:
+ * a headless box (a server riced over ssh) has no fc-list, and then the probe
+ * above says "no" forever and every run re-downloads a 120 MiB zip. Looking at
+ * what we unpacked needs nothing installed. */
+static int font_unpacked(const char *name, const char *dir) {
+    Str names;
+    int hit;
+
+    str_init(&names);
+    osr_list_dir(&names, dir, NULL, NULL);
+    hit = any_line_matches(&names, name);
+    str_free(&names);
     return hit;
 }
 
@@ -223,12 +251,18 @@ int osr_install_nerd_font(const char *name) {
 
     if (name == NULL || *name == '\0') name = "JetBrainsMono";
 
-    if (font_registered(name)) {
+    str_init(&dir);
+    str_addz(&dir, osr_mod_home());
+    str_addz(&dir, "/.local/share/fonts");
+
+    if (font_registered(name) || font_unpacked(name, str_text(&dir))) {
         osr_infof("%s Nerd Font already installed - skipping", name);
+        str_free(&dir);
         return 1;
     }
     if (!osr_have_cmd("unzip")) {
         osr_warnf("unzip not available - skipping %s Nerd Font install", name);
+        str_free(&dir);
         return 1;
     }
 
@@ -238,10 +272,6 @@ int osr_install_nerd_font(const char *name) {
     str_addc(&url, '/');
     str_addz(&url, name);
     str_addz(&url, ".zip");
-
-    str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.local/share/fonts");
 
     str_init(&zip);
     str_addz(&zip, env_str("TMPDIR", "/tmp"));
