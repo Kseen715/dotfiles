@@ -64,6 +64,7 @@ desaturated neutral. Keep it that way when adding modules.
 | `config/i3/90-theme.conf` | `~/.config/i3/config.d/90-theme.conf` |
 | `config/polybar/colors.ini` | `~/.config/polybar/colors.ini` |
 | `config/rofi/colors.rasi` | `~/.config/rofi/colors.rasi` |
+| `config/rofi/{launcher,powermenu}.rasi` | `~/.config/rofi/` — square-cornered copies of the dotfiles layouts (this rice rounds nothing) |
 | `config/dunst/90-theme.conf` | `~/.config/dunst/dunstrc.d/90-theme.conf` |
 | `config/picom/90-theme.conf` | `~/.config/picom/90-theme.conf` |
 | `config/xprofile/90-theme.sh` | `~/.config/xprofile.d/90-theme.sh` |

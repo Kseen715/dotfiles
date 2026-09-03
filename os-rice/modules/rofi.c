@@ -30,14 +30,19 @@ int osrm_rofi(void) {
     str_addz(&dir, "/.config/rofi");
     ok = osr_mkdir_p(str_text(&dir)) && ok;
 
-    /* The layout files are the dotfiles'; only colors.rasi is the theme's, and
-     * rofi's own @import in config.rasi is what pulls it in. */
+    /* The layouts are the dotfiles' unless this rice ships its own. rofi has no
+     * cascade past @import - colors.rasi is imported at the top of a layout, so
+     * a property set there loses to the same property in the layout's own
+     * blocks - which means a rice that wants a different border-radius (or any
+     * other structural value) has no way to express it except a whole layout.
+     * i3-rosemary is square-cornered and does exactly that. */
     str_init(&src); str_init(&dst);
     for (i = 0; files[i] != NULL; i++) {
         str_reset(&src); str_reset(&dst);
+        str_addz(&dst, str_text(&dir)); str_addc(&dst, '/'); str_addz(&dst, files[i]);
+        if (osr_install_theme_layer("rofi", files[i], str_text(&dst))) continue;
         str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/rofi/");
         str_addz(&src, files[i]);
-        str_addz(&dst, str_text(&dir)); str_addc(&dst, '/'); str_addz(&dst, files[i]);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }

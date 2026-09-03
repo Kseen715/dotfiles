@@ -1,0 +1,108 @@
+/* powermenu.rasi -- rice-owned copy of the dotfiles layout, square-cornered.
+ *
+ * The dotfiles layout (dotfiles/rofi/powermenu.rasi) is the shared one and keeps its
+ * radii; this rice is unrounded end to end (picom corner-radius 0, dunst
+ * corner_radius 0), and rofi draws its own corners on a 32-bit visual, so
+ * picom cannot square them for it. Hence a whole layout here rather than a
+ * one-line override: rofi has no cascade past @import, and colors.rasi is
+ * imported BEFORE these blocks, so a radius set there would lose to them.
+ *
+ * Structure must track the dotfiles file; only the border-radius values differ.
+ */
+/* rofi/powermenu.rasi — dotfiles-owned layout for scripts/rofi-powermenu.sh
+ * (the wleave/wlogout replacement, i3-sugg §2). Colors come from the rice.
+ *
+ * Shaped after the glass rice's wleave: a row of rounded, bordered cards, one
+ * icon each, the focused one filled with the accent. Two differences, both
+ * deliberate:
+ *
+ *   - the icons are font glyphs, not glass's PNGs, so they take the palette's
+ *     color instead of being white bitmaps (see the script's header);
+ *   - the card carries a small label under the icon. wleave hides its `text`
+ *     via `all: unset` and leans on six icons being self-evident; "reboot" and
+ *     "shutdown" are the two you least want to guess between.
+ *
+ * The script feeds rows as Pango markup with a newline in them, so the width
+ * here and the script's `-eh` have to agree with the content: rofi CLIPS an
+ * element that is too small rather than growing it, in both axes. 560px is what
+ * five cards need before "shutdown" stops being truncated to "shutd".
+ */
+
+@import "colors.rasi"
+
+* {
+    font:             "JetBrainsMono Nerd Font Medium 12";
+    background-color: transparent;
+    text-color:       @fg;
+}
+
+window {
+    transparency:     "real";
+    location:         center;
+    anchor:           center;
+    width:            560px;
+    border:           2px;
+    border-color:     @accent;
+    border-radius:    0px;
+    background-color: @bg;
+    children:         [ mainbox ];
+}
+
+mainbox {
+    children: [ inputbar, listview ];
+    padding:  16px;
+    spacing:  12px;
+}
+
+inputbar {
+    children:         [ prompt ];
+    background-color: @bg-alt;
+    border-radius:    0px;
+    padding:          10px 14px;
+}
+
+prompt {
+    text-color:       @accent;
+    horizontal-align: 0.5;
+}
+
+listview {
+    columns:   5;
+    lines:     1;
+    spacing:   10px;
+    /* Without this the row is translated right by one `spacing` and overflows
+     * the listview's right edge by the same amount - rofi still allocates the
+     * scrollbar's slot even for a single fixed row that can never scroll.
+     * launcher.rasi has always carried this line; this file did not, which is
+     * the whole difference. Measured: content centers landed ~10px right of
+     * the column centers, so the cards sat visibly right of the prompt above. */
+    scrollbar: false;
+}
+
+/* The card. 1px border + 12px radius is glass's button, and the border is what
+ * keeps an unfocused card readable against @bg-alt on a low-contrast palette. */
+element {
+    padding:          10px 2px;
+    border:           1px;
+    border-radius:    0px;
+    border-color:     @bg;
+    background-color: @bg-alt;
+    text-color:       @fg;
+    cursor:           pointer;
+}
+
+element-text {
+    horizontal-align: 0.5;
+    vertical-align:   0.5;
+    background-color: transparent;
+    text-color:       inherit;
+}
+
+/* Focus fills the whole card with the accent, as wleave's button:focus does.
+ * text-color has to be restated: the glyph and the label both inherit from the
+ * element, and without this they stay @fg on an accent fill. */
+element selected {
+    background-color: @accent;
+    border-color:     @accent;
+    text-color:       @bg;
+}

@@ -67,13 +67,24 @@ _backend_broken='glx_init ERROR|Failed to enable vsync|Failed to get GLX|GLX_BAD
 # not look like a broken compositor: windows map, their backdrop is blurred, and
 # the contents never arrive. rofi and alacritty both "froze" that way.
 #
-# Six seconds costs nothing on a healthy machine - picom is already compositing
+# Twenty seconds, not six. The latency of the failure is the whole problem: on
+# the Ironlake/Optimus box this was measured on, X comes up with AccelMethod
+# none, GLX falls back to llvmpipe, and picom logs
+#
+#   [ glx_init ERROR ] Failed to enable vsync.
+#
+# THIRTEEN seconds after start - past a six-second window, so the poll declared
+# the glx attempt healthy and the xrender fallback never ran. What you get is a
+# software-GL compositor with no vsync: every full-screen repaint (a wallpaper
+# change is exactly one) tears and flickers.
+#
+# The wait costs nothing on a healthy machine - picom is already compositing
 # throughout the poll, and this script is backgrounded by exec_always.
 _try() {
     picom "$@" >"$_log" 2>&1 &
     _pid=$!
     _n=0
-    while [ "$_n" -lt 6 ]; do
+    while [ "$_n" -lt 20 ]; do
         sleep 1
         _n=$((_n + 1))
         kill -0 "$_pid" 2>/dev/null || return 1
