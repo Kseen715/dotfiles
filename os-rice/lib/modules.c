@@ -77,6 +77,7 @@ int osrm_win_winutil(void);
 /* POSIX-only: every one of these installs a program that assumes an X11 or
  * Wayland desktop, a systemd/openrc unit, or a distro package manager. */
 int osrm_alacritty(void);
+int osrm_amacc(void);
 int osrm_amnezia_vpn(void);
 int osrm_arandr(void);
 int osrm_archives(void);
@@ -217,6 +218,7 @@ static const ModuleRow modules[] = {
     { "win-winutil",     "windows",     0, MODULE_RUN(osrm_win_winutil) }
 #else
     { "alacritty",       "x11+wayland", 1, MODULE_RUN(osrm_alacritty) },
+    { "amacc",           "x11+wayland", 0, MODULE_RUN(osrm_amacc) },
     { "amnezia-vpn",     "x11+wayland", 0, MODULE_RUN(osrm_amnezia_vpn) },
     { "arandr",          "x11",         0, MODULE_RUN(osrm_arandr) },
     { "archives",        "x11+wayland", 0, MODULE_RUN(osrm_archives) },

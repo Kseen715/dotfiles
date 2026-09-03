@@ -280,6 +280,7 @@ static const char *posix_srcs[] = {
     "lib/uv/generic_opp.c",
     "lib/uv/journal.c",
     "modules/alacritty.c",
+    "modules/amacc.c",
     "modules/amnezia-vpn.c",
     "modules/arandr.c",
     "modules/archives.c",

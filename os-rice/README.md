@@ -2,7 +2,7 @@
 title: os-rice
 type: readme
 status: past-MVP
-updated: 2026-08-30
+updated: 2026-09-03
 tags:
   - kind/readme
   - topic/os-rice
@@ -34,7 +34,7 @@ rice is a plain list of what to install.
 > [!success] Status: past MVP
 > The harness (`lib/`, `install.sh`, `osr`, `build/osr`) plus **120 C
 > modules** pass the idempotency matrix on apt/apk/pacman. Every legacy
-> per-distro tree is gone, Windows included — and Windows is no longer a
+> per-distro tree is gone, Windows included - and Windows is no longer a
 > second C core either: `build/osr.exe` is built from the same `osr.c`, the
 > same `lib/` units and the same `modules/` files as `build/osr`, with the
 > differences inside those units under one `#ifdef` each. See
@@ -154,7 +154,7 @@ is missing without touching it:
 curl -fsSL https://raw.githubusercontent.com/Kseen715/dotfiles/main/os-rice/osr | sh -s -- --check
 ```
 
-`--verbose` streams command output instead of spinners — automatic when stdout
+`--verbose` streams command output instead of spinners - automatic when stdout
 is not a TTY, so piping to a logfile stays clean.
 
 ---
@@ -204,39 +204,53 @@ use the static output.
 GCC is the reference compiler, but the harness builds and tests against TCC, GCC and Clang. Other compilers are treated as rudimentary, and are not expected to pass the test suite.
 All compilers are tested with `nob -t` (synchronous, no parallelism, with time measurement).
 
-Lower x = faster.
+Lower x = faster. The ratio is against **that host's** gcc.
 
-| Compiler | OS | Arch | Notes | Compilation time |
-|---|---|---|---|---|
-| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 0.072x |
-| [lacc](https://github.com/larmel/lacc) | GNU Linux | x86_64 | `osr module lacc`. C89 by design, own assembler and ELF writer. Needs the preprocessor patch the module ships | 0.19x |
-| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386 | `osr module lcc` | 0.287x |
-| [cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/) | GNU Linux | x86_64 | `osr module cproc`. Accepts every flag `nob` emits, `-std=c89` included; QBE is built into the same prefix | 0.34x |
-| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | 0.381x |
-| clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | 0.810x |
-| gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | _13.893s_ |
-| gcc 15.2.0 `-m32` | GNU Linux | i386(x86) | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | 1.007x |
-| zig 0.14.1 cc clang 20.1.8 | GNU Linux | x86_64 | Ladder 4 priority | 1.854x |
+#### x86_64
+
+| Compiler | OS | Notes | Compilation time |
+| --- | --- | --- | --- |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.072x |
+| [lacc](https://github.com/larmel/lacc) | GNU Linux | `osr module lacc`. C89 by design, own assembler and ELF writer. Needs the preprocessor patch the module ships | 0.190x |
+| [cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/) | GNU Linux | `osr module cproc`. Accepts every flag `nob` emits, `-std=c89` included; QBE is built into the same prefix. QBE's arm64 backend does not carry over: on aarch64 it compiles a hello world but every os-rice unit dies in the kernel headers - `/usr/include/aarch64-linux-gnu/asm/sigcontext.h:81:2: error: no type in struct member declaration` | 0.340x |
+| [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | - | 0.381x |
+| clang 21.1.8 | GNU Linux | - | 0.810x |
+| gcc 15.2.0 | GNU Linux | - | **BASELINE** |
+| zig 0.14.1 cc clang 20.1.8 | GNU Linux | - | 1.854x |
+
+#### x86 / i386
+
+| Compiler | OS |  Notes | Compilation time |
+| --- | --- | --- | --- |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | `osr module lcc` | _16.234s_ |
+| gcc 15.2.0 `-m32` | GNU Linux | `CC="gcc -m32"`; needs `gcc-multilib` + `libc6-dev-i386` | **BASELINE** |
+
+#### aarch64 / arm64 / armv8
+
+| Compiler | OS | Notes | Compilation time |
+| --- | --- | --- | --- |
+| [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | - | 0.083x |
+| gcc 13.3.0 | GNU Linux | - | **BASELINE** |
 
 ### In testing
 
 | Compiler | OS | Arch | Notes |
-|---|---|---|---|
-| [xcc](https://github.com/tyfkda/xcc) | GNU Linux | x86_64, aarch64, riscv64, wasm | `osr module xcc` Ships its own libc instead of using the host headers, and it has no `<dirent.h>`: `Cannot open file: <dirent.h>`. The driver locates `cc1`/`cpp`/`as`/`ld` relative to `argv[0]`, so the module installs an exec wrapper rather than a symlink |
+| --- | --- | --- | --- |
+| [xcc](https://github.com/tyfkda/xcc) | GNU Linux | x86_64, aarch64, riscv64, wasm | `osr module xcc` Ships its own libc instead of using the host headers, and it has no `<dirent.h>`: `Cannot open file: <dirent.h>`. The driver locates `cc1`/`cpp`/`as`/`ld` relative to `argv[0]`, so the module installs an exec wrapper rather than a symlink. Its aarch64 backend was checked on the Pi: the module builds, the hello world passes, and the tree still stops at the same `<dirent.h>` |
 | [SmallerC](https://github.com/alexfru/SmallerC) | GNU Linux, DOS, Windows | i386(x86), 16-bit x86 | `osr module smallerc` 32-bit only, own libc, no `<dirent.h>`, and the driver rejects `-std=c89`, `-O2` and `-pedantic`. Its prefix is compiled in (`-DPATH_PREFIX`), so `make` and `make install` get the same one, or every compile ends in `smlrpp: not found` |
-| [shecc](https://github.com/sysprog21/shecc) | GNU Linux | ARMv7-A, RV32IM | `osr module shecc` No x86-64 backend at all — it is a cross compiler here, so its output cannot even run on the build box. Only the stage-0 compiler is installed: `make` also builds the self-hosted stage 1 and 2 and needs `qemu-arm` for them (`Warning: failed to build the stage 1 and stage 2 compilers due to missing qemu-arm`) |
-| [arocc](https://github.com/Vexu/arocc) | GNU Linux | x86_64 | `osr module arocc` Front end only so far: even a hello world ends at `fatal error: TODO CodeGen.genVar`. It tracks Zig master and needs 0.17.0-dev or newer to build — on Zig 0.14 the build stops at `error: no field named 'debug' in enum 'builtin.OptimizeMode'` |
-| [Cuik](https://github.com/RealNeGate/Cuik) | GNU Linux | x86_64 | `osr module cuik` Alpha. No `-std` switch and it rejects the warning flags `nob` emits; its preprocessor expands the predefined `linux` macro inside a header name, so `#include <linux/limits.h>` becomes `couldn't find file: 1/limits.h`. The build itself needs LuaJIT specifically (Lua 5.4 rejects `build.lua`'s `0x...u` suffixes and its `unpack`), plus ninja, nasm, clang and lld — the `cuik-build-deps` pkgmap row |
+| [shecc](https://github.com/sysprog21/shecc) | GNU Linux | ARMv7-A, RV32IM | `osr module shecc` No x86-64 backend at all, so on an x86 box it is a cross compiler whose output cannot run. On the aarch64 Pi its ARMv7 output _does_ run, directly on the kernel's 32-bit compat layer and with no qemu - after a `chmod +x`, which shecc does not do to its own output. It still cannot build the tree: it ignores host headers in favour of its own libc, so any TU with `#include <stdio.h>` aborts (SIGABRT, no diagnostic printed at all), and every os-rice unit does. Only the stage-0 compiler is installed either way: `make` also builds the self-hosted stage 1 and 2 and needs `qemu-arm` for them (`Warning: failed to build the stage 1 and stage 2 compilers due to missing qemu-arm`) |
+| [arocc](https://github.com/Vexu/arocc) | GNU Linux | x86_64 | `osr module arocc` Front end only so far: even a hello world ends at `fatal error: TODO CodeGen.genVar`. It tracks Zig master and needs 0.17.0-dev or newer to build - on Zig 0.14 the build stops at `error: no field named 'debug' in enum 'builtin.OptimizeMode'` |
+| [Cuik](https://github.com/RealNeGate/Cuik) | GNU Linux | x86_64 | `osr module cuik` Alpha. No `-std` switch and it rejects the warning flags `nob` emits; its preprocessor expands the predefined `linux` macro inside a header name, so `#include <linux/limits.h>` becomes `couldn't find file: 1/limits.h`. The build itself needs LuaJIT specifically (Lua 5.4 rejects `build.lua`'s `0x...u` suffixes and its `unpack`), plus ninja, nasm, clang and lld - the `cuik-build-deps` pkgmap row |
 | mingw-w64 | Windows | - | Windows PE target; cannot be judged from a Linux box |
 | [OrangeC](https://github.com/LADSoft/OrangeC) | Windows | - | Windows PE target; same |
 | [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | GNU Linux | i386(x86) | An LLVM obfuscating backend rather than a compiler in its own right |
 | [CompCert](https://github.com/AbsInt/CompCert) | GNU Linux | x86_64 | No distro package, and the GitHub releases carry no binaries, so there is nothing to install short of the Coq/opam source build. Note also the INRIA license: free for research and evaluation, paid for commercial use |
-| [amacc](https://github.com/jserv/amacc) | GNU Linux | ARM32 | ARM-only JIT, and it cannot even be built here: `mk/arm.mk:11: *** "no arm-linux-gnueabihf-gcc found.".  Stop.` — hence no module |
+| [amacc](https://github.com/jserv/amacc) | GNU Linux | ARM32 | `osr module amacc` ARM-only JIT: it compiles a C subset and runs it in-process, and the driver itself is a 32-bit ARM binary, so the module installs the `arm-cross` row (`gcc-arm-linux-gnueabihf` + `qemu-user`, both demanded by upstream's `mk/arm.mk` before it will build). On the aarch64 Pi the driver runs natively on the 32-bit compat layer once `libc6:armhf` is present, and the module's wrapper falls back to `qemu-arm -L /usr/arm-linux-gnueabihf` where it does not - which is also how an x86_64 host gets it. JIT mode passes upstream's 27 tests; its ELF-output mode does not survive here (bus error natively, `Inconsistency detected by ld.so: rtld.c: 1280` under qemu-arm). It cannot build os-rice: the C subset is far short of the tree, and `-c` is not one of its flags (`usage: amacc [-s] [-o object] file`) |
 
 ### Not working
 
 | Compiler | OS | Arch | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [chibicc](https://github.com/rui314/chibicc) | GNU Linux | - | C11 compiler that searches /usr/include but not the compiler-private directory where stddef.h actually lives on a glibc host, and it cannot parse GCC's own stdarg.h |
 | [faucc](https://github.com/FAU-AS-MOS/FAUcc) | GNU Linux | - | 16/32-bit only; `cc1` predates host's glibc headers - it rejects `-std=c89`, has no `__builtin_bswap*`/`__builtin_expect`, and cannot even parse a cast inside an integer constant expression (valid C89, but glibc's `fd_set` uses it), so every TU that includes a system header dies in `cc1`. Not fixable by adding multilib. `nob` now drives it with `-b i386`; the 32-bit target itself builds via `CC="gcc -m32"` |
 | [bcc](https://github.com/realchonk/bcc) | GNU Linux | - | Does not have libc implementation |
@@ -246,9 +260,9 @@ Lower x = faster.
 
 ## How it works
 
-- **Package method, not just name.** A `pkgmap` row's RHS may carry a provider tag (`script:`, `source:`, `cargo:`, `aur:`). `pkg_install` expands logical names, installs the native batch in one call, then dispatches tagged rows — each provider owning its own idempotency probe. Untagged names pass through unchanged, so the common case needs no row at all.
+- **Package method, not just name.** A `pkgmap` row's RHS may carry a provider tag (`script:`, `source:`, `cargo:`, `aur:`). `pkg_install` expands logical names, installs the native batch in one call, then dispatches tagged rows - each provider owning its own idempotency probe. Untagged names pass through unchanged, so the common case needs no row at all.
 - **Every module declares its session.** Its `lib/modules.c` registry row is `x11`, `wayland`, or `x11+wayland`, so session compatibility is metadata rather than source inspection.
-- **Service name, per init.** `servicemap/` is a file per init (`<init>.map`, then `any.map`), most specific wins — one `enable_service bluetooth` reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit. No module branches on the init system.
+- **Service name, per init.** `servicemap/` is a file per init (`<init>.map`, then `any.map`), most specific wins - one `enable_service bluetooth` reaches `bluetooth.service` on systemd and `/etc/sv/bluetoothd` on runit. No module branches on the init system.
 - **Idempotent by contract.** Run a rice 100x and it converges; a second run is all `[ok] skipped`, zero errors.
 - **Config layered by ownership.** `00-env` (user, seeded once), `10-*`/`20-*`/`30-*` (dotfiles, overwritten), `90-theme` (rice, swapped), `99-local` (machine, never touched). `~/.zshrc` is a thin loader owning only a marked block.
 
@@ -258,7 +272,7 @@ Lower x = faster.
 
 A module installs one thing: a C translation unit `modules/<name>.c`,
 registered in `lib/modules.c`. All are C. A `modules/<name>.sh` still runs
-if one appears — a rice never says which tier it wanted — but it gets no
+if one appears - a rice never says which tier it wanted - but it gets no
 os-rice verbs, because those are C functions now. See
 [[os-rice/DESIGN#11a. Every `.sh` module is legacy|DESIGN 11a]] and
 [[os-rice/DESIGN#13. The port, and what it left behind|DESIGN 13]].
@@ -279,12 +293,12 @@ that source into `build/osr`; runtime builds use the registry row as their
 allowlist and compile the source only when requested. Everything a module may
 call is `lib/module.h`: packages (`osr_pkg_install`, resolved through
 `lib/pkgmap/` exactly as `pkg_install` does), steps (`osr_run_step` for a
-function of your own — the thing the shell tier could not do), services,
+function of your own - the thing the shell tier could not do), services,
 `as_root`/`as_user` execs, the config-file primitives, and the detected facts.
 
 **Ported:** every one of them. What each must do is stated in
 `test/unit_c/modules_test.c` and its neighbours, by name, against a sandbox
-whose `$PATH` is a directory of logging stubs — the argv log a module produces
+whose `$PATH` is a directory of logging stubs - the argv log a module produces
 IS what it did to the box.
 
 > [!note] Every provider is the core's
@@ -300,7 +314,7 @@ IS what it did to the box.
 - **An app/module:** one line in `rices/<name>/rice.list` (that count is the progress-bar denominator).
 - **A package that differs per distro:** one row in `lib/pkgmap/<mgr>.map`.
 - **A new rice:** `rices/<name>/` with a `rice.list`, a `config/zsh/90-theme.zsh`, a `config/starship.palette.toml` (colors only) and `wallpapers/`.
-- **A theme's colors:** `themes/<name>/theme.list`. Templates live beside each app's dotfiles, one per app — never one per theme.
+- **A theme's colors:** `themes/<name>/theme.list`. Templates live beside each app's dotfiles, one per app - never one per theme.
 
 ---
 
@@ -328,7 +342,7 @@ OSR_TEST_IMAGES="alpine:latest" sh os-rice/test/matrix.sh
 
 Every test is a C behaviour test under `test/unit_c/`: **1617 named assertions
 in 40 binaries**, each stating what a unit must DO rather than diffing it
-against a recording. A test links no lib object — it drives `build/osr` as a
+against a recording. A test links no lib object - it drives `build/osr` as a
 subprocess inside a sandbox whose `$PATH` is a directory of stubs that log
 their own argv, so it survives the unit under it being renamed or split, and so
 "what did this do to the box" is a literal, complete list of commands. See
@@ -338,7 +352,7 @@ suite is written this way rather than as a diff against the shell tier.
 
 > [!tip] Writing an expectation
 > `OSR_TEST_DUMP=1 ./build/nob test` prints the whole actual command log on a
-> failed comparison instead of only the first line that differed — which is
+> failed comparison instead of only the first line that differed - which is
 > what you want while writing a new expectation, and not what you want in CI.
 
 CI runs the fast gate on every push and the matrix across
@@ -348,12 +362,12 @@ debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).
 > Modules needing a GPU, a display, a real kernel or a hypervisor are
 > correct-by-construction and unit-tested, but only a real machine or a QEMU
 > boot exercises them end to end
-> ([[os-rice/DESIGN#9. Testing — containers plus QEMU, no real machine|DESIGN 9]]).
+> ([[os-rice/DESIGN#9. Testing - containers plus QEMU, no real machine|DESIGN 9]]).
 
 ---
 
 ## Still out of scope
 
 The `repo:` / `tarball:` / `brew:` / `flatpak:` providers, and `osr prune`
-(package removal on rice switch — switching is additive on purpose). See
+(package removal on rice switch - switching is additive on purpose). See
 [[archive-decisions#A3]].

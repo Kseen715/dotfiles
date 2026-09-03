@@ -10,6 +10,14 @@ fd = fd-find
 # 32-bit libc to link the i386 binaries it emits.
 multilib = gcc-multilib libc6-dev-i386
 
+# amacc (modules/amacc.c) is an ARM32 JIT: the driver itself is a 32-bit ARM
+# binary, so it is cross-built, and upstream's mk/arm.mk also demands qemu-arm
+# on PATH before it will build at all. On an aarch64 host the driver can run
+# without qemu (CONFIG_COMPAT), but only once libc6:armhf is there, which apt
+# supplies only after `dpkg --add-architecture armhf`; the module falls back to
+# qemu-arm when that step was not taken, so the row does not list it.
+arm-cross = gcc-arm-linux-gnueabihf qemu-user
+
 # Native-first (§1a G6): prefer the distro package so it updates via apt; fall
 # back to a downloaded binary / install script only on releases that lack it.
 # Availability was checked per release; a row exists ONLY where native is absent.
