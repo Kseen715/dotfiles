@@ -57,10 +57,36 @@ set -u
 # why this is polled rather than checked once at a fixed instant.
 _failed_re='surface failed to realize|No EGL configuration|Unable to create a GL context|Failed to initialize|GLX_BAD|Failed to get GLX|EGL_BAD'
 
+# TWO files, and the split is the whole correctness argument.
+#
+# $_out is THIS INVOCATION's, named by pid. Nothing else writes it, so the
+# failure test below reads the output of the terminal this script started and
+# of nothing else. It used to be one fixed path shared by every invocation, and
+# that was a real race, not a tidiness point: hold $mod+Return and i3 runs this
+# script a dozen times in the same second (measured: eleven in one second on
+# the box this was written on). Each one truncated the shared file and then
+# grepped it, so an instance would find ANOTHER instance's "No EGL
+# configuration" in there, conclude that its own perfectly healthy alacritty
+# had failed, kill it, and fall through to the next terminal in the list. That
+# is the "sometimes $mod+Return opens ghostty instead" report, in full.
+#
+# $_log is the shared history, APPEND-only - never truncated mid-run, so
+# concurrent instances interleave sections instead of erasing each other. It
+# used to be truncated per attempt, which destroyed the one thing worth
+# keeping: by the time you noticed the wrong terminal, the log held the output
+# of the one that worked and nothing about the one that did not.
+_log="${XDG_RUNTIME_DIR:-/tmp}/osr-term.log"
+_out="${XDG_RUNTIME_DIR:-/tmp}/osr-term.$$.out"
+# Size guard before anything is written, and only from an instance that finds
+# the file already oversized - never while this run is appending to it.
+[ -f "$_log" ] && [ "$(wc -c <"$_log")" -gt 262144 ] && : >"$_log"
+trap 'rm -f "$_out"' EXIT HUP INT TERM
+
 _try() {
-    _log="${XDG_RUNTIME_DIR:-/tmp}/osr-term.log"
-    : >"$_log"
-    "$@" >"$_log" 2>&1 &
+    _cur=$_out
+    : >"$_cur"
+    printf '=== %s [pid %s]: %s ===\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$$" "$*" >>"$_log"
+    "$@" >"$_cur" 2>&1 &
     _pid=$!
     # Poll rather than sleep-then-look: the failure arrives asynchronously, some
     # of it only once the window tries to realize. Five seconds is long enough
@@ -70,17 +96,35 @@ _try() {
     while [ "$_n" -lt 5 ]; do
         sleep 1
         _n=$((_n + 1))
-        kill -0 "$_pid" 2>/dev/null || return 1
-        if grep -qE "$_failed_re" "$_log" 2>/dev/null; then
+        if ! kill -0 "$_pid" 2>/dev/null; then
+            printf '(exited within %ss)\n' "$_n" >>"$_cur"
+            cat "$_cur" >>"$_log"
+            return 1
+        fi
+        if grep -qE "$_failed_re" "$_cur" 2>/dev/null; then
             kill "$_pid" 2>/dev/null || true
+            printf '(killed: matched the renderer-failure pattern)\n' >>"$_cur"
+            cat "$_cur" >>"$_log"
             return 1
         fi
     done
+    cat "$_cur" >>"$_log"
     return 0
 }
 
+# Which candidate is being tried, and why the previous one was passed over, is
+# announced ONCE per fallback. Silence here is what turns "alacritty is the
+# rice's terminal" into "sometimes $mod+Return opens a different terminal and I
+# have no idea why" - the chain is doing its job in that moment, and the only
+# thing wrong is that it does it in secret.
+_fell_back=""
 for _t in ${OSR_TERMINAL:-} alacritty ghostty wezterm foot kitty xterm; do
     command -v "$_t" >/dev/null 2>&1 || continue
+    if [ -n "$_fell_back" ]; then
+        command -v notify-send >/dev/null 2>&1 &&
+            notify-send -u normal "$_fell_back did not start" \
+                "Falling back to $_t. Reason is in ${XDG_RUNTIME_DIR:-/tmp}/osr-term.log."
+    fi
     _try "$_t" "$@" && exit 0
     # It is installed and it did not come up. On this class of machine that is
     # almost always the GL context, so give the SAME terminal a second chance on
@@ -88,6 +132,7 @@ for _t in ${OSR_TERMINAL:-} alacritty ghostty wezterm foot kitty xterm; do
     # GTK4 terminal whose window chrome goes through its own, equally broken,
     # GL path.
     _try env LIBGL_ALWAYS_SOFTWARE=1 GSK_RENDERER=cairo "$_t" "$@" && exit 0
+    _fell_back=$_t
 done
 
 # Nothing at all came up. Say so where it can actually be seen — an i3 exec that
