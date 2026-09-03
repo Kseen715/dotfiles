@@ -569,3 +569,6 @@ openresolv@resolute =
 # jmtpfs and p7zip are both gone from resolute; 7zip is the maintained fork.
 jmtpfs@resolute =
 p7zip@resolute = 7zip
+
+# ninja is ninja-build here (the `ninja` package is something else).
+cuik-build-deps = luajit ninja-build nasm clang lld

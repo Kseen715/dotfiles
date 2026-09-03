@@ -80,6 +80,7 @@ int osrm_alacritty(void);
 int osrm_amnezia_vpn(void);
 int osrm_arandr(void);
 int osrm_archives(void);
+int osrm_arocc(void);
 int osrm_audio(void);
 int osrm_avahi(void);
 int osrm_benchmark(void);
@@ -90,7 +91,9 @@ int osrm_celluloid(void);
 int osrm_cliphist(void);
 int osrm_codecs(void);
 int osrm_copyq(void);
+int osrm_cproc(void);
 int osrm_cpu_microcodes(void);
+int osrm_cuik(void);
 int osrm_curseforge(void);
 int osrm_datagrip(void);
 int osrm_discord(void);
@@ -134,6 +137,7 @@ int osrm_inxi(void);
 int osrm_kate(void);
 int osrm_kdeconnect(void);
 int osrm_keyring(void);
+int osrm_lacc(void);
 int osrm_lcc(void);
 int osrm_lightdm(void);
 int osrm_loupe(void);
@@ -165,6 +169,8 @@ int osrm_rofi(void);
 int osrm_rust(void);
 int osrm_sddm(void);
 int osrm_serie(void);
+int osrm_shecc(void);
+int osrm_smallerc(void);
 int osrm_steam(void);
 int osrm_swap(void);
 int osrm_swaylock(void);
@@ -187,6 +193,7 @@ int osrm_waylock(void);
 int osrm_wleave(void);
 int osrm_wlogout(void);
 int osrm_wofi(void);
+int osrm_xcc(void);
 int osrm_xdg(void);
 int osrm_xorg(void);
 int osrm_yandex_browser(void);
@@ -213,6 +220,7 @@ static const ModuleRow modules[] = {
     { "amnezia-vpn",     "x11+wayland", 0, MODULE_RUN(osrm_amnezia_vpn) },
     { "arandr",          "x11",         0, MODULE_RUN(osrm_arandr) },
     { "archives",        "x11+wayland", 0, MODULE_RUN(osrm_archives) },
+    { "arocc",           "x11+wayland", 0, MODULE_RUN(osrm_arocc) },
     { "audio",           "x11+wayland", 0, MODULE_RUN(osrm_audio) },
     { "avahi",           "x11+wayland", 0, MODULE_RUN(osrm_avahi) },
     { "benchmark",       "x11+wayland", 0, MODULE_RUN(osrm_benchmark) },
@@ -223,7 +231,9 @@ static const ModuleRow modules[] = {
     { "cliphist",        "wayland",     1, MODULE_RUN(osrm_cliphist) },
     { "codecs",          "x11+wayland", 0, MODULE_RUN(osrm_codecs) },
     { "copyq",           "x11",         1, MODULE_RUN(osrm_copyq) },
+    { "cproc",           "x11+wayland", 0, MODULE_RUN(osrm_cproc) },
     { "cpu-microcodes",  "x11+wayland", 0, MODULE_RUN(osrm_cpu_microcodes) },
+    { "cuik",            "x11+wayland", 0, MODULE_RUN(osrm_cuik) },
     { "curseforge",      "x11+wayland", 0, MODULE_RUN(osrm_curseforge) },
     { "datagrip",        "x11+wayland", 0, MODULE_RUN(osrm_datagrip) },
     { "discord",         "x11+wayland", 0, MODULE_RUN(osrm_discord) },
@@ -268,6 +278,7 @@ static const ModuleRow modules[] = {
     { "kate",            "x11+wayland", 1, MODULE_RUN(osrm_kate) },
     { "kdeconnect",      "x11+wayland", 0, MODULE_RUN(osrm_kdeconnect) },
     { "keyring",         "x11+wayland", 0, MODULE_RUN(osrm_keyring) },
+    { "lacc",            "x11+wayland", 0, MODULE_RUN(osrm_lacc) },
     { "lcc",             "x11+wayland", 0, MODULE_RUN(osrm_lcc) },
     { "lightdm",         "x11",         1, MODULE_RUN(osrm_lightdm) },
     { "loupe",           "x11+wayland", 0, MODULE_RUN(osrm_loupe) },
@@ -299,6 +310,8 @@ static const ModuleRow modules[] = {
     { "rust",            "x11+wayland", 0, MODULE_RUN(osrm_rust) },
     { "sddm",            "x11+wayland", 1, MODULE_RUN(osrm_sddm) },
     { "serie",           "x11+wayland", 1, MODULE_RUN(osrm_serie) },
+    { "shecc",           "x11+wayland", 0, MODULE_RUN(osrm_shecc) },
+    { "smallerc",        "x11+wayland", 0, MODULE_RUN(osrm_smallerc) },
     { "starship",        "x11+wayland", 1, MODULE_RUN(osrm_starship) },
     { "steam",           "x11+wayland", 0, MODULE_RUN(osrm_steam) },
     { "swap",            "x11+wayland", 0, MODULE_RUN(osrm_swap) },
@@ -323,6 +336,7 @@ static const ModuleRow modules[] = {
     { "wleave",          "wayland",     1, MODULE_RUN(osrm_wleave) },
     { "wlogout",         "wayland",     1, MODULE_RUN(osrm_wlogout) },
     { "wofi",            "wayland",     1, MODULE_RUN(osrm_wofi) },
+    { "xcc",             "x11+wayland", 0, MODULE_RUN(osrm_xcc) },
     { "xdg",             "x11+wayland", 0, MODULE_RUN(osrm_xdg) },
     { "xorg",            "x11",         1, MODULE_RUN(osrm_xorg) },
     { "yandex-browser",  "x11+wayland", 0, MODULE_RUN(osrm_yandex_browser) },

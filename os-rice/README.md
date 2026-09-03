@@ -209,7 +209,9 @@ Lower x = faster.
 | Compiler | OS | Arch | Notes | Compilation time |
 |---|---|---|---|---|
 | [tcc](https://bellard.org/tcc/) 0.9.27 | GNU Linux | x86_64 | Ladder 1 priority | 0.072x |
-| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386(x86) | - | 0.287x |
+| [lacc](https://github.com/larmel/lacc) | GNU Linux | x86_64 | `osr module lacc`. C89 by design, own assembler and ELF writer. Needs the preprocessor patch the module ships | 0.19x |
+| [drh/lcc](https://github.com/drh/lcc) | GNU Linux | i386 | `osr module lcc` | 0.287x |
+| [cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/) | GNU Linux | x86_64 | `osr module cproc`. Accepts every flag `nob` emits, `-std=c89` included; QBE is built into the same prefix | 0.34x |
 | [pcc](http://pcc.ludd.ltu.se/) 1.2.0.DEVEL 20220331 | GNU Linux | x86_64 | - | 0.381x |
 | clang 21.1.8 | GNU Linux | x86_64 | Ladder 2 priority | 0.810x |
 | gcc 15.2.0 | GNU Linux | x86_64 | Ladder 3 priority | _13.893s_ |
@@ -220,18 +222,16 @@ Lower x = faster.
 
 | Compiler | OS | Arch | Notes |
 |---|---|---|---|
-| mingw-w64 | Windows | - | - |
-| [OrangeC](https://github.com/LADSoft/OrangeC) | Windows | - | - |
-| [CompCert](https://github.com/AbsInt/CompCert) | - | - | - |
-| [arocc](https://github.com/Vexu/arocc) | - | - | - |
-| [SmallerC](https://github.com/alexfru/SmallerC) | - | - | - |
-| [shecc](https://github.com/sysprog21/shecc) | - | - | - |
-| [Cuik](https://github.com/RealNeGate/Cuik) | - | - | - |
-| [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | - | - | - |
-| [amacc](https://github.com/jserv/amacc) | - | - | - |
-| [lacc](https://github.com/larmel/lacc) | - | - | - |
-| [cproc](https://github.com/michaelforney/cproc) | - | - | - |
-| [xcc](https://github.com/tyfkda/xcc) | - | - | - |
+| [xcc](https://github.com/tyfkda/xcc) | GNU Linux | x86_64, aarch64, riscv64, wasm | `osr module xcc` Ships its own libc instead of using the host headers, and it has no `<dirent.h>`: `Cannot open file: <dirent.h>`. The driver locates `cc1`/`cpp`/`as`/`ld` relative to `argv[0]`, so the module installs an exec wrapper rather than a symlink |
+| [SmallerC](https://github.com/alexfru/SmallerC) | GNU Linux, DOS, Windows | i386(x86), 16-bit x86 | `osr module smallerc` 32-bit only, own libc, no `<dirent.h>`, and the driver rejects `-std=c89`, `-O2` and `-pedantic`. Its prefix is compiled in (`-DPATH_PREFIX`), so `make` and `make install` get the same one, or every compile ends in `smlrpp: not found` |
+| [shecc](https://github.com/sysprog21/shecc) | GNU Linux | ARMv7-A, RV32IM | `osr module shecc` No x86-64 backend at all — it is a cross compiler here, so its output cannot even run on the build box. Only the stage-0 compiler is installed: `make` also builds the self-hosted stage 1 and 2 and needs `qemu-arm` for them (`Warning: failed to build the stage 1 and stage 2 compilers due to missing qemu-arm`) |
+| [arocc](https://github.com/Vexu/arocc) | GNU Linux | x86_64 | `osr module arocc` Front end only so far: even a hello world ends at `fatal error: TODO CodeGen.genVar`. It tracks Zig master and needs 0.17.0-dev or newer to build — on Zig 0.14 the build stops at `error: no field named 'debug' in enum 'builtin.OptimizeMode'` |
+| [Cuik](https://github.com/RealNeGate/Cuik) | GNU Linux | x86_64 | `osr module cuik` Alpha. No `-std` switch and it rejects the warning flags `nob` emits; its preprocessor expands the predefined `linux` macro inside a header name, so `#include <linux/limits.h>` becomes `couldn't find file: 1/limits.h`. The build itself needs LuaJIT specifically (Lua 5.4 rejects `build.lua`'s `0x...u` suffixes and its `unpack`), plus ninja, nasm, clang and lld — the `cuik-build-deps` pkgmap row |
+| mingw-w64 | Windows | - | Windows PE target; cannot be judged from a Linux box |
+| [OrangeC](https://github.com/LADSoft/OrangeC) | Windows | - | Windows PE target; same |
+| [Artfuscator](https://github.com/JuliaPoo/Artfuscator) | GNU Linux | i386(x86) | An LLVM obfuscating backend rather than a compiler in its own right |
+| [CompCert](https://github.com/AbsInt/CompCert) | GNU Linux | x86_64 | No distro package, and the GitHub releases carry no binaries, so there is nothing to install short of the Coq/opam source build. Note also the INRIA license: free for research and evaluation, paid for commercial use |
+| [amacc](https://github.com/jserv/amacc) | GNU Linux | ARM32 | ARM-only JIT, and it cannot even be built here: `mk/arm.mk:11: *** "no arm-linux-gnueabihf-gcc found.".  Stop.` — hence no module |
 
 ### Not working
 

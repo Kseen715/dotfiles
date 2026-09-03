@@ -50,3 +50,10 @@ telegram-desktop = source:provide_telegram
 # Empty RHS = skip, so modules/networkmanager.sh installs the 64-bit stack
 # everywhere; pacman.map carries the identity row that keeps it on Arch.
 lib32-libnm =
+
+# Cuik builds through build.lua, which needs LuaJIT specifically (plain Lua
+# 5.4 rejects the script's 0x...u integer suffixes), ninja to run the
+# generated build file, nasm for its assembly, and clang+lld because the
+# generated link line passes -fuse-ld=lld. These are the names on
+# arch/alpine/gentoo; apt, dnf and xbps spell one or two of them differently.
+cuik-build-deps = luajit ninja nasm clang lld

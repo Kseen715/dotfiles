@@ -260,6 +260,7 @@ static const char *core_srcs[] = {
 #define CORE_SRCS_COUNT (sizeof(core_srcs) / sizeof(core_srcs[0]))
 
 static const char *posix_srcs[] = {
+    "lib/ccsrc.c",
     "lib/gnome.c",
     "lib/testrun.c",
     "lib/benchmark.c",
@@ -282,6 +283,7 @@ static const char *posix_srcs[] = {
     "modules/amnezia-vpn.c",
     "modules/arandr.c",
     "modules/archives.c",
+    "modules/arocc.c",
     "modules/audio.c",
     "modules/avahi.c",
     "modules/benchmark.c",
@@ -292,7 +294,9 @@ static const char *posix_srcs[] = {
     "modules/cliphist.c",
     "modules/codecs.c",
     "modules/copyq.c",
+    "modules/cproc.c",
     "modules/cpu-microcodes.c",
+    "modules/cuik.c",
     "modules/curseforge.c",
     "modules/datagrip.c",
     "modules/discord.c",
@@ -336,6 +340,7 @@ static const char *posix_srcs[] = {
     "modules/kate.c",
     "modules/kdeconnect.c",
     "modules/keyring.c",
+    "modules/lacc.c",
     "modules/lcc.c",
     "modules/lightdm.c",
     "modules/loupe.c",
@@ -367,6 +372,8 @@ static const char *posix_srcs[] = {
     "modules/rust.c",
     "modules/sddm.c",
     "modules/serie.c",
+    "modules/shecc.c",
+    "modules/smallerc.c",
     "modules/steam.c",
     "modules/swap.c",
     "modules/swaylock.c",
@@ -389,6 +396,7 @@ static const char *posix_srcs[] = {
     "modules/wleave.c",
     "modules/wlogout.c",
     "modules/wofi.c",
+    "modules/xcc.c",
     "modules/xdg.c",
     "modules/xorg.c",
     "modules/yandex-browser.c",
@@ -1040,13 +1048,15 @@ static bool dep_flag_probe(const char *flag) {
  * per toolchain rather than once per build. Compilers whose dep output is
  * spelled differently or not at all (MSVC's /showIncludes, lcc, faucc) get
  * NULL and fall back to the whole-tree rule; handing a compiler a flag it
- * does not know fails the build rather than the probe.
+ * does not know fails the build rather than the probe. "no" is what a
+ * negative probe records in the cache file, so every return here tests for
+ * a real flag (a leading '-') rather than for a non-empty string.
  */
 static const char *dep_flag(void) {
     static char cached[8] = "";
     static bool probed = false;
     Nob_String_Builder sb = {0};
-    if (probed) return cached[0] ? cached : NULL;
+    if (probed) return cached[0] == '-' ? cached : NULL;
     probed = true;
     if (is_msvc() || is_lcc() || is_faucc()) return NULL;
     if (nob_file_exists(CC_DEPS) > 0 && nob_read_entire_file(CC_DEPS, &sb) && sb.count > 0) {

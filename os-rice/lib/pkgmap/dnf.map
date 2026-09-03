@@ -309,3 +309,5 @@ waylock =
 xcape =
 # elogind is the systemd-free seat manager; Fedora is systemd-only.
 elogind =
+
+cuik-build-deps = luajit ninja-build nasm clang lld

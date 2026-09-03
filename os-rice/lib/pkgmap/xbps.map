@@ -212,3 +212,6 @@ gtklock-userinfo-module =
 libdeep-filter-ladspa =
 nwg-displays =
 zam-plugins =
+
+# Void spells LuaJIT with its upstream capitalization.
+cuik-build-deps = LuaJIT ninja nasm clang lld
