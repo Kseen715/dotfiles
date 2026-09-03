@@ -21,6 +21,10 @@
  * C89 + POSIX, and C89 + Win32.
  */
 
+/* Feature macro before any header: glibc <features.h> sets it itself
+ * once a header is in, and redefining it after that warns. */
+#define _POSIX_C_SOURCE 200809L
+
 #include "fetch.h"
 #include "common.h"
 #include "cmds.h"
@@ -225,8 +229,6 @@ int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out,
 
 #ifndef _WIN32
 
-#define _POSIX_C_SOURCE 200809L
-
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -236,7 +238,6 @@ int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out,
 
 #include "common.h"
 #include "module.h"
-#include "fetch.h"
 #include "fetch.h"
 
 /* OSR_PROGRESS_MIN_BYTES -- below this, a download prints nothing. A meter for
