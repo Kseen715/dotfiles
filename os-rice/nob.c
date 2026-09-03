@@ -855,7 +855,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
     nob_cmd_append(cmd, "-Wno-unused-function");
-    if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", NULL);
+    /* pcc turns on -Wshadow under -Wall and has no diagnostic pragma to
+     * scope it, so the vendored thirdparty/yaml.h (included tree-wide)
+     * warns from every TU. gcc/clang do not enable -Wshadow at all under
+     * -Wall -Wextra, so nothing is lost by silencing it for pcc only. */
+    if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", "-Wno-shadow", NULL);
 #ifdef _WIN32
     cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
 #endif
