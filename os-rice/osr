@@ -235,22 +235,36 @@ case ${OSR_C_MODULE_BACKEND:-static} in
 esac
 export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN OSR_C_MODULE_BACKEND
 
-if [ ! -x "$OSR_BIN" ]; then
+# EVERY run, not just when build/osr is missing: nob tracks its own inputs and
+# is a no-op when nothing changed, but skipping it means a `git pull` never
+# reaches the binary -- the checkout says one thing and the box keeps doing
+# another until someone remembers to run nob by hand.
+#
+# A build that fails with a usable binary already there is a warning, not a
+# stop: a checkout someone else owns (or a box whose compiler just broke) must
+# still be able to run the osr it already has.
+# ...but only where the build inputs actually are: the test sandboxes assemble a
+# root out of symlinks with no nob.c in it (see osr_detached above) and still
+# expect the binary they linked in to run.
+if [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ]; then
     # nob.c is the build system (its header comment has the one-time bootstrap
     # line); osr.ps1 does the same thing on Windows. Building here is what
     # makes a fresh checkout work before anyone has built anything.
-    if [ ! -x "$OSR_ROOT/build/nob" ]; then
-        mkdir -p "$OSR_ROOT/build" 2>/dev/null || :
-        # shellcheck disable=SC2086  # $CC is a command line ("zig cc"), not one word
-        ${CC:-cc} -o "$OSR_ROOT/build/nob" "$OSR_ROOT/nob.c" || {
-            printf '[ERROR] osr: cannot bootstrap nob with %s\n' "${CC:-cc}" >&2
-            exit 1
-        }
-    fi
-    ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >/dev/null || {
+    mkdir -p "$OSR_ROOT/build" 2>/dev/null || :
+    # shellcheck disable=SC2086  # $CC is a command line ("zig cc"), not one word
+    ${CC:-cc} -o "$OSR_ROOT/build/nob" "$OSR_ROOT/nob.c" || {
+        printf '[ERROR] osr: cannot bootstrap nob with %s\n' "${CC:-cc}" >&2
+        [ -x "$OSR_BIN" ] || exit 1
+    }
+fi
+if [ -f "$OSR_ROOT/nob.c" ] && [ -x "$OSR_ROOT/build/nob" ]; then
+    # Quiet on the way through: nob says "everything up to date" on every no-op
+    # run, and this now runs before every command, `osr theme` included.
+    ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >/dev/null 2>&1 || {
         printf '[ERROR] osr: nob could not build %s\n' "$OSR_BIN" >&2
         ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >&2
-        exit 1
+        [ -x "$OSR_BIN" ] || exit 1
+        printf '[WARN]  osr: running the binary already in build/ instead\n' >&2
     }
 fi
 
