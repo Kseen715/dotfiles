@@ -439,33 +439,80 @@ static long cpu_max_khz(long cpu) {
     return khz;
 }
 
-/* cpu_core_types -- big.LITTLE. lscpu reports ONE "Model name" for a chip
+/* CoreGroup -- one kind of core in a heterogeneous CPU: how many there are
+ * and how fast that cluster is allowed to run. Both the ARM and the x86 probe
+ * fill these; core_groups_render turns them into the one string a person
+ * reads. */
+typedef struct {
+    const char *name;
+    long count;
+    long khz;
+} CoreGroup;
+
+#define CORE_GROUPS_MAX 8
+
+static void core_groups_render(Str *out, const CoreGroup *g, int n) {
+    int i;
+    for (i = 0; i < n; i++) {
+        if (i > 0) str_addz(out, " + ");
+        str_addl(out, g[i].count);
+        str_addz(out, "x ");
+        str_addz(out, g[i].name);
+        /* Per cluster, because the whole point of a hybrid CPU is that the
+         * halves do not run at the same speed; one "CPU max MHz" from lscpu
+         * would report the fast cluster's for both. */
+        if (g[i].khz > 0) {
+            str_addz(out, " @ ");
+            str_add_ghz(out, g[i].khz);
+        }
+    }
+}
+
+/* group_add -- fold one CPU into the group for `name`, tracking that
+ * cluster's highest cpufreq maximum. Returns 0 when there are more kinds of
+ * core than anything real ships, which turns the whole report off. */
+static int group_add(CoreGroup *g, int *n, const char *name, long cpu) {
+    long one;
+    int i;
+
+    for (i = 0; i < *n; i++)
+        if (strcmp(g[i].name, name) == 0) break;
+    if (i == *n) {
+        if (*n == CORE_GROUPS_MAX) return 0;
+        g[i].name = name;
+        g[i].count = 0;
+        g[i].khz = 0;
+        (*n)++;
+    }
+    g[i].count++;
+    /* Every CPU in a cluster shares one policy, so any member's maximum is the
+     * cluster's; take the highest seen in case a board pins one. */
+    one = cpu >= 0 ? cpu_max_khz(cpu) : 0;
+    if (one > g[i].khz) g[i].khz = one;
+    return 1;
+}
+
+/* arm_core_groups -- big.LITTLE. lscpu reports ONE "Model name" for a chip
  * whose cores are not all the same part ("Cortex-A55" on an eight-core RK3588
  * that is four A55s and four A76s), so the per-processor "CPU part" lines in
- * /proc/cpuinfo are the only place the mix shows. Groups them in first-seen
- * order and rewrites the model as "4x Cortex-A55 + 4x Cortex-A76"; a
- * homogeneous box keeps whatever lscpu said, and any part not in the table
- * (or a non-ARM implementer) leaves the model alone. */
-static void cpu_core_types(Facts *f) {
+ * /proc/cpuinfo are the only place the mix shows. Returns the number of
+ * distinct kinds found, 0 when this is not an ARM chip whose every part the
+ * table knows -- a raw hex part id is not an answer to print at somebody. */
+static int arm_core_groups(CoreGroup *g) {
     char *info;
     size_t len, pos = 0;
     Line line;
-    const char *names[8];
-    long counts[8];
-    long khz[8];
     long cpu = -1;
-    int ngroups = 0;
+    int n = 0;
     int arm = 1;
     Str l, val;
-    int i;
 
     info = slurp(env_str("OSR_CPUINFO", "/proc/cpuinfo"), &len);
-    if (info == NULL) return;
+    if (info == NULL) return 0;
     str_init(&l);
     str_init(&val);
     while (arm && next_line(info, len, &pos, &line)) {
         const char *name;
-        long one;
         str_reset(&l);
         str_add(&l, line.start, line.len);
         /* "processor : 2" opens each block; the part lines below it are that
@@ -481,39 +528,111 @@ static void cpu_core_types(Facts *f) {
         if (!cpuinfo_field(&val, str_text(&l), "CPU part")) continue;
         name = arm_core_name(str_text(&val));
         if (name == NULL) { arm = 0; break; }
-        for (i = 0; i < ngroups; i++)
-            if (strcmp(names[i], name) == 0) break;
-        if (i == ngroups) {
-            if (ngroups == 8) { arm = 0; break; }   /* nothing real has 8 kinds */
-            names[ngroups] = name;
-            counts[ngroups] = 0;
-            khz[ngroups] = 0;
-            ngroups++;
-        }
-        counts[i]++;
-        /* Every CPU in a cluster shares one policy, so any member's maximum is
-         * the cluster's; take the highest seen in case a board pins one. */
-        one = cpu >= 0 ? cpu_max_khz(cpu) : 0;
-        if (one > khz[i]) khz[i] = one;
+        if (!group_add(g, &n, name, cpu)) { arm = 0; break; }
     }
     str_free(&val);
     str_free(&l);
     free(info);
+    return arm ? n : 0;
+}
 
-    if (!arm || ngroups < 2) return;
-    str_reset(&f->cpu_model);
-    for (i = 0; i < ngroups; i++) {
-        if (i > 0) str_addz(&f->cpu_model, " + ");
-        str_addl(&f->cpu_model, counts[i]);
-        str_addz(&f->cpu_model, "x ");
-        str_addz(&f->cpu_model, names[i]);
-        /* Per cluster, because the whole point of big.LITTLE is that the two
-         * halves do not run at the same speed; a single "CPU max MHz" from
-         * lscpu would report the big cluster's for both. */
-        if (khz[i] > 0) {
-            str_addz(&f->cpu_model, " @ ");
-            str_add_ghz(&f->cpu_model, khz[i]);
+/* cpu_has_l3 -- does this CPU see a level-3 cache? On Intel's tiled hybrids
+ * (Meteor Lake and up) the two low-power E-cores live on the SoC tile, off
+ * the ring and with no L3 at all, which is exactly what makes them LP E-cores
+ * rather than ordinary E-cores -- the PMU lists them in cpu_atom with the
+ * rest. Missing cache sysfs (a VM) answers "yes", so the split simply does
+ * not happen rather than mislabelling every core. */
+static int cpu_has_l3(long cpu) {
+    int i;
+    int seen = 0;
+
+    for (i = 0; i < 10; i++) {
+        Str path;
+        char *buf;
+        size_t len;
+        str_init(&path);
+        str_addz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"));
+        str_addz(&path, "/cpu");
+        str_addl(&path, cpu);
+        str_addz(&path, "/cache/index");
+        str_addl(&path, (long)i);
+        str_addz(&path, "/level");
+        buf = slurp(str_text(&path), &len);
+        str_free(&path);
+        if (buf == NULL) continue;
+        seen = 1;
+        if (strtol(buf, NULL, 10) == 3) { free(buf); return 1; }
+        free(buf);
+    }
+    return seen ? 0 : 1;
+}
+
+/* x86_group -- one PMU device's cpu list ("0-15,24-31" under
+ * /sys/devices/cpu_core/cpus) folded in as one kind of core. An absent file
+ * is the normal case: only a hybrid chip has these devices at all. */
+static void x86_group(CoreGroup *g, int *n, const char *dev, const char *name) {
+    Str path;
+    char *buf;
+    size_t len;
+    const char *p;
+
+    str_init(&path);
+    str_addz(&path, env_str("OSR_SYSDEV", "/sys/devices"));
+    str_addc(&path, '/');
+    str_addz(&path, dev);
+    str_addz(&path, "/cpus");
+    buf = slurp(str_text(&path), &len);
+    str_free(&path);
+    if (buf == NULL) return;
+    /* "0-15,24-31": comma-separated singles and inclusive ranges. */
+    p = buf;
+    while (*p != '\0') {
+        long lo, hi, i;
+        if (*p < '0' || *p > '9') { p++; continue; }
+        lo = strtol(p, (char **)&p, 10);
+        hi = lo;
+        if (*p == '-') hi = strtol(p + 1, (char **)&p, 10);
+        for (i = lo; i <= hi; i++) {
+            /* The atom PMU covers both kinds of small core; the L3 is what
+             * tells them apart. */
+            const char *kind = name;
+            if (strcmp(name, "E-core") == 0 && !cpu_has_l3(i)) kind = "LP E-core";
+            if (!group_add(g, n, kind, i)) break;
         }
+    }
+    free(buf);
+}
+
+/* x86_core_groups -- Intel's hybrid chips (12th gen and up). Their brand
+ * string says nothing about the split and lscpu prints one model name, but
+ * the kernel exposes the two PMUs separately: cpu_core is the P-cores,
+ * cpu_atom the E-cores. Same shape as the ARM probe, different evidence. */
+static int x86_core_groups(CoreGroup *g) {
+    int n = 0;
+    x86_group(g, &n, "cpu_core", "P-core");
+    x86_group(g, &n, "cpu_atom", "E-core");
+    return n;
+}
+
+/* cpu_core_types -- the heterogeneous-CPU report, from whichever probe this
+ * architecture answers. On ARM the core names ARE the model lscpu printed, so
+ * the mix replaces it ("4x Cortex-A55 @ 1.80GHz + 4x Cortex-A76 @ 2.40GHz");
+ * on x86 the brand string is the model and the mix is extra, so it is
+ * appended. A homogeneous CPU (one group, or no probe) is left alone. */
+static void cpu_core_types(Facts *f) {
+    CoreGroup g[CORE_GROUPS_MAX];
+    int n;
+
+    n = arm_core_groups(g);
+    if (n > 1) {
+        str_reset(&f->cpu_model);
+        core_groups_render(&f->cpu_model, g, n);
+        return;
+    }
+    n = x86_core_groups(g);
+    if (n > 1) {
+        if (f->cpu_model.len > 0) str_addc(&f->cpu_model, ' ');
+        core_groups_render(&f->cpu_model, g, n);
     }
 }
 

@@ -214,6 +214,57 @@ int main(void) {
        "cpu: with no cpufreq the core mix prints without clocks");
     point("OSR_SYSCPU", "syscpu");
 
+    /* Intel hybrid: the brand string says "i7-12700K" and nothing about the
+     * eight P-cores and four E-cores, which only the two PMU devices show.
+     * Here the mix is appended -- unlike ARM, the brand string IS the model. */
+    osr_sb_write(&sb, "cpuinfo", "processor\t: 0\nmodel name\t: Intel(R) Core(TM) i7-12700K\n", 0644);
+    osr_sb_write(&sb, "sysdev/cpu_core/cpus", "0-3\n", 0644);
+    osr_sb_write(&sb, "sysdev/cpu_atom/cpus", "4-5\n", 0644);
+    point("OSR_SYSDEV", "sysdev");
+    osr_sb_write(&sb, "syscpu2/cpu0/cpufreq/cpuinfo_max_freq", "4900000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu1/cpufreq/cpuinfo_max_freq", "4900000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu2/cpufreq/cpuinfo_max_freq", "4900000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu3/cpufreq/cpuinfo_max_freq", "4900000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu4/cpufreq/cpuinfo_max_freq", "3800000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu5/cpufreq/cpuinfo_max_freq", "3800000\n", 0644);
+    point("OSR_SYSCPU", "syscpu2");
+    osr_sb_env(&sb, "OSR_DEVICETREE", "");
+    tool("lscpu",
+        "Architecture:            x86_64\n"
+        "Model name:              Intel(R) Core(TM) i7-12700K\n"
+        "CPU(s):                  6\n", 0);
+    facts("cpu");
+    is("OSR_CPU_MODEL",
+       "Intel(R) Core(TM) i7-12700K 4x P-core @ 4.90GHz + 2x E-core @ 3.80GHz",
+       "cpu: an Intel hybrid appends its P/E split to the brand string");
+
+    /* Meteor Lake and up: two of the atom cores are on the SoC tile with no
+     * L3 -- the PMU lumps them in with the E-cores, the cache topology does
+     * not. */
+    osr_sb_write(&sb, "sysdev/cpu_atom/cpus", "4-7\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu0/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu1/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu2/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu3/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu4/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu5/cache/index3/level", "3\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu6/cache/index2/level", "2\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu7/cache/index2/level", "2\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu6/cpufreq/cpuinfo_max_freq", "2500000\n", 0644);
+    osr_sb_write(&sb, "syscpu2/cpu7/cpufreq/cpuinfo_max_freq", "2500000\n", 0644);
+    facts("cpu");
+    is("OSR_CPU_MODEL",
+       "Intel(R) Core(TM) i7-12700K 4x P-core @ 4.90GHz + 2x E-core @ 3.80GHz"
+       " + 2x LP E-core @ 2.50GHz",
+       "cpu: the L3-less SoC-tile cores are reported as LP E-cores");
+    osr_sb_write(&sb, "sysdev/cpu_atom/cpus", "4-5\n", 0644);
+
+    /* Not hybrid: no cpu_core/cpu_atom devices, so nothing is appended. */
+    osr_sb_env(&sb, "OSR_SYSDEV", "/nonexistent");
+    facts("cpu");
+    is("OSR_CPU_MODEL", "Intel(R) Core(TM) i7-12700K",
+       "cpu: a non-hybrid x86 keeps the brand string untouched");
+
     /* x86: no CPU part lines at all, and no device tree. Nothing may touch
      * the model name lscpu gave. */
     osr_sb_write(&sb, "cpuinfo", "processor\t: 0\nmodel name\t: Intel(R) Core(TM) i7-9700K\n", 0644);
