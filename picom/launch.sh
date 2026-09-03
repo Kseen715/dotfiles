@@ -103,8 +103,24 @@ _try && exit 0
 #    picom aborts. xrender cannot do dual_kawase, and picom treats an
 #    unsupported blur method as a hard config error, so blur is turned off
 #    explicitly rather than left to fail a second time.
+#
+#    --no-use-damage is the third flag and it is not a tuning: on this backend
+#    picom keeps the OLD window pixmap after a window is resized, and a tiling
+#    WM resizes every window on screen each time one opens. What you get is a
+#    window that stops updating and shows the wallpaper through where its
+#    contents should be - reported as "the session froze with three terminals
+#    open", which is what it looks like from the desk.
+#
+#    Measured, as the mean pixel inside one terminal: (37,36,38) composited
+#    correctly, (76,60,67) once another window opened and the pixmap went
+#    stale, and (37,36,38) again after the resize WITH this flag.
+#    --xrender-sync-fence was tried on the same box and does not help; damage
+#    tracking is what has to go. The cost is a full-screen repaint per frame,
+#    which on the 1366x768 panel this class of machine has measured at under
+#    1% CPU - and it is only ever paid here, on the fallback path, by a box
+#    that already has no GPU acceleration at all.
 _stop
-_try --backend xrender --blur-method none && exit 0
+_try --backend xrender --blur-method none --no-use-damage && exit 0
 
 # 3. neither backend came up. Leave the log where it can be read rather than
 #    looping: the session still works, it is just uncomposited.
