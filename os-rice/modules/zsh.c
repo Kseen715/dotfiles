@@ -132,7 +132,7 @@ static const char *const MIG_BREW_NEW =
 #endif
 
 static const char *const MIG_LOCALBIN =
-    "# ~/.local/bin holds the small binaries os-rice compiles (ccver for the starship\n"
+    "# ~/.local/bin holds the small binaries os-rice compiles (osrvv for the starship\n"
     "# prompt, lcc). Debian/Ubuntu add it from ~/.profile, which is bash-login only\n"
     "# and zsh never reads, so it has to be here. Self-contained: the helpers above\n"
     "# are unset by the time this block runs on an already-seeded file.\n"
@@ -221,7 +221,7 @@ static int migrate_layers(void *ctx) {
                              "typeset -U path PATH", MIG_TYPESET);
 
     /* 5. Additive too: without ~/.local/bin on PATH the prompt cannot find
-     *    ccver (modules/starship.c) and lcc is invisible. */
+     *    osrvv (modules/osrvv.c) and lcc is invisible. */
     (void)osr_migrate_append(str_text(&env), "\\.local/bin",
                              "~/.local/bin on PATH", MIG_LOCALBIN);
 

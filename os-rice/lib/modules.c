@@ -60,6 +60,7 @@ typedef struct {
 
 /* Modules both systems have. */
 int osrm_fastfetch(void);
+int osrm_osrvv(void);
 int osrm_starship(void);
 int osrm_wezterm(void);
 
@@ -210,6 +211,7 @@ static const ModuleRow modules[] = {
 #ifdef _WIN32
     { "fastfetch",       "windows",     1, MODULE_RUN(osrm_fastfetch) },
     { "oh-my-posh",      "windows",     1, MODULE_RUN(osrm_oh_my_posh) },
+    { "osrvv",           "windows",     0, MODULE_RUN(osrm_osrvv) },
     { "pwsh",            "windows",     0, MODULE_RUN(osrm_pwsh) },
     { "starship",        "windows",     1, MODULE_RUN(osrm_starship) },
     { "wezterm",         "windows",     1, MODULE_RUN(osrm_wezterm) },
@@ -297,6 +299,7 @@ static const ModuleRow modules[] = {
     { "obs-studio",      "x11+wayland", 0, MODULE_RUN(osrm_obs_studio) },
     { "onlyoffice",      "x11+wayland", 0, MODULE_RUN(osrm_onlyoffice) },
     { "openssh",         "x11+wayland", 0, MODULE_RUN(osrm_openssh) },
+    { "osrvv",           "x11+wayland", 0, MODULE_RUN(osrm_osrvv) },
     { "pacman-multilib", "x11+wayland", 0, MODULE_RUN(osrm_pacman_multilib) },
     { "paru",            "x11+wayland", 0, MODULE_RUN(osrm_paru) },
     { "picom",           "x11",         1, MODULE_RUN(osrm_picom) },

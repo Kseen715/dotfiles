@@ -15,7 +15,7 @@ _osr_path_append()  { case ":$PATH:" in *":$1:"*) return 0 ;; esac; [ -d "$1" ] 
 # duplicate brew's bin dirs. Guarded so a POSIX sh sourcing this file still works.
 [ -n "${ZSH_VERSION:-}" ] && typeset -U path PATH
 
-# ~/.local/bin holds the small binaries os-rice compiles (ccver for the starship
+# ~/.local/bin holds the small binaries os-rice compiles (osrvv for the starship
 # prompt, lcc). Debian/Ubuntu add it from ~/.profile, which is bash-login only
 # and zsh never reads, so it has to be here.
 _osr_path_prepend "$HOME/.local/bin"

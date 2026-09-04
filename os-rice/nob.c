@@ -302,6 +302,7 @@ static const char *core_srcs[] = {
     "lib/yaml.c",
     /* Modules both systems have. */
     "modules/fastfetch.c",
+    "modules/osrvv.c",
     "modules/starship.c",
     "modules/wezterm.c",
 };

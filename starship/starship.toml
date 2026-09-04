@@ -122,6 +122,13 @@ tag_symbol = ' '
 format = '[\($hash$tag\)]($style) '
 
 # Langs and stuff
+#
+# Every [custom.<lang>] below asks `osrvv <lang>` for the version (osrvv/osrvv.c
+# in this repo, compiled onto PATH by the osrvv module). It is a program and not
+# the `... | sed ...` one-liners it replaced because starship runs a custom
+# command through `sh -c` on unix but `cmd /C` on Windows: no one string served
+# both, and the Windows prompt showed bare symbols with no versions at all.
+# `osrvv --list` prints the keys; a new language is a row in that file's table.
 
 [custom.1c]
 symbol = "1C "
@@ -135,7 +142,7 @@ symbol = "Ada "
 style = 'bold yellow'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['ada', 'adc', 'ads', 'adb']
-command = "gnatmake --version 2>/dev/null | sed -n 's/.*GNATMAKE[ \\t]*\\([0-9.]*\\).*/\\1-gnat/p'"
+command = "osrvv ada"
 disabled = false
 
 [aws]
@@ -157,20 +164,14 @@ disabled = false
 [c]
 disabled = true
 
-# C compilers. `ccver` (starship/ccver.c in this repo, built into ~/.local/bin)
-# lists EVERY compiler on PATH -- "v15.2.0-gcc v20.1.0-clang" -- which the
-# built-in [c] module cannot do: it reports only the first one it finds. It is
-# a compiled helper rather than a shell one-liner because starship runs custom
-# commands through `sh -c` on unix but `cmd /C` on Windows, so one one-liner
-# cannot serve both (the old `for c in gcc clang tcc; do ... sed ...` silently
-# produced nothing on Windows). Pass names to override the probe list, e.g.
-# `ccver gcc clang tcc cc`.
+# C compilers: osrvv lists EVERY one on PATH -- "v15.2.0-gcc v20.1.0-clang" --
+# which the built-in [c] module above cannot do (it reports only the first).
 [custom.c]
 symbol = " "
 style = 'bold 149'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['c', 'h', 'cu']
-command = "ccver"
+command = "osrvv c"
 disabled = false
 
 [custom.c3]
@@ -178,7 +179,7 @@ symbol = "C3 "
 style = 'bold blue'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['c3']
-command = "c3c --version 2>/dev/null | sed -n 's/.*C3 Compiler Version:[ \\t]*\\([0-9.]*\\).*/\\1/p'"
+command = "osrvv c3"
 disabled = false
 
 [custom.cuda]
@@ -186,7 +187,7 @@ symbol = "CU "
 style = 'bold green'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['cu']
-command = "nvcc --version | sed -n 's/.*release \\([0-9]\\+\\.[0-9]\\+\\).*/v\\1/p'"
+command = "osrvv cuda"
 disabled = false
 
 # Not working (2025-09-10)
@@ -202,7 +203,7 @@ disabled = false
 style = 'bold blue'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['cpp', 'cc', 'cxx', 'c++', 'hpp', 'hh', 'hxx', 'h++', 'tcc']
-command = "cpp --version 2>/dev/null | sed -n 's/.*cpp (.*) \\([0-9][0-9.]*\\).*/\\1/p'"
+command = "osrvv cpp"
 
 [cmake]
 symbol = "△ "
@@ -330,7 +331,7 @@ symbol = "󰥓 "
 style = 'bold yellow'
 format = '[$symbol($output )]($style)'
 detect_extensions = ['hc', 'HC']
-command = "hcc --version | sed -n 's/^hcc \\(beta-v[0-9.]\\+\\).*/\\1/p'"
+command = "osrvv holyc"
 disabled = false
 
 [custom.make]
@@ -338,7 +339,7 @@ symbol = " "
 style = 'bold yellow'
 format = '[$symbol($output )]($style)'
 detect_files = ['Makefile', 'makefile', 'GNUmakefile']
-command = "make --version | sed -n 's/^GNU Make \\([0-9.]\\+\\).*/v\\1/p'"
+command = "osrvv make"
 disabled = false
 
 [java]
