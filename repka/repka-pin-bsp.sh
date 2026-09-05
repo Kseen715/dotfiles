@@ -29,7 +29,7 @@ for arg in "$@"; do
     --dry-run)              DRY_RUN=1 ;;
     --force)                FORCE=1 ;;
     --disable-armbian-repo) DISABLE_REPO=1 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -158,12 +158,44 @@ fi
 log "Boot sanity check installed: $CHECK_BIN (runs after every apt operation)"
 
 # ------------------------------------------------- 4. optionally kill the repo
+# Append "Enabled: no" as a FIELD of every stanza in a deb822 sources file.
+# A blank line terminates a stanza, so the field must sit INSIDE the stanza with
+# no blank line before it - otherwise apt sees an orphan stanza and refuses to
+# parse the file at all, breaking every apt command on the board.
+deb822_disable() {
+  awk '
+    function flush(   i) {
+      if (n == 0) return
+      if (printed) print ""
+      for (i = 1; i <= n; i++) print buf[i]
+      print "Enabled: no"
+      printed = 1
+      n = 0
+    }
+    /^[[:space:]]*$/ { flush(); next }
+    /^[Ee]nabled:/   { next }
+    { buf[++n] = $0 }
+    END { flush() }
+  '
+}
+
 if [ "$DISABLE_REPO" = 1 ] && [ -f "$ARMBIAN_SOURCES" ]; then
   if [ "$DRY_RUN" = 1 ]; then
     echo "  (dry-run) would disable $ARMBIAN_SOURCES"
   else
-    sed -i 's/^Enabled:.*$//' "$ARMBIAN_SOURCES"
-    printf '\nEnabled: no\n' >> "$ARMBIAN_SOURCES"
+    BAK="${ARMBIAN_SOURCES}.repka-bak"
+    cp -a "$ARMBIAN_SOURCES" "$BAK"
+    deb822_disable < "$BAK" > "${ARMBIAN_SOURCES}.tmp"
+    chmod --reference="$BAK" "${ARMBIAN_SOURCES}.tmp" 2>/dev/null || chmod 0644 "${ARMBIAN_SOURCES}.tmp"
+    mv "${ARMBIAN_SOURCES}.tmp" "$ARMBIAN_SOURCES"
+
+    # A malformed sources file breaks apt entirely, so prove it still parses and
+    # roll back if it does not.
+    if ! apt-get indextargets >/dev/null 2>&1; then
+      mv "$BAK" "$ARMBIAN_SOURCES"
+      die "disabling $ARMBIAN_SOURCES made apt unable to parse it - reverted, board untouched"
+    fi
+    rm -f "$BAK"
   fi
   warn "apt.armbian.com disabled entirely (--disable-armbian-repo)"
 fi

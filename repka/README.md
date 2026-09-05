@@ -57,7 +57,18 @@ This applies, idempotently:
    any BSP package would still be touched
 
 Add `--disable-armbian-repo` to turn `apt.armbian.com` off entirely — the most
-conservative option if you don't need Armbian userland updates.
+conservative option if you don't need Armbian userland updates. It appends
+`Enabled: no` as a **field of each stanza** in `armbian.sources`. This detail
+matters: in deb822 a blank line terminates a stanza, so putting a newline before
+the field makes it an orphan stanza and apt refuses to read *any* source:
+
+```
+E: Malformed stanza 2 in source list /etc/apt/sources.list.d/armbian.sources (type)
+E: The list of sources could not be read.
+```
+
+On a live board the script re-parses the file afterwards and rolls the original
+back if apt can no longer read it, so a bad edit can't leave you without apt.
 
 ### Verified on `rpi-glr-02`
 
@@ -65,6 +76,59 @@ conservative option if you don't need Armbian userland updates.
 - after pinning: `24 upgraded`, kernel and DTB excluded
 - ran the real `apt full-upgrade`, rebooted → **board came back**, still
   `6.18.48-current-sunxi64` with `sun50i-h5-repka-pi3.dtb`
+
+## Patching the image itself (recommended for a fleet)
+
+Rather than fixing each board after flashing, bake the pin into the image once.
+Every card you write is then protected from its very first boot.
+
+```bash
+# .img.xz in, .img.xz out
+TMPDIR=/var/tmp ./repka-patch-image.sh \
+  ~/Downloads/Repka_26.08.0-trunk_Repkapi3_trixie_current_6.18.48.img.xz
+# -> Repka_26.08.0-trunk_Repkapi3_trixie_current_6.18.48-pinned.img.xz
+```
+
+It needs **no root**. Instead of loop-mounting, it carves partition 1 out of the
+image, edits it offline with `debugfs`, and writes it back. Into the rootfs it puts:
+
+- `/etc/apt/preferences.d/99-repka-bsp-pin` — the `Pin-Priority: -1` pin
+- `/usr/local/sbin/repka-boot-check` (mode 0755, root:root)
+- `/etc/apt/apt.conf.d/99-repka-boot-check` — the post-invoke hook
+- `hold` on the BSP packages, written straight into `/var/lib/dpkg/status`
+
+Options: `-o/--output`, `--xz`/`--no-xz`, `--level N`, `--disable-armbian-repo`,
+`--force`, `--keep-tmp`.
+
+It refuses to touch an image whose `BOARD` is not `repkapi3` or that has no
+`sun50i-h5-repka-pi3.dtb`, and it **verifies before emitting output** — if any check
+fails, no output file is written at all.
+
+### Notes
+
+- Needs scratch space for the decompressed image plus a copy of its root partition
+  (~4.8 GiB for this image). It checks upfront and tells you if you're short.
+  **`/tmp` is tmpfs (RAM) on this machine and is too small — use `TMPDIR=/var/tmp`.**
+- Re-running it on an already-patched image is a no-op that still verifies; it
+  reports which packages were already held.
+- Everything before partition 1 — the MBR and the raw U-Boot area at 8 KiB–4 MiB —
+  is left byte-for-byte identical (verified by checksum).
+- `xz` recompression is by far the slowest step. `--level 0` is fine for images you
+  flash locally; the default 6 matches the original.
+
+### Verified
+
+Patched the real `Repka_26.08.0-...6.18.48.img.xz` end to end:
+
+- all checks pass; output rootfs is `e2fsck`-clean
+- 4 BSP packages held, pin file and hook present, boot check root-owned mode 0755
+- `sun50i-h5-repka-pi3.dtb` intact
+- pre-partition area byte-identical to the original (`sha256` match)
+- `.img` → `.img.xz` roundtrip: `xz -t` clean, fsck clean, pin and DTB still there
+- second run over its own output: idempotent
+- `--disable-armbian-repo`: the rewritten `armbian.sources` was checked in a
+  `debian:trixie` container — it parses, and `apt-get update --print-uris` drops
+  from 3 armbian URIs to 0, while `debian.sources` is left untouched
 
 ## Provisioning several boards
 
@@ -82,7 +146,8 @@ a board that fails to return is reported rather than silently lost. It will refu
 reboot a host whose boot files fail the sanity check after upgrading.
 
 Requires key-based SSH and passwordless `sudo` (or `User root`, as in your
-`~/.ssh/config`).
+`~/.ssh/config`). If you patched the image with `repka-patch-image.sh`, the boards
+are already pinned and this is only a verification pass.
 
 ## Recovering a board you already bricked
 
@@ -108,7 +173,8 @@ which is 4 MiB on this image). You normally **don't** need it: `linux-u-boot-rep
 has no upstream counterpart, so the upgrade never replaces U-Boot. The script
 computes the bound from the actual partition table and refuses to overlap partition 1.
 
-> Note: the pin, fleet, and upgrade paths were verified end-to-end on live hardware.
+> Note: the pin, fleet, upgrade, and image-patch paths were verified end-to-end
+> (the first three on live hardware, the patcher against the real image).
 > `repka-recover-sd.sh` has had its image-side assumptions checked against the real
 > `.img.xz` (single ext4 partition at sector 8192), but the write path has not been
 > exercised on an actually-bricked card — take the `/boot.broken-*` backup seriously

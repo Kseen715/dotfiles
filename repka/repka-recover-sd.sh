@@ -28,7 +28,7 @@ while [ $# -gt 0 ]; do
     --uboot)  DO_UBOOT=1 ;;
     --yes)    ASSUME_YES=1 ;;
     --keep-tmp) KEEP_TMP=1 ;;
-    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift

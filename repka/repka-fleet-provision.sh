@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
     --upgrade) DO_UPGRADE=1 ;;
     --reboot)  DO_REBOOT=1 ;;
     --dry-run|--disable-armbian-repo|--force) PIN_ARGS+=("$1") ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"; exit 0 ;;
     -*)        echo "unknown option: $1" >&2; exit 2 ;;
     *)         HOSTS+=("$1") ;;
   esac
