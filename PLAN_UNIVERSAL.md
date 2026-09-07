@@ -155,7 +155,9 @@ One `#ifdef _WIN32` / `#else` pair per platform difference — no runtime OS
 detection where compile-time will do, since each target is a separate build.
 
 > [!note] `toolchains/` does not exist yet
-> Phase 0 is unstarted. See [[#Open questions]].
+> None is needed so far: Debian/Ubuntu's stock `gcc-mingw-w64-i686` builds the
+> whole tree for the XP target with no patch. A pinned image becomes worth its
+> cost only if that stops being true.
 
 ---
 
@@ -178,7 +180,7 @@ build\nob.exe clean
 | ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------- |
 | Win10/11            | current MSYS2 mingw-w64 or MSVC                                         | UCRT                                                   | no constraints; this is the shipping Windows rice |
 | Win7                | current mingw-w64                                                       | `0x0601`, UCRT or msvcrt                               | works today, no patching                          |
-| WinXP               | **own pinned/patched mingw-w64**, Dockerized                            | `0x0501`, `msvcrt.dll`, no `winpthread`, no C++ stdlib | the one genuinely bespoke toolchain — unstarted   |
+| WinXP               | stock **i686** mingw-w64 cross driver (`i686-w64-mingw32-gcc`), Dockerized only if a pin is later needed | `0x0501`, `msvcrt.dll`, no `winpthread`, no C++ stdlib | builds clean and produces an XP-loadable image today; see `os-rice/test/xp.sh` |
 | Linux, common arch  | `musl-gcc`, static                                                      | musl                                                   | x86_64/aarch64/armv7, any current musl toolchain  |
 | Linux, obscure arch | prebuilt cross-compiler from musl.cc / buildroot, fetched **on demand** | musl                                                   | stood up only against a named real board          |
 
@@ -199,8 +201,8 @@ execs the right prebuilt binary, never doing installer logic itself.
 | phase | state |
 | --- | --- |
 | **Phase 1 — minimal core** | the shape is proven end to end: both manifest parsers, the theme renderer, the package/provider path, elevation, the 8 Windows modules, the unit suite. Remaining: the byte-diff-against-sh checkpoint and a human pass on the fallback branches. |
-| **Phase 0 — XP toolchain** | not started |
-| **Phase 2 — XP end to end** | not started |
+| **Phase 0 — XP toolchain** | done, cheaper than planned: no bespoke toolchain was needed. `nob` picks its target from `$CC` (`NOB_TARGET` overrides) instead of from the host it runs on, so `CC=i686-w64-mingw32-gcc ./nob` cross-builds `build/osr.exe` from Linux — clean at `-std=c89 -Wall -Wextra -pedantic`, zero warnings. `test/xp.sh` is the acceptance check: 32-bit PE, subsystem 4.0, only XP-shipped DLLs, `msvcrt.dll` (not UCRT), no post-XP import. |
+| **Phase 2 — XP end to end** | not started. The blocker is not the build: XP's WinInet has no TLS 1.2, so `lib/fetch.c` cannot reach any modern HTTPS host, and nothing has been run on real XP or a QEMU XP guest. |
 | **Phase 3 — obscure Linux arch** | not started, and deliberately unplanned |
 
 Phase 1 detail worth keeping: `theme_render_test.c` renders a **real**

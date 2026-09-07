@@ -12,6 +12,8 @@
  *   ./build/nob both        (builds static and runtime outputs)
  *   ./build/nob test        (builds both + runs the test suite)
  *   ./build/nob clean
+ *   CC=i686-w64-mingw32-gcc ./build/nob   (cross-build build/osr.exe for the
+ *                            Windows XP tier from Linux; see target_windows)
  *   ./build/nob -v          (any of the above, with full command lines)
  *   ./build/nob -t          (any of the above, timed: how long each unit
  *                            took to compile and each binary to link)
@@ -77,13 +79,14 @@
 #include <sys/time.h>   /* gettimeofday, for `nob -t`; see now_secs() */
 #endif
 
-/* EXE -- the host's executable suffix. Windows needs ".exe"; on a Linux/CI
- * host the produced binaries (and the tests we actually run there) carry no
- * suffix. */
+/* HOST_EXE -- the executable suffix of the machine nob itself runs on. It
+ * names only nob's own scratch files (the compiler probe); what the build
+ * PRODUCES is named by exe() below, which follows the TARGET instead -- the
+ * two differ whenever this is a cross build (Linux host, XP target). */
 #ifdef _WIN32
-#define EXE ".exe"
+#define HOST_EXE ".exe"
 #else
-#define EXE ""
+#define HOST_EXE ""
 #endif
 
 /* Everything this script writes goes under BUILD_DIR: programs directly in
@@ -470,17 +473,10 @@ static const char *win_srcs[] = {
 };
 #define WIN_SRCS_COUNT (sizeof(win_srcs) / sizeof(win_srcs[0]))
 
-/* HOST_SRCS -- the list for the system being built for. nob.c has always
- * assumed the host it runs on is the system it builds for (see the -DWINVER
- * flags and the -lwininet line further down), and this is the same
- * assumption. */
-#ifdef _WIN32
-#define HOST_SRCS win_srcs
-#define HOST_SRCS_COUNT WIN_SRCS_COUNT
-#else
-#define HOST_SRCS posix_srcs
-#define HOST_SRCS_COUNT POSIX_SRCS_COUNT
-#endif
+/* MAX_HOST_SRCS -- the bound for a stack array holding whichever of the two
+ * lists target_srcs() picks. The pick is a runtime one now (see
+ * target_windows), so the array has to fit either. */
+#define MAX_HOST_SRCS (POSIX_SRCS_COUNT > WIN_SRCS_COUNT ? POSIX_SRCS_COUNT : WIN_SRCS_COUNT)
 
 /* The runtime host (D-4a) compiles every unit EXCEPT the modules, plus
  * lib/module_runtime.c, and loads a module's object on demand instead. So the
@@ -579,7 +575,7 @@ static const char *cc_ladder[] = {"tcc", "clang", "gcc", "zig cc", "cc", DEFAULT
 #define CC_STAMP BUILD_DIR "/cc.stamp"
 #define CC_PROBE_SRC BUILD_DIR "/cc_probe.c"
 #define CC_PROBE_OBJ BUILD_DIR "/cc_probe.o"
-#define CC_PROBE_BIN BUILD_DIR "/cc_probe" EXE
+#define CC_PROBE_BIN BUILD_DIR "/cc_probe" HOST_EXE
 
 /* DEV_NULL -- where a probe's own diagnostics go. A candidate that fails is
  * the expected case here, not something to report. */
@@ -743,6 +739,60 @@ static void append_cc(Nob_Cmd *cmd) {
 }
 
 static bool is_msvc(void) { return is_msvc_name(cc_prog()); }
+
+/* --- what we are building FOR ----------------------------------------
+ *
+ * nob.c used to assume the host it runs on is the system it builds for, so
+ * every Windows decision (the module list, the .exe suffix, the -DWINVER
+ * floor, -lwininet) was a `#ifdef _WIN32` on nob's own compilation. That
+ * assumption cost the XP tier: XP cannot host a current toolchain, so the
+ * only way to produce an XP binary is to cross-compile one from Linux, and
+ * a compile-time #ifdef cannot express that.
+ *
+ * The target is read from $CC instead, which is the thing that actually
+ * decides it: a mingw-w64 cross driver (i686-w64-mingw32-gcc) or any cl
+ * spelling produces Windows objects wherever it runs. NOB_TARGET=windows|posix
+ * overrides, for a toolchain whose name says nothing (a wrapper script, a
+ * pinned XP driver under some other name -- see PLAN_UNIVERSAL.md).
+ *
+ * XP specifically needs the 32-bit driver (i686-, not x86_64-); the flags
+ * below are the same either way, so nothing here enforces it.
+ */
+static bool target_windows(void) {
+    const char *env = getenv("NOB_TARGET");
+    const char *prog;
+    if (env != NULL && *env != '\0') return strcmp(env, "windows") == 0;
+    if (is_msvc()) return true;
+    prog = cc_prog();
+    if (strstr(prog, "mingw") != NULL || strstr(prog, "cygwin") != NULL) return true;
+#ifdef _WIN32
+    return true;
+#else
+    return false;
+#endif
+}
+
+/* target_runnable -- can this host execute what the build produces? False
+ * exactly when cross-compiling, which is what makes `nob test` build the test
+ * binaries and stop rather than try to exec a PE on Linux. */
+static bool target_runnable(void) {
+#ifdef _WIN32
+    return target_windows();
+#else
+    return !target_windows();
+#endif
+}
+
+/* exe -- the TARGET's executable suffix (HOST_EXE is the host's). */
+static const char *exe(void) { return target_windows() ? ".exe" : ""; }
+
+/* target_srcs -- the module list for the system being built for, and its
+ * length through the out parameter. */
+static const char **target_srcs(size_t *count) {
+    if (target_windows()) { *count = WIN_SRCS_COUNT; return win_srcs; }
+    *count = POSIX_SRCS_COUNT;
+    return posix_srcs;
+}
 
 /* is_chibicc -- does $CC name chibicc, with or without a path and flags?
  * chibicc is deliberately absent from cc_ladder: it is a self-hosting toy
@@ -921,9 +971,9 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
      * warns from every TU. gcc/clang do not enable -Wshadow at all under
      * -Wall -Wextra, so nothing is lost by silencing it for pcc only. */
     if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", "-Wno-shadow", NULL);
-#ifdef _WIN32
-    cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
-#endif
+    if (target_windows()) {
+        cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
+    }
 }
 
 
@@ -931,11 +981,13 @@ static void append_common_flags(Nob_Cmd *cmd) {
     append_common_flags_for(cmd, NULL);
 }
 
-/* BIN -- a program's path in the build directory, with the host's suffix:
- * BIN("install") is "build/install.exe" on Windows, "build/install"
- * elsewhere. A macro, not a function, so it stays a plain literal usable
- * anywhere a string is. */
-#define BIN(name) BUILD_DIR "/" name EXE
+/* bin_path -- a program's path in the build directory, with the target's
+ * suffix: bin_path("osr") is "build/osr.exe" for a Windows target and
+ * "build/osr" otherwise. A function, not a macro, because the suffix is a
+ * runtime fact now (see exe). */
+static const char *bin_path(const char *name) {
+    return nob_temp_sprintf("%s/%s%s", BUILD_DIR, name, exe());
+}
 
 /* obj_of -- "lib/net.c" -> "build/obj/lib_net.o". All objects live in one
  * flat directory; the path separators become '_' to keep names unique
@@ -1192,7 +1244,11 @@ static size_t host_objs(const char **objs, const char *main_src) {
     size_t i;
     objs[count++] = obj_of(main_src);
     for (i = 0; i < CORE_SRCS_COUNT; i++) objs[count++] = obj_of(core_srcs[i]);
-    for (i = 0; i < HOST_SRCS_COUNT; i++) objs[count++] = obj_of(HOST_SRCS[i]);
+    {
+        size_t n;
+        const char **host = target_srcs(&n);
+        for (i = 0; i < n; i++) objs[count++] = obj_of(host[i]);
+    }
     return count;
 }
 
@@ -1238,9 +1294,10 @@ static bool compile_objs(const char **srcs, size_t count) {
 }
 
 static void append_lib_objs(Nob_Cmd *cmd) {
-    size_t i;
+    size_t i, n;
+    const char **host = target_srcs(&n);
     for (i = 0; i < CORE_SRCS_COUNT; i++) nob_cmd_append(cmd, obj_of(core_srcs[i]));
-    for (i = 0; i < HOST_SRCS_COUNT; i++) nob_cmd_append(cmd, obj_of(HOST_SRCS[i]));
+    for (i = 0; i < n; i++) nob_cmd_append(cmd, obj_of(host[i]));
 }
 
 /* Windows-only link libs -- the sources' POSIX branches (see lib/net.c's
@@ -1259,11 +1316,9 @@ static void append_common_libs(Nob_Cmd *cmd) {
         cmd_append_args(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib", NULL);
         return;
     }
-#ifdef _WIN32
-    cmd_append_args(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32", NULL);
-#else
-    NOB_UNUSED(cmd);
-#endif
+    if (target_windows()) {
+        cmd_append_args(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32", NULL);
+    }
 }
 
 /* link_runtime -- the runtime-module host, built in one compiler invocation.
@@ -1353,7 +1408,7 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
  * moved out to build/test/, hence the climb back up in its path.
  */
 static bool run_test(const char *name) {
-    const char *bin_name = nob_temp_sprintf("../../" TEST_BIN_DIR "/%s" EXE, name);
+    const char *bin_name = nob_temp_sprintf("../../" TEST_BIN_DIR "/%s%s", name, exe());
     Nob_Cmd cmd = {0};
     bool ok;
     nob_log(NOB_INFO, "--- %s ---", name);
@@ -1374,7 +1429,7 @@ static bool build_tests(void) {
     if (!compile_objs(srcs, TEST_COUNT)) return false;
     if (!mkdir_if_needed(TEST_BIN_DIR)) return false;
     for (i = 0; i < TEST_COUNT; i++) {
-        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]);
+        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s%s", test_names[i], exe());
         if (!link_exe(bin, srcs[i], &procs)) return false;
     }
     if (!nob_procs_flush(&procs)) return false;
@@ -1384,51 +1439,57 @@ static bool build_tests(void) {
     }
     if (!compile_objs(usrcs, UNITY_TEST_COUNT)) return false;
     for (i = 0; i < UNITY_TEST_COUNT; i++) {
-        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, unity_test_names[i]);
+        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s%s", unity_test_names[i], exe());
         if (!link_standalone(bin, usrcs[i], &procs)) return false;
     }
     if (!nob_procs_flush(&procs)) return false;
 
-#ifndef _WIN32
-    for (i = 0; i < POSIX_TEST_COUNT; i++) {
-        psrcs[i] = nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]);
+    if (!target_windows()) {
+        for (i = 0; i < POSIX_TEST_COUNT; i++) {
+            psrcs[i] = nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]);
+        }
+        if (!compile_objs(psrcs, POSIX_TEST_COUNT)) return false;
+        for (i = 0; i < POSIX_TEST_COUNT; i++) {
+            const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s%s", posix_test_names[i], exe());
+            if (!link_standalone(bin, psrcs[i], &procs)) return false;
+        }
+    } else {
+        NOB_UNUSED(psrcs);
     }
-    if (!compile_objs(psrcs, POSIX_TEST_COUNT)) return false;
-    for (i = 0; i < POSIX_TEST_COUNT; i++) {
-        const char *bin = nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]);
-        if (!link_standalone(bin, psrcs[i], &procs)) return false;
-    }
-#else
-    NOB_UNUSED(psrcs);
-#endif
     return nob_procs_flush(&procs);
 }
 
-#ifndef _WIN32
 static bool run_runtime_module_tests(void) {
     Nob_Cmd cmd = {0};
     nob_log(NOB_INFO, "--- runtime_modules ---");
     cmd_append_args(&cmd, "sh", "test/runtime_modules.sh", NULL);
     return nob_cmd_run(&cmd);
 }
-#endif
 
 static bool run_all_tests(void) {
     bool ok = true;
     size_t i;
     if (!build_tests()) return false;
+    /* A cross build produced binaries this machine cannot exec (a PE on
+     * Linux). Building them is still the point -- that is the compile check
+     * for the target -- so stop here rather than fail on the first exec. */
+    if (!target_runnable()) {
+        nob_log(NOB_INFO, "cross build: test binaries built, not run (no %s host here)",
+                target_windows() ? "Windows" : "POSIX");
+        return true;
+    }
     for (i = 0; i < TEST_COUNT; i++) {
         if (!run_test(test_names[i])) ok = false;
     }
     for (i = 0; i < UNITY_TEST_COUNT; i++) {
         if (!run_test(unity_test_names[i])) ok = false;
     }
-#ifndef _WIN32
-    for (i = 0; i < POSIX_TEST_COUNT; i++) {
-        if (!run_test(posix_test_names[i])) ok = false;
+    if (!target_windows()) {
+        for (i = 0; i < POSIX_TEST_COUNT; i++) {
+            if (!run_test(posix_test_names[i])) ok = false;
+        }
+        if (!run_runtime_module_tests()) ok = false;
     }
-    if (!run_runtime_module_tests()) ok = false;
-#endif
     return ok;
 }
 
@@ -1445,22 +1506,22 @@ static void delete_built(const char *src) {
 
 static bool clean(void) {
     size_t i;
-    delete_if_exists(BIN("osr"));
-    delete_if_exists(BIN("osr-runtime"));
+    delete_if_exists(bin_path("osr"));
+    delete_if_exists(bin_path("osr-runtime"));
     delete_built("osr.c");
     for (i = 0; i < CORE_SRCS_COUNT; i++) delete_built(core_srcs[i]);
     for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_built(posix_srcs[i]);
     for (i = 0; i < WIN_SRCS_COUNT; i++) delete_built(win_srcs[i]);
     for (i = 0; i < TEST_COUNT; i++) {
-        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", test_names[i], exe()));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", test_names[i]));
     }
     for (i = 0; i < UNITY_TEST_COUNT; i++) {
-        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, unity_test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", unity_test_names[i], exe()));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", unity_test_names[i]));
     }
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
-        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s" EXE, posix_test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", posix_test_names[i], exe()));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]));
     }
     /* the compiler bookkeeping goes too: with no objects left there is no
@@ -1515,31 +1576,32 @@ static bool cc_toolchain_check(void) {
 /* build_all -- one binary, build/osr. Every object it needs compiled in one
  * parallel batch, then linked. */
 static bool build_all(void) {
-    const char *srcs[CORE_SRCS_COUNT + HOST_SRCS_COUNT + 1];
+    const char *srcs[CORE_SRCS_COUNT + MAX_HOST_SRCS + 1];
     size_t count = 0;
     Nob_Procs procs = {0};
-    size_t i;
+    size_t i, n;
+    const char **host;
 
     if (!cc_toolchain_check()) return false;
 
+    host = target_srcs(&n);
     srcs[count++] = "osr.c";
     for (i = 0; i < CORE_SRCS_COUNT; i++) srcs[count++] = core_srcs[i];
-    for (i = 0; i < HOST_SRCS_COUNT; i++) srcs[count++] = HOST_SRCS[i];
+    for (i = 0; i < n; i++) srcs[count++] = host[i];
 
     if (!compile_objs(srcs, count)) return false;
-    if (!link_exe(BIN("osr"), "osr.c", &procs)) return false;
+    if (!link_exe(bin_path("osr"), "osr.c", &procs)) return false;
     return nob_procs_flush(&procs);
 }
 
 static bool build_runtime(void) {
-#ifdef _WIN32
-    nob_log(NOB_ERROR, "runtime C modules are supported only by the POSIX build");
-    return false;
-#else
+    if (target_windows()) {
+        nob_log(NOB_ERROR, "runtime C modules are supported only by the POSIX build");
+        return false;
+    }
     if (!cc_toolchain_check()) return false;
     if (!mkdir_if_needed(BUILD_DIR)) return false;
-    return link_runtime(BIN("osr-runtime"));
-#endif
+    return link_runtime(bin_path("osr-runtime"));
 }
 
 /* --- autoconf-style command echo -------------------------------------
@@ -1811,12 +1873,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(subcommand, "test") == 0) {
         if (!build_all()) return 1;
-#ifndef _WIN32
         /* The runtime host is a POSIX output (it dlopens what it compiles), so
          * it is built here only where it exists -- and it is built at all
          * because test/runtime_modules.sh drives it. */
-        if (!build_runtime()) return 1;
-#endif
+        if (!target_windows() && !build_runtime()) return 1;
         return run_all_tests() ? 0 : 1;
     }
     if (strcmp(subcommand, "clean") == 0) {

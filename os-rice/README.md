@@ -195,6 +195,35 @@ trusted installer code and runs with the same privileges as a statically linked
 module; dynamic loading is not a sandbox. Windows and compiler-free deployments
 use the static output.
 
+### Cross-building for Windows (including XP)
+
+`nob` builds for whichever system `$CC` targets, not for the one it runs on, so
+a Windows binary is produced from Linux by naming a mingw-w64 cross driver. The
+32-bit driver is the Windows XP tier (`PLAN_UNIVERSAL.md`); the flags are the
+same either way, and the `_WIN32_WINNT=0x0501` floor is always on for a Windows
+target:
+
+```sh
+CC=i686-w64-mingw32-gcc ./build/nob         # build/osr.exe, XP-compatible
+CC=i686-w64-mingw32-gcc ./build/nob test    # builds the tests, does not run them
+sh test/xp.sh                               # cross-build + check the PE loads on XP
+```
+
+`NOB_TARGET=windows|posix` overrides the guess for a toolchain whose name says
+nothing. Objects are not portable between targets, so switching `$CC` back and
+forth rebuilds the tree each time -- `build/` holds one target at a time.
+
+`test/xp.sh` is the tier's acceptance check and the thing to run after touching
+any Windows path: it asserts the linked image is a 32-bit PE with a 4.0
+subsystem version, imports only DLLs XP ships, links `msvcrt.dll` rather than
+UCRT, and imports no symbol from its post-XP tripwire list. It skips (exit 0)
+where no i686 mingw-w64 is installed.
+
+> [!warning] Compiling for XP is not the same as working on XP
+> The image loads; what it then does over the network does not. `lib/fetch.c`
+> uses WinInet, and XP's WinInet has no TLS 1.2 -- every HTTPS fetch against a
+> modern host fails until that is addressed. See PLAN_UNIVERSAL.md's phase 2.
+
 ---
 
 ## Supported compiler targets
