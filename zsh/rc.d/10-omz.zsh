@@ -206,6 +206,45 @@ if [[ -d $ZSH_CUSTOM/plugins/zsh-autocomplete/Completions ]]; then
     fpath=($ZSH_CUSTOM/plugins/zsh-autocomplete/Completions $fpath)
 fi
 
+
+# --- compinit: audit once a day, not once a shell -----------------------------
+# oh-my-zsh.sh hardcodes `compinit -i -d "$ZSH_COMPDUMP"` on EVERY shell, and -i
+# does not skip the audit - it only makes compaudit's findings non-interactive.
+# Per functions/Completion/compinit:67, "the -C flag bypasses both the check for
+# rebuilding the dump file and the usual call to compaudit"; -C is the only one
+# that does. compaudit stats all 1340 files across the 42 $fpath dirs, measured
+# at 13 ms warm / 23 ms cold - the single largest entry in `zprof`.
+#
+# Intercepting it is safe because `autoload -U compinit` does NOT clobber an
+# already-defined function (verified), so this definition survives oh-my-zsh.sh's
+# line 77 and its call lands here instead. The wrapper unfunctions itself first,
+# so the real compinit is what runs below AND what zsh-autocomplete's later
+# .autocomplete__compinit gets.
+#
+# The 24 h window is the only thing traded away, and it is narrower than it
+# looks: omz separately `rm -f`s the dump whenever $fpath or its own git
+# revision changes (see (a) above), so a newly ENABLED PLUGIN is still picked up
+# on the next shell. What can lag by up to 24 h is a new completion FILE landing
+# in a directory that is already on $fpath - e.g. apt dropping `_foo` into
+# /usr/share/zsh/vendor-completions. `rm -f $ZSH_COMPDUMP` forces it sooner.
+#
+# -i is hardcoded on the rebuild branch rather than passing "$@" through: with
+# ZSH_DISABLE_COMPFIX=true below, omz's own call site switches to `compinit -u`,
+# which does not merely skip the warning - it LOADS completions from
+# world-writable directories. Rebuilding under -i keeps those excluded from the
+# dump, and every -C shell in between reuses that audited dump.
+ZSH_DISABLE_COMPFIX=true
+compinit() {
+    unfunction compinit
+    autoload -Uz compinit
+    setopt localoptions extendedglob
+    if [[ -n ${ZSH_COMPDUMP}(#qN.mh-24) ]]; then
+        compinit -C -d "$ZSH_COMPDUMP"
+    else
+        compinit -i -d "$ZSH_COMPDUMP"
+    fi
+}
+
 [ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
 # --- history: no duplicate rows ----------------------------------------------
