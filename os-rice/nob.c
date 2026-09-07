@@ -1693,6 +1693,11 @@ static bool cc_toolchain_check(void) {
     nob_sb_free(sb);
     if (same) return true;
 
+    /* The dep-flag probe answered for the old compiler, so its cache goes
+     * with the objects -- unconditionally, because clean() below runs only
+     * when there are objects to drop, and a build/ with no obj/ still holds
+     * a cc.deps that would hand tcc gcc's -MMD ("invalid option"). */
+    delete_if_exists(CC_DEPS);
     if (nob_file_exists(OBJ_DIR) > 0) {
         nob_log(NOB_INFO, "compiler is now %s -- rebuilding everything", current);
         if (!clean()) return false;
