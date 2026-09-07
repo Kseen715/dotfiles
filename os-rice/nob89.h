@@ -172,6 +172,14 @@ int nob_walk_dir(const char *root, Nob_Walk_Func func);
 void nob_go_rebuild_urself(int argc, char **argv, const char *source_path);
 
 #define nob_sb_append_null(sb) nob_da_append((sb), '\0')
+#define nob_sb_append_cstr(sb, cstr)              \
+    do {                                          \
+        const char *nob_sb_s_ = (cstr);           \
+        while (*nob_sb_s_) {                      \
+            nob_da_append((sb), *nob_sb_s_);      \
+            nob_sb_s_++;                          \
+        }                                         \
+    } while (0)
 #define nob_sb_free(sb) free((sb).items)
 #define nob_shift(xs, xs_sz) (NOB_ASSERT((xs_sz) > 0), (xs_sz)--, *(xs)++)
 #define NOB_GO_REBUILD_URSELF(argc, argv) nob_go_rebuild_urself((argc), (argv), __FILE__)

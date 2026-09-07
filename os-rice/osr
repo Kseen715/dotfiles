@@ -246,15 +246,21 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN OSR_C_MODULE_BACKEND
 # ...but only where the build inputs actually are: the test sandboxes assemble a
 # root out of symlinks with no nob.c in it (see osr_detached above) and still
 # expect the binary they linked in to run.
+# OSR_NO_BUILD=1 skips the block entirely. The test harness sets it: its
+# sandboxes run this script with OSR_ROOT pointing at the real checkout and a
+# PATH that carries stubs only, so the nob underneath would detect a different
+# compiler than the one that built the tree, wipe build/ mid-suite (that is
+# what a toolchain change means to nob) and pull the binaries out from under
+# the tests still to run.
 # A checkout needs a compiler as much as a fresh clone does: nob.c IS the build
 # system, and without cc the block below dies with a link error instead of the
 # one thing that would fix it. Same package row as the detached path above --
 # the bare distro images the matrix runs on ship no compiler at all.
-if [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ] && ! _bs_have_cc; then
+if [ -z "${OSR_NO_BUILD:-}" ] && [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ] && ! _bs_have_cc; then
     _bs_log "no C compiler found - installing via $(_bs_pkg)"
     _bs_add build-essential gcc base-devel build-base gcc sys-devel/gcc
 fi
-if [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ]; then
+if [ -z "${OSR_NO_BUILD:-}" ] && [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ]; then
     # nob.c is the build system (its header comment has the one-time bootstrap
     # line); osr.ps1 does the same thing on Windows. Building here is what
     # makes a fresh checkout work before anyone has built anything.
@@ -265,7 +271,7 @@ if [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ]; then
         [ -x "$OSR_BIN" ] || exit 1
     }
 fi
-if [ -f "$OSR_ROOT/nob.c" ] && [ -x "$OSR_ROOT/build/nob" ]; then
+if [ -z "${OSR_NO_BUILD:-}" ] && [ -f "$OSR_ROOT/nob.c" ] && [ -x "$OSR_ROOT/build/nob" ]; then
     # Quiet on the way through: nob says "everything up to date" on every no-op
     # run, and this now runs before every command, `osr theme` included.
     ( cd -- "$OSR_ROOT" && ./build/nob "$OSR_BUILD_TARGET" ) >/dev/null 2>&1 || {

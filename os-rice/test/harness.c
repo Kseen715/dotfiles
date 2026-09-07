@@ -338,6 +338,11 @@ void osr_sb_init(OsrSandbox *sb) {
     osr_sb_env(sb, "OSR_VERSION_ID", "24.04");
     osr_sb_env(sb, "OSR_ARCH", "x86_64");
     osr_sb_env(sb, "OSR_VERBOSE", "1");
+    /* The `osr` script rebuilds the tree on every run. A sandbox runs it with
+     * the real OSR_ROOT and a stub-only PATH, so that build would detect a
+     * different compiler than the one that built build/ and wipe it out from
+     * under the rest of the suite. The suite already built what it runs. */
+    osr_sb_env(sb, "OSR_NO_BUILD", "1");
     /* The sandbox PATH carries no curl and no wget on purpose: a scenario
      * asserts what a box with no downloader prints, it does not fetch. Say so
      * to lib/fetch.c, whose fallback for that case is the in-process TLS
