@@ -20,12 +20,14 @@
  *   #define BEARSSL_IMPLEMENTATION
  *   #include "../thirdparty/bearssl.h"
  *
- * Everywhere else just #include it. The implementation needs C99 (upstream
- * uses `static inline` and declarations after statements) and lib/bearssl.c
- * is the only unit nob.c builds that way; the declarations above it are
- * plain C89, because this file's `static inline` accessors were rewritten to
- * `static` when it was generated. Including bearssl.h therefore costs a unit
- * nothing -- lib/tls.c and the rest of the tree stay at -std=c89.
+ * Everywhere else just #include it. Both halves are C89, like the rest of
+ * this tree: upstream's only non-C90 spelling is `inline`, and the script
+ * that generated this file rewrote every `static inline` to `static`. So
+ * nothing here asks for a dialect of its own -- nob.c builds lib/bearssl.c
+ * and lib/tls.c at -std=c89 alongside everything else. (One GNU extension
+ * survives, `unsigned __int128`, which src/inner.h enables for itself on
+ * 64-bit gcc/clang; it is no more standard in C99 than in C89, the 32-bit
+ * XP tier never sees it, and lib/bearssl.c compiles at -w regardless.)
  *
  * A client handshake, in short (see https://bearssl.org/api1.html and
  * lib/tls.c for the whole thing):
@@ -52,9 +54,9 @@
  * `#ifdef BEARSSL_IMPLEMENTATION`; dropping every `#include` of a bearssl
  * header, of inner.h, and of config.h; stripping the repeated upstream
  * copyright block from each file, since one copy of it (below) covers the
- * whole amalgamation; and rewriting the public headers' `static inline`
- * accessors to `static`, which C89 units can include and which costs
- * nothing at -O2, where a compiler inlines a one-line static anyway. src/config.h is not carried at all: every macro in it
+ * whole amalgamation; and rewriting every `static inline` to `static`, which
+ * is what makes the result C89 and costs nothing at -O2, where a compiler
+ * inlines a one-line static anyway. src/config.h is not carried at all: every macro in it
  * is commented out upstream, and its only role is to override the
  * autodetection in inner.h, which is what this tree wants running.
  *
@@ -14610,7 +14612,7 @@ typedef union {
 	unsigned char b[sizeof(uint64_t)];
 } br_union_u64;
 
-static inline void
+static void
 br_enc16le(void *dst, unsigned x)
 {
 #if BR_LE_UNALIGNED
@@ -14624,7 +14626,7 @@ br_enc16le(void *dst, unsigned x)
 #endif
 }
 
-static inline void
+static void
 br_enc16be(void *dst, unsigned x)
 {
 #if BR_BE_UNALIGNED
@@ -14638,7 +14640,7 @@ br_enc16be(void *dst, unsigned x)
 #endif
 }
 
-static inline unsigned
+static unsigned
 br_dec16le(const void *src)
 {
 #if BR_LE_UNALIGNED
@@ -14651,7 +14653,7 @@ br_dec16le(const void *src)
 #endif
 }
 
-static inline unsigned
+static unsigned
 br_dec16be(const void *src)
 {
 #if BR_BE_UNALIGNED
@@ -14664,7 +14666,7 @@ br_dec16be(const void *src)
 #endif
 }
 
-static inline void
+static void
 br_enc32le(void *dst, uint32_t x)
 {
 #if BR_LE_UNALIGNED
@@ -14680,7 +14682,7 @@ br_enc32le(void *dst, uint32_t x)
 #endif
 }
 
-static inline void
+static void
 br_enc32be(void *dst, uint32_t x)
 {
 #if BR_BE_UNALIGNED
@@ -14696,7 +14698,7 @@ br_enc32be(void *dst, uint32_t x)
 #endif
 }
 
-static inline uint32_t
+static uint32_t
 br_dec32le(const void *src)
 {
 #if BR_LE_UNALIGNED
@@ -14712,7 +14714,7 @@ br_dec32le(const void *src)
 #endif
 }
 
-static inline uint32_t
+static uint32_t
 br_dec32be(const void *src)
 {
 #if BR_BE_UNALIGNED
@@ -14728,7 +14730,7 @@ br_dec32be(const void *src)
 #endif
 }
 
-static inline void
+static void
 br_enc64le(void *dst, uint64_t x)
 {
 #if BR_LE_UNALIGNED
@@ -14742,7 +14744,7 @@ br_enc64le(void *dst, uint64_t x)
 #endif
 }
 
-static inline void
+static void
 br_enc64be(void *dst, uint64_t x)
 {
 #if BR_BE_UNALIGNED
@@ -14756,7 +14758,7 @@ br_enc64be(void *dst, uint64_t x)
 #endif
 }
 
-static inline uint64_t
+static uint64_t
 br_dec64le(const void *src)
 {
 #if BR_LE_UNALIGNED
@@ -14770,7 +14772,7 @@ br_dec64le(const void *src)
 #endif
 }
 
-static inline uint64_t
+static uint64_t
 br_dec64be(const void *src)
 {
 #if BR_BE_UNALIGNED
@@ -14805,7 +14807,7 @@ void br_range_enc64be(void *dst, const uint64_t *v, size_t num);
 /*
  * Byte-swap a 32-bit integer.
  */
-static inline uint32_t
+static uint32_t
 br_swap32(uint32_t x)
 {
 	x = ((x & (uint32_t)0x00FF00FF) << 8)
@@ -14847,7 +14849,7 @@ void br_tls_phash(void *dst, size_t len,
  * Copy all configured hash implementations from a multihash context
  * to another.
  */
-static inline void
+static void
 br_multihash_copyimpl(br_multihash_context *dst,
 	const br_multihash_context *src)
 {
@@ -14883,7 +14885,7 @@ br_multihash_copyimpl(br_multihash_context *dst,
 /*
  * Negate a boolean.
  */
-static inline uint32_t
+static uint32_t
 NOT(uint32_t ctl)
 {
 	return ctl ^ 1;
@@ -14892,7 +14894,7 @@ NOT(uint32_t ctl)
 /*
  * Multiplexer: returns x if ctl == 1, y if ctl == 0.
  */
-static inline uint32_t
+static uint32_t
 MUX(uint32_t ctl, uint32_t x, uint32_t y)
 {
 	return y ^ (-ctl & (x ^ y));
@@ -14901,7 +14903,7 @@ MUX(uint32_t ctl, uint32_t x, uint32_t y)
 /*
  * Equality check: returns 1 if x == y, 0 otherwise.
  */
-static inline uint32_t
+static uint32_t
 EQ(uint32_t x, uint32_t y)
 {
 	uint32_t q;
@@ -14913,7 +14915,7 @@ EQ(uint32_t x, uint32_t y)
 /*
  * Inequality check: returns 1 if x != y, 0 otherwise.
  */
-static inline uint32_t
+static uint32_t
 NEQ(uint32_t x, uint32_t y)
 {
 	uint32_t q;
@@ -14925,7 +14927,7 @@ NEQ(uint32_t x, uint32_t y)
 /*
  * Comparison: returns 1 if x > y, 0 otherwise.
  */
-static inline uint32_t
+static uint32_t
 GT(uint32_t x, uint32_t y)
 {
 	/*
@@ -14957,7 +14959,7 @@ GT(uint32_t x, uint32_t y)
  * General comparison: returned value is -1, 0 or 1, depending on
  * whether x is lower than, equal to, or greater than y.
  */
-static inline int32_t
+static int32_t
 CMP(uint32_t x, uint32_t y)
 {
 	return (int32_t)GT(x, y) | -(int32_t)GT(y, x);
@@ -14966,7 +14968,7 @@ CMP(uint32_t x, uint32_t y)
 /*
  * Returns 1 if x == 0, 0 otherwise. Take care that the operand is signed.
  */
-static inline uint32_t
+static uint32_t
 EQ0(int32_t x)
 {
 	uint32_t q;
@@ -14978,7 +14980,7 @@ EQ0(int32_t x)
 /*
  * Returns 1 if x > 0, 0 otherwise. Take care that the operand is signed.
  */
-static inline uint32_t
+static uint32_t
 GT0(int32_t x)
 {
 	/*
@@ -14993,7 +14995,7 @@ GT0(int32_t x)
 /*
  * Returns 1 if x >= 0, 0 otherwise. Take care that the operand is signed.
  */
-static inline uint32_t
+static uint32_t
 GE0(int32_t x)
 {
 	return ~(uint32_t)x >> 31;
@@ -15002,7 +15004,7 @@ GE0(int32_t x)
 /*
  * Returns 1 if x < 0, 0 otherwise. Take care that the operand is signed.
  */
-static inline uint32_t
+static uint32_t
 LT0(int32_t x)
 {
 	return (uint32_t)x >> 31;
@@ -15011,7 +15013,7 @@ LT0(int32_t x)
 /*
  * Returns 1 if x <= 0, 0 otherwise. Take care that the operand is signed.
  */
-static inline uint32_t
+static uint32_t
 LE0(int32_t x)
 {
 	uint32_t q;
@@ -15037,7 +15039,7 @@ void br_ccopy(uint32_t ctl, void *dst, const void *src, size_t len);
  * Compute the bit length of a 32-bit integer. Returned value is between 0
  * and 32 (inclusive).
  */
-static inline uint32_t
+static uint32_t
 BIT_LENGTH(uint32_t x)
 {
 	uint32_t k, c;
@@ -15054,7 +15056,7 @@ BIT_LENGTH(uint32_t x)
 /*
  * Compute the minimum of x and y.
  */
-static inline uint32_t
+static uint32_t
 MIN(uint32_t x, uint32_t y)
 {
 	return MUX(GT(x, y), y, x);
@@ -15063,7 +15065,7 @@ MIN(uint32_t x, uint32_t y)
 /*
  * Compute the maximum of x and y.
  */
-static inline uint32_t
+static uint32_t
 MAX(uint32_t x, uint32_t y)
 {
 	return MUX(GT(x, y), x, y);
@@ -15095,7 +15097,7 @@ MAX(uint32_t x, uint32_t y)
                        * (uint64_t)((y) | (uint32_t)0x80000000) \
                        - ((uint64_t)(x) << 31) - ((uint64_t)(y) << 31) \
                        - ((uint64_t)1 << 62))
-static inline uint32_t
+static uint32_t
 MUL31_lo(uint32_t x, uint32_t y)
 {
 	uint32_t xl, xh;
@@ -15172,7 +15174,7 @@ uint32_t br_divrem(uint32_t hi, uint32_t lo, uint32_t d, uint32_t *r);
  * Wrapper for br_divrem(); the remainder is returned, and the quotient
  * is discarded.
  */
-static inline uint32_t
+static uint32_t
 br_rem(uint32_t hi, uint32_t lo, uint32_t d)
 {
 	uint32_t r;
@@ -15185,7 +15187,7 @@ br_rem(uint32_t hi, uint32_t lo, uint32_t d)
  * Wrapper for br_divrem(); the quotient is returned, and the remainder
  * is discarded.
  */
-static inline uint32_t
+static uint32_t
 br_div(uint32_t hi, uint32_t lo, uint32_t d)
 {
 	uint32_t r;
@@ -15302,7 +15304,7 @@ void br_i32_muladd_small(uint32_t *x, uint32_t z, const uint32_t *m);
  * The word MUST entirely fit within the word elements corresponding
  * to the announced bit length of a[].
  */
-static inline uint32_t
+static uint32_t
 br_i32_word(const uint32_t *a, uint32_t off)
 {
 	size_t u;
@@ -15357,7 +15359,7 @@ void br_i32_mulacc(uint32_t *d, const uint32_t *a, const uint32_t *b);
  * Zeroize an integer. The announced bit length is set to the provided
  * value, and the corresponding words are set to 0.
  */
-static inline void
+static void
 br_i32_zero(uint32_t *x, uint32_t bit_len)
 {
 	*x ++ = bit_len;
@@ -15505,7 +15507,7 @@ uint32_t br_i31_decode_mod(uint32_t *x,
  * value, and the corresponding words are set to 0. The ENCODED bit length
  * is expected here.
  */
-static inline void
+static void
 br_i31_zero(uint32_t *x, uint32_t bit_len)
 {
 	*x ++ = bit_len;
@@ -15659,7 +15661,7 @@ uint32_t br_i31_moddiv(uint32_t *x, const uint32_t *y,
  * FIXME: document "i15" functions.
  */
 
-static inline void
+static void
 br_i15_zero(uint16_t *x, uint16_t bit_len)
 {
 	*x ++ = bit_len;
@@ -15739,7 +15741,7 @@ uint32_t br_i62_modpow_opt_as_i31(uint32_t *x,
 
 /* ==================================================================== */
 
-static inline size_t
+static size_t
 br_digest_size(const br_hash_class *digest_class)
 {
 	return (size_t)(digest_class->desc >> BR_HASHDESC_OUT_OFF)
@@ -16294,7 +16296,7 @@ void br_ssl_engine_fail(br_ssl_engine_context *cc, int err);
 /*
  * Test whether the engine is closed (normally or as a failure).
  */
-static inline int
+static int
 br_ssl_engine_closed(const br_ssl_engine_context *cc)
 {
 	return cc->iomode == BR_IO_FAILED;
@@ -16325,7 +16327,7 @@ void br_ssl_engine_flush_record(br_ssl_engine_context *cc);
 /*
  * Test whether there is some accumulated payload to send.
  */
-static inline int
+static int
 br_ssl_engine_has_pld_to_send(const br_ssl_engine_context *rc)
 {
 	return rc->oxa != rc->oxb && rc->oxa != rc->oxc;
@@ -16642,7 +16644,7 @@ BR_TARGETS_X86_DOWN
 #define br_bswap32   _byteswap_ulong
 #endif
 
-static inline int
+static int
 br_cpuid(uint32_t mask_eax, uint32_t mask_ebx,
 	uint32_t mask_ecx, uint32_t mask_edx)
 {
@@ -19865,7 +19867,7 @@ le13_to_le8(unsigned char *dst, size_t len, const uint32_t *src)
  * value is the resulting carry. The source (w) and destination (d)
  * arrays may be identical, but shall not overlap partially.
  */
-static inline uint32_t
+static uint32_t
 norm13(uint32_t *d, const uint32_t *w, size_t len)
 {
 	size_t u;
@@ -20120,7 +20122,7 @@ mul20(uint32_t *d, const uint32_t *a, const uint32_t *b)
 #undef CPR
 }
 
-static inline void
+static void
 square20(uint32_t *d, const uint32_t *a)
 {
 	mul20(d, a, a);
@@ -22206,7 +22208,7 @@ le13_to_be8(unsigned char *dst, size_t len, const uint32_t *src)
  * value is the resulting carry. The source (w) and destination (d)
  * arrays may be identical, but shall not overlap partially.
  */
-static inline uint32_t
+static uint32_t
 norm13(uint32_t *d, const uint32_t *w, size_t len)
 {
 	size_t u;
@@ -22461,7 +22463,7 @@ mul20(uint32_t *d, const uint32_t *a, const uint32_t *b)
 #undef CPR
 }
 
-static inline void
+static void
 square20(uint32_t *d, const uint32_t *a)
 {
 	mul20(d, a, a);
@@ -25897,7 +25899,7 @@ typedef struct {
 	size_t point_len;
 } curve_params;
 
-static inline const curve_params *
+static const curve_params *
 id_to_curve(int curve)
 {
 	static const curve_params pp[] = {
@@ -26322,13 +26324,13 @@ point_zero(jacobian *P, const curve_params *cc)
 	P->c[0][0] = P->c[1][0] = P->c[2][0] = cc->p[0];
 }
 
-static inline void
+static void
 point_double(jacobian *P, const curve_params *cc)
 {
 	run_code(P, P, cc, code_double);
 }
 
-static inline uint32_t
+static uint32_t
 point_add(jacobian *P1, const jacobian *P2, const curve_params *cc)
 {
 	return run_code(P1, P2, cc, code_add);
@@ -26780,7 +26782,7 @@ typedef struct {
 	uint32_t p0i;
 } curve_params;
 
-static inline const curve_params *
+static const curve_params *
 id_to_curve(int curve)
 {
 	static const curve_params pp[] = {
@@ -27205,13 +27207,13 @@ point_zero(jacobian *P, const curve_params *cc)
 	P->c[0][0] = P->c[1][0] = P->c[2][0] = cc->p[0];
 }
 
-static inline void
+static void
 point_double(jacobian *P, const curve_params *cc)
 {
 	run_code(P, P, cc, code_double);
 }
 
-static inline uint32_t
+static uint32_t
 point_add(jacobian *P1, const jacobian *P2, const curve_params *cc)
 {
 	return run_code(P1, P2, cc, code_add);
@@ -28829,7 +28831,7 @@ br_digest_size_by_ID(int digest_id)
 		(l) = (uint32_t)mul32tmp; \
 	} while (0)
 
-static inline void
+static void
 bmul(uint32_t *hi, uint32_t *lo, uint32_t x, uint32_t y)
 {
 	uint32_t x0, x1, x2, x3;
@@ -28923,7 +28925,7 @@ bmul(uint32_t *hi, uint32_t *lo, uint32_t x, uint32_t y)
  * Simple multiplication in GF(2)[X], using 16 integer multiplications.
  */
 
-static inline void
+static void
 bmul(uint32_t *hi, uint32_t *lo, uint32_t x, uint32_t y)
 {
 	uint32_t x0, x1, x2, x3;
@@ -29129,7 +29131,7 @@ br_ghash_ctmul(void *y, const void *h, const void *data, size_t len)
 /*
  * Multiplication in GF(2)[X], truncated to its low 32 bits.
  */
-static inline uint32_t
+static uint32_t
 bmul32(uint32_t x, uint32_t y)
 {
 	uint32_t x0, x1, x2, x3;
@@ -29341,7 +29343,7 @@ br_ghash_ctmul32(void *y, const void *h, const void *data, size_t len)
  * and bit reversal of 64-bit words.
  */
 
-static inline uint64_t
+static uint64_t
 bmul64(uint64_t x, uint64_t y)
 {
 	uint64_t x0, x1, x2, x3;
@@ -29477,7 +29479,7 @@ br_ghash_ctmul64(void *y, const void *h, const void *data, size_t len)
 /*
  * Test CPU support for PCLMULQDQ.
  */
-static inline int
+static int
 pclmul_supported(void)
 {
 	/*
@@ -29565,14 +29567,14 @@ BR_TARGETS_X86_UP
  */
 #if BR_CLANG
 BR_TARGET("sse2")
-static inline __m128i
+static __m128i
 pclmulqdq00(__m128i x, __m128i y)
 {
 	__asm__ ("pclmulqdq $0x00, %1, %0" : "+x" (x) : "x" (y));
 	return x;
 }
 BR_TARGET("sse2")
-static inline __m128i
+static __m128i
 pclmulqdq11(__m128i x, __m128i y)
 {
 	__asm__ ("pclmulqdq $0x11, %1, %0" : "+x" (x) : "x" (y));
@@ -35503,7 +35505,7 @@ br_hkdf_produce(br_hkdf_context *hc,
 
 /* ==== src/mac/hmac.c ==== */
 #define block_size br_amalg_hmac_block_size
-static inline size_t
+static size_t
 block_size(const br_hash_class *dig)
 {
 	unsigned ls;
@@ -35603,14 +35605,14 @@ br_hmac_out(const br_hmac_context *ctx, void *out)
 
 /* ==== src/mac/hmac_ct.c ==== */
 #define block_size br_amalg_hmac_ct_block_size
-static inline size_t
+static size_t
 hash_size(const br_hash_class *dig)
 {
 	return (unsigned)(dig->desc >> BR_HASHDESC_OUT_OFF)
 		& BR_HASHDESC_OUT_MASK;
 }
 
-static inline size_t
+static size_t
 block_size(const br_hash_class *dig)
 {
 	unsigned ls;
@@ -42162,7 +42164,7 @@ sendrec_ack(br_ssl_engine_context *rc, size_t len)
  * Test whether there is some buffered outgoing record that still must
  * sent.
  */
-static inline int
+static int
 has_rec_tosend(const br_ssl_engine_context *rc)
 {
 	return rc->oxa == rc->oxb && rc->oxa != rc->oxc;
@@ -47476,11 +47478,11 @@ br_ssl_key_export(br_ssl_engine_context *cc,
 #define ADDR_NULL   ((uint32_t)-1)
 
 #define GETSET(name, off) \
-static inline uint32_t get_ ## name(br_ssl_session_cache_lru *cc, uint32_t x) \
+static uint32_t get_ ## name(br_ssl_session_cache_lru *cc, uint32_t x) \
 { \
 	return br_dec32be(cc->store + x + (off)); \
 } \
-static inline void set_ ## name(br_ssl_session_cache_lru *cc, \
+static void set_ ## name(br_ssl_session_cache_lru *cc, \
 	uint32_t x, uint32_t val) \
 { \
 	br_enc32be(cc->store + x + (off), val); \
@@ -47617,7 +47619,7 @@ find_replacement_node(br_ssl_session_cache_lru *cc, uint32_t x, uint32_t *al)
  * Set the link at address 'alx' to point to node 'x'. If 'alx' is
  * ADDR_NULL, then this sets the tree root to 'x'.
  */
-static inline void
+static void
 set_link(br_ssl_session_cache_lru *cc, uint32_t alx, uint32_t x)
 {
 	if (alx == ADDR_NULL) {
@@ -50178,7 +50180,7 @@ br_aes_big_keysched_inv(uint32_t *skey, const void *key, size_t key_len)
 	return num_rounds;
 }
 
-static inline uint32_t
+static uint32_t
 rotr(uint32_t x, int n)
 {
 	return (x << (32 - n)) | (x >> n);
@@ -50316,7 +50318,7 @@ static const uint32_t Ssm0[] = {
 	0x7BB0B0CB, 0xA85454FC, 0x6DBBBBD6, 0x2C16163A
 };
 
-static inline uint32_t
+static uint32_t
 rotr(uint32_t x, int n)
 {
 	return (x << (32 - n)) | (x >> n);
@@ -51912,7 +51914,7 @@ inv_shift_rows(uint64_t *q)
 	}
 }
 
-static inline uint64_t
+static uint64_t
 rotr32(uint64_t x)
 {
 	return (x << 32) | (x >> 32);
@@ -51979,7 +51981,7 @@ br_aes_ct64_bitslice_decrypt(unsigned num_rounds,
 #define mix_columns br_amalg_aes_ct64_enc_mix_columns
 #define rotr32 br_amalg_aes_ct64_enc_rotr32
 #define shift_rows br_amalg_aes_ct64_enc_shift_rows
-static inline void
+static void
 add_round_key(uint64_t *q, const uint64_t *sk)
 {
 	q[0] ^= sk[0];
@@ -51992,7 +51994,7 @@ add_round_key(uint64_t *q, const uint64_t *sk)
 	q[7] ^= sk[7];
 }
 
-static inline void
+static void
 shift_rows(uint64_t *q)
 {
 	int i;
@@ -52011,13 +52013,13 @@ shift_rows(uint64_t *q)
 	}
 }
 
-static inline uint64_t
+static uint64_t
 rotr32(uint64_t x)
 {
 	return (x << 32) | (x >> 32);
 }
 
-static inline void
+static void
 mix_columns(uint64_t *q)
 {
 	uint64_t q0, q1, q2, q3, q4, q5, q6, q7;
@@ -52813,7 +52815,7 @@ inv_shift_rows(uint32_t *q)
 	}
 }
 
-static inline uint32_t
+static uint32_t
 rotr16(uint32_t x)
 {
 	return (x << 16) | (x >> 16);
@@ -52880,7 +52882,7 @@ br_aes_ct_bitslice_decrypt(unsigned num_rounds,
 #define mix_columns br_amalg_aes_ct_enc_mix_columns
 #define rotr16 br_amalg_aes_ct_enc_rotr16
 #define shift_rows br_amalg_aes_ct_enc_shift_rows
-static inline void
+static void
 add_round_key(uint32_t *q, const uint32_t *sk)
 {
 	q[0] ^= sk[0];
@@ -52893,7 +52895,7 @@ add_round_key(uint32_t *q, const uint32_t *sk)
 	q[7] ^= sk[7];
 }
 
-static inline void
+static void
 shift_rows(uint32_t *q)
 {
 	int i;
@@ -52909,13 +52911,13 @@ shift_rows(uint32_t *q)
 	}
 }
 
-static inline uint32_t
+static uint32_t
 rotr16(uint32_t x)
 {
 	return (x << 16) | (x >> 16);
 }
 
-static inline void
+static void
 mix_columns(uint32_t *q)
 {
 	uint32_t q0, q1, q2, q3, q4, q5, q6, q7;
@@ -55917,7 +55919,7 @@ br_aes_pwr8_ctrcbc_decrypt(const br_aes_pwr8_ctrcbc_keys *ctx,
 	}
 }
 
-static inline void
+static void
 incr_ctr(void *dst, const void *src)
 {
 	uint64_t hi, lo;
@@ -56418,7 +56420,7 @@ inv_shift_rows(unsigned *state)
 	state[15] = tmp;
 }
 
-static inline unsigned
+static unsigned
 gf256red(unsigned x)
 {
 	unsigned y;
@@ -56629,7 +56631,7 @@ br_aes_x86ni_supported(void)
 BR_TARGETS_X86_UP
 
 BR_TARGET("sse2,aes")
-static inline __m128i
+static __m128i
 expand_step128(__m128i k, __m128i k2)
 {
 	k = _mm_xor_si128(k, _mm_slli_si128(k, 4));
@@ -56640,7 +56642,7 @@ expand_step128(__m128i k, __m128i k2)
 }
 
 BR_TARGET("sse2,aes")
-static inline void
+static void
 expand_step192(__m128i *t1, __m128i *t2, __m128i *t3)
 {
 	__m128i t4;
@@ -56660,7 +56662,7 @@ expand_step192(__m128i *t1, __m128i *t2, __m128i *t3)
 }
 
 BR_TARGET("sse2,aes")
-static inline void
+static void
 expand_step256_1(__m128i *t1, __m128i *t2)
 {
 	__m128i t4;
@@ -56676,7 +56678,7 @@ expand_step256_1(__m128i *t1, __m128i *t2)
 }
 
 BR_TARGET("sse2,aes")
-static inline void
+static void
 expand_step256_2(__m128i *t1, __m128i *t3)
 {
 	__m128i t2, t4;
@@ -58211,7 +58213,7 @@ static const unsigned char QR1[] = {
  * 32-bit rotation. The C compiler is supposed to recognize it as a
  * rotation and use the local architecture rotation opcode (if available).
  */
-static inline uint32_t
+static uint32_t
 rotl(uint32_t x, int n)
 {
 	return (x << n) | (x >> (32 - n));
@@ -58331,7 +58333,7 @@ br_des_ct_keysched(uint32_t *skey, const void *key, size_t key_len)
  * DES confusion function. This function performs expansion E (32 to
  * 48 bits), XOR with subkey, S-boxes, and permutation P.
  */
-static inline uint32_t
+static uint32_t
 Fconf(uint32_t r0, const uint32_t *sk)
 {
 	/*
@@ -58995,7 +58997,7 @@ static const uint32_t S8[] = {
 	0x00000820, 0x00020020, 0x08000000, 0x08020800
 };
 
-static inline uint32_t
+static uint32_t
 Fconf(uint32_t r0, uint32_t skl, uint32_t skr)
 {
 	uint32_t r1;
@@ -59997,7 +59999,7 @@ poly1305_inner_small(uint64_t *acc, uint64_t *r, const void *data, size_t len)
 	acc[2] = a2;
 }
 
-static inline void
+static void
 poly1305_inner(uint64_t *acc, uint64_t *r, const void *data, size_t len)
 {
 	if (len >= 64) {

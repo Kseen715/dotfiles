@@ -986,16 +986,6 @@ static bool vendored_tls_src(const char *src) {
     return src != NULL && strcmp(src, "lib/bearssl.c") == 0;
 }
 
-/* c99_src -- the units that cannot be C89. Just the vendored BearSSL
- * sources: upstream declares functions after statements. Its public
- * declarations were rewritten to plain C89 when thirdparty/bearssl.h was
- * amalgamated (see thirdparty/amalgamate_bearssl.py), so lib/tls.c and every
- * other unit that includes them build at -std=c89 like the rest of the tree.
- */
-static bool c99_src(const char *src) {
-    return vendored_tls_src(src);
-}
-
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
  * this script produces is built with, in whichever dialect $CC speaks. XP
  * floor: see PLAN_UNIVERSAL.md's toolchain matrix -- checked today against
@@ -1043,13 +1033,15 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
         return;
     }
     if (vendored_tls_src(src)) {
-        /* Upstream's own warnings, on upstream's own dialect. */
-        cmd_append_args(cmd, "-std=c99", "-w", "-O2", NULL);
+        /* C89 like the rest of the tree -- thirdparty/amalgamate_bearssl.py
+         * rewrites upstream's `inline` away, and nothing else in BearSSL is
+         * post-C90. Upstream's warnings are upstream's, so they are off
+         * rather than read past on every build. */
+        cmd_append_args(cmd, "-std=c89", "-w", "-O2", NULL);
         cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
         return;
     }
-    cmd_append_args(cmd, c99_src(src) ? "-std=c99" : "-std=c89",
-                    "-Wall", "-Wextra", "-pedantic",
+    cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic",
                     o0 ? "-O0" : "-O2", NULL);
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */

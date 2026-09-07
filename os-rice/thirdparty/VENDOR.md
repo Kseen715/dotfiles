@@ -25,11 +25,13 @@ updating the record below, so a diff against upstream stays meaningful.
   `bearssl.h` by hand -- every local change lives in `amalgamate_bearssl.py`,
   so a version bump stays a re-run rather than a merge. What the script does
   to upstream is listed in the comment it writes at the top of the header.
-* Build note: `lib/bearssl.c` is compiled at `-std=c99 -w` (see `nob.c`), not
-  the C89 the rest of this tree holds itself to -- upstream declares
-  variables after statements. Including the declarations costs nothing: the
-  script rewrites the public headers' `static inline` accessors to plain
-  `static`, so `lib/tls.c` builds at `-std=c89` like everything else.
+* Build note: all C89, like the rest of this tree. Upstream's only non-C90
+  spelling is `inline`, and the script rewrites every `static inline` to
+  `static`, so `lib/bearssl.c` and `lib/tls.c` are both built at `-std=c89`
+  (see `nob.c`); the vendored unit adds `-w`, since upstream's warnings are
+  upstream's to fix. The one extension left is `unsigned __int128`, which
+  `src/inner.h` turns on for itself on 64-bit gcc/clang -- no more standard
+  in C99 than in C89, and never reached on the 32-bit XP tier.
 
 ## cacert.pem -- Mozilla CA bundle
 

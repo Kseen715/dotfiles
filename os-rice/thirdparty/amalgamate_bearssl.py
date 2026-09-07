@@ -34,12 +34,14 @@ PROLOGUE = """/*
  *   #define BEARSSL_IMPLEMENTATION
  *   #include "../thirdparty/bearssl.h"
  *
- * Everywhere else just #include it. The implementation needs C99 (upstream
- * uses `static inline` and declarations after statements) and lib/bearssl.c
- * is the only unit nob.c builds that way; the declarations above it are
- * plain C89, because this file's `static inline` accessors were rewritten to
- * `static` when it was generated. Including bearssl.h therefore costs a unit
- * nothing -- lib/tls.c and the rest of the tree stay at -std=c89.
+ * Everywhere else just #include it. Both halves are C89, like the rest of
+ * this tree: upstream's only non-C90 spelling is `inline`, and the script
+ * that generated this file rewrote every `static inline` to `static`. So
+ * nothing here asks for a dialect of its own -- nob.c builds lib/bearssl.c
+ * and lib/tls.c at -std=c89 alongside everything else. (One GNU extension
+ * survives, `unsigned __int128`, which src/inner.h enables for itself on
+ * 64-bit gcc/clang; it is no more standard in C99 than in C89, the 32-bit
+ * XP tier never sees it, and lib/bearssl.c compiles at -w regardless.)
  *
  * A client handshake, in short (see https://bearssl.org/api1.html and
  * lib/tls.c for the whole thing):
@@ -66,9 +68,9 @@ PROLOGUE = """/*
  * `#ifdef BEARSSL_IMPLEMENTATION`; dropping every `#include` of a bearssl
  * header, of inner.h, and of config.h; stripping the repeated upstream
  * copyright block from each file, since one copy of it (below) covers the
- * whole amalgamation; and rewriting the public headers' `static inline`
- * accessors to `static`, which C89 units can include and which costs
- * nothing at -O2, where a compiler inlines a one-line static anyway. src/config.h is not carried at all: every macro in it
+ * whole amalgamation; and rewriting every `static inline` to `static`, which
+ * is what makes the result C89 and costs nothing at -O2, where a compiler
+ * inlines a one-line static anyway. src/config.h is not carried at all: every macro in it
  * is commented out upstream, and its only role is to override the
  * autodetection in inner.h, which is what this tree wants running.
  *
@@ -161,14 +163,6 @@ inlined = '\n\n'.join('/* ==== inc/%s ==== */\n%s' % (h, clean(read('inc/' + h))
 umbrella = clean(umbrella.replace(marker, '@@BEARSSL_HEADERS@@', 1))
 assert '@@BEARSSL_HEADERS@@' in umbrella
 umbrella = umbrella.replace('@@BEARSSL_HEADERS@@', inlined)
-
-# C89 has no `inline`, and the public headers' accessors are the only thing
-# that would force every unit including bearssl.h up to C99 (the sources
-# below need C99 regardless, and get it). Dropping the keyword leaves them
-# ordinary static functions -- same semantics, and gcc/clang inline a
-# one-liner at -O2 with or without the hint.
-umbrella = re.sub(r'^static\s+inline\b', 'static', umbrella, flags=re.M)
-assert 'static inline' not in umbrella
 
 sources = []
 for root, _dirs, files in os.walk(os.path.join(src, 'src')):
@@ -293,6 +287,25 @@ for f in sources:
     parts.append('')
 
 parts.append('#endif /* BEARSSL_IMPLEMENTATION */')
-open(out, 'w', encoding='utf-8').write('\n'.join(parts) + '\n')
+text = '\n'.join(parts) + '\n'
+
+# `inline` is the one thing in upstream that C89 has no spelling for, and it
+# is the only reason this library would need a dialect of its own: with the
+# keyword gone, both halves of the header -- the public accessors and the
+# 63k lines of implementation -- compile at -std=c89 -pedantic (gcc, clang
+# and both mingw cross-compilers agree), so nob.c builds this file the same
+# way it builds the rest of the tree. `static` alone is the same function
+# with the same linkage; at -O2 a compiler inlines a one-line static whether
+# or not it was asked to. Everything else upstream writes is already C90:
+# no declarations after statements, no `//` comments, no long long. The one
+# extension left is `unsigned __int128`, which inner.h turns on for itself
+# on 64-bit gcc/clang and which is no more standard in C99 than in C89 --
+# -pedantic notes it, and lib/bearssl.c is compiled at -w anyway.
+text = re.sub(r'^static\s+inline\b', 'static', text, flags=re.M)
+assert not re.search(r'(?<![\w])inline(?![\w])',
+                     '\n'.join(ln for ln in text.split('\n')
+                                if not ln.lstrip().startswith('*'))), \
+    'an `inline` this script does not rewrite is left in the output'
+open(out, 'w', encoding='utf-8').write(text)
 print('%s: %d headers, %d sources, %d renamed statics'
       % (out, len(HEADERS) + 1, len(sources), len(set(n for v in RENAMES.values() for n in v))))

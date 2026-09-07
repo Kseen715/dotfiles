@@ -1,8 +1,8 @@
 /* lib/tls.c -- see lib/tls.h.
  *
  * C89, like the rest of this tree, and compiled as such: the vendored
- * BearSSL headers this unit includes carry no `static inline` accessors,
- * the amalgamation script having rewritten them to plain `static`.
+ * BearSSL header this unit includes carries no `inline` at all, the
+ * amalgamation script having rewritten every one to plain `static`.
  *
  * The client below is compiled only where the target needs it -- nob.c
  * defines OSR_HAVE_BEARSSL for the legacy-Windows tier and for a build that
