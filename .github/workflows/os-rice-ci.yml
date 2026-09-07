@@ -49,6 +49,10 @@ jobs:
       # before it runs anything. exec, because what is built there is then run.
       - name: Double-run install on ${{ matrix.image }}
         run: |
+          # The mountpoint has to exist before the tmpfs can go over it, and a
+          # fresh checkout has no build/ -- the engine cannot create it either,
+          # the mount it would create it in being read-only.
+          mkdir -p os-rice/build
           docker run --rm -e HOME=/root \
             -v "$GITHUB_WORKSPACE":/dotfiles:ro \
             --tmpfs /dotfiles/os-rice/build:rw,exec \

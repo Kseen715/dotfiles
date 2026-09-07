@@ -34,6 +34,10 @@ ENGINE=$(command -v podman 2>/dev/null || command -v docker 2>/dev/null || true)
 # exec because the thing built there (build/nob, build/osr) is then run.
 # podman COPIES the underlying directory up into a fresh tmpfs and docker does
 # not, so the one that would inherit the host's binaries has to say otherwise.
+# The mountpoint has to exist before the tmpfs can go over it, and the engine
+# cannot create it inside a read-only mount -- a checkout that has never been
+# built has no build/ at all.
+mkdir -p "$REPO/os-rice/build"
 # shellcheck disable=SC2086  # $MOUNTS is a command line, split on purpose
 MOUNTS="--tmpfs /dotfiles/os-rice/build:rw,exec"
 case $(basename "$ENGINE") in
