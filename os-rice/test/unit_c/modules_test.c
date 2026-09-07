@@ -105,6 +105,15 @@ int main(void) {
     osr_sb_env(&sb, "OSR_INIT", "systemd");
     hs_path(&p, hs_text(&sb.osr_root), "..");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
+    /* modules/helpers.c writes one file by absolute system path; aim it at a
+     * fixture dir instead (OSR_XFCE_HELPERS_DIR, DESIGN §11). Baseline rather
+     * than per-scenario because the all-modules sweep below runs helpers too:
+     * against the real /usr/share that sweep asks the DEVELOPER'S box whether
+     * the file is already there -- so the scenario that asserts the write
+     * passes on a machine without the rice and fails on one with it -- and,
+     * run as root, the sandbox's `sudo` stub execs a real tee into the host's
+     * /usr/share, which poisons every run after it. */
+    osr_sb_env(&sb, "OSR_XFCE_HELPERS_DIR", at("usr/share/xfce4/helpers"));
 
     osr_sb_stub_body(&sb, "apt-get",
         "printf 'apt-get %s\\n' \"$*\" >>\"$LOG\"\nexit 0\n");
@@ -469,6 +478,10 @@ int main(void) {
     osr_sb_env(&sb, "OSR_VERSION_ID", "24.04");
     hs_path(&p, hs_text(&sb.osr_root), "..");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
+    /* A seed writes only when the file is ABSENT, and the sweep above already
+     * ran helpers once -- so clear the fixture, exactly as fresh_home() clears
+     * $HOME for the modules that write there. */
+    osr_sb_rm(&sb, "usr");
     installed(0);
     run_module("helpers");
     ran("apt-get install -y -q -o Dpkg::Use-Pty=0 exo-utils xterm",
@@ -483,13 +496,22 @@ int main(void) {
             "helpers: and the file-manager role is set too");
         free(rc);
     }
-    ran("tee /usr/share/xfce4/helpers/osr-term.desktop",
-        "helpers: the system helper entry is written under /usr/share");
+    ran("tee ROOT/usr/share/xfce4/helpers/osr-term.desktop",
+        "helpers: the system helper entry is written under the system helpers "
+        "dir (/usr/share/xfce4/helpers unless the test aims it elsewhere)");
     ran("sudo",
         "helpers: escalating to do it -- unlike the file in $HOME");
-    did_not("sudo -u tester tee /usr/share",
+    did_not("sudo -u tester tee ROOT/usr/share/xfce4/helpers",
         "helpers: and the system file is NOT written as the riced user, who "
         "has no business owning something under /usr/share");
+    {
+        char *entry = h_slurp(at("usr/share/xfce4/helpers/osr-term.desktop"));
+        osr_assert_true(entry != NULL &&
+                        strstr(entry, "X-XFCE-Category=TerminalEmulator") != NULL,
+            "helpers: and the entry really lands, carrying the category that "
+            "makes the id exo expands from helpers.rc resolvable at all");
+        free(entry);
+    }
 
     /* SS5: seeded, then the user's. A rerun rewrites neither. */
     osr_sb_write(&sb, "home/.config/xfce4/helpers.rc",
@@ -498,6 +520,9 @@ int main(void) {
     osr_sb_reset(&sb);
     osr_sb_run_core(&sb, "module", "run", "helpers", (const char *)NULL);
     did_not("apt-get install", "helpers: a rerun installs nothing");
+    did_not("tee ROOT/usr/share/xfce4/helpers",
+        "helpers: nor rewrites the system helper entry -- a seed is a seed on "
+        "both sides of the privilege boundary (SS5)");
     {
         char *rc = h_slurp(at("home/.config/xfce4/helpers.rc"));
         osr_assert_eq("TerminalEmulator=xterm\n", rc,

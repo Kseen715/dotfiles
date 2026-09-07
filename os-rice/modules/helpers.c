@@ -87,11 +87,22 @@ int osrm_helpers(void) {
     /* Root-owned on purpose: a helper id is resolved from the system dir, and
      * the per-user ~/.local/share/xfce4/helpers path is not read by every exo
      * build. The seed only writes when nothing is there, so a distro that ever
-     * starts shipping this id wins. */
-    if (!osr_seed_file_root("/usr/share/xfce4/helpers/osr-term.desktop", osrterm_helper)) {
+     * starts shipping this id wins.
+     *
+     * The directory is a variable only so the unit test can aim at a fixture
+     * (§11): the seed asks the filesystem whether the file is already there,
+     * and against the real /usr/share that question is answered by the
+     * developer's own box -- on one where the rice IS installed the seed
+     * short-circuits and the test asserting the write fails. Same override
+     * trick as OSR_DESKTOP_DIRS in yandex-browser. */
+    str_init(&path);
+    str_addz(&path, env_str("OSR_XFCE_HELPERS_DIR", "/usr/share/xfce4/helpers"));
+    str_addz(&path, "/osr-term.desktop");
+    if (!osr_seed_file_root(str_text(&path), osrterm_helper)) {
         osr_warnf("could not write the osr-term helper entry - "
                   "set TerminalEmulator in ~/.config/xfce4/helpers.rc to a packaged terminal");
         ok = 0;
     }
+    str_free(&path);
     return ok;
 }
