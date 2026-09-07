@@ -978,19 +978,24 @@ static void check_cc_detection(void) {
 
 /* unoptimized_src -- sources built at -O0 on purpose.
  *
- * Only one so far: lib/yaml.c is the vendored parser's 13k-line
- * implementation, and it is the most expensive unit in the tree to
- * optimize -- gcc -O2 spends about 3.4s on it, more than three times the
- * next-slowest file, where -O0 costs 0.7s. What that buys is throughput
- * inside a YAML parser reading configuration files of a few kilobytes,
- * which is not a cost this tool can measure. Move it back if a profile ever
- * disagrees.
+ * Both are vendored, and both for the same reason: they are the two most
+ * expensive units in the tree to optimize, and what optimizing them buys is
+ * throughput this tool cannot measure.
+ *
+ * lib/yaml.c is the parser's 13k-line implementation -- gcc -O2 spends about
+ * 3.4s on it, more than three times the next-slowest file, where -O0 costs
+ * 0.7s, and it reads configuration files of a few kilobytes.
+ *
+ * lib/bearssl.c is 63k lines, and the work it does is bounded by a socket:
+ * a download waits on the network, not on the cipher. Move either back if a
+ * profile ever disagrees.
  *
  * The dialects that ignore -O flags anyway (lcc invokes its compiler bare,
  * faucc documents -O as accepted-and-ignored) are unaffected either way.
  */
 static bool unoptimized_src(const char *src) {
-    return strcmp(src, "lib/yaml.c") == 0;
+    return src != NULL &&
+           (strcmp(src, "lib/yaml.c") == 0 || strcmp(src, "lib/bearssl.c") == 0);
 }
 
 /* vendored_tls_src -- the unit that carries thirdparty/bearssl.h. Upstream
@@ -1051,7 +1056,7 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * rewrites upstream's `inline` away, and nothing else in BearSSL is
          * post-C90. Upstream's warnings are upstream's, so they are off
          * rather than read past on every build. */
-        cmd_append_args(cmd, "-std=c89", "-w", "-O2", NULL);
+        cmd_append_args(cmd, "-std=c89", "-w", o0 ? "-O0" : "-O2", NULL);
         if (target_windows())
             cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
         return;
