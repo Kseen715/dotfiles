@@ -6,5 +6,10 @@
 os-rice/nob.h linguist-vendored
 
 # Vendored: LibYAML, amalgamated into one C89 header by
-# os-rice/thirdparty/amalgamate_yaml.py (that script is ours, this is not).
+# os-rice/thirdparty/amalgamate_yaml.py
 os-rice/thirdparty/yaml.h linguist-vendored
+
+# Vendored: BearSSL, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_bearssl.py
+os-rice/thirdparty/bearssl.h linguist-vendored
+os-rice/thirdparty/cacert.pem linguist-vendored

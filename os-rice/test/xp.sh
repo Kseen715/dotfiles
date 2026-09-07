@@ -132,6 +132,23 @@ else
     FAILED=1
 fi
 
+# 6. The TLS stack this tier cannot do without. XP's schannel has no TLS 1.2,
+#    so the binary carries BearSSL and a CA bundle of its own (lib/tls.c): if
+#    either is missing from the image, every HTTPS fetch on XP fails and the
+#    checks above would not notice.
+if printf '%s\n' "$IMPORTED_DLLS" | grep -q '^WS2_32$'; then
+    p_ok "imports ws2_32 (the sockets lib/tls.c runs TLS over)"
+else
+    p_fail "no ws2_32 import -- lib/tls.c was not linked in, so HTTPS cannot work on XP"
+    FAILED=1
+fi
+if grep -q "BEGIN CERTIFICATE" "$BIN"; then
+    p_ok "carries the CA bundle"
+else
+    p_fail "no CA bundle in the image -- nothing to verify a certificate against"
+    FAILED=1
+fi
+
 if [ "$FAILED" = 0 ]; then
     sec "XP tier: image is loadable on Windows XP"
     exit 0

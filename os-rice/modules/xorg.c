@@ -440,6 +440,7 @@ static void nouveau_quirk(void) {
         str_free(&text); str_free(&conf);
     } else {
         Str conf;
+        int unwarranted;
         str_init(&conf);
         nouveau_conf(&conf);
         /* Removing is NOT simply "the guards said no this time", and getting
@@ -452,9 +453,9 @@ static void nouveau_quirk(void) {
          * be there: the operator asked (=0), the proprietary driver took over,
          * or the box has no NVIDIA GPU at all any more. A hand-written file
          * with no header of ours is the user's and is never touched. */
-        int unwarranted = strcmp(force, "0") == 0
-                          || nvidia_module_loaded()
-                          || strstr(env_str("OSR_GPU_VENDOR", ""), "NVIDIA") == NULL;
+        unwarranted = strcmp(force, "0") == 0
+                      || nvidia_module_loaded()
+                      || strstr(env_str("OSR_GPU_VENDOR", ""), "NVIDIA") == NULL;
         if (unwarranted && file_exists(str_text(&conf))
             && log_has(str_text(&conf), NOUVEAU_HEADER)) {
             char *argv[4];

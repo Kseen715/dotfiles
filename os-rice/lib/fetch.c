@@ -647,8 +647,54 @@ int osr_net_main(int argc, char **argv) {
 #include <wininet.h>
 #include <stdio.h>
 
+#include "tls.h"
+
 static HINTERNET wininet_open_session(void) {
     return InternetOpenA("os-rice/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+}
+
+/* --- the second transport ------------------------------------------------
+ *
+ * WinINet is the right answer on any Windows whose schannel can still finish
+ * a handshake: it knows the machine's proxy and its root store, and it is
+ * already installed. Windows XP's cannot -- it stops at TLS 1.0 -- so on that
+ * tier every https:// URL goes through lib/tls.c instead, which brings its own
+ * TLS and its own trust store. Plain http:// stays on WinINet either way,
+ * since nothing about it is broken there.
+ *
+ * The four raw entry points below each begin with this check. Everything
+ * above them (osr_fetch_download and friends) is unchanged and does not know
+ * which transport carried the bytes.
+ */
+static int use_own_tls(const char *url) {
+    return url != NULL && strncmp(url, "https://", 8) == 0 && osr_tls_needed();
+}
+
+static int sink_to_file(void *ctx, const char *data, unsigned long len) {
+    return fwrite(data, 1, (size_t)len, (FILE *)ctx) == (size_t)len;
+}
+
+typedef struct {
+    char *buf;
+    unsigned long len;
+    unsigned long cap;
+} BufSink;
+
+static int sink_to_buffer(void *ctx, const char *data, unsigned long len) {
+    BufSink *b = (BufSink *)ctx;
+
+    if (b->len + len + 1 > b->cap) {
+        unsigned long cap = (b->cap == 0) ? 16384UL : b->cap;
+        char *grown;
+        while (cap < b->len + len + 1) cap *= 2;
+        grown = (char *)realloc(b->buf, cap);
+        if (grown == NULL) return 0;
+        b->buf = grown;
+        b->cap = cap;
+    }
+    memcpy(b->buf + b->len, data, (size_t)len);
+    b->len += len;
+    return 1;
 }
 
 int osr_net_available(void) {
@@ -664,6 +710,16 @@ int osr_download(const char *url, const char *dest_path) {
     int rc;
 
     if (url == NULL || dest_path == NULL) return OSR_NET_ERR;
+
+    if (use_own_tls(url)) {
+        FILE *out = fopen(dest_path, "wb");
+        int tls_rc;
+        if (out == NULL) return OSR_NET_ERR;
+        tls_rc = osr_tls_get(url, sink_to_file, out, NULL, 0, NULL);
+        if (fclose(out) != 0) tls_rc = OSR_NET_ERR;
+        if (tls_rc != OSR_NET_OK) remove(dest_path);
+        return tls_rc;
+    }
 
     hSession = wininet_open_session();
     if (hSession == NULL) return OSR_NET_ERR;
@@ -704,6 +760,23 @@ int osr_fetch_to_buffer(const char *url, char **out_buf, unsigned long *out_len)
     *out_buf = NULL;
     *out_len = 0;
     if (url == NULL) return OSR_NET_ERR;
+
+    if (use_own_tls(url)) {
+        BufSink sink;
+        memset(&sink, 0, sizeof(sink));
+        if (osr_tls_get(url, sink_to_buffer, &sink, NULL, 0, NULL) != OSR_NET_OK) {
+            free(sink.buf);
+            return OSR_NET_ERR;
+        }
+        if (sink.buf == NULL) {
+            sink.buf = (char *)malloc(1);
+            if (sink.buf == NULL) return OSR_NET_ERR;
+        }
+        sink.buf[sink.len] = '\0';
+        *out_buf = sink.buf;
+        *out_len = sink.len;
+        return OSR_NET_OK;
+    }
 
     hSession = wininet_open_session();
     if (hSession == NULL) return OSR_NET_ERR;
@@ -817,6 +890,13 @@ long osr_remote_size(const char *url) {
     long result;
 
     if (url == NULL) return -1;
+
+    if (use_own_tls(url)) {
+        long len = -1;
+        if (osr_tls_get(url, NULL, NULL, NULL, 0, &len) != OSR_NET_OK) return -1;
+        return len;
+    }
+
     hRequest = wininet_head_open(url, &hSession, &hConnect);
     if (hRequest == NULL) return -1;
 
@@ -843,6 +923,8 @@ int osr_final_url(const char *url, char *out, unsigned long out_sz) {
     out[0] = '\0';
     if (url == NULL) return OSR_NET_ERR;
 
+    if (use_own_tls(url)) return osr_tls_get(url, NULL, NULL, out, out_sz, NULL);
+
     hRequest = wininet_head_open(url, &hSession, &hConnect);
     if (hRequest == NULL) return OSR_NET_ERR;
 
@@ -866,8 +948,8 @@ int osr_final_url(const char *url, char *out, unsigned long out_sz) {
  * install, because the transport is part of the operating system.
  * ------------------------------------------------------------------------ */
 
-const char *osr_fetch_backend(void) { return "wininet"; }
-const char *osr_fetch_ensure(void)  { return "wininet"; }
+const char *osr_fetch_backend(void) { return osr_tls_needed() ? "bearssl" : "wininet"; }
+const char *osr_fetch_ensure(void)  { return osr_fetch_backend(); }
 
 int osr_fetch_buffer(Str *out, const char *url) {
     char *buf = NULL;

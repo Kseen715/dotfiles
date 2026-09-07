@@ -31,7 +31,7 @@ package manager — and is itself being rewritten into C
 ([[os-rice/DESIGN#13. The port, and what is left of it|DESIGN 13]]), which is
 why this core and that one are converging on the same shape rather than two. Two targets fall outside what a shell can reach at all:
 
-- **Legacy Windows** — Windows 7 (PowerShell 2.0 built in, no winget) and Windows XP (no guaranteed PowerShell, no TLS 1.2 without patching, no package manager, ever).
+- **Legacy Windows** — Windows 7 (PowerShell 2.0 built in, no winget) and Windows XP (no guaranteed PowerShell, no TLS 1.2 in the OS at all -- the binary brings its own, see `os-rice/lib/tls.c` -- no package manager, ever).
 - **Obscure / bare embedded Linux** — a kernel, maybe a `/bin/sh`, no `apt`/`pacman`/`apk`.
 
 Neither is reachable by writing more shell: the runtime those languages need
@@ -202,7 +202,7 @@ execs the right prebuilt binary, never doing installer logic itself.
 | --- | --- |
 | **Phase 1 — minimal core** | the shape is proven end to end: both manifest parsers, the theme renderer, the package/provider path, elevation, the 8 Windows modules, the unit suite. Remaining: the byte-diff-against-sh checkpoint and a human pass on the fallback branches. |
 | **Phase 0 — XP toolchain** | done, cheaper than planned: no bespoke toolchain was needed. `nob` picks its target from `$CC` (`NOB_TARGET` overrides) instead of from the host it runs on, so `CC=i686-w64-mingw32-gcc ./nob` cross-builds `build/osr.exe` from Linux — clean at `-std=c89 -Wall -Wextra -pedantic`, zero warnings. `test/xp.sh` is the acceptance check: 32-bit PE, subsystem 4.0, only XP-shipped DLLs, `msvcrt.dll` (not UCRT), no post-XP import. |
-| **Phase 2 — XP end to end** | not started. The blocker is not the build: XP's WinInet has no TLS 1.2, so `lib/fetch.c` cannot reach any modern HTTPS host, and nothing has been run on real XP or a QEMU XP guest. |
+| **Phase 2 — XP end to end** | in progress. The TLS blocker is gone: the XP build carries its own stack (vendored BearSSL over ws2_32 in `lib/tls.c`, Mozilla CA bundle compiled in), and `lib/fetch.c` routes `https://` to it on pre-Vista Windows only, keeping WinINet everywhere else. Verified under Wine (`OSR_TLS=bearssl`): TLS 1.2 fetch, a cross-host redirect chain, a real download, and an expired certificate rejected. Remaining: run it on real XP or a QEMU XP guest — nothing here has touched actual hardware. |
 | **Phase 3 — obscure Linux arch** | not started, and deliberately unplanned |
 
 Phase 1 detail worth keeping: `theme_render_test.c` renders a **real**

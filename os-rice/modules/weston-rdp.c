@@ -69,7 +69,9 @@ static const char *const ENV_FILE =
 /* The session starter: block until weston has a seat, then become the session.
  * `wayland-info` is the ask -- it lists the compositor's globals, and wl_seat
  * appearing in them IS "a client has connected". */
-static const char *const SESSION_SH =
+/* Split into chunks because C90 only promises 509 bytes per string
+ * literal and this script is three times that; seed_session joins them. */
+static const char *const SESSION_SH[] = {
     "#!/bin/sh\n"
     "# Written by os-rice (modules/weston-rdp.c) if it was not here.\n"
     "#\n"
@@ -77,7 +79,8 @@ static const char *const SESSION_SH =
     "# is expected to sit here waiting: weston's rdp backend builds its wl_seat\n"
     "# out of the connecting client's keyboard and mouse, so before anyone\n"
     "# connects there is no seat, and a Plasma session started then dies in\n"
-    "# kwin dereferencing the seat it did not get.\n"
+    "# kwin dereferencing the seat it did not get.\n",
+
     ": \"${XDG_RUNTIME_DIR:=/run/weston-rdp}\"\n"
     "export XDG_RUNTIME_DIR\n"
     "while :; do\n"
@@ -90,7 +93,8 @@ static const char *const SESSION_SH =
     "    [ -n \"${WAYLAND_DISPLAY:-}\" ] &&\n"
     "        wayland-info 2>/dev/null | grep -q \"interface: 'wl_seat'\" && break\n"
     "    sleep 2\n"
-    "done\n"
+    "done\n",
+
     "# Let the connection settle before Plasma starts drawing into it.\n"
     "sleep 5\n"
     "\n"
@@ -98,15 +102,18 @@ static const char *const SESSION_SH =
     "# BE the top-level compositor and starts kwin with --xwayland, whose\n"
     "# Xwayland dies in mesa on this kind of box and hangs the startup behind\n"
     "# its splash. plasma_session assumes a compositor is already there, which\n"
-    "# is exactly the situation, and brings up its own kwin under weston.\n"
+    "# is exactly the situation, and brings up its own kwin under weston.\n",
+
     "# The environment startplasma-wayland would have exported is ours to set:\n"
     "# without QT_QPA_PLATFORM every Qt part of the session exits with 'no Qt\n"
-    "# platform plugin could be initialized'.\n"
+    "# platform plugin could be initialized'.\n",
+
     "export QT_QPA_PLATFORM=wayland\n"
     "export XDG_CURRENT_DESKTOP=KDE\n"
     "export KDE_FULL_SESSION=true\n"
     "export XDG_SESSION_TYPE=wayland\n"
-    "exec plasma_session\n";
+    "exec plasma_session\n"
+};
 
 /* seed_ini -- weston.ini for the RDP compositor. Deliberately NO [autolaunch]:
  * letting weston spawn and watch the session looks tidy and takes the whole
@@ -295,6 +302,8 @@ int osrm_weston_rdp(void) {
         "weston", "openssl", "dbus", "wayland-utils", NULL
     };
     char *argv[4];
+    Str session;
+    size_t i;
     int ok;
 
     ok = osr_pkg_install_step("Installing the Weston RDP compositor", pkgs);
@@ -305,11 +314,15 @@ int osrm_weston_rdp(void) {
 
     ok = make_cert() && ok;
     (void)osr_seed_file_root(RDP_ENV, ENV_FILE);
-    if (osr_seed_file_root(RDP_SESSION, SESSION_SH)) {
+    str_init(&session);
+    for (i = 0; i < sizeof SESSION_SH / sizeof SESSION_SH[0]; i++)
+        str_addz(&session, SESSION_SH[i]);
+    if (osr_seed_file_root(RDP_SESSION, str_text(&session))) {
         argv[0] = (char *)"chmod"; argv[1] = (char *)"0755";
         argv[2] = (char *)RDP_SESSION; argv[3] = NULL;
         (void)osr_run_root_quiet(argv);
     }
+    str_free(&session);
     (void)seed_ini();
 
     /* Everything above is a file on disk and is true under any init; only the

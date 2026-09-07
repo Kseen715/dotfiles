@@ -74,7 +74,8 @@ os-rice/
                        native/script/cargo/aur/source, and scoop/choco/winget
     build.c            the source: builders (26 of them) + the artifact
                        toolkit a Windows builder assembles out of
-    fetch.c git.c      download + github_latest (curl/wget, or WinINet);
+    fetch.c git.c      download + github_latest (curl/wget, or WinINet,
+                       or tls.c's own TLS 1.2 where WinINet is too old);
                        repo / oh-my-zsh helpers
     service.c          enable_service/disable_service, 4 init systems + SCM
     config.c           seed_once / install_layer / loader block / templates
@@ -219,10 +220,30 @@ subsystem version, imports only DLLs XP ships, links `msvcrt.dll` rather than
 UCRT, and imports no symbol from its post-XP tripwire list. It skips (exit 0)
 where no i686 mingw-w64 is installed.
 
-> [!warning] Compiling for XP is not the same as working on XP
-> The image loads; what it then does over the network does not. `lib/fetch.c`
-> uses WinInet, and XP's WinInet has no TLS 1.2 -- every HTTPS fetch against a
-> modern host fails until that is addressed. See PLAN_UNIVERSAL.md's phase 2.
+#### HTTPS on XP
+
+XP's schannel stops at TLS 1.0 and never got 1.1 or 1.2, so WinINet -- the
+transport `lib/fetch.c` uses on every other Windows, and the right one there --
+cannot finish a handshake with a host worth fetching from. That tier therefore
+carries its own stack: `lib/tls.c` speaks TLS 1.2 over ws2_32 using the
+vendored BearSSL (`thirdparty/bearssl.h`, one amalgamated header), and trusts
+the Mozilla CA bundle compiled in beside it (`thirdparty/cacert.pem`, turned
+into an array by `nob`; refreshing trust is a file swap and a rebuild). See
+`thirdparty/VENDOR.md`.
+
+The switch is made per URL at run time, and only where it has to be: an
+`https://` URL on a pre-Vista Windows goes through BearSSL, everything else
+keeps WinINet and its proxy and root-store knowledge. `OSR_TLS=bearssl` forces
+the XP path anywhere, which is how it is exercised without an XP box:
+
+```sh
+OSR_TLS=bearssl wine build/osr.exe net get https://example.com
+OSR_TLS=bearssl wine build/osr.exe net final-url https://github.com/cli/cli/releases/latest
+```
+
+> [!note] Still not run on real hardware
+> The above is a cross build exercised under Wine. Nothing here has been run on
+> an actual Windows XP install; see PLAN_UNIVERSAL.md's phase 2.
 
 ---
 

@@ -100,6 +100,14 @@
 #define OBJ_DIR BUILD_DIR "/obj"
 #define TEST_BIN_DIR BUILD_DIR "/test"
 
+/* The vendored TLS stack and the trust store it needs, both of which exist
+ * for one tier: Windows XP's schannel has no TLS 1.2 and never will, so that
+ * build carries its own (thirdparty/VENDOR.md says why, lib/tls.c uses it).
+ * CACERT_SRC is generated -- gen_cacert() turns the PEM into an array -- so
+ * it lives under build/ with the other outputs. */
+#define CACERT_PEM "thirdparty/cacert.pem"
+#define CACERT_SRC BUILD_DIR "/cacert_pem.c"
+
 /* mkdir_if_needed -- nob_mkdir_if_not_exists() logs "directory `x` already
  * exists" on every single run; now that an up-to-date build prints nothing
  * else, those two lines would be the whole output. Only call it when there
@@ -299,6 +307,12 @@ static const char *core_srcs[] = {
      * it was lib/net.c and lib/fetch.c, one per system, publishing different
      * names for the same three acts. */
     "lib/fetch.c",
+    /* lib/tls.c is fetch.c's transport of last resort: the Windows XP tier's
+     * own TLS is too old to reach any host worth fetching from, so that build
+     * brings BearSSL along. Core rather than win-only because the URL parsers
+     * at the top of it are portable and the suite asserts them wherever it
+     * runs -- everything below them is under #ifdef _WIN32. */
+    "lib/tls.c",
     /* The vendored YAML parser's implementation (thirdparty/yaml.h). Core
      * rather than static-only: config parsing is what it is here for, and
      * that lives in the runtime host too. */
@@ -464,7 +478,20 @@ static const char *posix_srcs[] = {
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
 
+/* The first WIN_TLS_SRCS entries are the vendored TLS stack and its trust
+ * store, and only the tier that has no usable system TLS builds them: see
+ * target_needs_own_tls(), which is what decides whether target_srcs() hands
+ * the whole array out or starts past them. Keep them first, and keep the
+ * count in step. */
 static const char *win_srcs[] = {
+    /* The CA bundle as an array, generated from thirdparty/cacert.pem by
+     * gen_cacert() below. lib/tls.c decodes it into trust anchors: XP's own
+     * root store expired years ago, so trust travels with the binary. */
+    CACERT_SRC,
+    /* The vendored TLS stack's implementation (thirdparty/bearssl.h): 63k
+     * lines of upstream, the single most expensive unit in the tree. */
+    "lib/bearssl.c",
+    /* --- from here on, every Windows target --- */
     "modules/oh-my-posh.c",
     "modules/pwsh.c",
     "modules/win-debloat.c",
@@ -472,6 +499,7 @@ static const char *win_srcs[] = {
     "modules/win-update.c",
 };
 #define WIN_SRCS_COUNT (sizeof(win_srcs) / sizeof(win_srcs[0]))
+#define WIN_TLS_SRCS 2
 
 /* MAX_HOST_SRCS -- the bound for a stack array holding whichever of the two
  * lists target_srcs() picks. The pick is a runtime one now (see
@@ -502,7 +530,7 @@ static const char *win_srcs[] = {
  * linking them against the object built from the same source would define it
  * twice. */
 static const char *test_names[] = {
-    "net_parse_test", "artifact_test",
+    "net_parse_test", "artifact_test", "tls_url_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 
@@ -772,6 +800,36 @@ static bool target_windows(void) {
 #endif
 }
 
+/* target_needs_own_tls -- does the system this build targets lack a TLS the
+ * program can use, so that it has to carry thirdparty/bearssl.h along?
+ *
+ * Exactly one tier does: legacy Windows, whose schannel stops at TLS 1.0 and
+ * whose WinINet therefore cannot finish a handshake with a current host (see
+ * lib/tls.c). Everything else -- modern Windows through WinINet, POSIX
+ * through curl or wget -- already has one, and building BearSSL for those
+ * would compile the tree's most expensive unit to produce code no run can
+ * reach.
+ *
+ * The tier is read off the target the same way target_windows() reads the
+ * system: from the toolchain's name. XP needs the 32-bit driver, so an
+ * i686-/i386- prefixed mingw cross-compiler is the XP tier and an x86_64- one
+ * is not -- a 64-bit image does not load on 32-bit XP at all. Anything whose
+ * name settles nothing (cl, a bare gcc on a Windows host, a wrapper script)
+ * is taken to be a modern target, which is the safe way round: the cost of
+ * being wrong is HTTPS falling back to WinINet, not a build that fails.
+ *
+ * NOB_TLS=1 forces it in, NOB_TLS=0 forces it out, for the targets the name
+ * cannot settle and for measuring what it costs.
+ */
+static bool target_needs_own_tls(void) {
+    const char *env = getenv("NOB_TLS");
+    const char *prog;
+    if (env != NULL && *env != '\0') return strcmp(env, "0") != 0;
+    if (!target_windows()) return false;
+    prog = cc_prog();
+    return strstr(prog, "i686") != NULL || strstr(prog, "i386") != NULL;
+}
+
 /* target_runnable -- can this host execute what the build produces? False
  * exactly when cross-compiling, which is what makes `nob test` build the test
  * binaries and stop rather than try to exec a PE on Linux. */
@@ -789,7 +847,11 @@ static const char *exe(void) { return target_windows() ? ".exe" : ""; }
 /* target_srcs -- the module list for the system being built for, and its
  * length through the out parameter. */
 static const char **target_srcs(size_t *count) {
-    if (target_windows()) { *count = WIN_SRCS_COUNT; return win_srcs; }
+    if (target_windows()) {
+        if (target_needs_own_tls()) { *count = WIN_SRCS_COUNT; return win_srcs; }
+        *count = WIN_SRCS_COUNT - WIN_TLS_SRCS;
+        return win_srcs + WIN_TLS_SRCS;
+    }
     *count = POSIX_SRCS_COUNT;
     return posix_srcs;
 }
@@ -917,6 +979,23 @@ static bool unoptimized_src(const char *src) {
     return strcmp(src, "lib/yaml.c") == 0;
 }
 
+/* vendored_tls_src -- the unit that carries thirdparty/bearssl.h. Upstream
+ * code: it is compiled, never edited, so its warnings are not this tree's to
+ * fix and are turned off rather than read past on every build. */
+static bool vendored_tls_src(const char *src) {
+    return src != NULL && strcmp(src, "lib/bearssl.c") == 0;
+}
+
+/* c99_src -- the units that cannot be C89. Just the vendored BearSSL
+ * sources: upstream declares functions after statements. Its public
+ * declarations were rewritten to plain C89 when thirdparty/bearssl.h was
+ * amalgamated (see thirdparty/amalgamate_bearssl.py), so lib/tls.c and every
+ * other unit that includes them build at -std=c89 like the rest of the tree.
+ */
+static bool c99_src(const char *src) {
+    return vendored_tls_src(src);
+}
+
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
  * this script produces is built with, in whichever dialect $CC speaks. XP
  * floor: see PLAN_UNIVERSAL.md's toolchain matrix -- checked today against
@@ -936,9 +1015,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * /wd4505 is -Wno-unused-function; the CRT one silences the
          * fopen/getenv "deprecation" that C89 code cannot avoid. cl only
          * ever targets Windows, so the XP defines are unconditional here. */
-        cmd_append_args(cmd, "/nologo", "/W4", o0 ? "/Od" : "/O2", NULL);
+        cmd_append_args(cmd, "/nologo", vendored_tls_src(src) ? "/W0" : "/W4",
+                        o0 ? "/Od" : "/O2", NULL);
         cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
         cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
+        if (target_needs_own_tls()) nob_cmd_append(cmd, "/DOSR_HAVE_BEARSSL");
         return;
     }
     if (is_faucc()) {
@@ -961,7 +1042,14 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * invoked bare -- append_cc(cmd) above already put it on the line. */
         return;
     }
-    cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic",
+    if (vendored_tls_src(src)) {
+        /* Upstream's own warnings, on upstream's own dialect. */
+        cmd_append_args(cmd, "-std=c99", "-w", "-O2", NULL);
+        cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
+        return;
+    }
+    cmd_append_args(cmd, c99_src(src) ? "-std=c99" : "-std=c89",
+                    "-Wall", "-Wextra", "-pedantic",
                     o0 ? "-O0" : "-O2", NULL);
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
@@ -973,6 +1061,9 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
     if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", "-Wno-shadow", NULL);
     if (target_windows()) {
         cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
+        /* What lib/tls.c's #if reads: the client half of it is compiled only
+         * where the target has no TLS of its own. */
+        if (target_needs_own_tls()) nob_cmd_append(cmd, "-DOSR_HAVE_BEARSSL");
     }
 }
 
@@ -1237,6 +1328,45 @@ static bool needs_compile(const char *src) {
     return nob_needs_rebuild(obj, deps.items, deps.count) != 0;
 }
 
+/* gen_cacert -- thirdparty/cacert.pem as a C array, so the trust store is
+ * inside the binary rather than a file that has to travel beside it. Written
+ * only when the PEM is newer than what was generated last, since this is a
+ * quarter of a megabyte of source that then has to be compiled.
+ *
+ * A generator in nob rather than a script: nob is already the one tool this
+ * build needs, and adding a Python or awk dependency to a build whose whole
+ * point is "a C compiler is enough" would be a poor trade.
+ */
+static bool gen_cacert(void) {
+    Nob_String_Builder pem = {0};
+    Nob_String_Builder out = {0};
+    size_t i;
+    bool ok;
+
+    if (nob_needs_rebuild1(CACERT_SRC, CACERT_PEM) == 0) return true;
+    if (!mkdir_if_needed(BUILD_DIR)) return false;
+    if (!nob_read_entire_file(CACERT_PEM, &pem)) return false;
+
+    nob_sb_append_cstr(&out,
+        "/* Generated by nob.c from " CACERT_PEM " -- do not edit.\n"
+        " * The Mozilla CA bundle lib/tls.c decodes into trust anchors; see\n"
+        " * thirdparty/VENDOR.md for where it comes from and how to refresh it. */\n"
+        "const unsigned char osr_cacert_pem[] = {\n");
+    for (i = 0; i < pem.count; i++) {
+        nob_sb_append_cstr(&out, nob_temp_sprintf("%u,%s",
+            (unsigned)(unsigned char)pem.items[i], (i % 20 == 19) ? "\n" : ""));
+    }
+    nob_sb_append_cstr(&out, nob_temp_sprintf("\n};\nconst unsigned long osr_cacert_pem_len = %luUL;\n",
+                                              (unsigned long)pem.count));
+
+    nob_log(NOB_INFO, "GEN      %s", CACERT_SRC);
+    actions++;
+    ok = nob_write_entire_file(CACERT_SRC, out.items, out.count);
+    nob_sb_free(pem);
+    nob_sb_free(out);
+    return ok;
+}
+
 /* host_objs -- every object that goes into the one binary: main's, the core's,
  * and this system's own list. Returns how many were written. */
 static size_t host_objs(const char **objs, const char *main_src) {
@@ -1305,6 +1435,8 @@ static void append_lib_objs(Nob_Cmd *cmd) {
  *
  * -lwininet: lib/net.c's WinInet calls.
  * -ladvapi32: lib/fonts.c's RegOpenKeyExA/RegEnumValueA (registry font check).
+ * -lws2_32: the sockets lib/tls.c runs its own TLS over -- linked only where
+ * that client is built (target_needs_own_tls), since nothing else opens one.
  * -lshell32: SystemParametersInfoA (lib/wallpaper.c) links via user32 in
  * most mingw setups, but shell32 covers the COM-ish helpers if that ever
  * grows; included now so a future addition doesn't need a second flag
@@ -1313,11 +1445,15 @@ static void append_lib_objs(Nob_Cmd *cmd) {
 static void append_common_libs(Nob_Cmd *cmd) {
     if (is_msvc()) {
         /* cl hands plain .lib arguments straight to the linker. */
-        cmd_append_args(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib", NULL);
+        cmd_append_args(cmd, "wininet.lib", "advapi32.lib", "user32.lib", "shell32.lib",
+                        NULL);
+        if (target_needs_own_tls()) nob_cmd_append(cmd, "ws2_32.lib");
         return;
     }
     if (target_windows()) {
-        cmd_append_args(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32", NULL);
+        cmd_append_args(cmd, "-lwininet", "-ladvapi32", "-luser32", "-lshell32",
+                        NULL);
+        if (target_needs_own_tls()) nob_cmd_append(cmd, "-lws2_32");
     }
 }
 
@@ -1425,6 +1561,9 @@ static bool build_tests(void) {
     const char *psrcs[POSIX_TEST_COUNT];
     Nob_Procs procs = {0};
     size_t i;
+    /* The test binaries link the same objects the program does, the vendored
+     * TLS stack among them on a Windows target. */
+    if (target_needs_own_tls() && !gen_cacert()) return false;
     for (i = 0; i < TEST_COUNT; i++) srcs[i] = nob_temp_sprintf("test/unit_c/%s.c", test_names[i]);
     if (!compile_objs(srcs, TEST_COUNT)) return false;
     if (!mkdir_if_needed(TEST_BIN_DIR)) return false;
@@ -1512,6 +1651,7 @@ static bool clean(void) {
     for (i = 0; i < CORE_SRCS_COUNT; i++) delete_built(core_srcs[i]);
     for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_built(posix_srcs[i]);
     for (i = 0; i < WIN_SRCS_COUNT; i++) delete_built(win_srcs[i]);
+    delete_if_exists(CACERT_SRC);
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", test_names[i], exe()));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", test_names[i]));
@@ -1589,6 +1729,7 @@ static bool build_all(void) {
     for (i = 0; i < CORE_SRCS_COUNT; i++) srcs[count++] = core_srcs[i];
     for (i = 0; i < n; i++) srcs[count++] = host[i];
 
+    if (target_needs_own_tls() && !gen_cacert()) return false;
     if (!compile_objs(srcs, count)) return false;
     if (!link_exe(bin_path("osr"), "osr.c", &procs)) return false;
     return nob_procs_flush(&procs);
