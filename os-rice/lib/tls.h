@@ -11,8 +11,13 @@
  * So this unit is a small HTTPS client: a socket from ws2_32, TLS 1.2 from
  * the vendored BearSSL (thirdparty/bearssl.h, see thirdparty/VENDOR.md), and
  * the trust anchors decoded at first use from the Mozilla CA bundle compiled
- * in beside it. lib/fetch.c routes to it only where WinINet cannot do the
- * job -- see osr_tls_needed -- and keeps the system transport otherwise.
+ * in beside it. lib/fetch.c routes to it where the system transport cannot do
+ * the job -- see osr_tls_needed and osr_tls_available -- and keeps the system
+ * transport otherwise.
+ *
+ * It is not Windows-only: nob builds it for any target asked for it
+ * (NOB_TLS=1), and on POSIX it is what a box with neither curl nor wget
+ * falls back to.
  *
  * The URL handling below is pure string work with no I/O, so it is asserted
  * on whichever host runs the suite, the same way fetch.c's header parsers
@@ -46,10 +51,15 @@ int osr_url_resolve(const char *base, const char *location,
  * arrives; return 0 to abort the transfer. */
 typedef int (*osr_tls_sink)(void *ctx, const char *data, unsigned long len);
 
+/* osr_tls_available -- 1 when this build carries the client below at all
+ * (nob defined OSR_HAVE_BEARSSL), 0 when the file is only its parsers. */
+int osr_tls_available(void);
+
 /* osr_tls_needed -- 1 when this system's own HTTPS cannot be trusted to
  * connect and the client below should be used instead: Windows older than
- * Vista, or $OSR_TLS=bearssl for testing the path anywhere. 0 on POSIX and
- * on a current Windows, where lib/fetch.c's usual transport is better. */
+ * Vista, or $OSR_TLS=bearssl for asking for it anywhere. 0 on a current
+ * Windows, and on POSIX unless forced -- there the "no curl, no wget" case is
+ * fetch.c's to spot, since only it knows what the box has. */
 int osr_tls_needed(void);
 
 /* osr_tls_get -- GET url, following up to 5 redirects, and hand the body to

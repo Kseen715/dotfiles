@@ -239,13 +239,17 @@ int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out,
 #include "common.h"
 #include "module.h"
 #include "fetch.h"
+#include "tls.h"
 
 /* OSR_PROGRESS_MIN_BYTES -- below this, a download prints nothing. A meter for
  * a 30 KB tarball is noise; the number is roughly "big enough that the
  * terminal looks hung without one". */
 #define PROGRESS_MIN_DEFAULT 1048576L      /* 1 MiB */
 
-const char *osr_fetch_backend(void) {
+/* external_backend -- the downloader program this box has, "" for none. The
+ * in-process one (lib/tls.c) is not one of these: it needs no program and is
+ * chosen by use_own_tls below. */
+static const char *external_backend(void) {
     if (osr_have_cmd("curl")) return "curl";
     if (osr_have_cmd("wget")) return "wget";
     if (osr_have_cmd("busybox")) {
@@ -264,6 +268,29 @@ const char *osr_fetch_backend(void) {
     return "";
 }
 
+/* use_own_tls -- should this URL go through lib/tls.c rather than a
+ * downloader program?
+ *
+ * Two ways in. $OSR_TLS=bearssl asks for it (osr_tls_needed), which is how
+ * the path is exercised on a box that has curl. Otherwise it is the fallback
+ * for a box that has NO downloader at all -- a minimal container, an
+ * installer running before any package is in -- which used to be a hard
+ * "no downloader found" error. Either way it needs the client to have been
+ * built in (nob's NOB_TLS=1) and it speaks HTTPS only; plain http:// still
+ * needs a program.
+ */
+static int use_own_tls(const char *url) {
+    if (url == NULL || strncmp(url, "https://", 8) != 0) return 0;
+    if (!osr_tls_available()) return 0;
+    return osr_tls_needed() || *external_backend() == '\0';
+}
+
+const char *osr_fetch_backend(void) {
+    if (osr_tls_available() && (osr_tls_needed() || *external_backend() == '\0'))
+        return "bearssl";
+    return external_backend();
+}
+
 const char *osr_fetch_ensure(void) {
     const char *d = osr_fetch_backend();
     const char *curl[2];
@@ -275,6 +302,30 @@ const char *osr_fetch_ensure(void) {
     curl[1] = NULL;
     osr_pkg_install(curl);
     return osr_fetch_backend();
+}
+
+/* --- sinks for the in-process transport ---------------------------------- */
+
+static int sink_to_file(void *ctx, const char *data, unsigned long len) {
+    return fwrite(data, 1, (size_t)len, (FILE *)ctx) == (size_t)len;
+}
+
+static int sink_to_str(void *ctx, const char *data, unsigned long len) {
+    str_add((Str *)ctx, data, (size_t)len);
+    return 1;
+}
+
+/* tls_to_file -- a whole download through lib/tls.c, dest removed on
+ * failure so a half file is never left behind for the size check to pass. */
+static int tls_to_file(const char *url, const char *dest) {
+    FILE *out = fopen(dest, "wb");
+    int rc;
+
+    if (out == NULL) return 0;
+    rc = osr_tls_get(url, sink_to_file, out, NULL, 0, NULL);
+    if (fclose(out) != 0) rc = OSR_NET_ERR;
+    if (rc != OSR_NET_OK) { remove(dest); return 0; }
+    return 1;
 }
 
 /* fetch_argv -- the backend's "stream this URL to stdout" invocation. */
@@ -315,6 +366,15 @@ int osr_fetch_stdout(const char *url) {
     char *argv[5];
 
     if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
+    if (use_own_tls(url)) {
+        Str body;
+        int rc;
+        str_init(&body);
+        rc = osr_tls_get(url, sink_to_str, &body, NULL, 0, NULL) == OSR_NET_OK;
+        if (rc) fwrite(str_text(&body), 1, body.len, stdout);
+        str_free(&body);
+        return rc;
+    }
     backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
@@ -338,7 +398,10 @@ static int fetch_pipe(const char *url, char *const argv[], int as_root) {
 
     if (osr_theme_only()) return osr_theme_only_skip("osr_fetch_stdout | ...");
     backend = osr_fetch_ensure();
-    if (*backend == '\0') {
+    /* A pipe needs a CHILD writing the far end while this process runs the
+     * reader, and lib/tls.c is a blocking in-process call -- so this one shape
+     * still wants a downloader program, even where the others do not. */
+    if (*backend == '\0' || strcmp(backend, "bearssl") == 0) {
         osr_warn("no downloader found (need curl, wget, or busybox)");
         return 0;
     }
@@ -365,6 +428,8 @@ int osr_fetch_buffer(Str *out, const char *url) {
     char *argv[5];
 
     if (osr_theme_only()) return !osr_theme_only_skip("osr_fetch_stdout");
+    if (use_own_tls(url))
+        return osr_tls_get(url, sink_to_str, out, NULL, 0, NULL) == OSR_NET_OK;
     backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
@@ -439,6 +504,11 @@ long osr_fetch_remote_size(const char *url) {
     Str head;
     long size;
 
+    if (use_own_tls(url)) {
+        long len = -1;
+        if (osr_tls_get(url, NULL, NULL, NULL, 0, &len) != OSR_NET_OK) return -1;
+        return len;
+    }
     str_init(&head);
     head_block(&head, url);
     /* The LAST Content-Length wins: a redirect chain prints one header block
@@ -452,6 +522,13 @@ int osr_fetch_final_url(Str *out, const char *url) {
     Str head;
     char buf[2048];
 
+    if (use_own_tls(url)) {
+        buf[0] = '\0';
+        if (osr_tls_get(url, NULL, NULL, buf, sizeof(buf), NULL) != OSR_NET_OK) return 0;
+        if (buf[0] == '\0') return 0;
+        str_addz(out, buf);
+        return 1;
+    }
     str_init(&head);
     head_block(&head, url);
     buf[0] = '\0';
@@ -521,6 +598,11 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
     int reaped = 0;
 
     if (osr_theme_only()) return !osr_theme_only_skip("osr_download");
+    /* No progress meter on this path: the transfer is in-process and blocking,
+     * so there is no growing file to poll from a parent.
+     * ponytail: fork the same way the argv path does if a big download over
+     * this transport ever looks hung. */
+    if (use_own_tls(url)) return tls_to_file(url, dest);
     backend = osr_fetch_ensure();
 
     if (*backend == '\0') {
@@ -667,7 +749,8 @@ static HINTERNET wininet_open_session(void) {
  * which transport carried the bytes.
  */
 static int use_own_tls(const char *url) {
-    return url != NULL && strncmp(url, "https://", 8) == 0 && osr_tls_needed();
+    return url != NULL && strncmp(url, "https://", 8) == 0 &&
+           osr_tls_available() && osr_tls_needed();
 }
 
 static int sink_to_file(void *ctx, const char *data, unsigned long len) {
@@ -948,7 +1031,9 @@ int osr_final_url(const char *url, char *out, unsigned long out_sz) {
  * install, because the transport is part of the operating system.
  * ------------------------------------------------------------------------ */
 
-const char *osr_fetch_backend(void) { return osr_tls_needed() ? "bearssl" : "wininet"; }
+const char *osr_fetch_backend(void) {
+    return (osr_tls_available() && osr_tls_needed()) ? "bearssl" : "wininet";
+}
 const char *osr_fetch_ensure(void)  { return osr_fetch_backend(); }
 
 int osr_fetch_buffer(Str *out, const char *url) {

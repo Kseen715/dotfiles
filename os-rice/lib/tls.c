@@ -11,6 +11,12 @@
  * whose system TLS is fine should be routing around anyway; the 63k lines of
  * thirdparty/bearssl.h are then not compiled at all.
  */
+/* Feature macro before any header, as lib/fetch.c does: -std=c89 sets
+ * __STRICT_ANSI__, under which glibc hides getaddrinfo and struct addrinfo. */
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200112L
+#endif
+
 #include "tls.h"
 
 #include <stdio.h>
@@ -117,10 +123,11 @@ int osr_url_resolve(const char *base, const char *location,
     return 1;
 }
 
-#if defined(_WIN32) && defined(OSR_HAVE_BEARSSL)
+#ifdef OSR_HAVE_BEARSSL
 
 /* --- the client ---------------------------------------------------------- */
 
+#ifdef _WIN32
 #ifndef WINVER
 #define WINVER 0x0501
 #endif
@@ -132,6 +139,16 @@ int osr_url_resolve(const char *base, const char *location,
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#else
+/* BSD sockets say the same three things with other names. */
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+typedef int SOCKET;
+#define INVALID_SOCKET (-1)
+#define closesocket(s) close(s)
+#endif
 
 #include "../thirdparty/bearssl.h"
 
@@ -143,13 +160,26 @@ extern const unsigned long osr_cacert_pem_len;
 
 #define MAX_REDIRECTS 5
 
+int osr_tls_available(void) { return 1; }
+
+/* osr_tls_needed -- is this system's own HTTPS unusable, so that the client
+ * below has to carry the request?
+ *
+ * Windows answers from the version: pre-Vista schannel stops at TLS 1.0.
+ * POSIX has no such version test -- whether the box has a working downloader
+ * at all is a fetch.c question, and that is where it is asked (see
+ * use_own_tls there) -- so here only OSR_TLS=bearssl forces it. */
 int osr_tls_needed(void) {
-    OSVERSIONINFOA vi;
     const char *forced = env_str("OSR_TLS", "");
+#ifdef _WIN32
+    OSVERSIONINFOA vi;
+#endif
 
     if (strcmp(forced, "bearssl") == 0) return 1;
     if (strcmp(forced, "system") == 0) return 0;
-
+#ifndef _WIN32
+    return 0;
+#else
     memset(&vi, 0, sizeof(vi));
     vi.dwOSVersionInfoSize = sizeof(vi);
     /* GetVersionExA is deprecated on 8.1 and later, where it reports 6.2 for
@@ -158,6 +188,7 @@ int osr_tls_needed(void) {
      * well past that. */
     if (!GetVersionExA(&vi)) return 0;
     return vi.dwMajorVersion < 6;
+#endif
 }
 
 /* --- trust anchors, decoded from the bundle at first use ----------------- */
@@ -297,13 +328,15 @@ static int load_anchors(void) {
 /* --- socket -------------------------------------------------------------- */
 
 static int winsock_up(void) {
+#ifdef _WIN32
     static int started = 0;
     WSADATA wsa;
 
     if (started) return 1;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return 0;
     started = 1;
-    return 1;
+#endif
+    return 1;   /* nothing to start on POSIX */
 }
 
 static SOCKET tcp_connect(const char *host, int port) {
@@ -338,7 +371,7 @@ static SOCKET tcp_connect(const char *host, int port) {
 
 static int sock_read(void *ctx, unsigned char *buf, size_t len) {
     SOCKET sock = *(SOCKET *)ctx;
-    int got = recv(sock, (char *)buf, (int)len, 0);
+    int got = (int)recv(sock, (char *)buf, len, 0);
     /* A clean close is an end of stream to BearSSL's I/O layer just as an
      * error is: both mean nothing more will arrive. */
     if (got <= 0) return -1;
@@ -347,7 +380,7 @@ static int sock_read(void *ctx, unsigned char *buf, size_t len) {
 
 static int sock_write(void *ctx, const unsigned char *buf, size_t len) {
     SOCKET sock = *(SOCKET *)ctx;
-    int sent = send(sock, (const char *)buf, (int)len, 0);
+    int sent = (int)send(sock, (const char *)buf, len, 0);
     if (sent <= 0) return -1;
     return sent;
 }
@@ -527,12 +560,13 @@ int osr_tls_get(const char *url, osr_tls_sink sink, void *ctx,
     return OSR_NET_ERR;
 }
 
-#else /* !_WIN32 || !OSR_HAVE_BEARSSL */
+#else /* !OSR_HAVE_BEARSSL */
 
 /* POSIX runs curl or wget, and modern Windows has WinINet: both brought a
- * current TLS with them, so neither needs this one. Only the parsers above
- * are built here, and the suite asserts them on whichever host runs it. */
+ * current TLS with them, so neither needs this one built in. Only the parsers
+ * above are built here, and the suite asserts them on whichever host runs it. */
 
+int osr_tls_available(void) { return 0; }
 int osr_tls_needed(void) { return 0; }
 
 int osr_tls_get(const char *url, osr_tls_sink sink, void *ctx,
@@ -543,4 +577,4 @@ int osr_tls_get(const char *url, osr_tls_sink sink, void *ctx,
     return OSR_NET_UNSUPPORTED;
 }
 
-#endif /* _WIN32 && OSR_HAVE_BEARSSL */
+#endif /* OSR_HAVE_BEARSSL */

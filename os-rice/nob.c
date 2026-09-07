@@ -274,6 +274,8 @@ static void cmd_append_args(Nob_Cmd *cmd, ...) {
  * win_srcs       the subsystems that exist only on Windows: process
  *                elevation, and the modules whose program or whose OS pass is
  *                Windows-only.
+ * tls_srcs       the vendored TLS stack, prepended to either of those when the
+ *                target carries its own TLS (target_needs_own_tls).
  *
  * There used to be two lists linking two different programs -- install.exe
  * from lib_srcs, build/osr from posix_srcs -- with their own module tables and
@@ -308,10 +310,11 @@ static const char *core_srcs[] = {
      * names for the same three acts. */
     "lib/fetch.c",
     /* lib/tls.c is fetch.c's transport of last resort: the Windows XP tier's
-     * own TLS is too old to reach any host worth fetching from, so that build
-     * brings BearSSL along. Core rather than win-only because the URL parsers
-     * at the top of it are portable and the suite asserts them wherever it
-     * runs -- everything below them is under #ifdef _WIN32. */
+     * own TLS is too old to reach any host worth fetching from, and a POSIX box
+     * may have no downloader at all, so those builds bring BearSSL along (see
+     * tls_srcs / target_needs_own_tls). Core because the URL parsers at the top
+     * of it are portable and the suite asserts them wherever it runs --
+     * everything below them is under #ifdef OSR_HAVE_BEARSSL. */
     "lib/tls.c",
     /* The vendored YAML parser's implementation (thirdparty/yaml.h). Core
      * rather than static-only: config parsing is what it is here for, and
@@ -478,12 +481,11 @@ static const char *posix_srcs[] = {
 };
 #define POSIX_SRCS_COUNT (sizeof(posix_srcs) / sizeof(posix_srcs[0]))
 
-/* The first WIN_TLS_SRCS entries are the vendored TLS stack and its trust
- * store, and only the tier that has no usable system TLS builds them: see
- * target_needs_own_tls(), which is what decides whether target_srcs() hands
- * the whole array out or starts past them. Keep them first, and keep the
- * count in step. */
-static const char *win_srcs[] = {
+/* tls_srcs -- the vendored TLS stack and its trust store, built only where
+ * the target needs its own TLS (target_needs_own_tls). Its own list rather
+ * than part of either system's: nothing in it is Windows-specific, and
+ * target_srcs() prepends it to whichever list the target uses. */
+static const char *tls_srcs[] = {
     /* The CA bundle as an array, generated from thirdparty/cacert.pem by
      * gen_cacert() below. lib/tls.c decodes it into trust anchors: XP's own
      * root store expired years ago, so trust travels with the binary. */
@@ -491,7 +493,10 @@ static const char *win_srcs[] = {
     /* The vendored TLS stack's implementation (thirdparty/bearssl.h): 63k
      * lines of upstream, the single most expensive unit in the tree. */
     "lib/bearssl.c",
-    /* --- from here on, every Windows target --- */
+};
+#define TLS_SRCS_COUNT (sizeof(tls_srcs) / sizeof(tls_srcs[0]))
+
+static const char *win_srcs[] = {
     "modules/oh-my-posh.c",
     "modules/pwsh.c",
     "modules/win-debloat.c",
@@ -499,12 +504,12 @@ static const char *win_srcs[] = {
     "modules/win-update.c",
 };
 #define WIN_SRCS_COUNT (sizeof(win_srcs) / sizeof(win_srcs[0]))
-#define WIN_TLS_SRCS 2
 
-/* MAX_HOST_SRCS -- the bound for a stack array holding whichever of the two
- * lists target_srcs() picks. The pick is a runtime one now (see
- * target_windows), so the array has to fit either. */
-#define MAX_HOST_SRCS (POSIX_SRCS_COUNT > WIN_SRCS_COUNT ? POSIX_SRCS_COUNT : WIN_SRCS_COUNT)
+/* MAX_HOST_SRCS -- the bound for a stack array holding what target_srcs()
+ * hands back. The pick is a runtime one (see target_windows), so the array
+ * has to fit either list, plus the TLS units either may carry. */
+#define MAX_HOST_SRCS ((POSIX_SRCS_COUNT > WIN_SRCS_COUNT ? POSIX_SRCS_COUNT : WIN_SRCS_COUNT) \
+                       + TLS_SRCS_COUNT)
 
 /* The runtime host (D-4a) compiles every unit EXCEPT the modules, plus
  * lib/module_runtime.c, and loads a module's object on demand instead. So the
@@ -803,12 +808,16 @@ static bool target_windows(void) {
 /* target_needs_own_tls -- does the system this build targets lack a TLS the
  * program can use, so that it has to carry thirdparty/bearssl.h along?
  *
- * Exactly one tier does: legacy Windows, whose schannel stops at TLS 1.0 and
- * whose WinINet therefore cannot finish a handshake with a current host (see
- * lib/tls.c). Everything else -- modern Windows through WinINet, POSIX
- * through curl or wget -- already has one, and building BearSSL for those
- * would compile the tree's most expensive unit to produce code no run can
- * reach.
+ * One tier does by default: legacy Windows, whose schannel stops at TLS 1.0
+ * and whose WinINet therefore cannot finish a handshake with a current host
+ * (see lib/tls.c). Everything else -- modern Windows through WinINet, POSIX
+ * through curl or wget -- already has one, and building BearSSL for those by
+ * default would compile the tree's most expensive unit to produce code no
+ * ordinary run reaches.
+ *
+ * NOB_TLS=1 builds it into ANY target, Windows or POSIX. That is not a
+ * Windows-only stack: on POSIX lib/fetch.c uses it for https:// when the box
+ * has no curl, wget or busybox at all, which used to be a hard error.
  *
  * The tier is read off the target the same way target_windows() reads the
  * system: from the toolchain's name. XP needs the 32-bit driver, so an
@@ -845,15 +854,20 @@ static bool target_runnable(void) {
 static const char *exe(void) { return target_windows() ? ".exe" : ""; }
 
 /* target_srcs -- the module list for the system being built for, and its
- * length through the out parameter. */
+ * length through the out parameter. The TLS units come first when this target
+ * carries its own TLS -- before the modules, which is what keeps the runtime
+ * host's *_NO_MODULES_COUNT boundaries meaningful. */
 static const char **target_srcs(size_t *count) {
-    if (target_windows()) {
-        if (target_needs_own_tls()) { *count = WIN_SRCS_COUNT; return win_srcs; }
-        *count = WIN_SRCS_COUNT - WIN_TLS_SRCS;
-        return win_srcs + WIN_TLS_SRCS;
-    }
-    *count = POSIX_SRCS_COUNT;
-    return posix_srcs;
+    static const char *with_tls[MAX_HOST_SRCS];
+    const char **base = target_windows() ? win_srcs : posix_srcs;
+    size_t n = target_windows() ? WIN_SRCS_COUNT : POSIX_SRCS_COUNT;
+    size_t i;
+
+    if (!target_needs_own_tls()) { *count = n; return base; }
+    for (i = 0; i < TLS_SRCS_COUNT; i++) with_tls[i] = tls_srcs[i];
+    for (i = 0; i < n; i++) with_tls[TLS_SRCS_COUNT + i] = base[i];
+    *count = n + TLS_SRCS_COUNT;
+    return with_tls;
 }
 
 /* is_chibicc -- does $CC name chibicc, with or without a path and flags?
@@ -1038,7 +1052,8 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * post-C90. Upstream's warnings are upstream's, so they are off
          * rather than read past on every build. */
         cmd_append_args(cmd, "-std=c89", "-w", "-O2", NULL);
-        cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
+        if (target_windows())
+            cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
         return;
     }
     cmd_append_args(cmd, "-std=c89", "-Wall", "-Wextra", "-pedantic",
@@ -1051,12 +1066,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
      * warns from every TU. gcc/clang do not enable -Wshadow at all under
      * -Wall -Wextra, so nothing is lost by silencing it for pcc only. */
     if (is_pcc()) cmd_append_args(cmd, "-Wno-attributes", "-Wno-shadow", NULL);
-    if (target_windows()) {
+    if (target_windows())
         cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
-        /* What lib/tls.c's #if reads: the client half of it is compiled only
-         * where the target has no TLS of its own. */
-        if (target_needs_own_tls()) nob_cmd_append(cmd, "-DOSR_HAVE_BEARSSL");
-    }
+    /* What lib/tls.c's #ifdef reads: the client half of it is compiled only
+     * where the target carries its own TLS -- on either system. */
+    if (target_needs_own_tls()) nob_cmd_append(cmd, "-DOSR_HAVE_BEARSSL");
 }
 
 
@@ -1378,7 +1392,7 @@ static size_t host_objs(const char **objs, const char *main_src) {
  * Called only after compile_objs() has flushed, so the objects' mtimes
  * are final by the time we look at them. */
 static bool needs_link(const char *bin, const char *main_src) {
-    const char *objs[CORE_SRCS_COUNT + POSIX_SRCS_COUNT + WIN_SRCS_COUNT + 1];
+    const char *objs[CORE_SRCS_COUNT + MAX_HOST_SRCS + 1];
     size_t count = host_objs(objs, main_src);
     return nob_needs_rebuild(bin, objs, count) != 0;
 }
@@ -1456,13 +1470,18 @@ static void append_common_libs(Nob_Cmd *cmd) {
  * it dlopens what it compiles. */
 static bool link_runtime(const char *bin) {
     Nob_Cmd cmd = {0};
-    const char *inputs[CORE_NO_MODULES_COUNT + POSIX_NO_MODULES_COUNT + 2];
+    const char *inputs[CORE_NO_MODULES_COUNT + POSIX_NO_MODULES_COUNT + TLS_SRCS_COUNT + 2];
     size_t count = 0;
     size_t i;
+    /* The host links what lib/tls.c calls into, the same as the single binary
+     * does: with OSR_HAVE_BEARSSL defined, that unit has a TLS stack under it. */
+    bool own_tls = target_needs_own_tls();
 
+    if (own_tls && !gen_cacert()) return false;
     inputs[count++] = "osr.c";
     for (i = 0; i < CORE_NO_MODULES_COUNT; i++) inputs[count++] = core_srcs[i];
     for (i = 0; i < POSIX_NO_MODULES_COUNT; i++) inputs[count++] = posix_srcs[i];
+    if (own_tls) for (i = 0; i < TLS_SRCS_COUNT; i++) inputs[count++] = tls_srcs[i];
     inputs[count++] = POSIX_RUNTIME_SRC;
     collect_deps();
     if (nob_needs_rebuild(bin, inputs, count) == 0 &&
@@ -1478,6 +1497,7 @@ static bool link_runtime(const char *bin) {
                     is_lcc() ? "-Wl-E" : "-rdynamic", "-o", bin, "osr.c", NULL);
     for (i = 0; i < CORE_NO_MODULES_COUNT; i++) nob_cmd_append(&cmd, core_srcs[i]);
     for (i = 0; i < POSIX_NO_MODULES_COUNT; i++) nob_cmd_append(&cmd, posix_srcs[i]);
+    if (own_tls) for (i = 0; i < TLS_SRCS_COUNT; i++) nob_cmd_append(&cmd, tls_srcs[i]);
     cmd_append_args(&cmd, POSIX_RUNTIME_SRC, "-ldl", NULL);
     if (timing) return run_timed(&cmd, bin);
     return nob_cmd_run(&cmd);
@@ -1643,6 +1663,7 @@ static bool clean(void) {
     for (i = 0; i < CORE_SRCS_COUNT; i++) delete_built(core_srcs[i]);
     for (i = 0; i < POSIX_SRCS_COUNT; i++) delete_built(posix_srcs[i]);
     for (i = 0; i < WIN_SRCS_COUNT; i++) delete_built(win_srcs[i]);
+    for (i = 0; i < TLS_SRCS_COUNT; i++) delete_built(tls_srcs[i]);
     delete_if_exists(CACERT_SRC);
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", test_names[i], exe()));
