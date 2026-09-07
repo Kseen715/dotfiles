@@ -1,0 +1,31 @@
+{
+  // Каталоги, которые НЕ нужно отслеживать файловым вотчером.
+  "files.watcherExclude": {
+    // "**/.wine-build/**": true,
+    // "**/dist/**": true,
+    // "**/build/__pyi/**": true,
+    // "**/output/**": true,
+    // "**/__pycache__/**": true,
+    // "**/.git/**": true,
+    // "**/.gigacode/**": true
+    "**/os-rice/thirdparty/**.h": true
+  },
+  // Исключение из полнотекстового поиска.
+  "search.exclude": {
+    // "**/.wine-build": true,
+    // "**/dist": true,
+    // "**/build/__pyi": true,
+    // "**/output": true,
+    "**/__pycache__": true,
+    "**/.gigacode": true,
+    "**/os-rice/thirdparty/**.h": true
+  },
+  // Скрыть из дерева проводника и из индексации.
+  "files.exclude": {
+    "**/.wine-build": true,
+    "**/__pycache__": true,
+    "**/.gigacode": true
+  },
+  // Гасим IntelliSense C/C++ (cpptools-srv)
+//   "C_Cpp.files.exclude": { "**/.wine-build/**": true }
+}
