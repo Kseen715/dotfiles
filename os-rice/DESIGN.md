@@ -818,8 +818,9 @@ shell function) and `osr_theme_meta` / `osr_gpu_chip` (lib/theme.c, lib/detect.c
 A module that writes `/etc` by absolute path carries an override so it can be
 exercised without root — `OSR_PACMAN_DIR`/`OSR_DNF_CONF` in `mirrors`, the
 `OSR_MEMINFO`/`OSR_SWAPFILE`/… set in `swap`, `OSR_DESKTOP_DIRS` in
-`yandex-browser`, `OSR_XFCE_HELPERS_DIR` in `helpers`. That is the same trick `lib/user.c` uses for `/etc/passwd`,
-and it is the only reason those modules have unit tests at all (§5a).
+`yandex-browser`, `OSR_XFCE_HELPERS_DIR` in `helpers`. That is the same trick
+`lib/user.c` uses for `/etc/passwd`, and it is the only reason those modules
+have unit tests at all (§5a).
 
 A brand-new module goes straight to C. `modules/helpers.c` was the first
 written that way rather than ported, and is asserted the same way every module

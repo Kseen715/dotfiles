@@ -11,15 +11,93 @@ permissions:
   contents: read
 
 jobs:
-  # Fast, no-container gate: POSIX lint (dash -n + shellcheck) + unit tests.
+  # Fast, no-container gate: POSIX lint (dash -n + shellcheck) + unit tests,
+  # once per compiler.
+  #
+  # The matrix is over $CC because nob.c does not have one compiler, it has a
+  # LADDER (tcc, clang, gcc, zig cc, cc) and takes the first that probes clean
+  # -- so the compiler a contributor's `osr test` actually used is a property
+  # of what they happened to have installed, and a construct only one of them
+  # rejects breaks a box nobody tested on. C89 is the promise; three front ends
+  # are how it is kept. $CC wins over the ladder outright, which is the whole
+  # mechanism this needs.
+  #
+  # `osr test` rather than `nob test` directly: it is the entry point a
+  # contributor runs, it bootstraps build/nob with the same $CC, and it adds
+  # the lint pass (dash -n + shellcheck) the C tests do not cover.
   lint-and-unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang, tcc]
     steps:
       - uses: actions/checkout@v4
-      - name: Install dash, shellcheck, zsh
-        run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh
-      - name: Lint + unit tests
-        run: sh os-rice/osr test
+      - name: Install dash, shellcheck, zsh, ${{ matrix.cc }}
+        run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh ${{ matrix.cc }}
+      - name: Lint + unit tests (CC=${{ matrix.cc }})
+        run: CC=${{ matrix.cc }} sh os-rice/osr test
+
+  # The Windows tier, which nothing else in this file covers: the matrix images
+  # are all Linux and `osr test` needs a POSIX shell to run at all.
+  #
+  # What runs here is narrower on purpose. nob.c splits its tests three ways
+  # (test_names / unity_test_names / posix_test_names) and a Windows target
+  # builds the first two -- the POSIX behaviour tests drive build/osr as a
+  # subprocess against a sandbox of shell stubs, which is not a thing this host
+  # has. So this job asserts what Windows can assert: the Windows source set
+  # (win_srcs, the win-* modules, lib/win*) COMPILES and LINKS, and the
+  # host-independent units still pass when built by a Windows compiler.
+  #
+  # Two compilers again, and here they are not merely different front ends but
+  # different DIALECTS: nob.c spells its flags twice (is_msvc_name -> /W4 /c
+  # /Fo versus -Wall -c -o), and only cl.exe exercises the MSVC half.
+  unit-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: mingw-gcc
+            cc: gcc
+          - toolchain: msvc
+            cc: cl.exe
+    env:
+      # Explicit rather than left to nob.c's ladder: clang is on the runner
+      # too, so an unset $CC would quietly give both legs the same front end.
+      CC: ${{ matrix.cc }}
+    defaults:
+      run:
+        working-directory: os-rice
+    steps:
+      - uses: actions/checkout@v4
+      # One step per toolchain, each self-contained, because MSVC's environment
+      # comes from vcvars64.bat and a workflow `run:` is its own process -- a
+      # step that sourced it would hand nothing to the next one. Each leg
+      # bootstraps nob with its OWN compiler: building nob with gcc and the
+      # tree with cl would leave the MSVC dialect half-exercised. build/ first,
+      # the one directory nob cannot be asked to create -- it is where it goes.
+      # Then nob twice, build before test, which is what `osr` does on POSIX.
+      - name: Build + unit tests (mingw gcc)
+        if: matrix.toolchain == 'mingw-gcc'
+        shell: cmd
+        run: |
+          if not exist build mkdir build
+          gcc -o build\nob.exe nob.c || exit /b 1
+          build\nob.exe || exit /b 1
+          build\nob.exe test || exit /b 1
+      - name: Build + unit tests (MSVC)
+        if: matrix.toolchain == 'msvc'
+        shell: cmd
+        run: |
+          if not exist build mkdir build
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSDIR=%%i"
+          call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          cl /nologo /Fe:build\nob.exe /Fobuild\ nob.c || exit /b 1
+          build\nob.exe || exit /b 1
+          build\nob.exe test || exit /b 1
 
   # The idempotency matrix: one GitHub job per distro image, each installing the
   # rice TWICE in that image. The double run must be all-skips with no duplicate
