@@ -112,3 +112,9 @@ lib32-libnm = lib32-libnm
 # zramen is Void-only (a runit service). Arch is systemd, which takes the
 # zram-generator path in modules/swap.sh instead, so nothing is lost.
 zramen =
+
+# KDE Plasma (modules/plasma.c). Arch's plasma-meta already carries the Wayland
+# session, so the second logical name resolves to the workspace itself rather
+# than to a separate package.
+plasma-desktop = plasma-meta
+plasma-wayland = plasma-workspace

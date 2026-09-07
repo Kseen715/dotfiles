@@ -159,6 +159,7 @@ int osrm_pacman_multilib(void);
 int osrm_paru(void);
 int osrm_picom(void);
 int osrm_pipewire(void);
+int osrm_plasma(void);
 int osrm_polkit_agent(void);
 int osrm_polybar(void);
 int osrm_power(void);
@@ -193,6 +194,7 @@ int osrm_waybar(void);
 int osrm_waydroid(void);
 int osrm_wayland(void);
 int osrm_waylock(void);
+int osrm_weston_rdp(void);
 int osrm_wleave(void);
 int osrm_wlogout(void);
 int osrm_wofi(void);
@@ -304,6 +306,7 @@ static const ModuleRow modules[] = {
     { "paru",            "x11+wayland", 0, MODULE_RUN(osrm_paru) },
     { "picom",           "x11",         1, MODULE_RUN(osrm_picom) },
     { "pipewire",        "x11+wayland", 0, MODULE_RUN(osrm_pipewire) },
+    { "plasma",          "x11+wayland", 0, MODULE_RUN(osrm_plasma) },
     { "polkit-agent",    "x11+wayland", 0, MODULE_RUN(osrm_polkit_agent) },
     { "polybar",         "x11",         1, MODULE_RUN(osrm_polybar) },
     { "power",           "x11+wayland", 0, MODULE_RUN(osrm_power) },
@@ -339,6 +342,7 @@ static const ModuleRow modules[] = {
     { "waydroid",        "wayland",     0, MODULE_RUN(osrm_waydroid) },
     { "wayland",         "wayland",     0, MODULE_RUN(osrm_wayland) },
     { "waylock",         "wayland",     1, MODULE_RUN(osrm_waylock) },
+    { "weston-rdp",      "wayland",     0, MODULE_RUN(osrm_weston_rdp) },
     { "wezterm",         "x11+wayland", 1, MODULE_RUN(osrm_wezterm) },
     { "wleave",          "wayland",     1, MODULE_RUN(osrm_wleave) },
     { "wlogout",         "wayland",     1, MODULE_RUN(osrm_wlogout) },

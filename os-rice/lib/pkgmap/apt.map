@@ -580,3 +580,9 @@ p7zip@resolute = 7zip
 
 # ninja is ninja-build here (the `ninja` package is something else).
 cuik-build-deps = luajit ninja-build nasm clang lld
+
+# KDE Plasma (modules/plasma.c). Debian and Ubuntu split the desktop from the
+# session: kde-plasma-desktop is the desktop, and the Wayland session .desktop
+# and its kwin_wayland come only with plasma-workspace-wayland.
+plasma-desktop = kde-plasma-desktop
+plasma-wayland = plasma-workspace-wayland
