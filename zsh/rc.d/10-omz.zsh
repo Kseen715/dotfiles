@@ -245,6 +245,76 @@ compinit() {
     fi
 }
 
+# --- omz lib files that fork for nothing --------------------------------------
+# Two of oh-my-zsh's lib/ files dominate what is left of startup, and both are
+# paying for behavior this config immediately discards. Neither is patched by
+# forking the file into $ZSH_CUSTOM/lib/ - that silently pins a copy of upstream
+# that never gets updates - so both use omz's own documented opt-out variables,
+# which must be set before oh-my-zsh.sh sources lib/.
+#
+# Combined, worth ~4-5 ms of a ~160 ms startup, measured as interleaved wall
+# clock over 80 paired runs. `zprof` attributes far more to these two files, but
+# it inflates fork cost; the wall-clock figure is the real one.
+#
+# lib/misc.zsh autoloads url-quote-magic and
+# bracketed-paste-magic and wraps self-insert with them. The wrapper is the
+# expensive part twice over - once to load, and then on EVERY KEYSTROKE, stacked
+# under the three widget layers this file already installs (highlighting,
+# autosuggestions, autocomplete). What is given up is URL auto-quoting as you
+# type. Pasting is NOT affected: `^[[200~` stays bound to zsh's BUILTIN
+# bracketed-paste widget and the terminal is still put in `?2004h` bracketed
+# paste mode (both verified), so a pasted newline still lands in the buffer
+# rather than executing. The magic version only added quoting on top of that,
+# and it is the one upstream's own comment calls "known buggy in some versions".
+DISABLE_MAGIC_FUNCTIONS=true
+
+# lib/theme-and-appearance.zsh forks twice per shell, and both forks are dead
+# weight here:
+#
+#   test-ls-args ls --color   picks `alias ls='ls --color=tty'`, which
+#                             20-aliases.zsh overwrites with lsd two files later.
+#                             Pure waste, every shell.
+#   dircolors -b              builds $LS_COLORS from scratch each time, from a
+#                             definition that never changes.
+#
+# DISABLE_LS_COLORS drops both. It returns AFTER the `diff --color` wrapper, so
+# that survives, as do `colors`, prompt_subst and the ZSH_THEME_* defaults.
+#
+# But $LS_COLORS itself has to come back: lsd reads it (verified - a hand-written
+# LS_COLORS visibly repaints its output), and without it lsd falls back to a
+# built-in theme that leaves archives, images and audio uncolored and - the one
+# that actually matters - renders a BROKEN symlink in the same cyan as a working
+# one. So it is cached instead, turning a per-shell fork into a per-upgrade one.
+DISABLE_LS_COLORS=true
+export LSCOLORS="Gxfxcxdxbxegedabagacad"   # BSD ls; a static string upstream sets too
+#
+# The cache holds the bare VALUE, not dircolors' `LS_COLORS='...'; export ...`
+# script: `$(<file)` is a zsh builtin read - no fork, no parser - whereas
+# `source`ing the script form costs more to parse than the fork it replaced.
+() {
+    local cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh/ls-colors
+    # Rebuilt only when the dircolors binary is upgraded or ~/.dircolors is
+    # edited. An unset $commands entry makes -nt false, so a machine without
+    # dircolors writes no cache and keeps zsh's built-in defaults.
+    if [[ ! -s $cache || $commands[dircolors] -nt $cache ||
+          ( -f $HOME/.dircolors && $HOME/.dircolors -nt $cache ) ]]; then
+        (( $+commands[dircolors] )) || return 0
+        [[ -d ${cache:h} ]] || mkdir -p ${cache:h}
+        local out
+        if [[ -f $HOME/.dircolors ]]; then
+            out=$(dircolors -b "$HOME/.dircolors" 2>/dev/null)
+        else
+            out=$(dircolors -b 2>/dev/null)
+        fi
+        # ${(Q)...} strips the single quotes dircolors wraps the value in.
+        out=${(Q)${${out%%$'\n'*}#LS_COLORS=}%;}
+        [[ -n $out ]] && print -r -- $out > $cache
+    fi
+    [[ -s $cache ]] && export LS_COLORS="$(<$cache)"
+    return 0
+}
+
+
 [ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
 # --- history: no duplicate rows ----------------------------------------------
