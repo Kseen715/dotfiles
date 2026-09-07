@@ -143,6 +143,7 @@ int osr_url_resolve(const char *base, const char *location,
 /* BSD sockets say the same three things with other names. */
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netdb.h>
 #include <unistd.h>
 typedef int SOCKET;
@@ -339,6 +340,32 @@ static int winsock_up(void) {
     return 1;   /* nothing to start on POSIX */
 }
 
+/* sock_deadline -- a receive/send timeout on the socket.
+ *
+ * Without one, a host that accepts the connection and then says nothing
+ * leaves br_sslio_read() blocked forever, and the program with it -- which is
+ * how an offline box with a captive portal, or a firewall that drops rather
+ * than rejects, actually behaves. The system transports this one stands in
+ * for all have such a timeout (curl's, WinINet's); this is that.
+ * ponytail: it does not bound connect(), which the OS times out on its own
+ * after a minute or two; make it non-blocking with a select() if that wait
+ * ever matters. */
+#define TLS_TIMEOUT_SECS 30
+
+static void sock_deadline(SOCKET sock) {
+#ifdef _WIN32
+    DWORD ms = TLS_TIMEOUT_SECS * 1000;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&ms, sizeof(ms));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char *)&ms, sizeof(ms));
+#else
+    struct timeval tv;
+    tv.tv_sec = TLS_TIMEOUT_SECS;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
+}
+
 static SOCKET tcp_connect(const char *host, int port) {
     struct addrinfo hints;
     struct addrinfo *res;
@@ -366,6 +393,7 @@ static SOCKET tcp_connect(const char *host, int port) {
         sock = INVALID_SOCKET;
     }
     freeaddrinfo(res);
+    if (sock != INVALID_SOCKET) sock_deadline(sock);
     return sock;
 }
 

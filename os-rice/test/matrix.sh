@@ -26,6 +26,20 @@ IMAGES=${OSR_TEST_IMAGES:-"ubuntu:jammy ubuntu:noble ubuntu:resolute debian:11 d
 ENGINE=$(command -v podman 2>/dev/null || command -v docker 2>/dev/null || true)
 [ -n "$ENGINE" ] || { echo "no container engine (podman/docker) found" >&2; exit 1; }
 
+# The checkout goes in read-only -- a container must never write into the tree
+# the developer is editing -- but os-rice is a C program now and `osr` builds it
+# before it runs anything, so build/ has to be writable and EMPTY: the host's
+# build/ holds binaries linked against the host's libc, which is not the one in
+# the image. A tmpfs over that one path is both, and it dies with the container.
+# exec because the thing built there (build/nob, build/osr) is then run.
+# podman COPIES the underlying directory up into a fresh tmpfs and docker does
+# not, so the one that would inherit the host's binaries has to say otherwise.
+# shellcheck disable=SC2086  # $MOUNTS is a command line, split on purpose
+MOUNTS="--tmpfs /dotfiles/os-rice/build:rw,exec"
+case $(basename "$ENGINE") in
+    podman) MOUNTS="${MOUNTS},notmpcopyup" ;;
+esac
+
 # --- colors (TTY + NO_COLOR aware) -------------------------------------------
 # Store REAL escape bytes (not the literal string "\033[..") so they render
 # whether emitted by printf, sed, or any other tool — a literal "\033" only
@@ -42,34 +56,11 @@ fi
 # through %b unchanged.
 p() { printf '%b' "$*"; }
 
-# --- in-container test: emit one machine-parseable result line ---------------
-IN_CONTAINER='
-I=/dotfiles/os-rice/install.sh
-r1=FAIL; r2=FAIL; rp=FAIL
-
-echo "--- first install ---"
-if sh "$I" '"$RICE"' 2>&1; then r1=OK; fi
-
-echo "--- second install (idempotent?) ---"
-if sh "$I" '"$RICE"' >/tmp/i2 2>&1; then
-    cat /tmp/i2
-    if ! grep -q "\[ERROR\]" /tmp/i2 && grep -q "skipping" /tmp/i2; then r2=OK; fi
-else
-    cat /tmp/i2
-fi
-
-echo "--- PATH duplicate check ---"
-mkdir -p "$HOME/.cargo/bin" "$HOME/go/bin"
-Z="$HOME/.config/osr/zsh/rc.d/00-env.zsh"
-SH_BIN=$(command -v zsh || command -v sh)
-if [ -f "$Z" ]; then
-    P=$("$SH_BIN" -c ". \"$Z\"; . \"$Z\"; printf %s \"\$PATH\"" 2>/dev/null)
-    DUP=$(printf "%s" "$P" | tr ":" "\n" | sort | uniq -d | grep -v "^$" || true)
-    if [ -z "$DUP" ]; then rp=OK; else echo "duplicate PATH entries: $DUP"; fi
-fi
-
-echo "OSR_MATRIX r1=$r1 r2=$r2 rp=$rp"
-'
+# --- in-container test -------------------------------------------------------
+# The test itself is test/matrix-run.sh, which the read-only mount carries into
+# the container with everything else. It prints the OSR_MATRIX marker this file
+# scores below, and the CI matrix runs the same script one image per job.
+IN_CONTAINER="sh /dotfiles/os-rice/test/matrix-run.sh $RICE"
 
 field() { echo "$1" | grep -o "$2=[A-Z]*" | cut -d= -f2; }
 
@@ -110,7 +101,8 @@ for img in $IMAGES; do
     # Run quietly, capturing all output; show a spinner on a TTY, a plain line
     # otherwise (CI). Full logs are surfaced only on failure.
     if [ -t 1 ]; then
-        "$ENGINE" run --rm -e HOME=/root -v "$REPO":/dotfiles:ro "$img" \
+        # shellcheck disable=SC2086  # $MOUNTS is a command line, split on purpose
+        "$ENGINE" run --rm -e HOME=/root -v "$REPO":/dotfiles:ro $MOUNTS "$img" \
             sh -c "$IN_CONTAINER" >"$LOG" 2>&1 &
         _pid=$!
         _spin "$_pid" "$img" "$LOG"
@@ -118,7 +110,8 @@ for img in $IMAGES; do
         printf '\r%s[K' "$_E"            # clear the spinner line
     else
         printf '  running %s ...\n' "$img"
-        "$ENGINE" run --rm -e HOME=/root -v "$REPO":/dotfiles:ro "$img" \
+        # shellcheck disable=SC2086  # $MOUNTS is a command line, split on purpose
+        "$ENGINE" run --rm -e HOME=/root -v "$REPO":/dotfiles:ro $MOUNTS "$img" \
             sh -c "$IN_CONTAINER" >"$LOG" 2>&1 || true
     fi
 

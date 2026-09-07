@@ -338,6 +338,12 @@ void osr_sb_init(OsrSandbox *sb) {
     osr_sb_env(sb, "OSR_VERSION_ID", "24.04");
     osr_sb_env(sb, "OSR_ARCH", "x86_64");
     osr_sb_env(sb, "OSR_VERBOSE", "1");
+    /* The sandbox PATH carries no curl and no wget on purpose: a scenario
+     * asserts what a box with no downloader prints, it does not fetch. Say so
+     * to lib/fetch.c, whose fallback for that case is the in-process TLS
+     * client (lib/tls.c) -- which would otherwise open a REAL socket to a
+     * real host from inside a test. */
+    osr_sb_env(sb, "OSR_TLS", "system");
     osr_sb_env(sb, "NO_COLOR", "1");
     osr_sb_env(sb, "TERM", "dumb");
     {

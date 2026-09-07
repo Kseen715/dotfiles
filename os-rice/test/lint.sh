@@ -14,7 +14,7 @@ FAILED=0
 # Same palette as the installer, same §3 auto-degrade (TTY + NO_COLOR). It
 # comes from the core, which is where that decision lives now; a checkout that
 # has never been built lints in plain text rather than refusing to lint.
-OSR_RED= OSR_GREEN= OSR_YELLOW= OSR_CYAN= OSR_DIM= OSR_NC=
+OSR_RED=''; OSR_GREEN=''; OSR_YELLOW=''; OSR_CYAN=''; OSR_DIM=''; OSR_NC=''
 if [ -x "$OSR_ROOT/build/osr" ]; then
     eval "$("$OSR_ROOT/build/osr" ui vars 2>/dev/null || :)"
 fi
@@ -80,7 +80,7 @@ sec "ASCII-only program output (non-comment lines):"
 ASCII_FILES="$OSR_ROOT/install.sh $OSR_ROOT/osr $OSR_ROOT/wallpaper.sh"
 ASCII_FILES="$ASCII_FILES $(find "$OSR_ROOT/lib" "$OSR_ROOT/modules" \
     \( -name '*.sh' -o -name '*.c' -o -name '*.h' \) 2>/dev/null)"
-ASCII_FILES="$ASCII_FILES $OSR_ROOT/osr.c $OSR_ROOT/install.c"
+ASCII_FILES="$ASCII_FILES $OSR_ROOT/osr.c"
 # shellcheck disable=SC2086  # intentional word-split into a file list
 # What is scanned is the STRING LITERALS, not the whole line. Most of the high
 # bytes in this tree are section signs in a trailing `/* ... */` after real
@@ -116,7 +116,10 @@ function quoted(line,   out, i, c, n, instr) {
     if (lit ~ /\\3[0-7][0-7]/) printf "  FAIL %s:%d: %s\n", FILENAME, FNR, $0
 }'
 # shellcheck disable=SC2086  # intentional word-split into a file list
-_ascii_hits=$(LC_ALL=C awk "$_ascii_awk" $ASCII_FILES 2>/dev/null)
+_ascii_hits=$(LC_ALL=C awk "$_ascii_awk" $ASCII_FILES) || {
+    p_fail "ASCII scan could not run (see awk error above)"
+    FAILED=1
+}
 _ascii_esc=
 if [ -n "$_ascii_hits$_ascii_esc" ]; then
     [ -z "$_ascii_hits" ] || printf '%s\n' "$_ascii_hits" >&2
@@ -181,7 +184,7 @@ fi
 # The frozen reference lives at test/ref/<name>_sh_ref.sh instead.
 sec "no .sh shadowing a C module:"
 _shadow=""
-for _m in $("$OSR_BIN" module list 2>/dev/null); do
+for _m in $("${OSR_BIN:-$OSR_ROOT/build/osr}" module list 2>/dev/null); do
     [ -f "$OSR_ROOT/modules/$_m.sh" ] && _shadow="$_shadow $_m"
 done
 if [ -n "$_shadow" ]; then

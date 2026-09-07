@@ -278,16 +278,22 @@ static const char *external_backend(void) {
  * "no downloader found" error. Either way it needs the client to have been
  * built in (nob's NOB_TLS=1) and it speaks HTTPS only; plain http:// still
  * needs a program.
+ *
+ * $OSR_TLS=system is the way OUT of both, and it has to be read here rather
+ * than left to osr_tls_needed(): the fallback below does not ask whether the
+ * system TLS is old, only whether a downloader exists. The test harness pins
+ * it, its sandbox having no downloader on purpose and no business opening a
+ * socket to a real host.
  */
 static int use_own_tls(const char *url) {
     if (url == NULL || strncmp(url, "https://", 8) != 0) return 0;
     if (!osr_tls_available()) return 0;
+    if (strcmp(env_str("OSR_TLS", ""), "system") == 0) return 0;
     return osr_tls_needed() || *external_backend() == '\0';
 }
 
 const char *osr_fetch_backend(void) {
-    if (osr_tls_available() && (osr_tls_needed() || *external_backend() == '\0'))
-        return "bearssl";
+    if (use_own_tls("https://")) return "bearssl";
     return external_backend();
 }
 
