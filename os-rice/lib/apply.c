@@ -9,7 +9,6 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,33 +93,37 @@ static int cmp_str(const void *a, const void *b) {
 }
 
 void osr_apply_verbs(Str *out) {
-    Str dir;
-    DIR *d;
-    struct dirent *e;
+    Str dir, list;
     char **found = NULL;
     size_t count = 0;
     size_t cap = 0;
     size_t i;
+    size_t at = 0;
+    Line file;
 
     str_init(&dir);
     str_addz(&dir, osr_mod_root());
     str_addz(&dir, "/lib");
-    d = opendir(str_text(&dir));
-    if (d == NULL) { str_free(&dir); return; }
+    /* osr_list_dir rather than readdir: it is the same glob-shaped listing --
+     * `lib/*.c`, sorted, dotfiles skipped -- and it is the one enumeration
+     * this tree has that both systems answer, MSVC having no <dirent.h>. The
+     * ".c" it strips is put back below, because what is wanted here is the
+     * file to read, not the unit's name. */
+    str_init(&list);
+    osr_list_dir(&list, str_text(&dir), NULL, ".c");
 
-    while ((e = readdir(d)) != NULL) {
+    while (next_line(str_text(&list), list.len, &at, &file)) {
         Str path, current;
         char *buf;
         size_t len = 0;
         size_t pos = 0;
-        size_t nl = strlen(e->d_name);
         Line line;
 
-        if (nl < 3 || strcmp(e->d_name + nl - 2, ".c") != 0) continue;
         str_init(&path);
         str_add(&path, str_text(&dir), dir.len);
         str_addc(&path, '/');
-        str_addz(&path, e->d_name);
+        str_add(&path, file.start, file.len);
+        str_addz(&path, ".c");
         buf = slurp(str_text(&path), &len);
         str_free(&path);
         if (buf == NULL) continue;
@@ -156,7 +159,7 @@ void osr_apply_verbs(Str *out) {
         str_free(&current);
         free(buf);
     }
-    closedir(d);
+    str_free(&list);
     str_free(&dir);
 
     /* Sorted, so the listing is the same on every filesystem. */
@@ -393,34 +396,36 @@ void osr_theme_modules(Str *out, const char *rice) {
     } else {
         /* No recorded rice (first run, or a hand-built system): every module
          * that can paint something. */
-        Str dir;
-        DIR *d;
+        Str dir, sh;
         char **names = NULL;
         size_t n = 0;
         size_t cap = 0;
         size_t i;
+        size_t at = 0;
+        Line f;
 
         str_init(&dir);
         str_addz(&dir, osr_mod_root());
         str_addz(&dir, "/modules");
-        d = opendir(str_text(&dir));
-        if (d != NULL) {
-            struct dirent *e;
-            while ((e = readdir(d)) != NULL) {
-                size_t nl = strlen(e->d_name);
-                if (nl < 4 || strcmp(e->d_name + nl - 3, ".sh") != 0) continue;
-                if (n == cap) {
-                    cap = cap ? cap * 2 : 32;
-                    names = (char **)realloc(names, cap * sizeof *names);
-                    if (names == NULL) break;
-                }
-                names[n] = (char *)malloc(nl + 1);
-                if (names[n] == NULL) break;
-                memcpy(names[n], e->d_name, nl + 1);
-                n++;
+        /* `modules/*.sh` through osr_list_dir, which is what the shell's glob
+         * was and what both systems can answer. The ".sh" comes back on
+         * immediately: the names go into the same sorted sweep as the C tier's
+         * below, and that sweep strips three characters off every one. */
+        str_init(&sh);
+        osr_list_dir(&sh, str_text(&dir), NULL, ".sh");
+        while (next_line(str_text(&sh), sh.len, &at, &f)) {
+            if (n == cap) {
+                cap = cap ? cap * 2 : 32;
+                names = (char **)realloc(names, cap * sizeof *names);
+                if (names == NULL) break;
             }
-            closedir(d);
+            names[n] = (char *)malloc(f.len + 4);
+            if (names[n] == NULL) break;
+            memcpy(names[n], f.start, f.len);
+            memcpy(names[n] + f.len, ".sh", 4);
+            n++;
         }
+        str_free(&sh);
         /* The C tier's names go into the same sorted sweep: modules' *.sh were
          * the whole world when lib/apply.sh wrote this, and a module that has
          * moved to C still paints. */
@@ -444,8 +449,9 @@ void osr_theme_modules(Str *out, const char *rice) {
             }
             str_free(&reg);
         }
-        /* readdir order is the filesystem's; the glob the shell expanded was
-         * sorted, and the module order decides the order layers land in. */
+        /* Two sorted listings concatenated are not one sorted listing, and
+         * the module order decides the order layers land in -- so the merged
+         * set is sorted again, the way the glob the shell expanded was. */
         if (names != NULL) qsort(names, n, sizeof *names, cmp_name);
 
         for (i = 0; i < n; i++) {

@@ -18,7 +18,6 @@
 
 #include "common.h"
 
-#include <dirent.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/stat.h>
@@ -35,6 +34,9 @@
  * the documented one and has never changed. */
 #define OSR_ENABLE_VT 0x0004
 #else
+/* <dirent.h> is POSIX's alone: mingw ships one, MSVC does not, and the one
+ * reader of it here (osr_list_dir) has a FindFirstFileA body on that side. */
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -990,6 +992,49 @@ static int name_cmp_qsort(const void *a, const void *b) {
     return strcmp(*(const char *const *)a, *(const char *const *)b);
 }
 
+/* list_dir_keep -- everything osr_list_dir does that does not depend on which
+ * system handed it the name: the three filters, and the array they feed. It
+ * is a function rather than the middle of one loop so that the two
+ * enumerations below differ only in how they ask for a name -- readdir on
+ * POSIX, FindFirstFileA on Windows -- and not in what counts as one. */
+static void list_dir_keep(const char *name, const char *dir, const char *marker,
+                          const char *strip_suffix, char ***names,
+                          size_t *count, size_t *cap) {
+    char path[OSR_PATH_MAX];
+    size_t name_len = strlen(name);
+    size_t suffix_len = (strip_suffix != NULL) ? strlen(strip_suffix) : 0;
+    size_t keep = name_len;
+
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return;
+
+    /* A leading dot is skipped whichever mode this is in, because glob's
+     * `*` never matched one either and every caller here inherited that
+     * reading -- a theme's `.DS_Store` is not a wallpaper. */
+    if (name[0] == '.') return;
+
+    if (marker != NULL) {
+        if (!osr_path_join(path, sizeof(path), dir, name)) return;
+        if (!osr_append_bounded(path, sizeof(path), "/")) return;
+        if (!osr_append_bounded(path, sizeof(path), marker)) return;
+        if (!file_exists(path)) return;
+    } else if (strip_suffix != NULL) {
+        if (name_len <= suffix_len) return;
+        if (strcmp(name + name_len - suffix_len, strip_suffix) != 0) return;
+        keep = name_len - suffix_len;
+    }
+
+    if (*count == *cap) {
+        *cap = *cap ? *cap * 2 : 16;
+        *names = (char **)realloc(*names, *cap * sizeof **names);
+        if (*names == NULL) osr_die_oom();
+    }
+    (*names)[*count] = (char *)malloc(keep + 1);
+    if ((*names)[*count] == NULL) osr_die_oom();
+    memcpy((*names)[*count], name, keep);
+    (*names)[*count][keep] = '\0';
+    (*count)++;
+}
+
 /* osr_list_dir -- the listing behind every "what is available" answer this
  * tree gives: the rices, the themes, the modules.
  *
@@ -1009,50 +1054,35 @@ static int name_cmp_qsort(const void *a, const void *b) {
  */
 void osr_list_dir(Str *out, const char *dir, const char *marker,
                   const char *strip_suffix) {
-    DIR *d;
-    struct dirent *ent;
     char **names = NULL;
     size_t count = 0, cap = 0, i;
-    size_t suffix_len = (strip_suffix != NULL) ? strlen(strip_suffix) : 0;
+#ifdef _WIN32
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    char pattern[OSR_PATH_MAX];
+
+    /* Windows enumerates a pattern, not a directory, so the `*` that POSIX
+     * leaves implicit has to be written out. A directory that is not there
+     * comes back as INVALID_HANDLE_VALUE, which is the same silent nothing
+     * opendir's NULL gets on the other side -- a listing of what is not
+     * installed is empty, not an error. */
+    if (!osr_path_join(pattern, sizeof(pattern), dir, "*")) return;
+    h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        list_dir_keep(fd.cFileName, dir, marker, strip_suffix, &names, &count, &cap);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    DIR *d;
+    struct dirent *ent;
 
     d = opendir(dir);
     if (d == NULL) return;
-
-    while ((ent = readdir(d)) != NULL) {
-        char path[OSR_PATH_MAX];
-        size_t name_len = strlen(ent->d_name);
-        size_t keep = name_len;
-
-        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
-
-        /* A leading dot is skipped whichever mode this is in, because glob's
-         * `*` never matched one either and every caller here inherited that
-         * reading -- a theme's `.DS_Store` is not a wallpaper. */
-        if (ent->d_name[0] == '.') continue;
-
-        if (marker != NULL) {
-            if (!osr_path_join(path, sizeof(path), dir, ent->d_name)) continue;
-            if (!osr_append_bounded(path, sizeof(path), "/")) continue;
-            if (!osr_append_bounded(path, sizeof(path), marker)) continue;
-            if (!file_exists(path)) continue;
-        } else if (strip_suffix != NULL) {
-            if (name_len <= suffix_len) continue;
-            if (strcmp(ent->d_name + name_len - suffix_len, strip_suffix) != 0) continue;
-            keep = name_len - suffix_len;
-        }
-
-        if (count == cap) {
-            cap = cap ? cap * 2 : 16;
-            names = (char **)realloc(names, cap * sizeof *names);
-            if (names == NULL) osr_die_oom();
-        }
-        names[count] = (char *)malloc(keep + 1);
-        if (names[count] == NULL) osr_die_oom();
-        memcpy(names[count], ent->d_name, keep);
-        names[count][keep] = '\0';
-        count++;
-    }
+    while ((ent = readdir(d)) != NULL)
+        list_dir_keep(ent->d_name, dir, marker, strip_suffix, &names, &count, &cap);
     closedir(d);
+#endif
 
     if (count > 1) qsort(names, count, sizeof *names, name_cmp_qsort);
     for (i = 0; i < count; i++) {
