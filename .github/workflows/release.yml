@@ -113,33 +113,37 @@ jobs:
             expect: 'ELF 64-bit.*aarch64.*statically linked'
           - slug: linux-x86-glibc
             cc: zig cc -target x86-linux-gnu
-            expect: 'ELF 32-bit.*i386.*dynamically linked'
+            expect: 'ELF 32-bit.*80386.*dynamically linked'
           - slug: linux-x86-musl
             cc: zig cc -target x86-linux-musl
-            expect: 'ELF 32-bit.*i386.*statically linked'
+            expect: 'ELF 32-bit.*80386.*statically linked'
           - slug: windows-x86_64
             cc: x86_64-w64-mingw32-gcc
             apt: gcc-mingw-w64-x86-64
             exe: .exe
             expect: 'PE32\+.*x86-64'
-          # The XP tier asserted, not assumed. Subsystem 4.00 is what nob.c's
-          # i686- driver-name detection produces (x86_64 gives 5.02, ARM64
-          # 6.00), and it is the same decision that links vendored BearSSL --
-          # verified present here by nm and absent from the x86_64 leg. If a
-          # future apt rename made $CC stop matching `i686-`, this leg would
-          # still build and still be a working 32-bit binary; it would just
-          # quietly lose XP support and TLS with it. That is exactly the
-          # failure a printed-but-unchecked `file` would have let through.
+            bearssl: absent
+          # The XP tier asserted, not assumed -- but asserted through `bearssl`
+          # below rather than through file(1). nob.c's i686- driver-name
+          # detection also stamps subsystem 4.00 (x86_64 gives 5.02, ARM64
+          # 6.00), which would have been the obvious thing to match on, except
+          # that the runner's file(1) does not print the subsystem for PE at
+          # all -- it says `PE32 executable (console) Intel 80386, for MS
+          # Windows` where a local file 5.46 says `PE32 executable for MS
+          # Windows 4.00 (console), Intel i386`. So `expect` here checks only
+          # what both versions agree on: 32-bit x86 PE.
           - slug: windows-x86
             cc: i686-w64-mingw32-gcc
             apt: gcc-mingw-w64-i686
             exe: .exe
-            expect: 'PE32 .*MS Windows 4\.00.*Intel i386'
+            expect: 'PE32 .*(80386|i386)'
+            bearssl: present
           - slug: windows-aarch64
             cc: zig cc -target aarch64-windows-gnu
             nob_target: windows
             exe: .exe
-            expect: 'PE32\+.*ARM64'
+            expect: 'PE32\+.*([Aa]arch64|ARM64)'
+            bearssl: absent
     steps:
       - uses: actions/checkout@v4
 
@@ -187,6 +191,26 @@ jobs:
             echo "::error::${{ matrix.slug }}: expected /${{ matrix.expect }}/, got: $desc"
             exit 1
           }
+
+      # The XP tier, checked by what it actually changes. nob.c decides that
+      # tier off $CC's program name (target_needs_own_tls: `i686`/`i386` in
+      # it), and the consequence is that the vendored BearSSL gets linked in,
+      # because XP's schannel stops at TLS 1.0. If an apt rename ever made
+      # $CC stop matching, this leg would still build and still be a valid
+      # 32-bit binary -- it would just quietly lose HTTPS on the one OS the
+      # tier exists for. Grepping the linked image for a BearSSL symbol is
+      # the direct evidence, and unlike file(1)'s subsystem field it does not
+      # depend on which version of file the runner happens to ship.
+      - name: Check the TLS tier
+        if: matrix.bearssl != ''
+        run: |
+          n=$(grep -ac 'br_ssl' build/osr${{ matrix.exe }} || true)
+          case "${{ matrix.bearssl }}:$n" in
+            present:0) echo "::error::${{ matrix.slug }}: vendored BearSSL missing; XP tier was not selected"; exit 1 ;;
+            absent:0)  echo "no BearSSL, as expected" ;;
+            present:*) echo "BearSSL linked, as expected" ;;
+            absent:*)  echo "::error::${{ matrix.slug }}: vendored BearSSL linked in; this target should use schannel"; exit 1 ;;
+          esac
 
       # Uploaded under the bare target slug; the release job adds the version
       # to the filename once it has computed it. Doing it the other way would
