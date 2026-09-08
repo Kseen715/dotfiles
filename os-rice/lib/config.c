@@ -23,6 +23,16 @@
 #else
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+/* <io.h> for the descriptor shuffle in osr_choose_wallpaper, under the names
+ * the Microsoft runtime publishes them by: dup/dup2/close are POSIX spellings
+ * that MSVC declares nowhere (mingw does, which is why only the cl leg
+ * noticed). Aliased rather than spelled at the call site, because what the
+ * three lines there are doing -- redirect this function's stdout to stderr for
+ * the duration -- reads worse in underscores. */
+#include <io.h>
+#define dup   _dup
+#define dup2  _dup2
+#define close _close
 #endif
 #include <sys/stat.h>
 

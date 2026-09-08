@@ -4,14 +4,16 @@
  * repos live in the riced account's home, and a root-owned object inside one
  * is the failure this file spends its first four lines repairing.
  *
- * C89 + POSIX.
+ * C89, and portable: the one descriptor this file needs is osr_scratch_fd's,
+ * so there is no <unistd.h> here -- git.c is in core_srcs and MSVC ships no
+ * such header.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
-#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "git.h"
 #include "cmds.h"
@@ -345,28 +347,11 @@ int osr_install_omz(void) {
          * process would have to keep writing to: the reader is a child we
          * wait for, so a script larger than one pipe buffer would deadlock
          * against itself. */
-        Str tmp;
         int fd;
         char *v[7];
 
-        str_init(&tmp);
-        str_addz(&tmp, env_str("TMPDIR", "/tmp"));
-        str_addz(&tmp, "/osr-omz-");
-        str_addl(&tmp, (long)getpid());
-        fd = open(str_text(&tmp), O_RDWR | O_CREAT | O_TRUNC, 0600);
+        fd = osr_scratch_fd("omz", str_text(&patched), patched.len);
         if (fd < 0) osr_die("failed to install oh-my-zsh (exit 1)");
-        remove(str_text(&tmp));
-        {
-            const char *text = str_text(&patched);
-            size_t left = patched.len;
-            while (left > 0) {
-                long n = (long)write(fd, text, left);
-                if (n <= 0) osr_die("failed to install oh-my-zsh (exit 1)");
-                text += n;
-                left -= (size_t)n;
-            }
-        }
-        lseek(fd, 0, SEEK_SET);
 
         /* sh passed `"" --unattended --skip-chsh`; the empty first argument is
          * the installer's own convention for "no custom remote". */
@@ -378,8 +363,7 @@ int osr_install_omz(void) {
         v[5] = (char *)"--skip-chsh";
         v[6] = NULL;
         rc = osr_run_user_in(v, fd);
-        close(fd);
-        str_free(&tmp);
+        osr_scratch_close(fd);
     }
 
     str_free(&patched);

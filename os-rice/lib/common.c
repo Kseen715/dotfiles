@@ -33,6 +33,18 @@
  * meant to build with whatever compiler the machine already has. The value is
  * the documented one and has never changed. */
 #define OSR_ENABLE_VT 0x0004
+/* S_ISREG/S_ISDIR, spelled out for the same reason: they are POSIX macros, and
+ * MSVC's <sys/stat.h> publishes only the _S_IF* bits they are made of. mingw
+ * defines them, which is why this is the one line that decides whether
+ * file_exists and dir_exists below compile -- and why leaving it out fails as
+ * a warning rather than an error, C4013 taking S_ISREG for a function nobody
+ * ever links. The test is the documented one, byte for byte what POSIX says. */
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
 #else
 /* <dirent.h> is POSIX's alone: mingw ships one, MSVC does not, and the one
  * reader of it here (osr_list_dir) has a FindFirstFileA body on that side. */
@@ -986,6 +998,63 @@ const char *osr_tmpdir(void) {
 #else
     return env_str("TMPDIR", "/tmp");
 #endif
+}
+
+/* osr_scratch_fd -- see lib/common.h. The three calls under it are the same
+ * act on either system and differ only in spelling, so the spelling is settled
+ * once here and the body is written once: MSVC publishes open, write, lseek
+ * and close under underscored names only, and _O_TEMPORARY is its answer to
+ * unlinking a file that is still open. _O_BINARY goes with it, because the
+ * payload is bytes a child reads back and the text mode a Windows descriptor
+ * defaults to would rewrite every newline on the way in. */
+#ifdef _WIN32
+#define OSR_SCRATCH_OPEN(path) \
+    _open((path), _O_RDWR | _O_CREAT | _O_TRUNC | _O_TEMPORARY | _O_BINARY, \
+          _S_IREAD | _S_IWRITE)
+#define OSR_SCRATCH_WRITE(fd, buf, n) ((long)_write((fd), (buf), (unsigned int)(n)))
+#define OSR_SCRATCH_LSEEK _lseek
+#define OSR_SCRATCH_CLOSE _close
+#else
+#define OSR_SCRATCH_OPEN(path) open((path), O_RDWR | O_CREAT | O_TRUNC, 0600)
+#define OSR_SCRATCH_WRITE(fd, buf, n) ((long)write((fd), (buf), (n)))
+#define OSR_SCRATCH_LSEEK lseek
+#define OSR_SCRATCH_CLOSE close
+#endif
+
+int osr_scratch_fd(const char *tag, const char *text, size_t len) {
+    Str path;
+    int fd;
+    size_t off = 0;
+
+    str_init(&path);
+    str_addz(&path, osr_tmpdir());
+    str_trim_trailing(&path, '/');
+    str_addz(&path, "/osr-");
+    str_addz(&path, tag);
+    str_addc(&path, '-');
+    str_addl(&path, osr_pid());
+
+    fd = OSR_SCRATCH_OPEN(str_text(&path));
+    /* POSIX drops the name now and keeps the bytes alive through this
+     * descriptor; _O_TEMPORARY did the same thing above at open time, and a
+     * remove() here would fail on a file Windows still has open. */
+#ifndef _WIN32
+    if (fd >= 0) remove(str_text(&path));
+#endif
+    str_free(&path);
+    if (fd < 0) return -1;
+
+    while (off < len) {
+        long n = OSR_SCRATCH_WRITE(fd, text + off, len - off);
+        if (n <= 0) { OSR_SCRATCH_CLOSE(fd); return -1; }
+        off += (size_t)n;
+    }
+    if (OSR_SCRATCH_LSEEK(fd, 0, SEEK_SET) != 0) { OSR_SCRATCH_CLOSE(fd); return -1; }
+    return fd;
+}
+
+void osr_scratch_close(int fd) {
+    if (fd >= 0) OSR_SCRATCH_CLOSE(fd);
 }
 
 static int name_cmp_qsort(const void *a, const void *b) {

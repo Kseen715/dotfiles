@@ -313,6 +313,29 @@ long osr_pid(void);
  * sandbox is obeyed wherever it runs. */
 const char *osr_tmpdir(void);
 
+/* osr_scratch_fd -- text laid down in a private scratch file, handed back as a
+ * descriptor already rewound to its first byte, or -1 when that could not be
+ * done. tag names the file (`osr-<tag>-<pid>` under osr_tmpdir).
+ *
+ * It exists because a caller cannot simply pipe the text to the child instead:
+ * nothing reads the pipe until the child is running, so a payload larger than
+ * one pipe buffer wedges the writer against a child it has not spawned yet.
+ * That is why both users of this -- the migration appender and the oh-my-zsh
+ * installer -- wrote the payload to a file first, and why the file is dropped
+ * from the filesystem the moment it is open: unlink(2) on POSIX, the CRT's
+ * delete-on-close on Windows. The name is gone either way; the descriptor is
+ * the only handle left, and closing it is what reclaims the bytes.
+ *
+ * Here rather than in either caller because the descriptor is one of the
+ * questions only a kernel answers, and this file is where those live: there is
+ * no open()/write()/lseek() on the Windows side to write it with twice. */
+int osr_scratch_fd(const char *tag, const char *text, size_t len);
+
+/* osr_scratch_close -- give back what osr_scratch_fd handed out. Its own name
+ * rather than close(): the caller is not allowed a <unistd.h> either, and on
+ * Windows this is the close that finally unlinks the file. */
+void osr_scratch_close(int fd);
+
 /* osr_list_dir -- the listing behind every "what is available" answer: rices,
  * themes, modules.
  *

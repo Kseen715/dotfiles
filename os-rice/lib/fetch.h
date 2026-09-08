@@ -77,8 +77,18 @@ const char *osr_fetch_backend(void);
 const char *osr_fetch_ensure(void);
 
 /* osr_fetch_child -- fork the downloader with its stdout on write_fd, for a
- * payload that is piped rather than saved (`... | sh`). Returns its pid. */
+ * payload that is piped rather than saved (`... | sh`). Returns its pid.
+ *
+ * POSIX-only, declaration and definition both (lib/fetch.c), the way lib/ui.h
+ * guards the calls that name a pid: there is no fork here to hand a pid back,
+ * the Windows transport is WinINet reading into a buffer rather than a child
+ * writing down a pipe, and pid_t is a POSIX type that MSVC does not define at
+ * all -- so a declaration left visible on that side does not merely go unused,
+ * it fails to parse. Every caller is inside a `#ifndef _WIN32` for the same
+ * reason (lib/pkg.c's script: provider, lib/build.c's ghostty .deb). */
+#ifndef _WIN32
 pid_t osr_fetch_child(const char *backend, const char *url, int write_fd);
+#endif
 
 /* osr_fetch_stdout -- stream a URL to this process's stdout. */
 int osr_fetch_stdout(const char *url);

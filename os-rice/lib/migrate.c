@@ -1,15 +1,16 @@
 /* lib/migrate.c -- C port of lib/migrate.sh. See lib/migrate.h.
  *
- * C89 + POSIX.
+ * C89, and portable: every descriptor this file once opened for itself is now
+ * osr_scratch_fd's, so there is no <unistd.h> here to keep it off the Windows
+ * side of core_srcs -- MSVC ships no such header at all.
  */
+#ifndef _WIN32
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "module.h"
 
@@ -71,41 +72,26 @@ int osr_migrate_append(const char *file, const char *detect_ere,
      * plain append redirect because the append has to happen as the riced
      * user, and the shell's own > runs before the privilege change. */
     {
-        Str tmp;
+        Str payload;
         int fd;
-        str_init(&tmp);
-        str_addz(&tmp, env_str("TMPDIR", "/tmp"));
-        str_trim_trailing(&tmp, '/');
-        str_addz(&tmp, "/osr-mig-app-");
-        {
-            char pid[32];
-            sprintf(pid, "%ld", (long)getpid());
-            str_addz(&tmp, pid);
-        }
+
         /* An unlinked scratch file rather than a pipe: nothing reads the pipe
          * until the child exists, so a text larger than the pipe buffer would
-         * wedge this process against a child it has not spawned yet. */
-        fd = open(str_text(&tmp), O_RDWR | O_CREAT | O_TRUNC, 0600);
-        remove(str_text(&tmp));
-        str_free(&tmp);
+         * wedge this process against a child it has not spawned yet. The
+         * leading newline is the `printf '\n'` ahead of the cat. */
+        str_init(&payload);
+        str_addc(&payload, '\n');
+        str_addz(&payload, text);
+        fd = osr_scratch_fd("mig-app", str_text(&payload), payload.len);
+        str_free(&payload);
         if (fd < 0) return 1;
-        {
-            char nl = '\n';
-            size_t n = strlen(text);
-            if (write(fd, &nl, 1) != 1 ||
-                (n > 0 && write(fd, text, n) != (ssize_t)n)) {
-                close(fd);
-                return 1;
-            }
-        }
-        lseek(fd, 0, SEEK_SET);
 
         argv[0] = (char *)"tee";
         argv[1] = (char *)"-a";
         argv[2] = (char *)file;
         argv[3] = NULL;
         (void)osr_run_user_quiet_in(argv, fd);
-        close(fd);
+        osr_scratch_close(fd);
     }
 
     osr_infof("migrated %s: %s", base_name(file), label);
@@ -169,14 +155,10 @@ int osr_migrate_replace(const char *file, const char *label, const char *old,
         /* Written through a scratch file and copied as the user, so a failure
          * partway through leaves the original intact rather than truncated. */
         str_init(&tmp);
-        str_addz(&tmp, env_str("TMPDIR", "/tmp"));
+        str_addz(&tmp, osr_tmpdir());
         str_trim_trailing(&tmp, '/');
         str_addz(&tmp, "/osr-mig-res-");
-        {
-            char pid[32];
-            sprintf(pid, "%ld", (long)getpid());
-            str_addz(&tmp, pid);
-        }
+        str_addl(&tmp, osr_pid());
         {
             FILE *f = fopen(str_text(&tmp), "wb");
             if (f != NULL) {

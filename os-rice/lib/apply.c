@@ -105,10 +105,10 @@ void osr_apply_verbs(Str *out) {
     str_addz(&dir, osr_mod_root());
     str_addz(&dir, "/lib");
     /* osr_list_dir rather than readdir: it is the same glob-shaped listing --
-     * `lib/*.c`, sorted, dotfiles skipped -- and it is the one enumeration
-     * this tree has that both systems answer, MSVC having no <dirent.h>. The
-     * ".c" it strips is put back below, because what is wanted here is the
-     * file to read, not the unit's name. */
+     * every *.c under lib/, sorted, dotfiles skipped -- and it is the one
+     * enumeration this tree has that both systems answer, MSVC having no
+     * <dirent.h>. The ".c" it strips is put back below, because what is
+     * wanted here is the file to read, not the unit's name. */
     str_init(&list);
     osr_list_dir(&list, str_text(&dir), NULL, ".c");
 
@@ -407,10 +407,10 @@ void osr_theme_modules(Str *out, const char *rice) {
         str_init(&dir);
         str_addz(&dir, osr_mod_root());
         str_addz(&dir, "/modules");
-        /* `modules/*.sh` through osr_list_dir, which is what the shell's glob
-         * was and what both systems can answer. The ".sh" comes back on
-         * immediately: the names go into the same sorted sweep as the C tier's
-         * below, and that sweep strips three characters off every one. */
+        /* Every *.sh under modules/, through osr_list_dir, which is what the
+         * shell's glob was and what both systems can answer. The ".sh" comes
+         * back on immediately: the names go into the same sorted sweep as the
+         * C tier's below, and that sweep strips three characters off each. */
         str_init(&sh);
         osr_list_dir(&sh, str_text(&dir), NULL, ".sh");
         while (next_line(str_text(&sh), sh.len, &at, &f)) {

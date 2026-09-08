@@ -1,0 +1,272 @@
+name: os-rice release
+
+# Cutting a release is "run the whole test suite, then ship what it blessed",
+# so the trigger is the same event that already means `main` is believed good:
+# a push to main. Every such push produces a release -- there is no separate
+# "release branch" or approval step in this repo to hang one off, and a
+# version scheme that counts per day (below) is built for exactly that cadence.
+#
+# workflow_dispatch is the manual escape hatch: re-cut after a runner outage,
+# or ship a build from main without an intervening commit.
+#
+# Deliberately NOT `push: tags:`. This workflow CREATES the tag; triggering on
+# tag push would make it re-enter itself on its own output. Tags are already
+# covered on the CI side -- os-rice-ci.yml runs on `tags: ["**"]` -- so a tag
+# still gets tested, it just does not cut a second release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The version below is derived from the tags that exist WHEN THE RELEASE JOB
+# RUNS, so two of these in flight at once is a race: both read the same day's
+# tags, both compute the same N, and the second `gh release create` fails on a
+# tag that now exists -- after its nine builds have already been paid for.
+# Serialized rather than cancelled: cancel-in-progress would be right for a
+# CI check, where only the newest commit's answer matters, but a release is a
+# side effect on the outside world, and killing one between `gh release
+# create` and its upload would leave a tag with no binaries on it.
+concurrency:
+  group: os-rice-release
+  cancel-in-progress: false
+
+# Read by default; only the job that actually creates the tag and the release
+# gets write, and it gets it on the job rather than here so a compromised
+# build step (which runs a compiler over the tree, i.e. arbitrary code) cannot
+# reach the contents scope.
+permissions:
+  contents: read
+
+jobs:
+  # The gate. Not a copy of the test matrix -- the actual file, called as a
+  # reusable workflow, which is what the `workflow_call:` trigger in
+  # os-rice-ci.yml exists for. A drifting duplicate would be worse than no
+  # gate at all: it would report green for a suite nobody maintains.
+  test:
+    uses: ./.github/workflows/os-rice-ci.yml
+
+  # One job per shipped binary, all on ubuntu-latest, because nob.c picks its
+  # target purely from $CC (see target_windows() / target_needs_own_tls()) --
+  # cross-compiling is the normal way this tree is built, not a special case,
+  # and a Linux runner can produce all nine artifacts.
+  #
+  # Two toolchain families, for two different reasons:
+  #
+  # zig cc, for the six Linux targets. Ubuntu's cross packages give you the
+  # arch but not the libc: there is no apt route to a musl aarch64 or a musl
+  # i386 binary, and gluing three gcc cross packages to three musl-cross
+  # toolchains is six installs of two shapes. `zig cc -target <arch>-linux-
+  # <gnu|musl>` is one binary that ships every libc/arch pair, and it is
+  # already on nob.c's own compiler ladder, so it is not a new dependency in
+  # spirit. $CC is tokenized into words by nob.c (split_words, CC_MAX_WORDS),
+  # so the multi-word "zig cc -target ..." form works as $CC -- verified.
+  #
+  # mingw-w64 from apt, for Windows x86_64 and x86, because for those two the
+  # toolchain NAME is load-bearing. nob.c reads the target off $CC's program
+  # name: "mingw" in it selects the Windows source set, and an i686-/i386-
+  # prefix specifically selects the XP tier, which links the vendored BearSSL
+  # so HTTPS works on a box whose schannel stops at TLS 1.0. `zig cc` would
+  # present nob.c with the program name "zig", which settles neither -- the
+  # 32-bit build would silently come out as a modern-Windows binary. Using the
+  # triple-named drivers gets both decisions right with no overrides.
+  #
+  # Windows aarch64 is the one target with no apt mingw driver at all
+  # (gcc-mingw-w64 ships x86_64 and i686 only). Rather than pull in llvm-mingw
+  # as a third toolchain for one artifact, it goes through zig -- and since
+  # "zig" tells nob.c nothing about the target, NOB_TARGET=windows says it
+  # explicitly. That override exists in nob.c for precisely this case ("for a
+  # toolchain whose name says nothing", target_windows()). No XP concern here:
+  # Windows-on-ARM is modern by construction, which is also what nob.c's
+  # name-based tier detection concludes on its own.
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: os-rice
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # `expect` is an ERE matched against file(1)'s description of the
+          # binary, asserted below. It carries the two things a wrong $CC
+          # would get wrong silently: the ARCHITECTURE, and -- on Linux --
+          # the LIBC, which is visible as the linkage (zig's musl targets
+          # come out statically linked, its glibc targets dynamic with an
+          # interpreter). Without the libc half, a typo in one -target could
+          # ship the same glibc binary under both names and nothing would
+          # notice. Patterns are deliberately loose about everything else:
+          # section counts and file(1)'s exact phrasing move between versions,
+          # and a release must not fail because the runner's file was upgraded.
+          - slug: linux-x86_64-glibc
+            cc: zig cc -target x86_64-linux-gnu
+            expect: 'ELF 64-bit.*x86-64.*dynamically linked'
+          - slug: linux-x86_64-musl
+            cc: zig cc -target x86_64-linux-musl
+            expect: 'ELF 64-bit.*x86-64.*statically linked'
+          - slug: linux-aarch64-glibc
+            cc: zig cc -target aarch64-linux-gnu
+            expect: 'ELF 64-bit.*aarch64.*dynamically linked'
+          - slug: linux-aarch64-musl
+            cc: zig cc -target aarch64-linux-musl
+            expect: 'ELF 64-bit.*aarch64.*statically linked'
+          - slug: linux-x86-glibc
+            cc: zig cc -target x86-linux-gnu
+            expect: 'ELF 32-bit.*i386.*dynamically linked'
+          - slug: linux-x86-musl
+            cc: zig cc -target x86-linux-musl
+            expect: 'ELF 32-bit.*i386.*statically linked'
+          - slug: windows-x86_64
+            cc: x86_64-w64-mingw32-gcc
+            apt: gcc-mingw-w64-x86-64
+            exe: .exe
+            expect: 'PE32\+.*x86-64'
+          # The XP tier asserted, not assumed. Subsystem 4.00 is what nob.c's
+          # i686- driver-name detection produces (x86_64 gives 5.02, ARM64
+          # 6.00), and it is the same decision that links vendored BearSSL --
+          # verified present here by nm and absent from the x86_64 leg. If a
+          # future apt rename made $CC stop matching `i686-`, this leg would
+          # still build and still be a working 32-bit binary; it would just
+          # quietly lose XP support and TLS with it. That is exactly the
+          # failure a printed-but-unchecked `file` would have let through.
+          - slug: windows-x86
+            cc: i686-w64-mingw32-gcc
+            apt: gcc-mingw-w64-i686
+            exe: .exe
+            expect: 'PE32 .*MS Windows 4\.00.*Intel i386'
+          - slug: windows-aarch64
+            cc: zig cc -target aarch64-windows-gnu
+            nob_target: windows
+            exe: .exe
+            expect: 'PE32\+.*ARM64'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Only the two mingw legs need apt; the zig legs get their whole
+      # toolchain from setup-zig, so this step is skipped for six of nine.
+      - name: Install ${{ matrix.apt }}
+        if: matrix.apt != ''
+        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.apt }}
+
+      # setup-zig rather than curl-ing ziglang.org: it knows the community
+      # mirrors (upstream's own host has rate-limited CI before) and caches the
+      # toolchain between runs. Version pinned, not "master" -- a release
+      # artifact should not change because an unrelated compiler did.
+      - name: Install zig
+        if: matrix.apt == ''
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+
+      # build/ is the one directory nob cannot create for itself: it is where
+      # nob itself goes. Bootstrap with the host cc (nob.c is build-time
+      # tooling and always runs on the runner), then run it with $CC set to
+      # the cross driver -- which is the entire cross-compilation interface.
+      - name: Build ${{ matrix.slug }}
+        env:
+          CC: ${{ matrix.cc }}
+          NOB_TARGET: ${{ matrix.nob_target }}
+        run: |
+          mkdir -p build
+          cc -o build/nob nob.c
+          ./build/nob
+
+      # An ASSERTION, not a print. Cross-compilation here is driven entirely by
+      # the name and flags of $CC, so every way this can go wrong produces a
+      # binary that builds and links perfectly and is simply for the wrong
+      # machine -- or, on the windows-x86 leg, for the right machine without
+      # the TLS stack that tier needs. None of that is visible in the build
+      # log. `file` is the only step that looks at what was actually produced,
+      # so it has to be able to fail the job.
+      - name: Check the binary is for the target we asked for
+        run: |
+          desc=$(file -b build/osr${{ matrix.exe }})
+          echo "$desc"
+          echo "$desc" | grep -Eq '${{ matrix.expect }}' || {
+            echo "::error::${{ matrix.slug }}: expected /${{ matrix.expect }}/, got: $desc"
+            exit 1
+          }
+
+      # Uploaded under the bare target slug; the release job adds the version
+      # to the filename once it has computed it. Doing it the other way would
+      # need the version resolved before any build starts, i.e. an extra job
+      # and an extra checkout, to rename nine files.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.slug }}
+          path: os-rice/build/osr${{ matrix.exe }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The only write scope in the file, and only here: this job runs no
+    # compiler and no repository code, it renames files and calls `gh`.
+    permissions:
+      contents: write
+    steps:
+      # fetch-depth 0 + fetch-tags because the version below is computed FROM
+      # the existing tags; a default shallow checkout has none of them, and
+      # would happily hand out .1 every single time.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # v<YYYYMMDD>.<N>, N counting releases within the UTC day.
+      #
+      # Not github.run_number: that counts runs of this workflow for the life
+      # of the repository and never resets, so it would pair a correct date
+      # with a meaningless ordinal (v20260908.417). The day's own tags are the
+      # only authority on how many releases that day has had.
+      #
+      # max+1, not count+1: a tag deleted by hand would make a count reuse a
+      # version that already existed in someone's checkout. UTC, because the
+      # runner's clock is UTC and a local-time date would put two different
+      # days' releases under one label depending on where it ran.
+      - name: Compute version
+        id: v
+        run: |
+          day=$(date -u +%Y%m%d)
+          last=$(git tag -l "v$day.*" | sed "s/^v$day\.//" | sort -n | tail -1)
+          echo "tag=v$day.$(( ${last:-0} + 1 ))" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # download-artifact lays each artifact out as artifacts/<name>/osr[.exe],
+      # so the directory name IS the target slug -- rename into a flat dist/
+      # with the version in the filename, which is what someone who downloaded
+      # three of these into ~/Downloads needs to tell them apart.
+      #
+      # SHA256SUMS is written last and with bare filenames (cd dist), so
+      # `sha256sum -c SHA256SUMS` works in whatever directory the user
+      # unpacked the release into.
+      - name: Assemble release files
+        run: |
+          mkdir dist
+          for d in artifacts/*/; do
+            slug=$(basename "$d")
+            for f in "$d"osr*; do
+              case "$f" in *.exe) ext=.exe ;; *) ext= ;; esac
+              cp "$f" "dist/osr-${{ steps.v.outputs.tag }}-$slug$ext"
+            done
+          done
+          chmod +x dist/*
+          cd dist && sha256sum osr-* > SHA256SUMS
+          cat SHA256SUMS
+
+      # `gh release create` creates the tag itself, at this commit, as part of
+      # making the release -- so there is no separate `git tag && git push`,
+      # and no window where a tag exists with no release attached to it.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --title "${{ steps.v.outputs.tag }}" \
+            --notes "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`." \
+            dist/*
