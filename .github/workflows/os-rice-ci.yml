@@ -33,7 +33,7 @@ jobs:
       matrix:
         cc: [gcc, clang, tcc]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install dash, shellcheck, zsh, ${{ matrix.cc }}
         run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh ${{ matrix.cc }}
       - name: Lint + unit tests (CC=${{ matrix.cc }})
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: os-rice
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # One step per toolchain, each self-contained, because MSVC's environment
       # comes from vcvars64.bat and a workflow `run:` is its own process -- a
       # step that sourced it would hand nothing to the next one. Each leg
@@ -120,7 +120,7 @@ jobs:
           - archlinux:latest
           - fedora:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The checkout goes in read-only -- the test must not write into the tree
       # it is testing -- with a tmpfs over os-rice/build, which is the one path
       # that HAS to be writable: os-rice is a C program and `osr` builds it

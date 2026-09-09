@@ -145,7 +145,7 @@ jobs:
             expect: 'PE32\+.*([Aa]arch64|ARM64)'
             bearssl: absent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Only the two mingw legs need apt; the zig legs get their whole
       # toolchain from setup-zig, so this step is skipped for six of nine.
@@ -216,7 +216,7 @@ jobs:
       # to the filename once it has computed it. Doing it the other way would
       # need the version resolved before any build starts, i.e. an extra job
       # and an extra checkout, to rename nine files.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.slug }}
           path: os-rice/build/osr${{ matrix.exe }}
@@ -286,7 +286,7 @@ jobs:
             module: cproc
             note: 'QBE built into the same prefix'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install zig
         if: matrix.zig != ''
@@ -329,7 +329,12 @@ jobs:
             bytes=$(stat -c %s build/osr 2>/dev/null || echo 0)
             [ -n "$secs" ] && [ "$bytes" != 0 ] || ok=0
           fi
-          ver=$($CC --version 2>/dev/null | head -1 | cut -c1-60)
+          # zig cc reports "clang version 19.1.7 (https://github.com/ziglang/
+          # zig-bootstrap ...)" -- a URL is noise in the table and cut(1) would
+          # leave half of it dangling. Drop parentheticals holding a URL only;
+          # gcc's "(Ubuntu 13.3.0-6ubuntu2~24.04.1)" is the distro build and stays.
+          ver=$($CC --version 2>/dev/null | head -1 \
+                | sed 's| *([^()]*://[^()]*)||g; s|  *| |g; s| *$||' | cut -c1-60)
           [ -n "$ver" ] || ver='-'
           printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \
@@ -338,7 +343,7 @@ jobs:
           # A required compiler that cannot build the tree fails the release.
           [ $ok = 1 ] || [ '${{ matrix.required }}' != true ]
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ccbench-${{ matrix.slug }}
           path: os-rice/row.tsv
@@ -356,7 +361,7 @@ jobs:
       # fetch-depth 0 + fetch-tags because the version below is computed FROM
       # the existing tags; a default shallow checkout has none of them, and
       # would happily hand out .1 every single time.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -379,7 +384,7 @@ jobs:
           last=$(git tag -l "v$day.*" | sed "s/^v$day\.//" | sort -n | tail -1)
           echo "tag=v$day.$(( ${last:-0} + 1 ))" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
