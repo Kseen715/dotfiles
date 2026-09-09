@@ -56,26 +56,22 @@ int osrm_wezterm(void) {
     ok = osr_step("Installing JetBrains Mono Nerd Font", nerd_font,
                   (void *)"JetBrainsMono") && ok;
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/wezterm/.wezterm.lua");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.wezterm.lua");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/wezterm/.wezterm.lua", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.wezterm.lua", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* Palette. The theme's version wins; the dotfiles default covers a theme
      * that ships none. In --module mode OSR_THEME_DIR is whatever the theme
      * picker resolved (section 6). */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/wezterm/colors/osr-rice.toml");
+    str_setz(&dst, osr_mod_home(), "/.config/wezterm/colors/osr-rice.toml", (const char *)NULL);
     if (!osr_install_theme_layer("wezterm", "wezterm-theme.toml", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles());
-        str_addz(&src, "/wezterm/wezterm-theme.toml");
+        str_setz(&src, osr_mod_dotfiles(), "/wezterm/wezterm-theme.toml", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
 
     if (ok) osr_successf("wezterm: themed as '%s'", osr_mod_theme());
     return ok;

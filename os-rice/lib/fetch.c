@@ -168,9 +168,7 @@ int osr_json_string_field(Str *out, const char *json, const char *key) {
     int found = 0;
 
     str_init(&pat);
-    str_addc(&pat, '"');
-    str_addz(&pat, key);
-    str_addc(&pat, '"');
+    str_addzz(&pat, "\"", key, "\"", (const char *)NULL);
     p = json;
     while ((p = strstr(p, str_text(&pat))) != NULL) {
         p += pat.len;
@@ -198,13 +196,11 @@ static int github_tag(Str *out, const char *repo, int quiet) {
 
     str_init(&url);
     str_addz(&url, "https://api.github.com/repos/");
-    str_addz(&url, repo);
-    str_addz(&url, "/releases/latest");
+    str_addzz(&url, repo, "/releases/latest", (const char *)NULL);
     str_init(&json);
     osr_fetch_buffer(&json, str_text(&url));
     if (osr_json_string_field(out, str_text(&json), "tag_name")) {
-        str_free(&json);
-        str_free(&url);
+        str_freev(&json, &url, (Str *)NULL);
         return 1;
     }
     /* A repo with no published release 404s on releases/latest; its tags
@@ -212,16 +208,13 @@ static int github_tag(Str *out, const char *repo, int quiet) {
     str_reset(&json);
     str_reset(&url);
     str_addz(&url, "https://api.github.com/repos/");
-    str_addz(&url, repo);
-    str_addz(&url, "/tags");
+    str_addzz(&url, repo, "/tags", (const char *)NULL);
     osr_fetch_buffer(&json, str_text(&url));
     if (osr_json_string_field(out, str_text(&json), "name")) {
-        str_free(&json);
-        str_free(&url);
+        str_freev(&json, &url, (Str *)NULL);
         return 1;
     }
-    str_free(&json);
-    str_free(&url);
+    str_freev(&json, &url, (Str *)NULL);
     if (!quiet) osr_warnf("github_latest: could not resolve a tag for %s", repo);
     return 0;
 }
@@ -1117,8 +1110,7 @@ static int fetch_pipe(const char *url, char *const argv[], int as_root) {
     int fd;
 
     str_init(&tmp);
-    str_addz(&tmp, osr_tmpdir());
-    str_addz(&tmp, "/osr-pipe-");
+    str_addzz(&tmp, osr_tmpdir(), "/osr-pipe-", (const char *)NULL);
     str_addl(&tmp, osr_pid());
 
     if (!osr_fetch_download(url, str_text(&tmp), 0)) {

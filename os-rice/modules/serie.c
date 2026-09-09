@@ -39,13 +39,13 @@ int osrm_serie(void) {
 
     ok = osr_pkg_install_step("Installing serie", pkgs);
 
-    str_init(&src); str_init(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/serie/config.toml");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/serie/config.toml", (const char *)NULL);
     if (!osr_install_theme_layer("serie", "config.toml", str_text(&dst))) {
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/serie/config.toml");
+        str_addzz(&src, osr_mod_dotfiles(), "/serie/config.toml", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

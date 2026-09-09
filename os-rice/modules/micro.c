@@ -28,14 +28,14 @@ int osrm_micro(void) {
 
     ok = osr_pkg_install_step("Installing micro", pkgs);
 
-    str_init(&dir); str_init(&base); str_init(&dst); str_init(&frag);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/micro");
-    str_addz(&base, osr_mod_dotfiles()); str_addz(&base, "/micro/settings.json");
+    str_initv(&dir, &base, &dst, &frag, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/micro", (const char *)NULL);
+    str_addzz(&base, osr_mod_dotfiles(), "/micro/settings.json", (const char *)NULL);
     /* settings.json is ONE file micro rewrites itself, so the rice's keys and
      * the theme's are composed into it rather than either owning it. */
     if (file_exists(str_text(&base))) {
         (void)osr_theme_source(&frag, "micro", "settings.json", &is_temp);
-        str_addz(&dst, str_text(&dir)); str_addz(&dst, "/settings.json");
+        str_addzz(&dst, str_text(&dir), "/settings.json", (const char *)NULL);
         ok = osr_compose_json_config(str_text(&base), str_text(&frag),
                                      str_text(&dst)) && ok;
         if (is_temp) (void)unlink(str_text(&frag));
@@ -43,11 +43,10 @@ int osrm_micro(void) {
     /* The colorscheme is a file per theme, named after it: micro loads it by
      * the name settings.json points at. */
     if (*osr_mod_theme() != '\0') {
-        str_reset(&dst);
-        str_addz(&dst, str_text(&dir)); str_addz(&dst, "/colorschemes/");
-        str_addz(&dst, osr_mod_theme()); str_addz(&dst, ".micro");
+        str_setz(&dst, str_text(&dir), "/colorschemes/", osr_mod_theme(), ".micro",
+            (const char *)NULL);
         (void)osr_install_theme_layer("micro", "theme.micro", str_text(&dst));
     }
-    str_free(&dir); str_free(&base); str_free(&dst); str_free(&frag);
+    str_freev(&dir, &base, &dst, &frag, (Str *)NULL);
     return ok;
 }

@@ -305,29 +305,24 @@ static void persist_cap(const char *caps, const char *setcap, const char *path) 
     Str file, body;
 
     base = (base != NULL) ? base + 1 : path;
-    str_init(&file); str_init(&body);
+    str_initv(&file, &body, (Str *)NULL);
 
     if (strcmp(mgr, "apt") == 0) {
-        str_addz(&file, env_str("OSR_APT_CONF_DIR", "/etc/apt/apt.conf.d"));
-        str_addz(&file, "/99-osr-setcap-");
-        str_addz(&file, base);
+        str_addzz(&file, env_str("OSR_APT_CONF_DIR", "/etc/apt/apt.conf.d"), "/99-osr-setcap-",
+            base, (const char *)NULL);
         str_addz(&body, "// managed by os-rice: dpkg drops file capabilities on\n"
                         "// every unpack, and the program stops working as itself\n"
                         "// with no error anywhere. Reapplied after each dpkg run.\n"
                         "DPkg::Post-Invoke { \"test -x ");
-        str_addz(&body, path);
-        str_addz(&body, " && ");
-        str_addz(&body, setcap); str_addc(&body, ' '); str_addz(&body, caps);
-        str_addc(&body, ' '); str_addz(&body, path);
-        str_addz(&body, " || true\"; };\n");
+        str_addzz(&body, path, " && ", setcap, " ", caps, " ", path, " || true\"; };\n",
+            (const char *)NULL);
     } else if (strcmp(mgr, "pacman") == 0) {
         const char *dir = env_str("OSR_PACMAN_HOOK_DIR", "/etc/pacman.d/hooks");
         char *argv[4];
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
         argv[2] = (char *)dir; argv[3] = NULL;
         (void)osr_run_root_quiet(argv);
-        str_addz(&file, dir); str_addz(&file, "/99-osr-setcap-");
-        str_addz(&file, base); str_addz(&file, ".hook");
+        str_addzz(&file, dir, "/99-osr-setcap-", base, ".hook", (const char *)NULL);
         /* Type = Path, not Package: the target is the FILE whose capability is
          * being restored, so the hook needs no knowledge of which package ships
          * it (intel_gpu_top comes from intel-gpu-tools, btop from btop). */
@@ -335,12 +330,10 @@ static void persist_cap(const char *caps, const char *setcap, const char *path) 
                         "# and the replacement carries no capabilities.\n"
                         "[Trigger]\nOperation = Install\nOperation = Upgrade\n"
                         "Type = Path\nTarget = ");
-        str_addz(&body, path[0] == '/' ? path + 1 : path);
-        str_addz(&body, "\n\n[Action]\nDescription = Restoring ");
-        str_addz(&body, caps); str_addz(&body, " on "); str_addz(&body, base);
-        str_addz(&body, "\nWhen = PostTransaction\nExec = ");
-        str_addz(&body, setcap); str_addc(&body, ' '); str_addz(&body, caps);
-        str_addc(&body, ' '); str_addz(&body, path); str_addc(&body, '\n');
+        str_addzz(&body, path[0] == '/' ? path + 1 : path,
+            "\n\n[Action]\nDescription = Restoring ", caps, " on ", base,
+            "\nWhen = PostTransaction\nExec = ", setcap, " ", caps, " ", path, "\n",
+            (const char *)NULL);
     } else {
         osr_warnf("%s has no package hook here - %s loses %s on its next upgrade, "
                   "rerun the module to restore it", mgr, base, caps);
@@ -349,7 +342,7 @@ static void persist_cap(const char *caps, const char *setcap, const char *path) 
     if (file.len > 0 && !osr_write_root(str_text(&file), str_text(&body)))
         osr_warnf("could not write %s - %s loses %s on its next upgrade",
                   str_text(&file), base, caps);
-    str_free(&file); str_free(&body);
+    str_freev(&file, &body, (Str *)NULL);
 }
 
 /* osr_setcap -- see module.h. setcap itself lives in libcap (libcap2-bin on
@@ -362,7 +355,7 @@ int osr_setcap(const char *caps, const char *cmd) {
     int ok = 0;
 
     if (!osr_have_cmd(cmd)) return 0;
-    str_init(&path); str_init(&setcap);
+    str_initv(&path, &setcap, (Str *)NULL);
     if (!osr_path_lookup("setcap", &setcap)) {
         osr_warnf("setcap is missing - %s will not get %s", cmd, caps);
     } else if (osr_path_lookup(cmd, &path)) {
@@ -378,7 +371,7 @@ int osr_setcap(const char *caps, const char *cmd) {
             osr_warnf("could not grant %s to %s", caps, str_text(&path));
         }
     }
-    str_free(&path); str_free(&setcap);
+    str_freev(&path, &setcap, (Str *)NULL);
     return ok;
 }
 
@@ -487,8 +480,7 @@ int osr_run_step(const char *desc, char *const argv[]) {
     }
 
     str_init(&log_path);
-    str_addz(&log_path, env_str("OSR_LOG", "/tmp/os-rice.log"));
-    str_addz(&log_path, ".step");
+    str_addzz(&log_path, env_str("OSR_LOG", "/tmp/os-rice.log"), ".step", (const char *)NULL);
     fd = open(str_text(&log_path), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
         str_free(&log_path);
@@ -581,8 +573,7 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
     }
 
     str_init(&log_path);
-    str_addz(&log_path, env_str("OSR_LOG", "/tmp/os-rice.log"));
-    str_addz(&log_path, ".step");
+    str_addzz(&log_path, env_str("OSR_LOG", "/tmp/os-rice.log"), ".step", (const char *)NULL);
     fd = open(str_text(&log_path), O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (fd < 0) {
         str_free(&log_path);
@@ -628,74 +619,39 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
 
 /* --- files ---------------------------------------------------------------- */
 
-/* tee_root -- `as_root tee [-a] <path> >/dev/null <<'EOF' ... EOF`: write, or
- * append to, a file this program OWNS at a path only root can write -- a
- * .desktop entry, an apt source list, a PAM stack line.
+/* tee -- `as_root tee [-a] <path> >/dev/null <<'EOF' ... EOF`: write, or
+ * append to, a file this program OWNS at a path the calling identity can write
+ * -- a .desktop entry, an apt source list, a PAM stack line.
  *
  * tee and not a plain write because the escalation is the whole point, and the
  * heredoc becomes a temp file handed to tee on stdin: sh's heredoc was one too,
  * so this is the same shape and not an extra command in anybody's log. */
-static int tee_root(const char *path, const char *text, int append) {
-    char tmpl[] = "/tmp/osr-tee.XXXXXX";
+static int tee(const char *path, const char *text, int append,
+               int (*run)(char *const argv[], int in_fd)) {
     char *argv[4];
-    size_t len = strlen(text);
     int fd, rc;
 
-    fd = mkstemp(tmpl);
+    fd = osr_scratch_fd("tee", text, strlen(text));
     if (fd < 0) return 0;
-    if (len > 0 && (size_t)write(fd, text, len) != len) {
-        close(fd);
-        (void)unlink(tmpl);
-        return 0;
-    }
-    close(fd);
-    fd = open(tmpl, O_RDONLY);
-    if (fd < 0) { (void)unlink(tmpl); return 0; }
     argv[0] = (char *)"tee";
     argv[1] = append ? (char *)"-a" : (char *)path;
     argv[2] = append ? (char *)path : NULL;
     argv[3] = NULL;
-    rc = osr_run_root_quiet_in(argv, fd);
-    close(fd);
-    (void)unlink(tmpl);
+    rc = run(argv, fd);
+    osr_scratch_close(fd);
     return rc == 0;
 }
 
-int osr_write_root(const char *path, const char *text)  { return tee_root(path, text, 0); }
-int osr_append_root(const char *path, const char *text) { return tee_root(path, text, 1); }
+int osr_write_root(const char *path, const char *text)  { return tee(path, text, 0, osr_run_root_quiet_in); }
+int osr_append_root(const char *path, const char *text) { return tee(path, text, 1, osr_run_root_quiet_in); }
 
-/* tee_user -- the same as the RICED ACCOUNT, for a file under its own $HOME
- * that this program owns and rewrites (a portal preference, a generated
- * fragment). Identity matters more than privilege here: a root-owned dotfile is
- * one the user's session cannot rewrite. */
-static int tee_user(const char *path, const char *text, int append) {
-    char tmpl[] = "/tmp/osr-tee.XXXXXX";
-    char *argv[4];
-    size_t len = strlen(text);
-    int fd, rc;
-
-    fd = mkstemp(tmpl);
-    if (fd < 0) return 0;
-    if (len > 0 && (size_t)write(fd, text, len) != len) {
-        close(fd);
-        (void)unlink(tmpl);
-        return 0;
-    }
-    close(fd);
-    fd = open(tmpl, O_RDONLY);
-    if (fd < 0) { (void)unlink(tmpl); return 0; }
-    argv[0] = (char *)"tee";
-    argv[1] = append ? (char *)"-a" : (char *)path;
-    argv[2] = append ? (char *)path : NULL;
-    argv[3] = NULL;
-    rc = osr_run_user_quiet_in(argv, fd);
-    close(fd);
-    (void)unlink(tmpl);
-    return rc == 0;
-}
-
-int osr_write_user(const char *path, const char *text)  { return tee_user(path, text, 0); }
-int osr_append_user(const char *path, const char *text) { return tee_user(path, text, 1); }
+/* The user half is the same command as the RICED ACCOUNT, for a file under its
+ * own $HOME that this program owns and rewrites (a portal preference, a
+ * generated fragment). Identity matters more than privilege there: a root-owned
+ * dotfile is one the user's session cannot rewrite. Which is the whole
+ * difference between the two, so it is the only thing passed in. */
+int osr_write_user(const char *path, const char *text)  { return tee(path, text, 0, osr_run_user_quiet_in); }
+int osr_append_user(const char *path, const char *text) { return tee(path, text, 1, osr_run_user_quiet_in); }
 
 int osr_mkdir_p_all(const char *const dirs[]) {
     char **argv;
@@ -720,6 +676,15 @@ int osr_mkdir_p(const char *dir) {
     return osr_mkdir_p_all(one);
 }
 
+int osr_chmod(const char *mode, const char *path, int as_root) {
+    char *argv[4];
+    argv[0] = (char *)"chmod";
+    argv[1] = (char *)mode;
+    argv[2] = (char *)path;
+    argv[3] = NULL;
+    return (as_root ? osr_run_root(argv) : osr_run_user(argv)) == 0;
+}
+
 /* dir_of -- `dirname`. */
 static void dir_of(Str *out, const char *path) {
     const char *slash = strrchr(path, '/');
@@ -741,8 +706,7 @@ int osr_install_file(const char *src, const char *dst) {
     if (file_exists(dst)) {
         Str bak;
         str_init(&bak);
-        str_addz(&bak, dst);
-        str_addz(&bak, ".bak");
+        str_addzz(&bak, dst, ".bak", (const char *)NULL);
         if (!file_exists(str_text(&bak))) {
             argv[0] = (char *)"cp"; argv[1] = (char *)"-f"; argv[2] = (char *)dst;
             argv[3] = bak.p; argv[4] = NULL;
@@ -1303,8 +1267,7 @@ int osr_install_file(const char *src, const char *dst) {
 
     if (file_exists(dst)) {
         str_init(&bak);
-        str_addz(&bak, dst);
-        str_addz(&bak, ".bak");
+        str_addzz(&bak, dst, ".bak", (const char *)NULL);
         if (!file_exists(str_text(&bak))) {
             /* Once, ever: the .bak is what the machine looked like BEFORE
              * os-rice touched it, and overwriting it on the second run would
@@ -1360,8 +1323,7 @@ int osr_ensure_line(const char *file, const char *line) {
                 free(tail);
             }
         }
-        str_addz(&text, line);
-        str_addc(&text, '\n');
+        str_addzz(&text, line, "\n", (const char *)NULL);
         ok = write_file(file, str_text(&text), 1);
         str_free(&text);
         return ok;

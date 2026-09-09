@@ -121,8 +121,7 @@ int osr_testrun_main(int argc, char **argv) {
     if (setenv("OSR_TEST_COLOR", env_is_set("OSR_GREEN") ? "1" : "", 1) != 0) return 1;
 
     str_init(&path);
-    str_addz(&path, here);
-    str_addz(&path, "/lint.sh");
+    str_addzz(&path, here, "/lint.sh", (const char *)NULL);
     if (run_sh(str_text(&path)) != 0) rc = 1;
     str_free(&path);
 
@@ -138,17 +137,14 @@ int osr_testrun_main(int argc, char **argv) {
      * "can this runner run a directory of tests" depend on the directory
      * being a whole project. */
     str_init(&path);
-    str_addz(&path, here);
-    str_addz(&path, "/..");
+    str_addzz(&path, here, "/..", (const char *)NULL);
     {
         Str nob;
         Str nobsrc;
         str_init(&nob);
-        str_addz(&nob, str_text(&path));
-        str_addz(&nob, "/build/nob");
+        str_addzz(&nob, str_text(&path), "/build/nob", (const char *)NULL);
         str_init(&nobsrc);
-        str_addz(&nobsrc, str_text(&path));
-        str_addz(&nobsrc, "/nob.c");
+        str_addzz(&nobsrc, str_text(&path), "/nob.c", (const char *)NULL);
         /* Both, and nob.c is the one that matters: the fixture tree symlinks
          * build/ to the real one, so the binary is there while the sources
          * it builds from are not. nob.c present is what "this is a project
@@ -158,8 +154,7 @@ int osr_testrun_main(int argc, char **argv) {
             colored("OSR_CYAN", "C unit tests:");
             if (run_prog(str_text(&nob), "test", str_text(&path)) != 0) rc = 1;
         }
-        str_free(&nob);
-        str_free(&nobsrc);
+        str_freev(&nob, &nobsrc, (Str *)NULL);
     }
     str_free(&path);
 
@@ -179,8 +174,7 @@ int osr_testrun_main(int argc, char **argv) {
         }
         for (i = 0; i < g.gl_pathc; i++) {
             str_init(&line);
-            str_addz(&line, "- ");
-            str_addz(&line, base_name(g.gl_pathv[i]));
+            str_addzz(&line, "- ", base_name(g.gl_pathv[i]), (const char *)NULL);
             colored("OSR_DIM", str_text(&line));
             str_free(&line);
             if (run_sh(g.gl_pathv[i]) != 0) rc = 1;

@@ -27,24 +27,12 @@
 
 static OsrSandbox sb;
 
-static const char *at(const char *rel) {
-    static HStr ring[4];
-    static int ready = 0;
-    static int next = 0;
-    HStr *p;
-    if (!ready) { int i; for (i = 0; i < 4; i++) hs_init(&ring[i]); ready = 1; }
-    p = &ring[next];
-    next = (next + 1) % 4;
-    hs_path(p, hs_text(&sb.root), rel);
-    return hs_text(p);
-}
+static const char *at(const char *rel) { return osr_sb_at(&sb, rel); }
 
-static char *read_rel(const char *rel) { return h_slurp(at(rel)); }
+static char *read_rel(const char *rel) { return osr_sb_slurp(&sb, rel); }
 
 static void holds(const char *rel, const char *needle, const char *label) {
-    char *got = read_rel(rel);
-    osr_assert_true(strstr(got, needle) != NULL, label);
-    free(got);
+    osr_assert_file(&sb, rel, needle, label);
 }
 static void lacks(const char *rel, const char *needle, const char *label) {
     char *got = read_rel(rel);
@@ -492,11 +480,7 @@ int main(void) {
     /* ================================================================
      * 2. Hyprland -- a Wayland desktop, and the VM special case
      * ================================================================ */
-    osr_sb_env(&sb, "OSR_PKG", "pacman");
-    osr_sb_env(&sb, "OSR_DISTRO", "arch");
-    osr_sb_env(&sb, "OSR_ID_LIKE", "");
-    osr_sb_env(&sb, "OSR_CODENAME", "");
-    osr_sb_env(&sb, "OSR_VERSION_ID", "");
+    osr_sb_env_arch(&sb);
     hs_path(&p, hs_text(&sb.root), "theme");
     osr_sb_env(&sb, "OSR_THEME_DIR", hs_text(&p));
     osr_sb_env(&sb, "OSR_THEME", "glass");

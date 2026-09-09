@@ -32,41 +32,34 @@ int osrm_kate(void) {
 
     ok = osr_pkg_install_step("Installing Kate", pkgs);
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/kate/katerc");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/katerc");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/kate/katerc", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/katerc", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* The SAME colour scheme file, twice: KDE reads the palette from the
      * scheme in .local/share and the ACTIVE colours from kdeglobals, and an
      * app started outside a Plasma session only ever consults the latter. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/color-schemes/os-rice.colors");
+    str_setz(&dst, osr_mod_home(), "/.local/share/color-schemes/os-rice.colors",
+        (const char *)NULL);
     (void)osr_install_theme_layer("kde", "color-scheme.colors", str_text(&dst));
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/kdeglobals");
+    str_setz(&dst, osr_mod_home(), "/.config/kdeglobals", (const char *)NULL);
     (void)osr_install_theme_layer("kde", "color-scheme.colors", str_text(&dst));
 
     /* An earlier name for the same file; left behind it shows up as a second,
      * stale entry in KDE's scheme picker. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/color-schemes/osr.colors");
+    str_setz(&dst, osr_mod_home(), "/.local/share/color-schemes/osr.colors", (const char *)NULL);
     (void)unlink(str_text(&dst));
     str_addz(&dst, ".bak");
     (void)unlink(str_text(&dst));
 
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/konsole/osr.colorscheme");
+    str_setz(&dst, osr_mod_home(), "/.local/share/konsole/osr.colorscheme", (const char *)NULL);
     (void)osr_install_theme_layer("konsole", "osr.colorscheme", str_text(&dst));
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/org.kde.syntax-highlighting/themes/osr.theme");
+    str_setz(&dst, osr_mod_home(), "/.local/share/org.kde.syntax-highlighting/themes/osr.theme",
+        (const char *)NULL);
     (void)osr_install_theme_layer("kate", "osr.theme", str_text(&dst));
 
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

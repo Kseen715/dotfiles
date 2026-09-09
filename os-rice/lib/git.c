@@ -108,9 +108,7 @@ int osr_git_repo(const char *name, const char *url, const char *dir,
         char *chown_v[5];
         Str owner;
         str_init(&owner);
-        str_addz(&owner, osr_mod_user());
-        str_addc(&owner, ':');
-        str_addz(&owner, osr_mod_user());
+        str_addzz(&owner, osr_mod_user(), ":", osr_mod_user(), (const char *)NULL);
         chown_v[0] = (char *)"chown";
         chown_v[1] = (char *)"-R";
         chown_v[2] = (char *)str_text(&owner);
@@ -121,8 +119,7 @@ int osr_git_repo(const char *name, const char *url, const char *dir,
     }
 
     str_init(&git_dir);
-    str_addz(&git_dir, dir);
-    str_addz(&git_dir, "/.git");
+    str_addzz(&git_dir, dir, "/.git", (const char *)NULL);
     have_git_dir = dir_exists(str_text(&git_dir));
     str_free(&git_dir);
 
@@ -189,9 +186,7 @@ int osr_zsh_plugin(const char *name, const char *url) {
     if (osr_theme_only()) return osr_theme_only_skip("zsh_plugin");
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.oh-my-zsh/custom/plugins/");
-    str_addz(&dir, name);
+    str_addzz(&dir, osr_mod_home(), "/.oh-my-zsh/custom/plugins/", name, (const char *)NULL);
 
     args[0] = (char *)"--depth";
     args[1] = (char *)"1";
@@ -207,10 +202,7 @@ int osr_zsh_plugin(const char *name, const char *url) {
 
 /* omz_path -- $OSR_HOME/.oh-my-zsh<suffix>. */
 static void omz_path(Str *out, const char *suffix) {
-    str_reset(out);
-    str_addz(out, osr_mod_home());
-    str_addz(out, "/.oh-my-zsh");
-    str_addz(out, suffix);
+    str_setz(out, osr_mod_home(), "/.oh-my-zsh", suffix, (const char *)NULL);
 }
 
 /* user_rm_rf / user_mv -- the two file moves install_omz makes, both as_user
@@ -319,8 +311,7 @@ int osr_install_omz(void) {
         if (dir_exists(str_text(&custom))) {
             Str fresh_custom;
             str_init(&fresh_custom);
-            str_addz(&fresh_custom, str_text(&fresh));
-            str_addz(&fresh_custom, "/custom");
+            str_addzz(&fresh_custom, str_text(&fresh), "/custom", (const char *)NULL);
             (void)user_rm_rf(str_text(&fresh_custom));
             (void)user_mv(str_text(&custom), str_text(&fresh_custom));
             str_free(&fresh_custom);
@@ -328,9 +319,7 @@ int osr_install_omz(void) {
         (void)user_rm_rf(str_text(&core));
         (void)user_mv(str_text(&fresh), str_text(&core));
 
-        str_free(&custom);
-        str_free(&fresh);
-        str_free(&core);
+        str_freev(&custom, &fresh, &core, (Str *)NULL);
         return 1;
     }
     str_free(&core);
@@ -368,8 +357,7 @@ int osr_install_omz(void) {
         osr_scratch_close(fd);
     }
 
-    str_free(&patched);
-    str_free(&script);
+    str_freev(&patched, &script, (Str *)NULL);
     if (rc != 0) osr_die("failed to install oh-my-zsh (exit %d)", rc);
     return 1;
 }

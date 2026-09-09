@@ -54,25 +54,24 @@ int osrm_i3(void) {
     ok = osr_pkg_install_step("Installing i3", pkgs);
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/i3/config.d");
+    str_addzz(&dir, osr_mod_home(), "/.config/i3/config.d", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/i3/.config/i3/config");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/i3/config");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/i3/.config/i3/config", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/i3/config", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     for (i = 0; scripts[i] != NULL; i++) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&src, osr_mod_dotfiles());
-        str_addz(&src, "/i3/.config/i3/scripts/"); str_addz(&src, scripts[i]);
-        str_addz(&dst, osr_mod_home());
-        str_addz(&dst, "/.config/i3/scripts/");    str_addz(&dst, scripts[i]);
+        str_reset(&src);
+        str_reset(&dst);
+        str_addzz(&src, osr_mod_dotfiles(), "/i3/.config/i3/scripts/", scripts[i],
+            (const char *)NULL);
+        str_addzz(&dst, osr_mod_home(), "/.config/i3/scripts/", scripts[i], (const char *)NULL);
         if (!file_exists(str_text(&src))) continue;
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-        (void)osr_run_user(argv);
+        (void)osr_chmod("+x", dst.p, 0);
     }
 
     /* The terminal launcher goes on PATH as `osr-term`, not into ~/.config/i3,
@@ -81,8 +80,7 @@ int osrm_i3(void) {
      * "open in terminal" in rofi dies silently. One name every consumer can
      * spell -- i3's $term, rofi, and the xfce4 helpers.rc that helpers.c
      * seeds -- beats three paths. */
-    str_reset(&src);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/i3/.config/i3/scripts/term.sh");
+    str_setz(&src, osr_mod_dotfiles(), "/i3/.config/i3/scripts/term.sh", (const char *)NULL);
     if (file_exists(str_text(&src))) {
         argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
         argv[3] = src.p; argv[4] = (char *)"/usr/local/bin/osr-term"; argv[5] = NULL;
@@ -94,18 +92,16 @@ int osrm_i3(void) {
      * {{WALLPAPER_PATH}} as well as color roles. */
     str_init(&layer);
     if (osr_theme_source(&layer, "i3", "90-theme.conf", &is_temp)) {
-        str_reset(&dst);
-        str_addz(&dst, str_text(&dir)); str_addz(&dst, "/90-theme.conf");
+        str_setz(&dst, str_text(&dir), "/90-theme.conf", (const char *)NULL);
         ok = osr_install_wallpaper_layer(str_text(&layer), str_text(&dst)) && ok;
         if (is_temp) (void)unlink(str_text(&layer));
     }
     str_free(&layer);
 
     /* Machine layer -- yours, never rewritten. */
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/99-local.conf");
+    str_setz(&dst, str_text(&dir), "/99-local.conf", (const char *)NULL);
     ok = osr_seed_empty(str_text(&dst)) && ok;
 
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

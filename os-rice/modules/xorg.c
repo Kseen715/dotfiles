@@ -147,8 +147,8 @@ static int glamor_old_gl(const char *path) {
 /* xorg_conf_path -- a file under /etc/X11/xorg.conf.d, with the directory
  * overridable ($OSR_XORGCONF_DIR) so a test asserts on its own tree. */
 static void xorg_conf_path(Str *out, const char *file) {
-    str_addz(out, env_str("OSR_XORGCONF_DIR", "/etc/X11/xorg.conf.d"));
-    str_addz(out, file);
+    str_addzz(out, env_str("OSR_XORGCONF_DIR", "/etc/X11/xorg.conf.d"), file,
+        (const char *)NULL);
 }
 
 /* glamor_gpu_hang -- the kernel's own record of the crash this option
@@ -206,8 +206,8 @@ static int glamor_gpu_hang(void) {
  * of what this writes must not need /etc, and a box with a modprobe.d
  * elsewhere is then not a special case either. */
 static void nouveau_conf(Str *out) {
-    str_addz(out, env_str("OSR_MODPROBE_DIR", "/etc/modprobe.d"));
-    str_addz(out, NOUVEAU_FILE);
+    str_addzz(out, env_str("OSR_MODPROBE_DIR", "/etc/modprobe.d"), NOUVEAU_FILE,
+        (const char *)NULL);
 }
 
 /* nvidia_module_loaded -- is the proprietary driver the one in charge? sysfs
@@ -217,8 +217,7 @@ static int nvidia_module_loaded(void) {
     Str path;
     int loaded;
     str_init(&path);
-    str_addz(&path, env_str("OSR_SYSMOD", "/sys/module"));
-    str_addz(&path, "/nvidia");
+    str_addzz(&path, env_str("OSR_SYSMOD", "/sys/module"), "/nvidia", (const char *)NULL);
     loaded = dir_exists(str_text(&path));
     str_free(&path);
     return loaded;
@@ -280,8 +279,7 @@ static int drm_card_of_nouveau(void) {
         /* cardN only: cardN-HDMI-A-1 is a connector, not the device. */
         if (strchr(n, '-') != NULL) continue;
         str_init(&path);
-        str_addz(&path, root); str_addc(&path, '/'); str_addz(&path, n);
-        str_addz(&path, "/device/uevent");
+        str_addzz(&path, root, "/", n, "/device/uevent", (const char *)NULL);
         if (log_has(str_text(&path), "DRIVER=nouveau")) card = atoi(n + 4);
         str_free(&path);
     }
@@ -375,9 +373,7 @@ static int nouveau_evidence(Str *why) {
     for (i = 0; logs[i] != NULL; i++) {
         for (j = 0; signs[j] != NULL; j++) {
             if (log_has(logs[i], signs[j])) {
-                str_addz(why, "the kernel log has \"");
-                str_addz(why, signs[j]);
-                str_addz(why, "\"");
+                str_addzz(why, "the kernel log has \"", signs[j], "\"", (const char *)NULL);
                 return 1;
             }
         }
@@ -409,7 +405,7 @@ static void nouveau_quirk(void) {
         char *have;
         size_t hlen;
 
-        str_init(&text); str_init(&conf);
+        str_initv(&text, &conf, (Str *)NULL);
         nouveau_conf(&conf);
         str_addz(&text, NOUVEAU_HEADER);
         str_addz(&text,
@@ -425,7 +421,7 @@ static void nouveau_quirk(void) {
             && strncmp(have, str_text(&text), hlen) == 0) {
             osr_infof("%s already current, skipping", str_text(&conf));
             free(have);
-            str_free(&text); str_free(&conf); str_free(&why);
+            str_freev(&text, &conf, &why, (Str *)NULL);
             return;
         }
         free(have);
@@ -437,7 +433,7 @@ static void nouveau_quirk(void) {
          * the on-disk blacklist has not been read yet. */
         (void)osr_initramfs_regen();
         osr_warn("reboot for the nouveau blacklist to take effect");
-        str_free(&text); str_free(&conf);
+        str_freev(&text, &conf, (Str *)NULL);
     } else {
         Str conf;
         int unwarranted;
@@ -508,37 +504,34 @@ int osrm_xorg(void) {
     }
 
     /* --- ~/.xprofile: loader block + layered drop-ins (§5) ------------------ */
-    str_init(&dir); str_init(&src); str_init(&dst);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/xprofile.d");
+    str_initv(&dir, &src, &dst, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/xprofile.d", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.xprofile");
+    str_addzz(&dst, osr_mod_home(), "/.xprofile", (const char *)NULL);
     ok = osr_install_xprofile_loader(str_text(&dir), str_text(&dst)) && ok;
 
     /* 10-session.sh -- dotfiles-owned, rice-independent (toolkit workarounds,
      * XDG ids). */
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/xprofile/10-session.sh");
+    str_addzz(&src, osr_mod_dotfiles(), "/xprofile/10-session.sh", (const char *)NULL);
     if (file_exists(str_text(&src))) {
-        str_reset(&dst);
-        str_addz(&dst, str_text(&dir)); str_addz(&dst, "/10-session.sh");
+        str_setz(&dst, str_text(&dir), "/10-session.sh", (const char *)NULL);
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
     /* 90-theme.sh -- rice-owned, swapped on rice switch (§6). */
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/90-theme.sh");
+    str_setz(&dst, str_text(&dir), "/90-theme.sh", (const char *)NULL);
     (void)osr_install_theme_layer("xprofile", "90-theme.sh", str_text(&dst));
     /* 00-env / 99-local -- the user's, never overwritten. */
-    str_reset(&dst); str_addz(&dst, str_text(&dir)); str_addz(&dst, "/00-env.sh");
+    str_setz(&dst, str_text(&dir), "/00-env.sh", (const char *)NULL);
     ok = osr_seed_empty(str_text(&dst)) && ok;
-    str_reset(&dst); str_addz(&dst, str_text(&dir)); str_addz(&dst, "/99-local.sh");
+    str_setz(&dst, str_text(&dir), "/99-local.sh", (const char *)NULL);
     ok = osr_seed_empty(str_text(&dst)) && ok;
 
     /* --- ~/.xinitrc: startx without a display manager ----------------------- */
-    str_reset(&dst); str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.xinitrc");
+    str_setz(&dst, osr_mod_home(), "/.xinitrc", (const char *)NULL);
     if (!file_exists(str_text(&dst))) {
         osr_info("seeding ~/.xinitrc (startx entry point)");
         ok = osr_write_user(str_text(&dst), XINITRC) && ok;
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-        (void)osr_run_user(argv);
+        (void)osr_chmod("+x", dst.p, 0);
     }
 
     /* --- GPU quirks (root-owned, /etc/X11/xorg.conf.d) ---------------------
@@ -562,7 +555,7 @@ int osrm_xorg(void) {
      * single grep against a single moment is a coin flip. Say WHICH one matched,
      * so a run that does nothing can be told apart from a run that found
      * nothing. */
-    str_init(&body); str_init(&why);
+    str_initv(&body, &why, (Str *)NULL);
     str_init(&quirks); xorg_conf_path(&quirks, QUIRKS_FILE);
     if (strcmp(env_str("OSR_X_DISABLE_GLAMOR", ""), "1") == 0) {
         str_addz(&why, "OSR_X_DISABLE_GLAMOR=1 was set");
@@ -624,8 +617,7 @@ int osrm_xorg(void) {
         int current = 0;
 
         str_init(&want);
-        str_addz(&want, QUIRKS_HEADER);
-        str_addz(&want, str_text(&body));
+        str_addzz(&want, QUIRKS_HEADER, str_text(&body), (const char *)NULL);
         have = slurp(str_text(&quirks), &hlen);
         if (have != NULL) {
             /* `[ "$(cat ...)" = "..." ]`: a command substitution drops the
@@ -676,7 +668,6 @@ int osrm_xorg(void) {
         (void)osr_write_root(str_text(&dst), INPUT_CONF);
     }
 
-    str_free(&dir); str_free(&src); str_free(&dst); str_free(&body);
-    str_free(&why); str_free(&quirks);
+    str_freev(&dir, &src, &dst, &body, &why, &quirks, (Str *)NULL);
     return ok;
 }

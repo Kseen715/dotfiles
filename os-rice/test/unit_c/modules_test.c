@@ -36,17 +36,7 @@
 
 static OsrSandbox sb;
 
-static const char *at(const char *rel) {
-    static HStr ring[4];
-    static int ready = 0;
-    static int next = 0;
-    HStr *p;
-    if (!ready) { int i; for (i = 0; i < 4; i++) hs_init(&ring[i]); ready = 1; }
-    p = &ring[next];
-    next = (next + 1) % 4;
-    hs_path(p, hs_text(&sb.root), rel);
-    return hs_text(p);
-}
+static const char *at(const char *rel) { return osr_sb_at(&sb, rel); }
 
 /* fresh_home -- a module that writes into $HOME must not find the previous
  * scenario's output already there and skip its own write. */
@@ -95,13 +85,7 @@ int main(void) {
     osr_sb_init(&sb);
     hs_init(&p);
 
-    osr_sb_env(&sb, "OSR_PKG", "apt");
-    osr_sb_env(&sb, "OSR_DISTRO", "ubuntu");
-    osr_sb_env(&sb, "OSR_ID_LIKE", "debian");
-    osr_sb_env(&sb, "OSR_CODENAME", "noble");
-    osr_sb_env(&sb, "OSR_VERSION_ID", "24.04");
-    osr_sb_env(&sb, "OSR_ARCH", "x86_64");
-    osr_sb_env(&sb, "OSR_ARCH_DEB", "amd64");
+    osr_sb_env_ubuntu(&sb);
     osr_sb_env(&sb, "OSR_INIT", "systemd");
     hs_path(&p, hs_text(&sb.osr_root), "..");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
@@ -394,11 +378,7 @@ int main(void) {
      * precedence: the theme's own file, else the app's template rendered with
      * the theme's palette, else the dotfiles base unrendered.
      * ================================================================ */
-    osr_sb_env(&sb, "OSR_PKG", "pacman");
-    osr_sb_env(&sb, "OSR_DISTRO", "arch");
-    osr_sb_env(&sb, "OSR_ID_LIKE", "");
-    osr_sb_env(&sb, "OSR_CODENAME", "");
-    osr_sb_env(&sb, "OSR_VERSION_ID", "");
+    osr_sb_env_arch(&sb);
     osr_sb_stub_body(&sb, "pacman",
         "[ \"$1\" = \"-Q\" ] && exit 1\n"
         "printf 'pacman %s\\n' \"$*\" >>\"$LOG\"\nexit 0\n");

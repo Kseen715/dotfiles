@@ -20,27 +20,29 @@ int osrm_gtklock(void) {
     ok = osr_pkg_install_step("Installing gtklock", pkgs);
     if (*osr_mod_theme_dir() == '\0') return ok;
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_theme_dir()); str_addz(&src, "/config/gtklock/config.ini");
-    str_addz(&dst, osr_mod_home());      str_addz(&dst, "/.config/gtklock/config.ini");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_theme_dir(), "/config/gtklock/config.ini", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/gtklock/config.ini", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* {{WALLPAPER_PATH}} -> the installed wallpaper (cosmetic bg). Shared with
      * hyprpaper/hyprland so all three paint the same file. */
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, osr_mod_theme_dir()); str_addz(&src, "/config/gtklock/style.css");
-    str_addz(&dst, osr_mod_home());      str_addz(&dst, "/.config/gtklock/style.css");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, osr_mod_theme_dir(), "/config/gtklock/style.css", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/gtklock/style.css", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_wallpaper_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* The lockscreen avatar is seeded once - user territory afterwards. */
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, osr_mod_theme_dir()); str_addz(&src, "/config/gtklock/.face");
-    str_addz(&dst, osr_mod_home());      str_addz(&dst, "/.face");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, osr_mod_theme_dir(), "/config/gtklock/.face", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.face", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_seed_once(str_text(&src), str_text(&dst)) && ok;
 
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

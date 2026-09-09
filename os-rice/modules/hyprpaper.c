@@ -26,14 +26,12 @@ int osrm_hyprpaper(void) {
     /* The wallpaper layer, not a plain one: hyprpaper.conf names the image, so
      * {{WALLPAPER_PATH}} has to be filled in as it is installed. */
     if (*osr_mod_theme_dir() != '\0') {
-        str_init(&src); str_init(&dst);
-        str_addz(&src, osr_mod_theme_dir());
-        str_addz(&src, "/config/hypr/hyprpaper.conf");
-        str_addz(&dst, osr_mod_home());
-        str_addz(&dst, "/.config/hypr/hyprpaper.conf");
+        str_initv(&src, &dst, (Str *)NULL);
+        str_addzz(&src, osr_mod_theme_dir(), "/config/hypr/hyprpaper.conf", (const char *)NULL);
+        str_addzz(&dst, osr_mod_home(), "/.config/hypr/hyprpaper.conf", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_wallpaper_layer(str_text(&src), str_text(&dst)) && ok;
-        str_free(&src); str_free(&dst);
+        str_freev(&src, &dst, (Str *)NULL);
     }
     return ok;
 }

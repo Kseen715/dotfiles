@@ -93,7 +93,7 @@ int osrm_yandex_browser(void) {
     ok = osr_pkg_install_step("Installing Yandex Browser", pkgs);
 
     str_init(&path);
-    str_addz(&path, osr_mod_dotfiles()); str_addz(&path, "/yandex-browser/flags.conf");
+    str_addzz(&path, osr_mod_dotfiles(), "/yandex-browser/flags.conf", (const char *)NULL);
     buf = slurp(str_text(&path), &len);
     if (buf == NULL) { str_free(&path); return ok; }
 
@@ -102,10 +102,10 @@ int osrm_yandex_browser(void) {
     free(buf);
 
     str_init(&apps);
-    str_addz(&apps, osr_mod_home()); str_addz(&apps, "/.local/share/applications");
+    str_addzz(&apps, osr_mod_home(), "/.local/share/applications", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&apps)) && ok;
 
-    str_init(&dst); str_init(&body);
+    str_initv(&dst, &body, (Str *)NULL);
     {
         /* A variable only so the unit test can aim at a fixture dir. */
         const char *dirs = env_str("OSR_DESKTOP_DIRS",
@@ -148,9 +148,7 @@ int osrm_yandex_browser(void) {
                     stamp_exec(&body, entry, elen, str_text(&flags));
                     free(entry);
 
-                    str_reset(&dst);
-                    str_addz(&dst, str_text(&apps)); str_addc(&dst, '/');
-                    str_addz(&dst, str_text(&base));
+                    str_setz(&dst, str_text(&apps), "/", str_text(&base), (const char *)NULL);
                     ok = osr_write_user(str_text(&dst), str_text(&body)) && ok;
                     done = 1;
                     str_free(&base);
@@ -173,6 +171,6 @@ int osrm_yandex_browser(void) {
         (void)osr_run_user_quiet(argv);
     }
 
-    str_free(&path); str_free(&flags); str_free(&apps); str_free(&dst); str_free(&body);
+    str_freev(&path, &flags, &apps, &dst, &body, (Str *)NULL);
     return ok;
 }

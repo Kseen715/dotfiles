@@ -93,11 +93,7 @@ static void skips(const char *pkg, const char *label) {
 int main(void) {
     osr_sb_init(&sb);
 
-    osr_sb_env(&sb, "OSR_PKG", "pacman");
-    osr_sb_env(&sb, "OSR_DISTRO", "arch");
-    osr_sb_env(&sb, "OSR_ID_LIKE", "");
-    osr_sb_env(&sb, "OSR_CODENAME", "");
-    osr_sb_env(&sb, "OSR_VERSION_ID", "");
+    osr_sb_env_arch(&sb);
     osr_sb_env(&sb, "OSR_INIT", "systemd");
 
     /* Nothing is installed, so every scenario takes the install path rather

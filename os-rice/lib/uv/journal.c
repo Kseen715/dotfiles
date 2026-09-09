@@ -66,12 +66,10 @@ static void add_field(Str *out, const char *s) {
 }
 
 void uv_jrec_format(Str *out, const UvJRec *r) {
-    str_addz(out, uv_jkind_name(r->kind));
-    str_addc(out, ' ');
+    str_addzz(out, uv_jkind_name(r->kind), " ", (const char *)NULL);
     add_field(out, r->backend);
     str_addc(out, ' ');
-    str_addz(out, uv_domain_name(r->domain));
-    str_addc(out, ' ');
+    str_addzz(out, uv_domain_name(r->domain), " ", (const char *)NULL);
     str_addl(out, r->idx);
     str_addc(out, ' ');
     str_addl(out, r->mv);
@@ -213,9 +211,7 @@ int uv_journal_append(const UvJRec *r) {
     Str dir, path, line;
     int fd, ok = 0;
 
-    str_init(&dir);
-    str_init(&path);
-    str_init(&line);
+    str_initv(&dir, &path, &line, (Str *)NULL);
     uv_journal_dir(&dir);
     uv_journal_path(&path);
 
@@ -241,9 +237,7 @@ int uv_journal_append(const UvJRec *r) {
     ok = fsync_dir(str_text(&dir));
 
 done:
-    str_free(&dir);
-    str_free(&path);
-    str_free(&line);
+    str_freev(&dir, &path, &line, (Str *)NULL);
     return ok ? UV_OK : UV_ERR;
 }
 

@@ -98,9 +98,7 @@ static int load_layout(const char *name, const char *schema_path) {
 
     str_init(&src);
     if (!osr_theme_source(&src, "gnome-panel", name, &is_temp)) {
-        str_addz(&src, osr_mod_dotfiles());
-        str_addz(&src, "/gnome-panel/");
-        str_addz(&src, name);
+        str_addzz(&src, osr_mod_dotfiles(), "/gnome-panel/", name, (const char *)NULL);
     }
     fd = open(str_text(&src), O_RDONLY);
     if (fd < 0) {

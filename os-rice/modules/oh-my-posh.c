@@ -64,8 +64,7 @@ static void posh_themes_dir(Str *out) {
             str_trim_trailing(&prefix, '\n');
             str_trim_trailing(&prefix, '\r');
             if (prefix.len > 0) {
-                str_addz(out, str_text(&prefix));
-                str_addz(out, "/themes");
+                str_addzz(out, str_text(&prefix), "/themes", (const char *)NULL);
             }
         }
         str_free(&prefix);
@@ -81,8 +80,7 @@ static void posh_themes_dir(Str *out) {
         str_init(&exe);
         if (osr_path_lookup("oh-my-posh", &exe)) {
             osr_dirname(str_text(&exe), dir, sizeof(dir));
-            str_addz(out, dir);
-            str_addz(out, "/themes");
+            str_addzz(out, dir, "/themes", (const char *)NULL);
         }
         str_free(&exe);
     }
@@ -112,9 +110,7 @@ int osrm_oh_my_posh(void) {
     }
 
     str_init(&dst);
-    str_addz(&dst, str_text(&themes_dir));
-    str_addc(&dst, '/');
-    str_addz(&dst, theme_file);
+    str_addzz(&dst, str_text(&themes_dir), "/", theme_file, (const char *)NULL);
 
     str_init(&src);
     if (osr_theme_source(&src, "oh-my-posh", theme_file, &is_temp)) {
@@ -126,9 +122,8 @@ int osrm_oh_my_posh(void) {
          * one gets it rather than nothing. */
         Str fallback;
         str_init(&fallback);
-        str_addz(&fallback, osr_mod_root());
-        str_addz(&fallback, "/themes/osr-rice/config/oh-my-posh/");
-        str_addz(&fallback, theme_file);
+        str_addzz(&fallback, osr_mod_root(), "/themes/osr-rice/config/oh-my-posh/", theme_file,
+            (const char *)NULL);
         if (file_exists(str_text(&fallback))) {
             osr_warnf("oh-my-posh: theme '%s' ships no prompt; using 'osr-rice', "
                       "the only one defined so far", osr_mod_theme());
@@ -141,9 +136,7 @@ int osrm_oh_my_posh(void) {
         str_free(&fallback);
     }
 
-    str_free(&src);
-    str_free(&dst);
-    str_free(&themes_dir);
+    str_freev(&src, &dst, &themes_dir, (Str *)NULL);
     return ok;
 }
 

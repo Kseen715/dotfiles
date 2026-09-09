@@ -69,20 +69,15 @@ static int passwd_line(Str *out, const char *user) {
     size_t ulen;
 
     if (pw != NULL) {
-        str_addz(out, pw->pw_name);
-        str_addc(out, ':');
-        str_addz(out, pw->pw_passwd != NULL ? pw->pw_passwd : "x");
-        str_addc(out, ':');
+        str_addzz(out, pw->pw_name, ":", pw->pw_passwd != NULL ? pw->pw_passwd : "x", ":",
+            (const char *)NULL);
         str_addl(out, (long)pw->pw_uid);
         str_addc(out, ':');
         str_addl(out, (long)pw->pw_gid);
         str_addc(out, ':');
-        str_addz(out, pw->pw_gecos != NULL ? pw->pw_gecos : "");
-        str_addc(out, ':');
-        str_addz(out, pw->pw_dir != NULL ? pw->pw_dir : "");
-        str_addc(out, ':');
-        str_addz(out, pw->pw_shell != NULL ? pw->pw_shell : "");
-        str_addc(out, '\n');
+        str_addzz(out, pw->pw_gecos != NULL ? pw->pw_gecos : "", ":",
+            pw->pw_dir != NULL ? pw->pw_dir : "", ":", pw->pw_shell != NULL ? pw->pw_shell : "",
+            "\n", (const char *)NULL);
         return 1;
     }
 
@@ -175,14 +170,11 @@ static int cmd_shell_is(const char *user, const char *shell) {
     if (cur.len == 0) { str_free(&cur); return 1; }
     if (strcmp(str_text(&cur), shell) == 0) { str_free(&cur); return 0; }
 
-    str_init(&a);
-    str_init(&b);
+    str_initv(&a, &b, (Str *)NULL);
     canon(&a, str_text(&cur));
     canon(&b, shell);
     same = strcmp(str_text(&a), str_text(&b)) == 0;
-    str_free(&a);
-    str_free(&b);
-    str_free(&cur);
+    str_freev(&a, &b, &cur, (Str *)NULL);
     return same ? 0 : 1;
 }
 
@@ -211,8 +203,7 @@ static void resolve_user(Str *user, Str *home, const char *explicit_user) {
         if (strcmp(str_text(user), "root") == 0) {
             str_addz(home, "/root");
         } else {
-            str_addz(home, "/home/");
-            str_addz(home, str_text(user));
+            str_addzz(home, "/home/", str_text(user), (const char *)NULL);
         }
     }
 }
@@ -221,25 +212,23 @@ static void resolve_user(Str *user, Str *home, const char *explicit_user) {
  * and every child it forks. `export` is what the shim bought; setenv is that. */
 void osr_resolve_user(const char *explicit_user) {
     Str user, home;
-    str_init(&user); str_init(&home);
+    str_initv(&user, &home, (Str *)NULL);
     resolve_user(&user, &home, explicit_user);
     setenv("OSR_USER", str_text(&user), 1);
     setenv("OSR_HOME", str_text(&home), 1);
-    str_free(&user); str_free(&home);
+    str_freev(&user, &home, (Str *)NULL);
 }
 
 static int cmd_resolve(const char *explicit_user) {
     Str user, home, out;
 
-    str_init(&user); str_init(&home);
+    str_initv(&user, &home, (Str *)NULL);
     resolve_user(&user, &home, explicit_user);
     str_init(&out);
     sh_assign(&out, "OSR_USER", str_text(&user));
     sh_assign(&out, "OSR_HOME", str_text(&home));
     out_flush(&out);
-    str_free(&out);
-    str_free(&home);
-    str_free(&user);
+    str_freev(&out, &home, &user, (Str *)NULL);
     return 0;
 }
 
@@ -346,8 +335,7 @@ int osr_register_shell(const char *shell) {
     if (shell == NULL || *shell == '\0') return 1;
     if (cmd_shell_registered(shell) == 0) return 1;
     str_init(&line);
-    str_addz(&line, shell);
-    str_addc(&line, '\n');
+    str_addzz(&line, shell, "\n", (const char *)NULL);
     ok = osr_append_root(shells_path(), str_text(&line));
     str_free(&line);
     return ok;
@@ -446,8 +434,7 @@ static int cmd_compose_block(const char *path, const char *name) {
     str_init(&out);
     osr_compose_block(&out, path, name, str_text(&body));
     out_flush(&out);
-    str_free(&out);
-    str_free(&body);
+    str_freev(&out, &body, (Str *)NULL);
     return 0;
 }
 
@@ -568,11 +555,11 @@ static void resolve_user(Str *user, Str *home, const char *explicit_user) {
 
 void osr_resolve_user(const char *explicit_user) {
     Str user, home;
-    str_init(&user); str_init(&home);
+    str_initv(&user, &home, (Str *)NULL);
     resolve_user(&user, &home, explicit_user);
     osr_setenv("OSR_USER", str_text(&user));
     osr_setenv("OSR_HOME", str_text(&home));
-    str_free(&user); str_free(&home);
+    str_freev(&user, &home, (Str *)NULL);
 }
 
 int osr_user_shell_is(const char *user, const char *shell) {
@@ -596,12 +583,12 @@ int osr_user_main(int argc, char **argv) {
     Str user, home, out;
 
     if (argc >= 2 && strcmp(argv[1], "resolve") == 0) {
-        str_init(&user); str_init(&home); str_init(&out);
+        str_initv(&user, &home, &out, (Str *)NULL);
         resolve_user(&user, &home, argc == 3 ? argv[2] : NULL);
         sh_assign(&out, "OSR_USER", str_text(&user));
         sh_assign(&out, "OSR_HOME", str_text(&home));
         out_flush(&out);
-        str_free(&out); str_free(&home); str_free(&user);
+        str_freev(&out, &home, &user, (Str *)NULL);
         return 0;
     }
     fputs("usage: osr user resolve [name]\n", stderr);

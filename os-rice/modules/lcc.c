@@ -108,9 +108,8 @@ int osrm_lcc(void) {
     Str crtbegin, crtend, libgcc, incdir;
     int ok = 1;
 
-    str_init(&prefix); str_init(&bin); str_init(&src); str_init(&srclcc);
-    str_init(&patch); str_init(&gz); str_init(&script); str_init(&esc);
-    str_init(&crtbegin); str_init(&crtend); str_init(&libgcc); str_init(&incdir);
+    str_initv(&prefix, &bin, &src, &srclcc, &patch, &gz, &script, &esc, &crtbegin, &crtend,
+        &libgcc, &incdir, (Str *)NULL);
 
     join(&prefix, osr_mod_home(), LCC_REL);
     join(&bin, osr_mod_home(), ".local/bin");
@@ -156,18 +155,9 @@ int osrm_lcc(void) {
 
     /* Clean slate, then the directory skeleton. A partial failed run must
      * not leave half-built objects behind for the rerun to reuse. */
-    str_reset(&script);
-    str_addz(&script, "rm -rf ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, " && mkdir -p ");
-    str_addz(&script, str_text(&src));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include-patch/bits");
+    str_setz(&script, "rm -rf ", str_text(&prefix), " && mkdir -p ", str_text(&src), " ",
+        str_text(&prefix), "/include ", str_text(&prefix), "/gcc ", str_text(&prefix),
+        "/include-patch/bits", (const char *)NULL);
     if (!run_sh_user("Preparing lcc install directory", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -177,10 +167,8 @@ int osrm_lcc(void) {
         osr_warnf("lcc: failed to download the source tarball");
         ok = 0; goto out;
     }
-    str_reset(&script);
-    str_addz(&script, "cd ");
-    str_addz(&script, str_text(&src));
-    str_addz(&script, " && tar -xzf lcc.tar.gz && mv lcc-master lcc");
+    str_setz(&script, "cd ", str_text(&src), " && tar -xzf lcc.tar.gz && mv lcc-master lcc",
+        (const char *)NULL);
     if (!run_sh_user("Extracting lcc source", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -188,28 +176,17 @@ int osrm_lcc(void) {
     /* Ship the patched driver, baking the prefix into @LCCPREFIX@. */
     join(&patch, osr_mod_root(), "modules/src/lcc-linux.c");
     sed_escape(&esc, str_text(&prefix));
-    str_reset(&script);
-    str_addz(&script, "cp ");
-    str_addz(&script, str_text(&patch));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&srclcc));
-    str_addz(&script, "/etc/linux.c && sed -i 's#@LCCPREFIX@#");
-    str_addz(&script, str_text(&esc));
-    str_addz(&script, "/#g' ");
-    str_addz(&script, str_text(&srclcc));
-    str_addz(&script, "/etc/linux.c");
+    str_setz(&script, "cp ", str_text(&patch), " ", str_text(&srclcc),
+        "/etc/linux.c && sed -i 's#@LCCPREFIX@#", str_text(&esc), "/#g' ", str_text(&srclcc),
+        "/etc/linux.c", (const char *)NULL);
     if (!run_sh_user("Patching lcc driver for this host", str_text(&script))) {
         ok = 0; goto out;
     }
 
     /* The overlay header rcc cannot parse, on the driver's include path. */
     join(&patch, osr_mod_root(), "modules/src/lcc-struct_mutex.h");
-    str_reset(&script);
-    str_addz(&script, "cp ");
-    str_addz(&script, str_text(&patch));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include-patch/bits/struct_mutex.h");
+    str_setz(&script, "cp ", str_text(&patch), " ", str_text(&prefix),
+        "/include-patch/bits/struct_mutex.h", (const char *)NULL);
     if (!run_sh_user("Installing patched glibc header", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -222,22 +199,14 @@ int osrm_lcc(void) {
      * -- the FIRST -I on the driver's path -- so it shadows gcc's stddef.h
      * entirely and the identical typedef never reaches rcc twice. */
     join(&patch, osr_mod_root(), "modules/src/lcc-byteswap.h");
-    str_reset(&script);
-    str_addz(&script, "cp ");
-    str_addz(&script, str_text(&patch));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include-patch/bits/byteswap.h");
+    str_setz(&script, "cp ", str_text(&patch), " ", str_text(&prefix),
+        "/include-patch/bits/byteswap.h", (const char *)NULL);
     if (!run_sh_user("Installing patched glibc byteswap.h", str_text(&script))) {
         ok = 0; goto out;
     }
     join(&patch, osr_mod_root(), "modules/src/lcc-stddef.h");
-    str_reset(&script);
-    str_addz(&script, "cp ");
-    str_addz(&script, str_text(&patch));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include/stddef.h");
+    str_setz(&script, "cp ", str_text(&patch), " ", str_text(&prefix), "/include/stddef.h",
+        (const char *)NULL);
     if (!run_sh_user("Installing lcc stddef.h overlay", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -249,30 +218,14 @@ int osrm_lcc(void) {
     gcc_print(&crtend,   1, "-print-file-name=crtend.o");
     gcc_print(&libgcc,   1, "-print-file-name=libgcc.a");
     gcc_print(&incdir,   0, "-print-file-name=include");
-    str_reset(&script);
-    str_addz(&script, "cp ");
-    str_addz(&script, str_text(&srclcc));
+    str_setz(&script, "cp ", str_text(&srclcc), (const char *)NULL);
     str_addz(&script, "/include/x86/linux/* ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/include/ && ln -sf /usr/bin/cpp ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc/cpp && ln -sf \"");
-    str_addz(&script, str_text(&incdir));
-    str_addz(&script, "\" ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc/include && ln -sf \"");
-    str_addz(&script, str_text(&crtbegin));
-    str_addz(&script, "\" ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc/crtbegin.o && ln -sf \"");
-    str_addz(&script, str_text(&crtend));
-    str_addz(&script, "\" ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc/crtend.o && ln -sf \"");
-    str_addz(&script, str_text(&libgcc));
-    str_addz(&script, "\" ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/gcc/libgcc.a");
+    str_addzz(&script, str_text(&prefix), "/include/ && ln -sf /usr/bin/cpp ",
+        str_text(&prefix), "/gcc/cpp && ln -sf \"", str_text(&incdir), "\" ", str_text(&prefix),
+        "/gcc/include && ln -sf \"", str_text(&crtbegin), "\" ", str_text(&prefix),
+        "/gcc/crtbegin.o && ln -sf \"", str_text(&crtend), "\" ", str_text(&prefix),
+        "/gcc/crtend.o && ln -sf \"", str_text(&libgcc), "\" ", str_text(&prefix),
+        "/gcc/libgcc.a", (const char *)NULL);
     if (!run_sh_user("Installing lcc headers and gcc support dir", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -281,12 +234,8 @@ int osrm_lcc(void) {
      * binaries against it); the driver, compiler proper, preprocessor and
      * profile tools are host-64-bit and compile with -std=gnu89 because gcc
      * 15 treats the 2002 code's implicit-int as an error. */
-    str_reset(&script);
-    str_addz(&script, "cd ");
-    str_addz(&script, str_text(&srclcc));
-    str_addz(&script, " && make BUILDDIR=");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, " CC=\"cc -m32 -std=gnu89\" CFLAGS=\"-g\" liblcc");
+    str_setz(&script, "cd ", str_text(&srclcc), " && make BUILDDIR=", str_text(&prefix),
+        " CC=\"cc -m32 -std=gnu89\" CFLAGS=\"-g\" liblcc", (const char *)NULL);
     if (!run_sh_user("Building lcc runtime library (32-bit)", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -295,20 +244,13 @@ int osrm_lcc(void) {
      * size_t; gcc accepts the C11-style identical redeclaration, the 2002 C89
      * rcc hard-errors -- the os-rice tree triggers it). Idempotent script. */
     join(&patch, osr_mod_root(), "modules/src/lcc-patch-decl.sh");
-    str_reset(&script);
-    str_addz(&script, "sh ");
-    str_addz(&script, str_text(&patch));
-    str_addz(&script, " ");
-    str_addz(&script, str_text(&srclcc));
-    str_addz(&script, "/src/decl.c");
+    str_setz(&script, "sh ", str_text(&patch), " ", str_text(&srclcc), "/src/decl.c",
+        (const char *)NULL);
     if (!run_sh_user("Patching rcc to accept identical typedef redefinition", str_text(&script))) {
         ok = 0; goto out;
     }
-    str_reset(&script);
-    str_addz(&script, "cd ");
-    str_addz(&script, str_text(&srclcc));
-    str_addz(&script, " && make BUILDDIR=");
-    str_addz(&script, str_text(&prefix));
+    str_setz(&script, "cd ", str_text(&srclcc), " && make BUILDDIR=", str_text(&prefix),
+        (const char *)NULL);
     str_addz(&script, " HOSTFILE=etc/linux.c CC=\"cc -std=gnu89\" CFLAGS=\"-g\" "
                       "rcc lburg cpp lcc bprint");
     if (!run_sh_user("Building lcc compiler", str_text(&script))) {
@@ -316,17 +258,11 @@ int osrm_lcc(void) {
     }
 
     /* Sanity: the driver must compile AND run a hello in one shot. */
-    str_reset(&script);
-    str_addz(&script, str_text(&src));
-    str_addz(&script, "/hello.c");
+    str_setz(&script, str_text(&src), "/hello.c", (const char *)NULL);
     osr_write_user(str_text(&script),
         "#include <stdio.h>\nint main(void){printf(\"lcc ok\\n\");return 0;}\n");
-    str_reset(&script);
-    str_addz(&script, "cd ");
-    str_addz(&script, str_text(&src));
-    str_addz(&script, " && ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/lcc -o hello hello.c && ./hello");
+    str_setz(&script, "cd ", str_text(&src), " && ", str_text(&prefix),
+        "/lcc -o hello hello.c && ./hello", (const char *)NULL);
     if (!run_sh_user("Verifying lcc on a hello world", str_text(&script))) {
         osr_warnf("lcc built but its hello world did not run - something is off");
         ok = 0; goto out;
@@ -334,14 +270,8 @@ int osrm_lcc(void) {
 
     /* PATH. ~/.local/bin is on the profile's PATH (the 00-env.zsh layer), so
      * a bare `lcc` in any terminal now resolves to the installed driver. */
-    str_reset(&script);
-    str_addz(&script, "mkdir -p ");
-    str_addz(&script, str_text(&bin));
-    str_addz(&script, " && ln -sf ");
-    str_addz(&script, str_text(&prefix));
-    str_addz(&script, "/lcc ");
-    str_addz(&script, str_text(&bin));
-    str_addz(&script, "/lcc");
+    str_setz(&script, "mkdir -p ", str_text(&bin), " && ln -sf ", str_text(&prefix), "/lcc ",
+        str_text(&bin), "/lcc", (const char *)NULL);
     if (!run_sh_user("Linking lcc onto PATH", str_text(&script))) {
         ok = 0; goto out;
     }
@@ -350,8 +280,7 @@ int osrm_lcc(void) {
                  str_text(&prefix));
 
 out:
-    str_free(&prefix); str_free(&bin); str_free(&src); str_free(&srclcc);
-    str_free(&patch); str_free(&gz); str_free(&script); str_free(&esc);
-    str_free(&crtbegin); str_free(&crtend); str_free(&libgcc); str_free(&incdir);
+    str_freev(&prefix, &bin, &src, &srclcc, &patch, &gz, &script, &esc, &crtbegin, &crtend,
+        &libgcc, &incdir, (Str *)NULL);
     return ok;
 }

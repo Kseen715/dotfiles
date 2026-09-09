@@ -39,17 +39,17 @@ int osrm_viewers(void) {
 
     ok = osr_pkg_install_step("Installing document + media viewers", pkgs);
 
-    str_init(&src); str_init(&dst);
+    str_initv(&src, &dst, (Str *)NULL);
     for (i = 0; layers[i] != NULL; i += 5) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, layers[i + 1]);
-        str_addz(&dst, osr_mod_home());     str_addz(&dst, layers[i + 3]);
+        str_reset(&src);
+        str_reset(&dst);
+        str_addzz(&src, osr_mod_dotfiles(), layers[i + 1], (const char *)NULL);
+        str_addzz(&dst, osr_mod_home(), layers[i + 3], (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-        str_reset(&dst);
-        str_addz(&dst, osr_mod_home()); str_addz(&dst, layers[i + 4]);
+        str_setz(&dst, osr_mod_home(), layers[i + 4], (const char *)NULL);
         (void)osr_install_theme_layer(layers[i], layers[i + 2], str_text(&dst));
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

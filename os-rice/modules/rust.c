@@ -66,12 +66,11 @@ static int install_cargo_tooling(void *ctx) {
     int rc;
     (void)ctx;
 
-    str_init(&bin); str_init(&binstall); str_init(&update); str_init(&cargo);
-    str_init(&shim_src); str_init(&shim_dst);
-    str_addz(&bin, osr_mod_home()); str_addz(&bin, "/.cargo/bin");
-    str_addz(&binstall, str_text(&bin)); str_addz(&binstall, "/cargo-binstall");
-    str_addz(&update,   str_text(&bin)); str_addz(&update,   "/cargo-install-update");
-    str_addz(&cargo,    str_text(&bin)); str_addz(&cargo,    "/cargo");
+    str_initv(&bin, &binstall, &update, &cargo, &shim_src, &shim_dst, (Str *)NULL);
+    str_addzz(&bin, osr_mod_home(), "/.cargo/bin", (const char *)NULL);
+    str_addzz(&binstall, str_text(&bin), "/cargo-binstall", (const char *)NULL);
+    str_addzz(&update, str_text(&bin), "/cargo-install-update", (const char *)NULL);
+    str_addzz(&cargo, str_text(&bin), "/cargo", (const char *)NULL);
 
     /* binstall first: a prebuilt binary where upstream ships one turns every
      * later cargo: row from a compile into a download. */
@@ -98,16 +97,13 @@ static int install_cargo_tooling(void *ctx) {
      * cargo-update invokes it as `<shim> install ...` and it rewrites that into
      * a binstall call. Dotfiles-owned (§5) - it is a flag translation, not a
      * setting, so it ships as a file rather than being generated here. */
-    str_addz(&shim_src, osr_mod_dotfiles());
-    str_addz(&shim_src, "/cargo/cargo-binstall-shim");
-    str_addz(&shim_dst, osr_mod_home());
-    str_addz(&shim_dst, "/.local/bin/cargo-binstall-shim");
+    str_addzz(&shim_src, osr_mod_dotfiles(), "/cargo/cargo-binstall-shim", (const char *)NULL);
+    str_addzz(&shim_dst, osr_mod_home(), "/.local/bin/cargo-binstall-shim", (const char *)NULL);
     (void)osr_install_layer(str_text(&shim_src), str_text(&shim_dst));
     argv[0] = (char *)"chmod"; argv[1] = (char *)"0755"; argv[2] = shim_dst.p; argv[3] = NULL;
     rc = osr_run_user(argv);
 
-    str_free(&bin); str_free(&binstall); str_free(&update); str_free(&cargo);
-    str_free(&shim_src); str_free(&shim_dst);
+    str_freev(&bin, &binstall, &update, &cargo, &shim_src, &shim_dst, (Str *)NULL);
     /* The step's verdict is this chmod's, which is what the sh function's
      * status was: an unexecutable shim is a cargo() alias that silently does
      * nothing, so it is worth failing the step over. */
@@ -122,8 +118,7 @@ int osrm_rust(void) {
     ok = osr_pkg_install_step("Installing build tools (cc, curl)", deps);
 
     str_init(&cargo);
-    str_addz(&cargo, osr_mod_home());
-    str_addz(&cargo, "/.cargo/bin/cargo");
+    str_addzz(&cargo, osr_mod_home(), "/.cargo/bin/cargo", (const char *)NULL);
     if (user_x(str_text(&cargo))) {
         osr_infof("Rust already installed (%s) - skipping", str_text(&cargo));
     } else {

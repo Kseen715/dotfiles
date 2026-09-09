@@ -45,10 +45,9 @@ int osrm_wofi(void) {
                                 "sh -c 'pkill wofi || wofi --show drun'");
     }
     str_init(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/wofi/config");
+    str_addzz(&dst, osr_mod_home(), "/.config/wofi/config", (const char *)NULL);
     (void)osr_install_theme_layer("wofi", "config", str_text(&dst));
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/wofi/style.css");
+    str_setz(&dst, osr_mod_home(), "/.config/wofi/style.css", (const char *)NULL);
     (void)osr_install_theme_layer("wofi", "style.css", str_text(&dst));
     str_free(&dst);
     return ok;

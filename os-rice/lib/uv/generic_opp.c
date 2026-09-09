@@ -37,54 +37,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-/* --- small sysfs readers -------------------------------------------------- */
-
-/* read_trim -- a sysfs file's contents with surrounding whitespace removed.
- * Returns 1 when the file was readable. Sysfs values are short and
- * newline-terminated, which is the whole reason this is not just slurp. */
-static int read_trim(Str *out, const char *path) {
-    char *buf;
-    size_t len, start, end;
-    buf = slurp(path, &len);
-    if (buf == NULL) return 0;
-    start = 0;
-    while (start < len && is_space(buf[start])) start++;
-    end = len;
-    while (end > start && is_space(buf[end - 1])) end--;
-    str_add(out, buf + start, end - start);
-    free(buf);
-    return 1;
-}
-
-/* read_long -- read_trim plus strtol. Returns 1 on a clean whole-string parse;
- * a sysfs attribute that exists but holds junk reads as absent, because acting
- * on a half-parsed voltage is worse than acting on none. */
-static int read_long(const char *path, long *out) {
-    Str s;
-    char *endp;
-    long v;
-    int ok = 0;
-    str_init(&s);
-    if (read_trim(&s, path) && s.len > 0) {
-        v = strtol(str_text(&s), &endp, 10);
-        if (*endp == '\0') {
-            *out = v;
-            ok = 1;
-        }
-    }
-    str_free(&s);
-    return ok;
-}
-
-/* path3 -- join into a caller-owned Str, so the readers above can be called on
- * a composed path without a fixed-size buffer anywhere. */
-static void path3(Str *out, const char *a, const char *b, const char *c) {
-    str_reset(out);
-    str_addz(out, a);
-    str_addz(out, b);
-    str_addz(out, c);
-}
-
 /* --- report formatting ---------------------------------------------------- */
 
 /* The report is a two-column list: a label and whatever we found. One shape,
@@ -93,15 +45,13 @@ static void path3(Str *out, const char *a, const char *b, const char *c) {
 
 static void row(Str *out, const char *label, const char *value) {
     size_t n;
-    str_addz(out, "  ");
-    str_addz(out, label);
+    str_addzz(out, "  ", label, (const char *)NULL);
     n = strlen(label);
     while (n < LABEL_WIDTH) {
         str_addc(out, ' ');
         n++;
     }
-    str_addz(out, value);
-    str_addc(out, '\n');
+    str_addzz(out, value, "\n", (const char *)NULL);
 }
 
 /* cont -- a continuation line under the previous row's value column. */
@@ -123,8 +73,7 @@ static int cpu_identity(Str *out, Str *vendor_out) {
 
     buf = slurp("/proc/cpuinfo", &len);
     if (buf == NULL) return 0;
-    str_init(&model);
-    str_init(&vendor);
+    str_initv(&model, &vendor, (Str *)NULL);
 
     while (next_line(buf, len, &pos, &ln)) {
         const char *colon;
@@ -151,15 +100,12 @@ static int cpu_identity(Str *out, Str *vendor_out) {
     if (model.len > 0) {
         str_addz(out, str_text(&model));
         if (vendor.len > 0) {
-            str_addz(out, " (");
-            str_addz(out, str_text(&vendor));
-            str_addc(out, ')');
+            str_addzz(out, " (", str_text(&vendor), ")", (const char *)NULL);
         }
         found = 1;
     }
     if (vendor_out != NULL) str_addz(vendor_out, str_text(&vendor));
-    str_free(&model);
-    str_free(&vendor);
+    str_freev(&model, &vendor, (Str *)NULL);
     return found;
 }
 
@@ -208,32 +154,27 @@ static int probe_cpufreq(Str *report, Str *driver_out) {
         row(report, "cpufreq", "no /sys/devices/system/cpu/cpufreq (no scaling driver)");
         return 0;
     }
-    str_init(&path);
-    str_init(&val);
-    str_init(&line);
+    str_initv(&path, &val, &line, (Str *)NULL);
 
     while ((e = readdir(d)) != NULL) {
         long lo = 0, hi = 0;
         if (strncmp(e->d_name, "policy", 6) != 0) continue;
 
-        str_reset(&line);
-        str_addz(&line, e->d_name);
-        str_addz(&line, ": ");
+        str_setz(&line, e->d_name, ": ", (const char *)NULL);
 
-        path3(&path, base, e->d_name, "/scaling_driver");
+        str_setz(&path, base, e->d_name, "/scaling_driver", (const char *)NULL);
         str_reset(&val);
-        if (read_trim(&val, str_text(&path))) {
-            str_addz(&line, "driver=");
-            str_addz(&line, str_text(&val));
+        if (osr_read_trim(&val, str_text(&path))) {
+            str_addzz(&line, "driver=", str_text(&val), (const char *)NULL);
             if (driver_out->len == 0) str_addz(driver_out, str_text(&val));
         } else {
             str_addz(&line, "driver=?");
         }
 
-        path3(&path, base, e->d_name, "/cpuinfo_min_freq");
-        if (read_long(str_text(&path), &lo)) {
-            path3(&path, base, e->d_name, "/cpuinfo_max_freq");
-            if (read_long(str_text(&path), &hi)) {
+        str_setz(&path, base, e->d_name, "/cpuinfo_min_freq", (const char *)NULL);
+        if (osr_read_long(str_text(&path), &lo)) {
+            str_setz(&path, base, e->d_name, "/cpuinfo_max_freq", (const char *)NULL);
+            if (osr_read_long(str_text(&path), &hi)) {
                 str_addz(&line, ", ");
                 str_addl(&line, lo / 1000);
                 str_addz(&line, "-");
@@ -242,11 +183,10 @@ static int probe_cpufreq(Str *report, Str *driver_out) {
             }
         }
 
-        path3(&path, base, e->d_name, "/scaling_governor");
+        str_setz(&path, base, e->d_name, "/scaling_governor", (const char *)NULL);
         str_reset(&val);
-        if (read_trim(&val, str_text(&path))) {
-            str_addz(&line, ", governor=");
-            str_addz(&line, str_text(&val));
+        if (osr_read_trim(&val, str_text(&path))) {
+            str_addzz(&line, ", governor=", str_text(&val), (const char *)NULL);
         }
 
         row(report, count == 0 ? "cpufreq" : "", str_text(&line));
@@ -256,9 +196,7 @@ static int probe_cpufreq(Str *report, Str *driver_out) {
 
     if (count == 0) row(report, "cpufreq", "no policies");
 
-    str_free(&path);
-    str_free(&val);
-    str_free(&line);
+    str_freev(&path, &val, &line, (Str *)NULL);
     return count;
 }
 
@@ -327,36 +265,32 @@ static int probe_regulators(Str *report) {
         row(report, "regulators", "no /sys/class/regulator (no software-visible rails)");
         return 0;
     }
-    str_init(&path);
-    str_init(&name);
-    str_init(&line);
+    str_initv(&path, &name, &line, (Str *)NULL);
 
     while ((e = readdir(d)) != NULL) {
         long now = 0, lo = 0, hi = 0;
         if (e->d_name[0] == '.') continue;
 
         str_reset(&name);
-        path3(&path, base, e->d_name, "/name");
-        if (!read_trim(&name, str_text(&path)) || name.len == 0) continue;
+        str_setz(&path, base, e->d_name, "/name", (const char *)NULL);
+        if (!osr_read_trim(&name, str_text(&path)) || name.len == 0) continue;
         if (!rail_is_cpuish(str_text(&name))) {
             others++;
             continue;
         }
 
-        str_reset(&line);
-        str_addz(&line, str_text(&name));
-        str_addz(&line, ": ");
-        path3(&path, base, e->d_name, "/microvolts");
-        if (read_long(str_text(&path), &now)) {
+        str_setz(&line, str_text(&name), ": ", (const char *)NULL);
+        str_setz(&path, base, e->d_name, "/microvolts", (const char *)NULL);
+        if (osr_read_long(str_text(&path), &now)) {
             str_addl(&line, now / 1000);
             str_addz(&line, " mV");
         } else {
             str_addz(&line, "(voltage not exposed)");
         }
-        path3(&path, base, e->d_name, "/min_microvolts");
-        if (read_long(str_text(&path), &lo)) {
-            path3(&path, base, e->d_name, "/max_microvolts");
-            if (read_long(str_text(&path), &hi)) {
+        str_setz(&path, base, e->d_name, "/min_microvolts", (const char *)NULL);
+        if (osr_read_long(str_text(&path), &lo)) {
+            str_setz(&path, base, e->d_name, "/max_microvolts", (const char *)NULL);
+            if (osr_read_long(str_text(&path), &hi)) {
                 str_addz(&line, ", hardware range ");
                 str_addl(&line, lo / 1000);
                 str_addz(&line, "-");
@@ -384,9 +318,7 @@ static int probe_regulators(Str *report) {
         cont(report, str_text(&line));
     }
 
-    str_free(&path);
-    str_free(&name);
-    str_free(&line);
+    str_freev(&path, &name, &line, (Str *)NULL);
     return shown;
 }
 
@@ -425,9 +357,7 @@ static int generic_probe(UvCaps *caps, Str *report) {
      * is the entire point of this backend. */
     strcpy(caps->detail, "read-only: no voltage-control interface on this machine");
 
-    str_init(&id);
-    str_init(&driver);
-    str_init(&vendor);
+    str_initv(&id, &driver, &vendor, (Str *)NULL);
 
     str_addz(report, "\n");
     if (cpu_identity(&id, &vendor)) {
@@ -474,9 +404,7 @@ static int generic_probe(UvCaps *caps, Str *report) {
         cont(report, "voltage here is firmware's business.");
     }
 
-    str_free(&id);
-    str_free(&driver);
-    str_free(&vendor);
+    str_freev(&id, &driver, &vendor, (Str *)NULL);
     return 1; /* always claims: this is the last resort */
 }
 

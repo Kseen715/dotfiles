@@ -105,9 +105,7 @@ int osr_gnome_free_binding(const char *binding) {
     /* The chord quoted on both sides, so "<Super>r" does not match the
      * "<Shift><Super>r" living in the same list. */
     str_init(&quoted);
-    str_addc(&quoted, '\'');
-    str_addz(&quoted, binding);
-    str_addc(&quoted, '\'');
+    str_addzz(&quoted, "'", binding, "'", (const char *)NULL);
 
     for (i = 0; KEY_SCHEMAS[i] != NULL; i++) {
         Str listing;
@@ -160,8 +158,7 @@ int osr_gnome_free_binding(const char *binding) {
             freed = 1;
             str_free(&key);
         }
-        str_free(&keys);
-        str_free(&listing);
+        str_freev(&keys, &listing, (Str *)NULL);
     }
 
     if (!freed)
@@ -179,14 +176,11 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
     char *argv[6];
 
     str_init(&path);
-    str_addz(&path, "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/");
-    str_addz(&path, id);
-    str_addc(&path, '/');
+    str_addzz(&path, "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/", id,
+        "/", (const char *)NULL);
 
     str_init(&child);
-    str_addz(&child, CUSTOM_KEY);
-    str_addc(&child, ':');
-    str_addz(&child, str_text(&path));
+    str_addzz(&child, CUSTOM_KEY, ":", str_text(&path), (const char *)NULL);
 
     str_init(&existing);
     argv[0] = (char *)"gsettings";
@@ -201,7 +195,7 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
 
     if (strstr(str_text(&existing), str_text(&path)) != NULL) {
         osr_infof("  %s %s shortcut already registered", id, binding);
-        str_free(&path); str_free(&child); str_free(&existing);
+        str_freev(&path, &child, &existing, (Str *)NULL);
         return 1;
     }
 
@@ -239,8 +233,7 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
         } else {
             str_addz(&value, "['");
         }
-        str_addz(&value, str_text(&path));
-        str_addz(&value, "']");
+        str_addzz(&value, str_text(&path), "']", (const char *)NULL);
 
         argv[2] = (char *)MEDIA_KEYS;
         argv[3] = (char *)"custom-keybindings";
@@ -250,7 +243,7 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
     }
 
     osr_infof("  %s %s shortcut registered at %s", id, binding, str_text(&path));
-    str_free(&path); str_free(&child); str_free(&existing);
+    str_freev(&path, &child, &existing, (Str *)NULL);
     return 1;
 }
 
@@ -291,9 +284,7 @@ static void shell_major(Str *out) {
  * XDG_DATA_HOME would be root's.
  */
 static void ext_data_home(Str *out) {
-    str_addz(out, "XDG_DATA_HOME=");
-    str_addz(out, osr_mod_home());
-    str_addz(out, "/.local/share");
+    str_addzz(out, "XDG_DATA_HOME=", osr_mod_home(), "/.local/share", (const char *)NULL);
 }
 
 /* ext_fetch -- the body of the step: ask the API for the build that matches
@@ -304,20 +295,14 @@ static int ext_fetch(void *ctx) {
     char *argv[7];
     int ok = 0;
 
-    str_init(&major); str_init(&json); str_init(&url);
-    str_init(&zip); str_init(&query); str_init(&data_home);
+    str_initv(&major, &json, &url, &zip, &query, &data_home, (Str *)NULL);
     shell_major(&major);
     ext_data_home(&data_home);
 
     str_addz(&query, "https://extensions.gnome.org/extension-info/?uuid=");
-    str_addz(&query, uuid);
-    str_addz(&query, "&shell_version=");
-    str_addz(&query, str_text(&major));
+    str_addzz(&query, uuid, "&shell_version=", str_text(&major), (const char *)NULL);
 
-    str_addz(&zip, env_str("TMPDIR", "/tmp"));
-    str_addc(&zip, '/');
-    str_addz(&zip, uuid);
-    str_addz(&zip, ".zip");
+    str_addzz(&zip, env_str("TMPDIR", "/tmp"), "/", uuid, ".zip", (const char *)NULL);
 
     if (osr_fetch_buffer(&json, str_text(&query)) &&
         osr_json_string_field(&url, str_text(&json), "download_url") &&
@@ -342,8 +327,7 @@ static int ext_fetch(void *ctx) {
         osr_warnf("no build of %s for GNOME %s", uuid, str_text(&major));
     }
 
-    str_free(&major); str_free(&json); str_free(&url);
-    str_free(&zip); str_free(&query); str_free(&data_home);
+    str_freev(&major, &json, &url, &zip, &query, &data_home, (Str *)NULL);
     return ok;
 }
 
@@ -366,10 +350,9 @@ static void ext_enable(const char *uuid) {
     Str existing, quoted, value;
     char *argv[6];
 
-    str_init(&existing); str_init(&quoted); str_init(&value);
+    str_initv(&existing, &quoted, &value, (Str *)NULL);
     str_addc(&quoted, '\'');
-    str_addz(&quoted, uuid);
-    str_addc(&quoted, '\'');
+    str_addzz(&quoted, uuid, "'", (const char *)NULL);
 
     argv[0] = (char *)"gsettings";
     argv[1] = (char *)"get";
@@ -381,7 +364,7 @@ static void ext_enable(const char *uuid) {
 
     if (strstr(str_text(&existing), str_text(&quoted)) != NULL) {
         osr_infof("  %s already enabled", uuid);
-        str_free(&existing); str_free(&quoted); str_free(&value);
+        str_freev(&existing, &quoted, &value, (Str *)NULL);
         return;
     }
 
@@ -392,13 +375,10 @@ static void ext_enable(const char *uuid) {
         size_t len = existing.len;
         if (len > 0 && str_text(&existing)[len - 1] == ']') len--;
         str_add(&value, str_text(&existing), len);
-        str_addz(&value, ", ");
-        str_addz(&value, str_text(&quoted));
-        str_addc(&value, ']');
+        str_addzz(&value, ", ", str_text(&quoted), "]", (const char *)NULL);
     } else {
         str_addc(&value, '[');
-        str_addz(&value, str_text(&quoted));
-        str_addc(&value, ']');
+        str_addzz(&value, str_text(&quoted), "]", (const char *)NULL);
     }
 
     argv[1] = (char *)"set";
@@ -406,7 +386,7 @@ static void ext_enable(const char *uuid) {
     argv[5] = NULL;
     if (osr_run_user(argv) != 0)
         osr_warnf("%s installed but not enabled - enable it in Extensions", uuid);
-    str_free(&existing); str_free(&quoted); str_free(&value);
+    str_freev(&existing, &quoted, &value, (Str *)NULL);
 }
 
 int osr_gnome_extension_install(const char *desc, const char *uuid) {

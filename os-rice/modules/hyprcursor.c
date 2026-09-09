@@ -21,16 +21,14 @@ int osrm_hyprcursor(void) {
     ok = osr_pkg_install_step("Installing Bibata cursor theme (AUR)", bibata) && ok;
 
     str_init(&icons);
-    str_addz(&icons, osr_mod_home());
-    str_addz(&icons, "/.local/share/icons");
+    str_addzz(&icons, osr_mod_home(), "/.local/share/icons", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&icons)) && ok;
     /* A copy into the user's icon dir, not a symlink: a flatpak reads it through
      * the --filesystem grant below, and that does not follow links out of it. */
     if (dir_exists("/usr/share/icons/Bibata-Modern-Ice")) {
         Str dst;
         str_init(&dst);
-        str_addz(&dst, str_text(&icons));
-        str_addc(&dst, '/');
+        str_addzz(&dst, str_text(&icons), "/", (const char *)NULL);
         argv[0] = (char *)"cp"; argv[1] = (char *)"-rf";
         argv[2] = (char *)"/usr/share/icons/Bibata-Modern-Ice";
         argv[3] = dst.p; argv[4] = NULL;
@@ -50,16 +48,14 @@ int osrm_hyprcursor(void) {
     }
     if (osr_have_cmd("flatpak")) {
         Str themes, share;
-        str_init(&themes); str_init(&share);
-        str_addz(&themes, "--filesystem="); str_addz(&themes, osr_mod_home());
-        str_addz(&themes, "/.themes:ro");
-        str_addz(&share, "--filesystem="); str_addz(&share, str_text(&icons));
-        str_addz(&share, ":ro");
+        str_initv(&themes, &share, (Str *)NULL);
+        str_addzz(&themes, "--filesystem=", osr_mod_home(), "/.themes:ro", (const char *)NULL);
+        str_addzz(&share, "--filesystem=", str_text(&icons), ":ro", (const char *)NULL);
         argv[0] = (char *)"flatpak"; argv[1] = (char *)"override";
         argv[2] = (char *)"--user"; argv[3] = themes.p; argv[4] = share.p;
         argv[5] = NULL;
         (void)osr_run_user_quiet(argv);
-        str_free(&themes); str_free(&share);
+        str_freev(&themes, &share, (Str *)NULL);
     }
     str_free(&icons);
     return ok;

@@ -32,13 +32,12 @@ int osrm_dkms(void) {
         if (osr_run_quiet(q) == 0) {
             Str desc, pkg;
             const char *one[2];
-            str_init(&desc); str_init(&pkg);
-            str_addz(&desc, "Installing "); str_addz(&desc, kernels[i]);
-            str_addz(&desc, " headers");
-            str_addz(&pkg, kernels[i]); str_addz(&pkg, "-headers");
+            str_initv(&desc, &pkg, (Str *)NULL);
+            str_addzz(&desc, "Installing ", kernels[i], " headers", (const char *)NULL);
+            str_addzz(&pkg, kernels[i], "-headers", (const char *)NULL);
             one[0] = str_text(&pkg); one[1] = NULL;
             ok = osr_pkg_install_step(str_text(&desc), one) && ok;
-            str_free(&desc); str_free(&pkg);
+            str_freev(&desc, &pkg, (Str *)NULL);
         }
     }
     return ok;

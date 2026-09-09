@@ -64,8 +64,7 @@
  * puts fastfetch's and wezterm's configs, so the state file is where someone
  * would look for it. */
 static void state_path(Str *out) {
-    str_addz(out, osr_home());
-    str_addz(out, "/.config/osr/state");
+    str_addzz(out, osr_home(), "/.config/osr/state", (const char *)NULL);
 }
 
 /* key_regex -- compile "^<key>=" the way sed's `s/^KEY=//p` and grep's
@@ -180,10 +179,7 @@ static void compose(Str *out, const char *key, const char *value) {
         str_add(out, str_text(&body), body.len);
         str_addc(out, '\n');
     }
-    str_addz(out, key);
-    str_addc(out, '=');
-    str_addz(out, value);
-    str_addc(out, '\n');
+    str_addzz(out, key, "=", value, "\n", (const char *)NULL);
     str_free(&body);
 }
 
@@ -334,8 +330,7 @@ static int cmd_set(const char *key, const char *value) {
 
     rc = write_state(str_text(&path), dir, &content);
 
-    str_free(&content);
-    str_free(&path);
+    str_freev(&content, &path, (Str *)NULL);
     return rc;
 }
 

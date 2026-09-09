@@ -66,15 +66,13 @@ typedef struct {
 } Facts;
 
 static void facts_init(Facts *f) {
-    str_init(&f->distro); str_init(&f->id_like); str_init(&f->codename);
-    str_init(&f->version_id); str_init(&f->version);
-    str_init(&f->arch); str_init(&f->arch_deb); str_init(&f->pkg);
-    str_init(&f->init); str_init(&f->etc_default);
-    str_init(&f->cpu_vendor); str_init(&f->cpu_model); str_init(&f->cpu_arch);
+    str_initv(&f->distro, &f->id_like, &f->codename, &f->version_id, &f->version, &f->arch,
+        &f->arch_deb, &f->pkg, &f->init, &f->etc_default, &f->cpu_vendor, &f->cpu_model,
+        &f->cpu_arch, (Str *)NULL);
     f->cpu_cores = 0; f->cpu_threads = 0;
-    str_init(&f->ram_total); str_init(&f->ram_type); str_init(&f->ram_speed);
+    str_initv(&f->ram_total, &f->ram_type, &f->ram_speed, (Str *)NULL);
     f->ram_sticks = 0; f->ram_channels = 0;
-    str_init(&f->gpu_vendor); str_init(&f->gpu_model); str_init(&f->gpu_devices);
+    str_initv(&f->gpu_vendor, &f->gpu_model, &f->gpu_devices, (Str *)NULL);
     f->gpu_count = 0;
     str_init(&f->npu_vendor); f->npu_count = 0;
     str_init(&f->virt);
@@ -86,39 +84,73 @@ static void facts_init(Facts *f) {
  * set of names they publish is the contract between them. */
 typedef void (*Sink)(void *ctx, const char *name, const char *value);
 
+/* --- publishing: the emitters both cores share -----------------------------
+ * Pure Facts -> Sink, so they live ABOVE the split rather than once per body.
+ * The name set is the contract between the two cores (a consumer must see
+ * every name whatever the answer, or "unset" and "no such device" become the
+ * same thing), and a contract kept in two hand-typed copies is one that
+ * drifts. */
+static void sh_sink(void *ctx, const char *name, const char *value) {
+    sh_assign((Str *)ctx, name, value);
+}
+static void env_sink(void *ctx, const char *name, const char *value) {
+    (void)ctx;
+    osr_setenv(name, value);
+}
+
+static void emit_num(Sink put, void *ctx, const char *name, long v) {
+    Str s;
+    str_init(&s);
+    str_addl(&s, v);
+    put(ctx, name, str_text(&s));
+    str_free(&s);
+}
+
+static void emit_cpu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
+    put(ctx, "OSR_CPU_MODEL", str_text(&f->cpu_model));
+    put(ctx, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
+    emit_num(put, ctx, "OSR_CPU_CORES", f->cpu_cores);
+    emit_num(put, ctx, "OSR_CPU_THREADS", f->cpu_threads);
+}
+
+static void emit_ram(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_RAM_TOTAL", str_text(&f->ram_total));
+    put(ctx, "OSR_RAM_TYPE", str_text(&f->ram_type));
+    put(ctx, "OSR_RAM_SPEED", str_text(&f->ram_speed));
+    emit_num(put, ctx, "OSR_RAM_STICKS", f->ram_sticks);
+    emit_num(put, ctx, "OSR_RAM_CHANNELS", f->ram_channels);
+}
+
+static void emit_gpu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
+    put(ctx, "OSR_GPU_MODEL", str_text(&f->gpu_model));
+    emit_num(put, ctx, "OSR_GPU_COUNT", f->gpu_count);
+    put(ctx, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
+}
+
+static void emit_npu(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
+    emit_num(put, ctx, "OSR_NPU_COUNT", f->npu_count);
+}
+
+/* emit_release -- the ten os-release/arch facets, which `all` alone publishes. */
+static void emit_release(Sink put, void *ctx, const Facts *f) {
+    put(ctx, "OSR_DISTRO", str_text(&f->distro));
+    put(ctx, "OSR_PKG", str_text(&f->pkg));
+    put(ctx, "OSR_INIT", str_text(&f->init));
+    put(ctx, "OSR_CODENAME", str_text(&f->codename));
+    put(ctx, "OSR_VERSION_ID", str_text(&f->version_id));
+    put(ctx, "OSR_VERSION", str_text(&f->version));
+    put(ctx, "OSR_ID_LIKE", str_text(&f->id_like));
+    put(ctx, "OSR_ARCH", str_text(&f->arch));
+    put(ctx, "OSR_ARCH_DEB", str_text(&f->arch_deb));
+    put(ctx, "OSR_ETC_DEFAULT", str_text(&f->etc_default));
+}
+
 #ifndef _WIN32
 
 /* --- little helpers -------------------------------------------------------- */
-
-/* have_cmd -- `command -v <name>`: an executable of that name on $PATH. The
- * resolved path goes into out when it is wanted (dmidecode needs it: sudo's
- * secure_path would otherwise pick a different one than PATH selected). */
-static int have_cmd(const char *name, Str *out) {
-    const char *path = env_str("PATH", "");
-    const char *p = path;
-    Str candidate;
-    int found = 0;
-
-    if (strchr(name, '/') != NULL) return access(name, X_OK) == 0;
-    str_init(&candidate);
-    while (!found) {
-        const char *colon = strchr(p, ':');
-        size_t len = (colon != NULL) ? (size_t)(colon - p) : strlen(p);
-        str_reset(&candidate);
-        if (len == 0) str_addc(&candidate, '.');
-        else str_add(&candidate, p, len);
-        str_addc(&candidate, '/');
-        str_addz(&candidate, name);
-        if (access(str_text(&candidate), X_OK) == 0) {
-            found = 1;
-            if (out != NULL) str_addz(out, str_text(&candidate));
-        }
-        if (colon == NULL) break;
-        p = colon + 1;
-    }
-    str_free(&candidate);
-    return found;
-}
 
 /* run_capture -- a command's stdout, stderr discarded, as the sh probes ran
  * them (`lscpu 2>/dev/null`). NULL when it cannot be started. */
@@ -129,8 +161,7 @@ static char *run_capture(const char *cmd) {
     int c;
 
     str_init(&line);
-    str_addz(&line, cmd);
-    str_addz(&line, " 2>/dev/null");
+    str_addzz(&line, cmd, " 2>/dev/null", (const char *)NULL);
     fp = popen(str_text(&line), "r");
     str_free(&line);
     if (fp == NULL) return NULL;
@@ -287,17 +318,12 @@ static int word_in_list(const Facts *f, const char *word) {
     Str hay;
     int found;
     str_init(&hay);
-    str_addc(&hay, ' ');
-    str_addz(&hay, str_text(&f->distro));
-    str_addc(&hay, ' ');
-    str_addz(&hay, str_text(&f->id_like));
-    str_addc(&hay, ' ');
+    str_addzz(&hay, " ", str_text(&f->distro), " ", str_text(&f->id_like), " ",
+        (const char *)NULL);
     {
         Str needle;
         str_init(&needle);
-        str_addc(&needle, ' ');
-        str_addz(&needle, word);
-        str_addc(&needle, ' ');
+        str_addzz(&needle, " ", word, " ", (const char *)NULL);
         found = contains(str_text(&hay), str_text(&needle));
         str_free(&needle);
     }
@@ -308,12 +334,12 @@ static int word_in_list(const Facts *f, const char *word) {
 /* The binary probe is authoritative (a Debian derivative still has apt-get);
  * the distro/id_like fallback only runs when none of them is installed. */
 static void detect_pkg(Facts *f) {
-    if (have_cmd("apt-get", NULL))            str_addz(&f->pkg, "apt");
-    else if (have_cmd("dnf", NULL))           str_addz(&f->pkg, "dnf");
-    else if (have_cmd("pacman", NULL))        str_addz(&f->pkg, "pacman");
-    else if (have_cmd("apk", NULL))           str_addz(&f->pkg, "apk");
-    else if (have_cmd("xbps-install", NULL))  str_addz(&f->pkg, "xbps");
-    else if (have_cmd("emerge", NULL))        str_addz(&f->pkg, "portage");
+    if (osr_path_lookup("apt-get", NULL))            str_addz(&f->pkg, "apt");
+    else if (osr_path_lookup("dnf", NULL))           str_addz(&f->pkg, "dnf");
+    else if (osr_path_lookup("pacman", NULL))        str_addz(&f->pkg, "pacman");
+    else if (osr_path_lookup("apk", NULL))           str_addz(&f->pkg, "apk");
+    else if (osr_path_lookup("xbps-install", NULL))  str_addz(&f->pkg, "xbps");
+    else if (osr_path_lookup("emerge", NULL))        str_addz(&f->pkg, "portage");
     else if (word_in_list(f, "debian") || word_in_list(f, "ubuntu")) str_addz(&f->pkg, "apt");
     else if (word_in_list(f, "fedora") || word_in_list(f, "rhel"))   str_addz(&f->pkg, "dnf");
     else if (word_in_list(f, "arch"))    str_addz(&f->pkg, "pacman");
@@ -325,11 +351,11 @@ static void detect_pkg(Facts *f) {
 /* Probe by evidence, not by PID 1's name: that works inside containers where
  * PID 1 is a shell. */
 static void detect_init(Facts *f) {
-    if (have_cmd("systemctl", NULL) && dir_exists("/run/systemd/system")) str_addz(&f->init, "systemd");
-    else if (have_cmd("rc-service", NULL))                                str_addz(&f->init, "openrc");
-    else if (have_cmd("sv", NULL) && dir_exists("/var/service"))          str_addz(&f->init, "runit");
-    else if (have_cmd("systemctl", NULL))                                 str_addz(&f->init, "systemd");
-    else if (have_cmd("rc-update", NULL))                                 str_addz(&f->init, "openrc");
+    if (osr_path_lookup("systemctl", NULL) && dir_exists("/run/systemd/system")) str_addz(&f->init, "systemd");
+    else if (osr_path_lookup("rc-service", NULL))                                str_addz(&f->init, "openrc");
+    else if (osr_path_lookup("sv", NULL) && dir_exists("/var/service"))          str_addz(&f->init, "runit");
+    else if (osr_path_lookup("systemctl", NULL))                                 str_addz(&f->init, "systemd");
+    else if (osr_path_lookup("rc-update", NULL))                                 str_addz(&f->init, "openrc");
     else                                                                  str_addz(&f->init, "sysvinit");
 
     /* System config base dir -- varies by distro FAMILY, not per-package (G7). */
@@ -350,8 +376,8 @@ static int dt_soc(Str *out) {
     Str path;
 
     str_init(&path);
-    str_addz(&path, env_str("OSR_DEVICETREE", "/proc/device-tree"));
-    str_addz(&path, "/compatible");
+    str_addzz(&path, env_str("OSR_DEVICETREE", "/proc/device-tree"), "/compatible",
+        (const char *)NULL);
     buf = slurp(str_text(&path), &len);
     str_free(&path);
     if (buf == NULL) return 0;
@@ -428,8 +454,8 @@ static long cpu_max_khz(long cpu) {
     long khz = 0;
 
     str_init(&path);
-    str_addz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"));
-    str_addz(&path, "/cpu");
+    str_addzz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"), "/cpu",
+        (const char *)NULL);
     str_addl(&path, cpu);
     str_addz(&path, "/cpufreq/cpuinfo_max_freq");
     buf = slurp(str_text(&path), &len);
@@ -458,8 +484,7 @@ static void core_groups_render(Str *out, const CoreGroup *g, int n) {
     for (i = 0; i < n; i++) {
         if (i > 0) str_addz(out, " + ");
         str_addl(out, g[i].count);
-        str_addz(out, "x ");
-        str_addz(out, g[i].name);
+        str_addzz(out, "x ", g[i].name, (const char *)NULL);
         /* Per cluster, because the whole point of a hybrid CPU is that the
          * halves do not run at the same speed; one "CPU max MHz" from lscpu
          * would report the fast cluster's for both. */
@@ -511,8 +536,7 @@ static int arm_core_groups(CoreGroup *g) {
 
     info = slurp(env_str("OSR_CPUINFO", "/proc/cpuinfo"), &len);
     if (info == NULL) return 0;
-    str_init(&l);
-    str_init(&val);
+    str_initv(&l, &val, (Str *)NULL);
     while (arm && next_line(info, len, &pos, &line)) {
         const char *name;
         str_reset(&l);
@@ -532,8 +556,7 @@ static int arm_core_groups(CoreGroup *g) {
         if (name == NULL) { arm = 0; break; }
         if (!group_add(g, &n, name, cpu)) { arm = 0; break; }
     }
-    str_free(&val);
-    str_free(&l);
+    str_freev(&val, &l, (Str *)NULL);
     free(info);
     return arm ? n : 0;
 }
@@ -553,8 +576,8 @@ static int cpu_has_l3(long cpu) {
         char *buf;
         size_t len;
         str_init(&path);
-        str_addz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"));
-        str_addz(&path, "/cpu");
+        str_addzz(&path, env_str("OSR_SYSCPU", "/sys/devices/system/cpu"), "/cpu",
+            (const char *)NULL);
         str_addl(&path, cpu);
         str_addz(&path, "/cache/index");
         str_addl(&path, (long)i);
@@ -579,10 +602,8 @@ static void x86_group(CoreGroup *g, int *n, const char *dev, const char *name) {
     const char *p;
 
     str_init(&path);
-    str_addz(&path, env_str("OSR_SYSDEV", "/sys/devices"));
-    str_addc(&path, '/');
-    str_addz(&path, dev);
-    str_addz(&path, "/cpus");
+    str_addzz(&path, env_str("OSR_SYSDEV", "/sys/devices"), "/", dev, "/cpus",
+        (const char *)NULL);
     buf = slurp(str_text(&path), &len);
     str_free(&path);
     if (buf == NULL) return;
@@ -681,7 +702,7 @@ static void detect_cpu(Facts *f) {
 
     str_reset(&f->cpu_arch);
     str_addz(&f->cpu_arch, str_text(&f->arch));
-    if (!have_cmd("lscpu", NULL)) {
+    if (!osr_path_lookup("lscpu", NULL)) {
         cpu_core_types(f);
         cpu_soc_name(f);
         if (f->cpu_cores == 0) f->cpu_cores = f->cpu_threads;
@@ -734,8 +755,7 @@ static char *dmi17(const char *cmd_prefix) {
     Str cmd;
     char *out;
     str_init(&cmd);
-    str_addz(&cmd, cmd_prefix);
-    str_addz(&cmd, " -t 17");
+    str_addzz(&cmd, cmd_prefix, " -t 17", (const char *)NULL);
     out = run_capture(str_text(&cmd));
     str_free(&cmd);
     if (out == NULL) return NULL;
@@ -756,8 +776,7 @@ static void ram_edac(Facts *f) {
     size_t i;
 
     str_init(&p);
-    str_addz(&p, root);
-    str_addz(&p, "/mc*/dimm*/dimm_mem_type");
+    str_addzz(&p, root, "/mc*/dimm*/dimm_mem_type", (const char *)NULL);
     if (glob(str_text(&p), 0, NULL, &g) == 0) {
         for (i = 0; i < g.gl_pathc; i++) {
             char *buf;
@@ -775,8 +794,7 @@ static void ram_edac(Facts *f) {
     str_free(&p);
     if (f->ram_sticks == 0) return;
     str_init(&p);
-    str_addz(&p, root);
-    str_addz(&p, "/mc*");
+    str_addzz(&p, root, "/mc*", (const char *)NULL);
     if (glob(str_text(&p), 0, NULL, &g) == 0) {
         f->ram_channels = (long)g.gl_pathc;
         globfree(&g);
@@ -811,8 +829,7 @@ static void ram_soc(Facts *f) {
             if (strcmp(table[i], str_text(&soc)) != 0) continue;
             if (f->ram_type.len == 0) str_addz(&f->ram_type, table[i + 1]);
             if (f->ram_speed.len == 0) {
-                str_addz(&f->ram_speed, table[i + 2]);
-                str_addz(&f->ram_speed, "MT/s");
+                str_addzz(&f->ram_speed, table[i + 2], "MT/s", (const char *)NULL);
             }
             break;
         }
@@ -850,16 +867,15 @@ static void detect_ram(Facts *f) {
     }
 
     str_init(&dmidec);
-    if (have_cmd("dmidecode", &dmidec)) {
+    if (osr_path_lookup("dmidecode", &dmidec)) {
         dmi = dmi17(str_text(&dmidec));
         /* Unprivileged: retry through a cached sudo ticket (-n never prompts).
          * Pass the resolved path: sudo's secure_path would otherwise pick a
          * different dmidecode than the one PATH selected. */
-        if (dmi == NULL && have_cmd("sudo", NULL)) {
+        if (dmi == NULL && osr_path_lookup("sudo", NULL)) {
             Str via;
             str_init(&via);
-            str_addz(&via, "sudo -n ");
-            str_addz(&via, str_text(&dmidec));
+            str_addzz(&via, "sudo -n ", str_text(&dmidec), (const char *)NULL);
             dmi = dmi17(str_text(&via));
             str_free(&via);
         }
@@ -878,8 +894,7 @@ static void detect_ram(Facts *f) {
         Str channels;
         Str field;
 
-        str_init(&channels);
-        str_init(&field);
+        str_initv(&channels, &field, (Str *)NULL);
         while (next_line(dmi, dlen, &pos, &line)) {
             Str l;
             const char *t;
@@ -949,8 +964,7 @@ static void detect_ram(Facts *f) {
             str_addl(&f->ram_speed, speed);
             str_addz(&f->ram_speed, "MT/s");
         }
-        str_free(&channels);
-        str_free(&field);
+        str_freev(&channels, &field, (Str *)NULL);
         free(dmi);
     }
 
@@ -969,9 +983,7 @@ static void each_vendor_id(const char *dir, const char *pattern,
     size_t i;
 
     str_init(&p);
-    str_addz(&p, dir);
-    str_addc(&p, '/');
-    str_addz(&p, pattern);
+    str_addzz(&p, dir, "/", pattern, (const char *)NULL);
     if (glob(str_text(&p), GLOB_NOCHECK, NULL, &g) == 0) {
         for (i = 0; i < g.gl_pathc; i++) {
             char *buf;
@@ -1002,8 +1014,7 @@ static void gpu_from_sysfs(const char *id, void *ctx) {
     /* sysfs knows the vendor id, never the codename -- empty chip, which every
      * family classifier reads as "unknown" -> current-gen driver. */
     if (f->gpu_devices.len > 0) str_addc(&f->gpu_devices, '\n');
-    str_addz(&f->gpu_devices, n);
-    str_addc(&f->gpu_devices, '|');
+    str_addzz(&f->gpu_devices, n, "|", (const char *)NULL);
     f->gpu_count++;
 }
 
@@ -1026,12 +1037,8 @@ static void gpu_from_dt(const char *compat, void *ctx) {
         str_reset(&f->gpu_devices);
     }
     uniq_add(&f->gpu_vendor, tag);
-    str_addz(&f->gpu_model, tag);
-    str_addc(&f->gpu_model, ' ');
-    str_addz(&f->gpu_model, chip);
-    str_addz(&f->gpu_devices, tag);
-    str_addc(&f->gpu_devices, '|');
-    str_addz(&f->gpu_devices, chip);
+    str_addzz(&f->gpu_model, tag, " ", chip, (const char *)NULL);
+    str_addzz(&f->gpu_devices, tag, "|", chip, (const char *)NULL);
     f->gpu_count = 1;
 }
 
@@ -1048,7 +1055,7 @@ static void npu_from_sysfs(const char *id, void *ctx) {
 
 /* lspci_lines -- `lspci -mm | grep -E "<classes>"`, or NULL. */
 static char *lspci_lines(void) {
-    if (!have_cmd("lspci", NULL)) return NULL;
+    if (!osr_path_lookup("lspci", NULL)) return NULL;
     return run_capture("lspci -mm");
 }
 
@@ -1078,16 +1085,13 @@ static void detect_gpu(Facts *f) {
                 str_free(&l);
                 continue;
             }
-            str_init(&vendor);
-            str_init(&dev);
+            str_initv(&vendor, &dev, (Str *)NULL);
             quoted_field(&vendor, str_text(&l), 4);
             quoted_field(&dev, str_text(&l), 6);
             {
                 Str both;
                 str_init(&both);
-                str_addz(&both, str_text(&vendor));
-                str_addc(&both, ' ');
-                str_addz(&both, str_text(&dev));
+                str_addzz(&both, str_text(&vendor), " ", str_text(&dev), (const char *)NULL);
                 tag = norm_gpu(str_text(&both));
                 str_free(&both);
             }
@@ -1107,9 +1111,7 @@ static void detect_gpu(Facts *f) {
             if (strncmp(str_text(&model), tag, strlen(tag)) != 0) {
                 Str prefixed;
                 str_init(&prefixed);
-                str_addz(&prefixed, tag);
-                str_addc(&prefixed, ' ');
-                str_addz(&prefixed, str_text(&model));
+                str_addzz(&prefixed, tag, " ", str_text(&model), (const char *)NULL);
                 str_free(&model);
                 model = prefixed;
             }
@@ -1125,16 +1127,11 @@ static void detect_gpu(Facts *f) {
                 if (sp != NULL) str_add(&chip, str_text(&dev), (size_t)(sp - str_text(&dev)));
                 else str_addz(&chip, str_text(&dev));
                 if (f->gpu_devices.len > 0) str_addc(&f->gpu_devices, '\n');
-                str_addz(&f->gpu_devices, tag);
-                str_addc(&f->gpu_devices, '|');
-                str_addz(&f->gpu_devices, str_text(&chip));
+                str_addzz(&f->gpu_devices, tag, "|", str_text(&chip), (const char *)NULL);
                 str_free(&chip);
             }
             f->gpu_count++;
-            str_free(&model);
-            str_free(&vendor);
-            str_free(&dev);
-            str_free(&l);
+            str_freev(&model, &vendor, &dev, &l, (Str *)NULL);
         }
         free(out);
     }
@@ -1168,20 +1165,14 @@ static void detect_npu(Facts *f) {
                 str_init(&l);
                 str_add(&l, line.start, line.len);
                 if (!contains(str_text(&l), "Processing accelerators")) { str_free(&l); continue; }
-                str_init(&vendor);
-                str_init(&dev);
+                str_initv(&vendor, &dev, (Str *)NULL);
                 quoted_field(&vendor, str_text(&l), 4);
                 quoted_field(&dev, str_text(&l), 6);
                 str_init(&both);
-                str_addz(&both, str_text(&vendor));
-                str_addc(&both, ' ');
-                str_addz(&both, str_text(&dev));
+                str_addzz(&both, str_text(&vendor), " ", str_text(&dev), (const char *)NULL);
                 uniq_add(&f->npu_vendor, norm_gpu(str_text(&both)));
                 f->npu_count++;
-                str_free(&both);
-                str_free(&vendor);
-                str_free(&dev);
-                str_free(&l);
+                str_freev(&both, &vendor, &dev, &l, (Str *)NULL);
             }
             free(out);
         }
@@ -1191,7 +1182,7 @@ static void detect_npu(Facts *f) {
 static void detect_virt(Facts *f) {
     str_reset(&f->virt);
     str_addz(&f->virt, "none");
-    if (have_cmd("systemd-detect-virt", NULL)) {
+    if (osr_path_lookup("systemd-detect-virt", NULL)) {
         char *v = run_capture("systemd-detect-virt");
         if (v != NULL) {
             Str t;
@@ -1206,7 +1197,7 @@ static void detect_virt(Facts *f) {
             free(v);
         }
     }
-    if (strcmp(str_text(&f->virt), "none") == 0 && have_cmd("lscpu", NULL)) {
+    if (strcmp(str_text(&f->virt), "none") == 0 && osr_path_lookup("lscpu", NULL)) {
         char *cpu = run_capture("lscpu");
         if (cpu != NULL) {
             /* the sh grep was case-insensitive over four patterns, then a case
@@ -1232,64 +1223,6 @@ static void detect_virt(Facts *f) {
  * prevent. Sink itself is declared above the split, since both bodies publish
  * through it.
  */
-static void sh_sink(void *ctx, const char *name, const char *value) {
-    sh_assign((Str *)ctx, name, value);
-}
-static void env_sink(void *ctx, const char *name, const char *value) {
-    (void)ctx;
-    osr_setenv(name, value);
-}
-
-static void emit_num(Sink put, void *ctx, const char *name, long v) {
-    Str s;
-    str_init(&s);
-    str_addl(&s, v);
-    put(ctx, name, str_text(&s));
-    str_free(&s);
-}
-
-static void emit_cpu(Sink put, void *ctx, const Facts *f) {
-    put(ctx, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
-    put(ctx, "OSR_CPU_MODEL", str_text(&f->cpu_model));
-    put(ctx, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
-    emit_num(put, ctx, "OSR_CPU_CORES", f->cpu_cores);
-    emit_num(put, ctx, "OSR_CPU_THREADS", f->cpu_threads);
-}
-
-static void emit_ram(Sink put, void *ctx, const Facts *f) {
-    put(ctx, "OSR_RAM_TOTAL", str_text(&f->ram_total));
-    put(ctx, "OSR_RAM_TYPE", str_text(&f->ram_type));
-    put(ctx, "OSR_RAM_SPEED", str_text(&f->ram_speed));
-    emit_num(put, ctx, "OSR_RAM_STICKS", f->ram_sticks);
-    emit_num(put, ctx, "OSR_RAM_CHANNELS", f->ram_channels);
-}
-
-static void emit_gpu(Sink put, void *ctx, const Facts *f) {
-    put(ctx, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
-    put(ctx, "OSR_GPU_MODEL", str_text(&f->gpu_model));
-    emit_num(put, ctx, "OSR_GPU_COUNT", f->gpu_count);
-    put(ctx, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
-}
-
-static void emit_npu(Sink put, void *ctx, const Facts *f) {
-    put(ctx, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
-    emit_num(put, ctx, "OSR_NPU_COUNT", f->npu_count);
-}
-
-/* emit_release -- the ten os-release/arch facets, which `all` alone publishes. */
-static void emit_release(Sink put, void *ctx, const Facts *f) {
-    put(ctx, "OSR_DISTRO", str_text(&f->distro));
-    put(ctx, "OSR_PKG", str_text(&f->pkg));
-    put(ctx, "OSR_INIT", str_text(&f->init));
-    put(ctx, "OSR_CODENAME", str_text(&f->codename));
-    put(ctx, "OSR_VERSION_ID", str_text(&f->version_id));
-    put(ctx, "OSR_VERSION", str_text(&f->version));
-    put(ctx, "OSR_ID_LIKE", str_text(&f->id_like));
-    put(ctx, "OSR_ARCH", str_text(&f->arch));
-    put(ctx, "OSR_ARCH_DEB", str_text(&f->arch_deb));
-    put(ctx, "OSR_ETC_DEFAULT", str_text(&f->etc_default));
-}
-
 /* detect_all -- every probe, in the order `osr detect all` runs them, published
  * through `put`. Returns 0 when no package manager was found, which is the one
  * line osr_detect printed. */
@@ -1558,60 +1491,25 @@ static void detect_ram(Facts *f) {
  * gives on a machine it cannot classify. */
 static void detect_virt(Facts *f) { (void)f; }
 
-static void sh_sink(void *ctx, const char *name, const char *value) {
-    sh_assign((Str *)ctx, name, value);
-}
-static void env_sink(void *ctx, const char *name, const char *value) {
-    (void)ctx;
-    osr_setenv(name, value);
-}
-
-static void emit_num(Sink put, void *ctx, const char *name, long v) {
-    Str s;
-    str_init(&s);
-    str_addl(&s, v);
-    put(ctx, name, str_text(&s));
-    str_free(&s);
-}
-
-/* detect_all -- every probe, published through `put`. The same variable set
- * the POSIX branch publishes, including the ones this side leaves empty: a
- * consumer must see the name whatever the answer, or "unset" and "no such
- * device" become the same thing. */
+/* detect_all -- every probe, published through the shared emitters above. The
+ * same variable set the POSIX branch publishes, including the ones this side
+ * leaves empty: a consumer must see the name whatever the answer, or "unset"
+ * and "no such device" become the same thing. That is exactly why the emitters
+ * are shared rather than retyped here -- the name set IS the contract. */
 static int detect_all(Sink put, void *ctx, Facts *f) {
     detect_release(f);
     detect_arch(f);
-    put(ctx, "OSR_DISTRO", str_text(&f->distro));
-    put(ctx, "OSR_PKG", str_text(&f->pkg));
-    put(ctx, "OSR_INIT", str_text(&f->init));
-    put(ctx, "OSR_CODENAME", str_text(&f->codename));
-    put(ctx, "OSR_VERSION_ID", str_text(&f->version_id));
-    put(ctx, "OSR_VERSION", str_text(&f->version));
-    put(ctx, "OSR_ID_LIKE", str_text(&f->id_like));
-    put(ctx, "OSR_ARCH", str_text(&f->arch));
-    put(ctx, "OSR_ARCH_DEB", str_text(&f->arch_deb));
-    put(ctx, "OSR_ETC_DEFAULT", str_text(&f->etc_default));
+    emit_release(put, ctx, f);
 
     detect_cpu(f);
-    put(ctx, "OSR_CPU_VENDOR", str_text(&f->cpu_vendor));
-    put(ctx, "OSR_CPU_MODEL", str_text(&f->cpu_model));
-    put(ctx, "OSR_CPU_ARCH", str_text(&f->cpu_arch));
-    emit_num(put, ctx, "OSR_CPU_CORES", f->cpu_cores);
-    emit_num(put, ctx, "OSR_CPU_THREADS", f->cpu_threads);
+    emit_cpu(put, ctx, f);
 
     detect_ram(f);
-    put(ctx, "OSR_RAM_TOTAL", str_text(&f->ram_total));
-    put(ctx, "OSR_RAM_TYPE", str_text(&f->ram_type));
-    put(ctx, "OSR_RAM_SPEED", str_text(&f->ram_speed));
-    emit_num(put, ctx, "OSR_RAM_STICKS", f->ram_sticks);
-    emit_num(put, ctx, "OSR_RAM_CHANNELS", f->ram_channels);
+    emit_ram(put, ctx, f);
 
-    put(ctx, "OSR_GPU_VENDOR", str_text(&f->gpu_vendor));
-    put(ctx, "OSR_GPU_MODEL", str_text(&f->gpu_model));
-    emit_num(put, ctx, "OSR_GPU_COUNT", f->gpu_count);
-    put(ctx, "OSR_GPU_DEVICES", str_text(&f->gpu_devices));
-    put(ctx, "OSR_NPU_VENDOR", str_text(&f->npu_vendor));
-    emit_num(put, ctx, "OSR_NPU_COUNT", f->npu_count);
+    /* No GPU or NPU probe on this side; the names are published empty. */
+    emit_gpu(put, ctx, f);
+    emit_npu(put, ctx, f);
 
     detect_virt(f);
     put(ctx, "OSR_VIRT", str_text(&f->virt));

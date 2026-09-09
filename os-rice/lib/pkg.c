@@ -220,8 +220,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
     int j;
     int done = 0;
 
-    str_init(&key);
-    str_init(&map);
+    str_initv(&key, &map, (Str *)NULL);
 
     /* The map paths, rebuilt per probe: <manager>.map, then any.map.
      *
@@ -261,9 +260,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
                 while (i > 0 && version[i - 1] != '.') i--;
                 if (i == 0) break;                   /* no dot left to drop */
                 plen = i - 1;
-                str_reset(&key);
-                str_addz(&key, name);
-                str_addc(&key, '@');
+                str_setz(&key, name, "@", (const char *)NULL);
                 str_add(&key, version, plen);
                 for (j = 0; j < OSR_MAP_FILES; j++) {
                     OSR_MAP_PATH(j);
@@ -295,8 +292,7 @@ void osr_pkgmap_resolve(Str *out, const char *name) {
     #undef OSR_MAP_PATH
     #undef OSR_MAP_FILES
 
-    str_free(&key);
-    str_free(&map);
+    str_freev(&key, &map, (Str *)NULL);
     if (!done) str_addz(out, name);          /* not listed -> unchanged */
 }
 
@@ -489,9 +485,7 @@ static int native_held(const char *pkg) {
         Str re;
         char *argv[7];
         str_init(&re);
-        str_addz(&re, "^[[:space:]]*exclude=.*\\b");
-        str_addz(&re, pkg);
-        str_addz(&re, "\\b");
+        str_addzz(&re, "^[[:space:]]*exclude=.*\\b", pkg, "\\b", (const char *)NULL);
         argv[0] = (char *)"grep"; argv[1] = (char *)"-rl"; argv[2] = (char *)"-E";
         argv[3] = re.p; argv[4] = (char *)"/etc/dnf/dnf.conf";
         argv[5] = (char *)"/etc/yum.repos.d"; argv[6] = NULL;
@@ -570,37 +564,28 @@ static int list_uri(Str *out, const char *path) {
     return found;
 }
 
-/* prune_one -- the body of the loop below, for a single bootstrap list. */
-static void prune_one(const char *ours) {
-    Str uri, dir, parent, hits;
+/* apt_uri_owners -- every apt list file under `path`'s own directory (and the
+ * sources.list beside it) that mentions this URI, one per line.
+ *
+ * Substring match on purpose: the vendor writes the URI with a trailing slash
+ * and a deb822 .sources file puts it on a URIs: line -- both still CONTAIN
+ * ours. In production the two search paths are /etc/apt/sources.list.d and
+ * /etc/apt/sources.list, exactly what lib/pkg.sh named; in a sandbox they are
+ * wherever the list under test lives. */
+static int apt_uri_owners(Str *out, const char *uri, const char *beside) {
+    Str dir, parent;
     char *argv[6];
-    size_t pos = 0;
-    Line line;
-    int other = 0;
+    const char *slash = strrchr(beside, '/');
+    const char *up;
 
-    str_init(&uri);
-    if (!list_uri(&uri, ours)) { str_free(&uri); return; }
+    if (slash == NULL) return 0;
+    str_initv(&dir, &parent, (Str *)NULL);
+    str_add(&dir, beside, (size_t)(slash - beside));
+    up = strrchr(str_text(&dir), '/');
+    str_add(&parent, str_text(&dir), up ? (size_t)(up - str_text(&dir)) : dir.len);
+    str_addz(&parent, "/sources.list");
 
-    /* The directories to search are derived from the list's own path -- in
-     * production /etc/apt/sources.list.d and /etc/apt/sources.list, exactly
-     * what lib/pkg.sh names, and in a sandbox whatever the list is in. */
-    str_init(&dir);
-    str_init(&parent);
-    {
-        const char *slash = strrchr(ours, '/');
-        const char *up;
-        if (slash == NULL) { str_free(&uri); str_free(&dir); str_free(&parent); return; }
-        str_add(&dir, ours, (size_t)(slash - ours));
-        up = strrchr(str_text(&dir), '/');
-        str_add(&parent, str_text(&dir), up ? (size_t)(up - str_text(&dir)) : dir.len);
-        str_addz(&parent, "/sources.list");
-    }
-
-    /* Substring match on purpose: the vendor writes the URI with a trailing
-     * slash and a deb822 .sources file puts it on a URIs: line -- both still
-     * CONTAIN ours. */
-    str_init(&hits);
-    argv[0] = (char *)"grep"; argv[1] = (char *)"-rlF"; argv[2] = uri.p;
+    argv[0] = (char *)"grep"; argv[1] = (char *)"-rlF"; argv[2] = (char *)uri;
     argv[3] = parent.p; argv[4] = dir.p; argv[5] = NULL;
     /* The exit status is deliberately ignored, and this is the one place in
      * the file where that is not laziness. grep is handed two paths, and on a
@@ -610,9 +595,40 @@ static void prune_one(const char *ours) {
      * it matched in the directory, so gating on the status turns the repair
      * off on exactly the apt-3.0 boxes it exists to protect. lib/pkg.sh ran
      * this as a pipeline into `head`, so it never saw grep's status at all;
-     * what matters is the lines, and they are checked below. */
-    (void)osr_run_capture(argv, &hits);
-    {
+     * what matters is the lines, and the caller checks those. */
+    (void)osr_run_capture(argv, out);
+    str_freev(&parent, &dir, (Str *)NULL);
+    return 1;
+}
+
+int osr_apt_repo_configured(const char *uri, const char *beside) {
+    Str hits;
+    size_t pos = 0;
+    Line line;
+    int found = 0;
+
+    if (strcmp(osr_mod_pkg(), "apt") != 0) return 0;
+    str_init(&hits);
+    if (apt_uri_owners(&hits, uri, beside)) {
+        while (!found && next_line(str_text(&hits), hits.len, &pos, &line))
+            if (line.len > 0) found = 1;
+    }
+    str_free(&hits);
+    return found;
+}
+
+/* prune_one -- the body of the loop below, for a single bootstrap list. */
+static void prune_one(const char *ours) {
+    Str uri, hits;
+    size_t pos = 0;
+    Line line;
+    int other = 0;
+
+    str_init(&uri);
+    if (!list_uri(&uri, ours)) { str_free(&uri); return; }
+
+    str_init(&hits);
+    if (apt_uri_owners(&hits, str_text(&uri), ours)) {
         while (!other && next_line(str_text(&hits), hits.len, &pos, &line)) {
             if (line.len == 0) continue;
             if (line.len == strlen(ours) && memcmp(line.start, ours, line.len) == 0) continue;
@@ -627,22 +643,9 @@ static void prune_one(const char *ours) {
         rm[0] = (char *)"rm"; rm[1] = (char *)"-f"; rm[2] = (char *)ours; rm[3] = NULL;
         osr_run_root(rm);
     }
-    str_free(&hits);
-    str_free(&parent);
-    str_free(&dir);
-    str_free(&uri);
+    str_freev(&hits, &uri, (Str *)NULL);
 }
 
-/* apt_prune_bootstrap_lists -- drop one of our bootstrap lists once the vendor
- * package describes the same repo itself, BEFORE any apt call.
- *
- * Not cosmetic: our list pins a signed-by pointing at our .asc under
- * /etc/apt/keyrings/, and the vendor's postinst writes its own list for the
- * same URI with signed-by pointing at a .gpg under /usr/share/keyrings/ --
- * and apt 3.0 (Debian 13+) treats one
- * repo described twice with different signed-by values as fatal, which breaks
- * every later apt call on the box, not just ours.
- */
 void osr_apt_prune_bootstrap_lists(void) {
     const char *lists = env_str("OSR_APT_BOOTSTRAP_LISTS", APT_BOOTSTRAP_LISTS_DEFAULT);
     const char *p = lists;
@@ -851,10 +854,7 @@ static int user_test_x(const char *path) {
 }
 
 static void cargo_path(Str *out, const char *leaf) {
-    str_reset(out);
-    str_addz(out, osr_mod_home());
-    str_addz(out, "/.cargo/bin/");
-    str_addz(out, leaf);
+    str_setz(out, osr_mod_home(), "/.cargo/bin/", leaf, (const char *)NULL);
 }
 
 int osr_pkg_cargo(const char *name, const char *crate) {
@@ -863,7 +863,7 @@ int osr_pkg_cargo(const char *name, const char *crate) {
     int ok = 0;
     int rc;
 
-    str_init(&bin); str_init(&cargo); str_init(&binstall);
+    str_initv(&bin, &cargo, &binstall, (Str *)NULL);
     cargo_path(&bin, name);
     cargo_path(&cargo, "cargo");
     cargo_path(&binstall, "cargo-binstall");
@@ -894,7 +894,7 @@ int osr_pkg_cargo(const char *name, const char *crate) {
     if (rc != 0) osr_die("cargo install failed for %s (exit %d)", name, rc);
     ok = 1;
 done:
-    str_free(&bin); str_free(&cargo); str_free(&binstall);
+    str_freev(&bin, &cargo, &binstall, (Str *)NULL);
     return ok;
 }
 
@@ -1039,7 +1039,7 @@ static void xbps_clear_conflicts(char *const todo[], size_t todo_n) {
         if (!has_sub(line.start, line.len, "with installed pkg")) continue;
 
         /* CONFLICT: <new> with installed pkg <installed> (matched by <pattern>) */
-        str_init(&new_pkg); str_init(&old_pkg);
+        str_initv(&new_pkg, &old_pkg, (Str *)NULL);
         field(&new_pkg, line.start, line.len, 2);
         field(&old_pkg, line.start, line.len, 6);
         if (old_pkg.len == 0) { str_free(&new_pkg); str_free(&old_pkg); continue; }
@@ -1051,13 +1051,13 @@ static void xbps_clear_conflicts(char *const todo[], size_t todo_n) {
         if (!osr_run_capture(q, &name)) str_reset(&name);
         str_trim_trailing(&name, '\n');
         if (name.len == 0) {
-            str_free(&name); str_free(&new_pkg); str_free(&old_pkg);
+            str_freev(&name, &new_pkg, &old_pkg, (Str *)NULL);
             continue;
         }
         if (native_held(str_text(&name))) {
             osr_warnf("%s is held - leaving it, %s cannot install",
                       str_text(&old_pkg), str_text(&new_pkg));
-            str_free(&name); str_free(&new_pkg); str_free(&old_pkg);
+            str_freev(&name, &new_pkg, &old_pkg, (Str *)NULL);
             continue;
         }
         str_init(&revdeps);
@@ -1073,8 +1073,7 @@ static void xbps_clear_conflicts(char *const todo[], size_t todo_n) {
             if (n > 0) {
                 osr_warnf("%s conflicts with %s but %ld package(s) need it - leaving it",
                           str_text(&old_pkg), str_text(&new_pkg), n);
-                str_free(&revdeps); str_free(&name);
-                str_free(&new_pkg); str_free(&old_pkg);
+                str_freev(&revdeps, &name, &new_pkg, &old_pkg, (Str *)NULL);
                 continue;
             }
         }
@@ -1089,7 +1088,7 @@ static void xbps_clear_conflicts(char *const todo[], size_t todo_n) {
                           str_text(&name), str_text(&new_pkg));
             }
         }
-        str_free(&name); str_free(&new_pkg); str_free(&old_pkg);
+        str_freev(&name, &new_pkg, &old_pkg, (Str *)NULL);
     }
     str_free(&out);
 }
@@ -1932,6 +1931,7 @@ int osr_pkg_cargo(const char *name, const char *crate) {
  * both systems. */
 const char *osr_pkg_aur_helper(void) { return ""; }
 void osr_apt_prune_bootstrap_lists(void) { }
+int osr_apt_repo_configured(const char *uri, const char *beside) { (void)uri; (void)beside; return 0; }
 
 /* osr_pkg_needs_admin -- would installing these names prompt for elevation?
  * Asked once, before any work, so the UAC prompt happens up front instead of

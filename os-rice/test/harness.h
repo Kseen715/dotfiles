@@ -125,6 +125,17 @@ void osr_sb_free(OsrSandbox *sb);
 /* osr_sb_env -- set or replace one variable. The value is copied. */
 void osr_sb_env(OsrSandbox *sb, const char *name, const char *value);
 
+/* osr_sb_at -- "<root>/<rel>", valid until the fourth osr_sb_at after it.
+ * For the paths handed straight to a stub or an assertion; hold nothing. */
+const char *osr_sb_at(OsrSandbox *sb, const char *rel);
+
+/* osr_sb_slurp -- contents of <root>/<rel>, "" when absent. Caller frees. */
+char *osr_sb_slurp(OsrSandbox *sb, const char *rel);
+
+/* osr_sb_env_ubuntu / osr_sb_env_arch -- the baseline distro answers. */
+void osr_sb_env_ubuntu(OsrSandbox *sb);
+void osr_sb_env_arch(OsrSandbox *sb);
+
 /* osr_sb_stub -- a fake tool that logs how it was called and exits with
  * `code`. Replaces any stub of that name already in place, so a scenario can
  * flip "dpkg says installed" to "dpkg says absent" between runs. */
@@ -245,6 +256,10 @@ void osr_assert_link(OsrSandbox *sb, const char *rel, const char *target,
                      const char *label);
 /* osr_assert_absent -- nothing exists at `rel`. */
 void osr_assert_absent(OsrSandbox *sb, const char *rel, const char *label);
+
+/* osr_assert_file -- <root>/<rel> exists and contains `needle`. */
+void osr_assert_file(OsrSandbox *sb, const char *rel, const char *needle,
+                     const char *label);
 
 void osr_assert_eq(const char *expected, const char *actual, const char *label);
 void osr_assert_true(int cond, const char *label);

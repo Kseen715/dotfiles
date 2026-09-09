@@ -48,8 +48,7 @@ static void backup_once(const char *file) {
     char *argv[4];
 
     str_init(&bak);
-    str_addz(&bak, file);
-    str_addz(&bak, ".pre-migrate");
+    str_addzz(&bak, file, ".pre-migrate", (const char *)NULL);
     if (!file_exists(str_text(&bak))) {
         argv[0] = (char *)"cp";
         argv[1] = (char *)file;
@@ -82,8 +81,7 @@ int osr_migrate_append(const char *file, const char *detect_ere,
          * wedge this process against a child it has not spawned yet. The
          * leading newline is the `printf '\n'` ahead of the cat. */
         str_init(&payload);
-        str_addc(&payload, '\n');
-        str_addz(&payload, text);
+        str_addzz(&payload, "\n", text, (const char *)NULL);
         fd = osr_scratch_fd("mig-app", str_text(&payload), payload.len);
         str_free(&payload);
         if (fd < 0) return 1;
@@ -138,7 +136,7 @@ int osr_migrate_replace(const char *file, const char *label, const char *old,
     buf = slurp(file, &len);
     if (buf == NULL) return 0;
 
-    str_init(&body); str_init(&needle); str_init(&repl); str_init(&out);
+    str_initv(&body, &needle, &repl, &out, (Str *)NULL);
     norm(&body, buf, len);
     norm(&needle, old, strlen(old));
     norm(&repl, new_text, strlen(new_text));
@@ -184,7 +182,7 @@ int osr_migrate_replace(const char *file, const char *label, const char *old,
         str_free(&tmp);
     }
 
-    str_free(&body); str_free(&needle); str_free(&repl); str_free(&out);
+    str_freev(&body, &needle, &repl, &out, (Str *)NULL);
     return ok;
 }
 
@@ -197,9 +195,7 @@ int osr_migrate_stale(const char *file, const char *detect_ere,
 
     /* '^[[:space:]]*[^#[:space:]].*(<ere>)' -- code lines only. */
     str_init(&pat);
-    str_addz(&pat, "^[[:space:]]*[^#[:space:]].*(");
-    str_addz(&pat, detect_ere);
-    str_addz(&pat, ")");
+    str_addzz(&pat, "^[[:space:]]*[^#[:space:]].*(", detect_ere, ")", (const char *)NULL);
     hit = file_matches(file, str_text(&pat));
     str_free(&pat);
 

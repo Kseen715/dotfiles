@@ -32,19 +32,9 @@
 
 static OsrSandbox sb;
 
-static char *read_rel(const char *rel) {
-    HStr path;
-    char *got;
-    hs_init(&path);
-    hs_path(&path, hs_text(&sb.root), rel);
-    got = h_slurp(hs_text(&path));
-    hs_free(&path);
-    return got;
-}
+static char *read_rel(const char *rel) { return osr_sb_slurp(&sb, rel); }
 static void holds(const char *rel, const char *needle, const char *label) {
-    char *got = read_rel(rel);
-    osr_assert_true(strstr(got, needle) != NULL, label);
-    free(got);
+    osr_assert_file(&sb, rel, needle, label);
 }
 static void lacks(const char *rel, const char *needle, const char *label) {
     char *got = read_rel(rel);

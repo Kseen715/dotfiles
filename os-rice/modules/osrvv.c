@@ -47,8 +47,7 @@ static int osrvv_dir(Str *out) {
     str_addz(out, dir);
     return 1;
 #else
-    str_addz(out, osr_mod_home());
-    str_addz(out, "/.local/bin");
+    str_addzz(out, osr_mod_home(), "/.local/bin", (const char *)NULL);
     return 1;
 #endif
 }
@@ -63,11 +62,10 @@ int osrm_osrvv(void) {
 
     if (osr_theme_only()) return osr_theme_only_skip("osrvv");
 
-    str_init(&src); str_init(&bin); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/osrvv/osrvv.c");
+    str_initv(&src, &bin, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/osrvv/osrvv.c", (const char *)NULL);
     if (!osrvv_dir(&bin)) { ok = 0; goto out; }
-    str_addz(&dst, str_text(&bin));
-    str_addz(&dst, "/osrvv");
+    str_addzz(&dst, str_text(&bin), "/osrvv", (const char *)NULL);
 #ifdef _WIN32
     str_addz(&dst, ".exe");
 #endif
@@ -107,6 +105,6 @@ int osrm_osrvv(void) {
 #endif
 
 out:
-    str_free(&src); str_free(&bin); str_free(&dst);
+    str_freev(&src, &bin, &dst, (Str *)NULL);
     return ok;
 }

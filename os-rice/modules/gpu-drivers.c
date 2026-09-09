@@ -266,7 +266,7 @@ int osrm_gpu_drivers(void) {
         while (*p != '\0' && !is_space(*p)) p++;
         if (p == start) continue;
 
-        str_init(&vendor); str_init(&chip); str_init(&desc);
+        str_initv(&vendor, &chip, &desc, (Str *)NULL);
         str_add(&vendor, start, (size_t)(p - start));
         (void)osr_gpu_chip(&chip, str_text(&vendor));
 
@@ -275,13 +275,12 @@ int osrm_gpu_drivers(void) {
             osr_infof("NVIDIA chip='%s' family=%s",
                       chip.len > 0 ? str_text(&chip) : "unknown", fam);
             if (in(fam, nv_current_fams)) {
-                str_addz(&desc, "Installing NVIDIA drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing NVIDIA drivers (", fam, ")", (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), nv_current) && ok;
             } else if (in(fam, nv_570_fams)) {
                 /* Dropped by the 580 branch; 570xx is their last driver. */
-                str_addz(&desc, "Installing NVIDIA 570xx drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing NVIDIA 570xx drivers (", fam, ")",
+                    (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), nv_570) && ok;
             } else if (strcmp(fam, "Kepler") == 0) {
                 ok = osr_pkg_install_step("Installing NVIDIA 470xx drivers (Kepler)",
@@ -299,8 +298,7 @@ int osrm_gpu_drivers(void) {
                 /* Curie and older: no proprietary branch survives, nouveau is it. */
                 osr_warnf("%s (%s) has no maintained NVIDIA driver - using nouveau, "
                           "no Vulkan/OpenCL", fam, str_text(&chip));
-                str_addz(&desc, "Installing nouveau ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing nouveau (", fam, ")", (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), nouveau) && ok;
             }
         } else if (strcmp(str_text(&vendor), "AMD") == 0) {
@@ -308,33 +306,30 @@ int osrm_gpu_drivers(void) {
             osr_infof("AMD chip='%s' family=%s",
                       chip.len > 0 ? str_text(&chip) : "unknown", fam);
             if (in(fam, amd_gcn3_fams)) {
-                str_addz(&desc, "Installing AMD drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing AMD drivers (", fam, ")", (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), amd_gcn3) && ok;
             } else if (in(fam, amd_gcn12_fams)) {
                 /* GCN 1/2 boot on the radeon DDX by default (amdgpu needs
                  * amdgpu.si_support=1 / cik_support=1 + radeon.*_support=0);
                  * RADV works on either KMS driver, so ship both DDX paths. */
-                str_addz(&desc, "Installing AMD GCN1/2 drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing AMD GCN1/2 drivers (", fam, ")",
+                    (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), amd_gcn12) && ok;
             } else if (in(fam, amd_tera_fams)) {
                 /* TeraScale: r600 gallium, no Vulkan (RADV is GCN+). */
                 osr_warnf("%s is pre-GCN - no Vulkan, OpenCL is unsupported", fam);
-                str_addz(&desc, "Installing AMD TeraScale drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing AMD TeraScale drivers (", fam, ")",
+                    (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), amd_terascale) && ok;
             } else if (in(fam, amd_r300_fams)) {
                 osr_warnf("%s is pre-GCN - no Vulkan, OpenCL is unsupported", fam);
-                str_addz(&desc, "Installing ATI r300 drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing ATI r300 drivers (", fam, ")", (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), amd_r300) && ok;
             } else if (strcmp(fam, "R100") == 0) {
                 /* Fixed-function era: dropped from mainline mesa, amber only. */
                 osr_warnf("%s predates programmable shaders - mesa-amber, no Vulkan/OpenCL",
                           fam);
-                str_addz(&desc, "Installing ATI amber drivers ("); str_addz(&desc, fam);
-                str_addc(&desc, ')');
+                str_addzz(&desc, "Installing ATI amber drivers (", fam, ")", (const char *)NULL);
                 ok = osr_pkg_install_step(str_text(&desc), amd_amber) && ok;
             }
         } else if (strcmp(str_text(&vendor), "Intel") == 0) {
@@ -376,7 +371,7 @@ int osrm_gpu_drivers(void) {
             osr_warnf("unknown/unsupported GPU vendor '%s' - skipping driver install",
                       str_text(&vendor));
         }
-        str_free(&vendor); str_free(&chip); str_free(&desc);
+        str_freev(&vendor, &chip, &desc, (Str *)NULL);
     }
     return ok;
 }

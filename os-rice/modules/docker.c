@@ -95,9 +95,7 @@ int osrm_docker(void) {
         } else if (osr_have_cmd("usermod")) {
             Str desc;
             str_init(&desc);
-            str_addz(&desc, "Adding ");
-            str_addz(&desc, user);
-            str_addz(&desc, " to docker group");
+            str_addzz(&desc, "Adding ", user, " to docker group", (const char *)NULL);
             argv[0] = (char *)"usermod"; argv[1] = (char *)"-aG";
             argv[2] = (char *)"docker"; argv[3] = (char *)user; argv[4] = NULL;
             osr_run_step_root(str_text(&desc), argv);
@@ -106,9 +104,7 @@ int osrm_docker(void) {
         } else if (osr_have_cmd("addgroup")) {
             Str desc;
             str_init(&desc);
-            str_addz(&desc, "Adding ");
-            str_addz(&desc, user);
-            str_addz(&desc, " to docker group");
+            str_addzz(&desc, "Adding ", user, " to docker group", (const char *)NULL);
             argv[0] = (char *)"addgroup"; argv[1] = (char *)user;
             argv[2] = (char *)"docker"; argv[3] = NULL;
             osr_run_step_root(str_text(&desc), argv);

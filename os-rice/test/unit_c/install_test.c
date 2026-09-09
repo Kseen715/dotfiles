@@ -29,17 +29,7 @@
 
 static OsrSandbox sb;
 
-static const char *at(const char *rel) {
-    static HStr ring[4];
-    static int ready = 0;
-    static int next = 0;
-    HStr *p;
-    if (!ready) { int i; for (i = 0; i < 4; i++) hs_init(&ring[i]); ready = 1; }
-    p = &ring[next];
-    next = (next + 1) % 4;
-    hs_path(p, hs_text(&sb.root), rel);
-    return hs_text(p);
-}
+static const char *at(const char *rel) { return osr_sb_at(&sb, rel); }
 
 /* run -- `install.sh <args>`, the shim people actually type, out of a fixture
  * tree rather than the real one. Up to four arguments, which is every shape

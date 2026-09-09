@@ -42,25 +42,23 @@ int osrm_foot(void) {
     ok = osr_step("Installing JetBrains Mono Nerd Font", nerd_font,
                   (void *)"JetBrainsMono") && ok;
 
-    str_init(&src); str_init(&dst); str_init(&pal);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/foot/foot.ini");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/foot/foot.ini");
+    str_initv(&src, &dst, &pal, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/foot/foot.ini", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/foot/foot.ini", (const char *)NULL);
     ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* The palette goes through install_foot_palette, not install_layer: foot
      * renamed its colour sections between releases, and the adapter is what
      * makes one theme file work on both. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/foot/foot-colors.ini");
+    str_setz(&dst, osr_mod_home(), "/.config/foot/foot-colors.ini", (const char *)NULL);
     if (osr_theme_source(&pal, "foot", "foot-colors.ini", &is_temp)) {
         ok = osr_install_foot_palette(str_text(&pal), str_text(&dst)) && ok;
         if (is_temp) (void)unlink(str_text(&pal));
     } else {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/foot/foot-colors.ini");
+        str_setz(&src, osr_mod_dotfiles(), "/foot/foot-colors.ini", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_foot_palette(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst); str_free(&pal);
+    str_freev(&src, &dst, &pal, (Str *)NULL);
     return ok;
 }

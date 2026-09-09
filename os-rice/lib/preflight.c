@@ -50,8 +50,7 @@ static int gpu_present(void) {
          * framebuffer also has) and not by-path/. */
         if (line.len > 7 && memcmp(line.start, "renderD", 7) == 0) found = 1;
     }
-    str_free(&names);
-    str_free(&dir);
+    str_freev(&names, &dir, (Str *)NULL);
     return found;
 }
 

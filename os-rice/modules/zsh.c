@@ -149,9 +149,7 @@ static const char *const MIG_TYPESET =
 
 /* rcdir -- ~/.config/osr/zsh/rc.d, the layered rc directory (§5). */
 static void rcdir(Str *out) {
-    str_reset(out);
-    str_addz(out, osr_mod_home());
-    str_addz(out, "/.config/osr/zsh/rc.d");
+    str_setz(out, osr_mod_home(), "/.config/osr/zsh/rc.d", (const char *)NULL);
 }
 
 static int omz(void *ctx)   { (void)ctx; return osr_install_omz(); }
@@ -172,10 +170,10 @@ static int migrate_layers(void *ctx) {
     Str dir, local, env;
 
     (void)ctx;
-    str_init(&dir); str_init(&local); str_init(&env);
+    str_initv(&dir, &local, &env, (Str *)NULL);
     rcdir(&dir);
-    str_addz(&local, str_text(&dir)); str_addz(&local, "/99-local.zsh");
-    str_addz(&env,   str_text(&dir)); str_addz(&env,   "/00-env.zsh");
+    str_addzz(&local, str_text(&dir), "/99-local.zsh", (const char *)NULL);
+    str_addzz(&env, str_text(&dir), "/00-env.zsh", (const char *)NULL);
 
     /* 1. Drop the legacy tool config now owned by 30-tools.zsh. Sourcing nvm.sh
      *    eagerly cost ~360 ms per shell, and start_agent never wrote $SSH_ENV so
@@ -204,7 +202,7 @@ static int migrate_layers(void *ctx) {
     {
         Str rc;
         str_init(&rc);
-        str_addz(&rc, osr_mod_home()); str_addz(&rc, "/.zshrc");
+        str_addzz(&rc, osr_mod_home(), "/.zshrc", (const char *)NULL);
         if (!osr_migrate_replace(str_text(&rc), "duplicate oh-my-zsh init -> 10-omz.zsh",
                                  MIG_OMZ_DUP_V1, MIG_OMZ_DUP_NEW)
             && !osr_migrate_replace(str_text(&rc), "duplicate oh-my-zsh init -> 10-omz.zsh",
@@ -225,7 +223,7 @@ static int migrate_layers(void *ctx) {
     (void)osr_migrate_append(str_text(&env), "\\.local/bin",
                              "~/.local/bin on PATH", MIG_LOCALBIN);
 
-    str_free(&dir); str_free(&local); str_free(&env);
+    str_freev(&dir, &local, &env, (Str *)NULL);
     return 1;
 }
 
@@ -327,45 +325,41 @@ int osrm_zsh(void) {
     for (i = 0; i < sizeof(plugins) / sizeof(plugins[0]); i++) {
         Str step;
         str_init(&step);
-        str_addz(&step, "Installing "); str_addz(&step, plugins[i].name);
+        str_addzz(&step, "Installing ", plugins[i].name, (const char *)NULL);
         ok = osr_step(str_text(&step), plugin, (void *)&plugins[i]) && ok;
         str_free(&step);
     }
 
     /* Layered rc.d config (§5): os-rice writes only what it owns. */
-    str_init(&dir); str_init(&src); str_init(&dst);
+    str_initv(&dir, &src, &dst, (Str *)NULL);
     rcdir(&dir);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/zsh/rc.d/00-env.zsh");
-    str_addz(&dst, str_text(&dir));     str_addz(&dst, "/00-env.zsh");
+    str_addzz(&src, osr_mod_dotfiles(), "/zsh/rc.d/00-env.zsh", (const char *)NULL);
+    str_addzz(&dst, str_text(&dir), "/00-env.zsh", (const char *)NULL);
     ok = osr_seed_once(str_text(&src), str_text(&dst)) && ok;
     for (i = 0; layers[i] != NULL; i++) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/zsh/rc.d/");
-        str_addz(&src, layers[i]);
-        str_addz(&dst, str_text(&dir)); str_addc(&dst, '/'); str_addz(&dst, layers[i]);
+        str_reset(&src);
+        str_reset(&dst);
+        str_addzz(&src, osr_mod_dotfiles(), "/zsh/rc.d/", layers[i], (const char *)NULL);
+        str_addzz(&dst, str_text(&dir), "/", layers[i], (const char *)NULL);
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
 
     /* rice-owned prompt theme, swapped on rice switch (§6). starship.toml is
      * owned by modules/starship.c (G5), not here. */
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/90-theme.zsh");
+    str_setz(&dst, str_text(&dir), "/90-theme.zsh", (const char *)NULL);
     (void)osr_install_theme_layer("zsh", "90-theme.zsh", str_text(&dst));
 
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/99-local.zsh");
+    str_setz(&dst, str_text(&dir), "/99-local.zsh", (const char *)NULL);
     ok = osr_seed_empty(str_text(&dst)) && ok;
 
     ok = osr_step("Migrating pre-existing zsh layers", migrate_layers, NULL) && ok;
 
     /* Thin loader: own only a marked block in ~/.zshrc (§5). */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.zshrc");
+    str_setz(&dst, osr_mod_home(), "/.zshrc", (const char *)NULL);
     ok = osr_install_zsh_loader(str_text(&dir), str_text(&dst)) && ok;
     /* ...and a marked block in ~/.zshenv, which is the only file early enough to
      * suppress Ubuntu's duplicate global compinit (82 ms). */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.zshenv");
+    str_setz(&dst, osr_mod_home(), "/.zshenv", (const char *)NULL);
     ok = osr_install_zsh_zshenv(str_text(&dst)) && ok;
 
     /* Byte-compile last: every layer and the loader are on disk by now, so one
@@ -376,15 +370,15 @@ int osrm_zsh(void) {
      * manager does this for us, and chsh is not everywhere, so
      * osr_set_login_shell walks chsh -> usermod -> /etc/passwd and registers zsh
      * in /etc/shells first. */
-    str_init(&zsh_bin); str_init(&desc);
+    str_initv(&zsh_bin, &desc, (Str *)NULL);
     if (!osr_path_lookup("zsh", &zsh_bin) || zsh_bin.len == 0) {
         osr_warn("zsh not on PATH after install - leaving login shell unchanged");
     } else if (!osr_user_shell_is(osr_mod_user(), str_text(&zsh_bin))) {
         ok = osr_step("Setting default shell to zsh", set_login_shell,
                       (void *)str_text(&zsh_bin)) && ok;
     }
-    str_free(&zsh_bin); str_free(&desc);
+    str_freev(&zsh_bin, &desc, (Str *)NULL);
 
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

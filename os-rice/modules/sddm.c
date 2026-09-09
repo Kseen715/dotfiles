@@ -25,28 +25,25 @@ int osrm_sddm(void) {
      * before any user session exists, so these are the one theme layer that
      * does not land in $HOME. */
     if (*osr_mod_theme_dir() != '\0') {
-        str_init(&src); str_init(&theme);
+        str_initv(&src, &theme, (Str *)NULL);
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
         argv[2] = (char *)"/etc/sddm.conf.d"; argv[3] = NULL;
         (void)osr_run_root(argv);
 
-        str_addz(&src, osr_mod_theme_dir());
-        str_addz(&src, "/config/sddm/hyprland.main.conf");
+        str_addzz(&src, osr_mod_theme_dir(), "/config/sddm/hyprland.main.conf",
+            (const char *)NULL);
         if (file_exists(str_text(&src))) {
             argv[0] = (char *)"cp"; argv[1] = (char *)"-f"; argv[2] = src.p;
             argv[3] = (char *)"/etc/sddm.conf.d/sddm.conf"; argv[4] = NULL;
             (void)osr_run_root(argv);
         }
-        str_reset(&src);
-        str_addz(&src, osr_mod_theme_dir());
-        str_addz(&src, "/config/sddm/theme.conf.user");
+        str_setz(&src, osr_mod_theme_dir(), "/config/sddm/theme.conf.user", (const char *)NULL);
         if (file_exists(str_text(&src))) {
             argv[0] = (char *)"cp"; argv[1] = (char *)"-f"; argv[2] = src.p;
             argv[3] = (char *)"/etc/sddm.conf.d/theme.conf.user"; argv[4] = NULL;
             (void)osr_run_root(argv);
         }
-        str_addz(&theme, osr_mod_theme_dir());
-        str_addz(&theme, "/config/sddm/glass-theme");
+        str_addzz(&theme, osr_mod_theme_dir(), "/config/sddm/glass-theme", (const char *)NULL);
         if (dir_exists(str_text(&theme))) {
             argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
             argv[2] = (char *)"/usr/share/sddm/themes"; argv[3] = NULL;
@@ -55,7 +52,7 @@ int osrm_sddm(void) {
             argv[3] = (char *)"/usr/share/sddm/themes/"; argv[4] = NULL;
             (void)osr_run_root(argv);
         }
-        str_free(&src); str_free(&theme);
+        str_freev(&src, &theme, (Str *)NULL);
     }
     return osr_service_enable("sddm") && ok;
 }

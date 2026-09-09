@@ -23,8 +23,7 @@ int osrm_vlc(void) {
 
     ok = osr_pkg_install_step("Installing VLC", pkgs);
     str_init(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/vlc/vlcrc");
+    str_addzz(&dst, osr_mod_home(), "/.config/vlc/vlcrc", (const char *)NULL);
     (void)osr_install_theme_layer("vlc", "vlcrc", str_text(&dst));
     str_free(&dst);
     return ok;

@@ -52,10 +52,7 @@ static const char *tmp_root(void) {
  * for its own temporaries. Same shape on purpose: a leftover from a killed run
  * is recognizable as ours either way. */
 static void tmp_path(Str *out, const char *stem, const char *suffix) {
-    str_reset(out);
-    str_addz(out, tmp_root());
-    str_addc(out, '/');
-    str_addz(out, stem);
+    str_setz(out, tmp_root(), "/", stem, (const char *)NULL);
     str_addl(out, osr_pid());
     str_addz(out, suffix);
 }
@@ -179,13 +176,9 @@ void osr_compose_block(Str *out, const char *path, const char *name, const char 
     size_t len;
 
     str_init(&begin);
-    str_addz(&begin, "# >>> os-rice:");
-    str_addz(&begin, name);
-    str_addz(&begin, " >>>");
+    str_addzz(&begin, "# >>> os-rice:", name, " >>>", (const char *)NULL);
     str_init(&end);
-    str_addz(&end, "# <<< os-rice:");
-    str_addz(&end, name);
-    str_addz(&end, " <<<");
+    str_addzz(&end, "# <<< os-rice:", name, " <<<", (const char *)NULL);
 
     /* `_eb_body=$(cat)` -- the command substitution ate the trailing newlines,
      * and the writer below puts exactly one back. */
@@ -238,7 +231,7 @@ void osr_compose_block(Str *out, const char *path, const char *name, const char 
     str_add(out, str_text(&end), end.len);
     str_addc(out, '\n');
 
-    str_free(&text); str_free(&begin); str_free(&end);
+    str_freev(&text, &begin, &end, (Str *)NULL);
 }
 
 int osr_ensure_block(const char *path, const char *name, const char *body) {
@@ -251,12 +244,12 @@ int osr_ensure_block(const char *path, const char *name, const char *body) {
     str_init(&tmp);
     tmp_path(&tmp, "osr-block-", "");
     if (!write_file(str_text(&tmp), str_text(&out), out.len)) {
-        str_free(&out); str_free(&tmp);
+        str_freev(&out, &tmp, (Str *)NULL);
         return 0;
     }
     ok = user_cp(str_text(&tmp), path, 0);
     remove(str_text(&tmp));
-    str_free(&out); str_free(&tmp);
+    str_freev(&out, &tmp, (Str *)NULL);
     return ok;
 }
 
@@ -264,12 +257,10 @@ int osr_ensure_block(const char *path, const char *name, const char *body) {
  * in lexical order, then drop the loop variable. `dir` is expanded here (it is
  * the installer's answer), `$_f` is not (it is the shell's, at login). */
 static void loader_body(Str *out, const char *dir, const char *glob_suffix) {
-    str_reset(out);
-    str_addz(out, "for _f in \"");
-    str_addz(out, dir);
+    str_setz(out, "for _f in \"", dir, (const char *)NULL);
     str_addz(out, "\"/*");
-    str_addz(out, glob_suffix);
-    str_addz(out, "; do [ -r \"$_f\" ] && . \"$_f\"; done\nunset _f\n");
+    str_addzz(out, glob_suffix, "; do [ -r \"$_f\" ] && . \"$_f\"; done\nunset _f\n",
+        (const char *)NULL);
 }
 
 int osr_install_zsh_loader(const char *rc_dir, const char *zshrc) {
@@ -331,8 +322,7 @@ static int py_merge(const char *base, const char *frag, const char *out_path) {
     int rc;
 
     str_init(&script);
-    str_addz(&script, osr_tmpdir());
-    str_addz(&script, "/osr-json-merge-");
+    str_addzz(&script, osr_tmpdir(), "/osr-json-merge-", (const char *)NULL);
     str_addl(&script, osr_pid());
     str_addz(&script, ".py");
 
@@ -536,18 +526,14 @@ int osr_apply_config(const char *name) {
     Str src, dst;
     int ok;
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_theme_dir());
-    str_addz(&src, "/config/");
-    str_addz(&src, name);
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_theme_dir(), "/config/", name, (const char *)NULL);
     if (!dir_exists(str_text(&src))) {
         osr_warnf("config '%s' not found in theme (%s) - skipping", name, str_text(&src));
-        str_free(&src); str_free(&dst);
+        str_freev(&src, &dst, (Str *)NULL);
         return 1;
     }
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/");
-    str_addz(&dst, name);
+    str_addzz(&dst, osr_mod_home(), "/.config/", name, (const char *)NULL);
     osr_infof("applying config: %s -> %s", name, str_text(&dst));
     osr_mkdir_p(str_text(&dst));
     /* Trailing /. and /: the CONTENTS are copied, so the directory does not end
@@ -555,7 +541,7 @@ int osr_apply_config(const char *name) {
     str_addz(&src, "/.");
     str_addc(&dst, '/');
     ok = user_cp(str_text(&src), str_text(&dst), 1);
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }
 
@@ -565,8 +551,7 @@ int osr_apply_config(const char *name) {
  * directory (a profiles.ini row for a profile that was deleted). */
 static void add_profile(Str *out, const char *path) {
     if (!dir_exists(path)) return;
-    str_addz(out, path);
-    str_addc(out, '\n');
+    str_addzz(out, path, "\n", (const char *)NULL);
 }
 
 /* glob_profiles -- the `*.default*` / `*.dev-edition*` fallback, for a profile
@@ -587,8 +572,7 @@ static void glob_profiles(Str *out, const char *root, const char *pattern) {
          * picker uses, anchored at both ends the way a shell glob is. */
         if (osr_glob_match(pattern, str_text(&name))) {
             str_init(&full);
-            str_addz(&full, root);
-            str_addc(&full, '/');
+            str_addzz(&full, root, "/", (const char *)NULL);
             str_add(&full, str_text(&name), name.len);
             add_profile(out, str_text(&full));
             str_free(&full);
@@ -607,8 +591,7 @@ void osr_mozilla_profiles(Str *out, const char *root) {
     if (!dir_exists(root)) return;
 
     str_init(&ini);
-    str_addz(&ini, root);
-    str_addz(&ini, "/profiles.ini");
+    str_addzz(&ini, root, "/profiles.ini", (const char *)NULL);
     buf = slurp(str_text(&ini), &len);
     str_free(&ini);
     if (buf == NULL) {
@@ -631,8 +614,7 @@ void osr_mozilla_profiles(Str *out, const char *root) {
 
         str_init(&path);
         if (*p != '/') {
-            str_addz(&path, root);
-            str_addc(&path, '/');
+            str_addzz(&path, root, "/", (const char *)NULL);
         }
         str_add(&path, p, n);
         add_profile(out, str_text(&path));
@@ -661,15 +643,13 @@ int osr_install_mozilla_layer(const char *root, const char *user_js, const char 
         str_add(&dir, line.start, line.len);
         if (user_js != NULL && *user_js != '\0' && file_exists(user_js)) {
             str_init(&dst);
-            str_addz(&dst, str_text(&dir));
-            str_addz(&dst, "/user.js");
+            str_addzz(&dst, str_text(&dir), "/user.js", (const char *)NULL);
             osr_install_layer(user_js, str_text(&dst));
             str_free(&dst);
         }
         if (user_chrome != NULL && *user_chrome != '\0' && file_exists(user_chrome)) {
             str_init(&dst);
-            str_addz(&dst, str_text(&dir));
-            str_addz(&dst, "/chrome");
+            str_addzz(&dst, str_text(&dir), "/chrome", (const char *)NULL);
             osr_mkdir_p(str_text(&dst));
             str_addz(&dst, "/userChrome.css");
             osr_install_layer(user_chrome, str_text(&dst));
@@ -752,15 +732,13 @@ void osr_theme_wallpapers(Str *out, const char *theme_dir) {
 
     if (theme_dir == NULL || *theme_dir == '\0') return;
     str_init(&dir);
-    str_addz(&dir, theme_dir);
-    str_addz(&dir, "/wallpapers");
+    str_addzz(&dir, theme_dir, "/wallpapers", (const char *)NULL);
     str_init(&names);
     osr_list_dir(&names, str_text(&dir), NULL, NULL);
     while (next_line(str_text(&names), names.len, &pos, &line)) {
         Str full;
         str_init(&full);
-        str_addz(&full, str_text(&dir));
-        str_addc(&full, '/');
+        str_addzz(&full, str_text(&dir), "/", (const char *)NULL);
         str_add(&full, line.start, line.len);
         if (osr_is_image(str_text(&full))) {
             str_add(out, str_text(&full), full.len);
@@ -768,8 +746,7 @@ void osr_theme_wallpapers(Str *out, const char *theme_dir) {
         }
         str_free(&full);
     }
-    str_free(&names);
-    str_free(&dir);
+    str_freev(&names, &dir, (Str *)NULL);
 }
 
 /* first_line -- the `| head -n 1 | tr -d '\n'` at the end of
@@ -792,8 +769,7 @@ void osr_theme_wallpaper(Str *out) {
     if (*theme != '\0') {
         Str key, pick;
         str_init(&key);
-        str_addz(&key, "wallpaper.");
-        str_addz(&key, theme);
+        str_addzz(&key, "wallpaper.", theme, (const char *)NULL);
         str_init(&pick);
         osr_state_get(&pick, str_text(&key));
         str_free(&key);
@@ -820,8 +796,7 @@ void osr_install_wallpaper_file(Str *out, const char *src) {
     if (src == NULL || *src == '\0') return;
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/Pictures/Wallpapers");
+    str_addzz(&dir, osr_mod_home(), "/Pictures/Wallpapers", (const char *)NULL);
     str_init(&base);
     base_of(&base, src);
     str_init(&dst);
@@ -837,8 +812,7 @@ void osr_install_wallpaper_file(Str *out, const char *src) {
         (void)user_cp(src, str_text(&dst), 0);
     }
     str_add(out, str_text(&dst), dst.len);
-    str_free(&dir);
-    str_free(&dst);
+    str_freev(&dir, &dst, (Str *)NULL);
 }
 
 void osr_install_wallpaper(Str *out) {
@@ -866,8 +840,7 @@ int osr_install_wallpaper_layer(const char *src, const char *dst) {
     osr_install_wallpaper(&wp);
 
     buf = read_or_die(src, &len, "install_wallpaper_layer: source");
-    str_init(&out);
-    str_init(&body);
+    str_initv(&out, &body, (Str *)NULL);
     for (i = 0; i < len; ) {
         if (i + mlen <= len && memcmp(buf + i, MARK, mlen) == 0) {
             str_add(&out, str_text(&wp), wp.len);
@@ -878,8 +851,7 @@ int osr_install_wallpaper_layer(const char *src, const char *dst) {
         }
     }
     free(buf);
-    str_free(&body);
-    str_free(&wp);
+    str_freev(&body, &wp, (Str *)NULL);
 
     ok = install_transformed("osr-wallpaper-layer-", "", &out, dst);
     str_free(&out);
@@ -947,8 +919,7 @@ void osr_wallpaper_record(const char *img) {
     Str dir, file, line;
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.config/osr");
+    str_addzz(&dir, osr_mod_home(), "/.config/osr", (const char *)NULL);
     osr_mkdir_p(str_text(&dir));
 
     /* A bare path on a line, because non-shell consumers read this file (a
@@ -958,14 +929,11 @@ void osr_wallpaper_record(const char *img) {
     str_add(&file, str_text(&dir), dir.len);
     str_addz(&file, "/wallpaper");
     str_init(&line);
-    str_addz(&line, img);
-    str_addc(&line, '\n');
+    str_addzz(&line, img, "\n", (const char *)NULL);
     write_as_user(str_text(&file), str_text(&line), line.len);
     (void)osr_state_set("wallpaper", img);
 
-    str_free(&line);
-    str_free(&file);
-    str_free(&dir);
+    str_freev(&line, &file, &dir, (Str *)NULL);
 }
 
 int osr_apply_wallpaper(void) {
@@ -987,8 +955,7 @@ static int seen_basename(const Str *seen, const char *base) {
     size_t i;
 
     str_init(&needle);
-    str_addc(&needle, '|');
-    str_addz(&needle, base);
+    str_addzz(&needle, "|", base, (const char *)NULL);
     for (i = 0; i + needle.len <= seen->len && !found; i++)
         if (memcmp(str_text(seen) + i, str_text(&needle), needle.len) == 0) found = 1;
     str_free(&needle);
@@ -1000,8 +967,7 @@ void osr_wallpaper_library(Str *out) {
     size_t pos = 0;
     Line l;
 
-    str_init(&seen);
-    str_init(&base);
+    str_initv(&seen, &base, (Str *)NULL);
 
     str_init(&theme);
     osr_theme_wallpapers(&theme, osr_mod_theme_dir());
@@ -1022,8 +988,7 @@ void osr_wallpaper_library(Str *out) {
     /* ~/Pictures/Wallpapers is where every image ever applied was copied, so
      * this half accretes into a library across themes. */
     str_init(&pat);
-    str_addz(&pat, osr_mod_home());
-    str_addz(&pat, "/Pictures/Wallpapers");
+    str_addzz(&pat, osr_mod_home(), "/Pictures/Wallpapers", (const char *)NULL);
     {
         Str names;
         size_t lpos = 0;
@@ -1033,8 +998,7 @@ void osr_wallpaper_library(Str *out) {
         while (next_line(str_text(&names), names.len, &lpos, &line)) {
             Str full;
             str_init(&full);
-            str_addz(&full, str_text(&pat));
-            str_addc(&full, '/');
+            str_addzz(&full, str_text(&pat), "/", (const char *)NULL);
             str_add(&full, line.start, line.len);
             if (osr_is_image(str_text(&full))) {
                 str_reset(&base);
@@ -1050,9 +1014,7 @@ void osr_wallpaper_library(Str *out) {
         }
         str_free(&names);
     }
-    str_free(&pat);
-    str_free(&base);
-    str_free(&seen);
+    str_freev(&pat, &base, &seen, (Str *)NULL);
 }
 
 /* absolute -- the `cd -- "$(dirname)" && pwd`/basename dance the shell did to
@@ -1072,8 +1034,7 @@ static void absolute(Str *out, const char *path) {
     else                                                    str_addz(out, str_text(&dir));
     str_addc(out, '/');
     str_add(out, str_text(&base), base.len);
-    str_free(&dir);
-    str_free(&base);
+    str_freev(&dir, &base, (Str *)NULL);
 }
 
 void osr_choose_wallpaper(Str *out, const char *path) {
@@ -1090,8 +1051,7 @@ void osr_choose_wallpaper(Str *out, const char *path) {
     if (*osr_mod_theme() != '\0') {
         Str key;
         str_init(&key);
-        str_addz(&key, "wallpaper.");
-        str_addz(&key, osr_mod_theme());
+        str_addzz(&key, "wallpaper.", osr_mod_theme(), (const char *)NULL);
         (void)osr_state_set(str_text(&key), str_text(&src));
         str_free(&key);
     }

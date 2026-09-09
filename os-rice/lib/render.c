@@ -114,8 +114,7 @@ static void unfilled(Str *out, const char *text, size_t len) {
     if (count > 1) qsort(names, count, sizeof(char *), name_cmp);   /* sort -u */
     for (i = 0; i < count; i++) {
         if (i == 0 || strcmp(names[i], names[i - 1]) != 0) {
-            str_addz(out, names[i]);
-            str_addc(out, ' ');
+            str_addzz(out, names[i], " ", (const char *)NULL);
         }
         free(names[i]);
     }
@@ -185,11 +184,7 @@ int osr_theme_source(Str *out, const char *app, const char *name, int *is_temp) 
     /* The theme's own file wins: it is already this theme's version. */
     if (*theme_dir != '\0') {
         str_init(&path);
-        str_addz(&path, theme_dir);
-        str_addz(&path, "/config/");
-        str_addz(&path, app);
-        str_addc(&path, '/');
-        str_addz(&path, name);
+        str_addzz(&path, theme_dir, "/config/", app, "/", name, (const char *)NULL);
         if (file_exists(str_text(&path))) {
             str_add(out, str_text(&path), path.len);
             str_free(&path);
@@ -200,12 +195,7 @@ int osr_theme_source(Str *out, const char *app, const char *name, int *is_temp) 
 
     /* Otherwise the app's one template, painted with this theme's palette. */
     str_init(&path);
-    str_addz(&path, osr_mod_dotfiles());
-    str_addc(&path, '/');
-    str_addz(&path, app);
-    str_addc(&path, '/');
-    str_addz(&path, name);
-    str_addz(&path, ".tmpl");
+    str_addzz(&path, osr_mod_dotfiles(), "/", app, "/", name, ".tmpl", (const char *)NULL);
     if (!file_exists(str_text(&path)) || *theme == '\0') {
         str_free(&path);
         return 0;
@@ -215,10 +205,7 @@ int osr_theme_source(Str *out, const char *app, const char *name, int *is_temp) 
         Str base;
         int ok;
         str_init(&tmp);
-        str_addz(&tmp, osr_tmpdir());
-        str_addz(&tmp, "/osr-theme-");
-        str_addz(&tmp, app);
-        str_addc(&tmp, '-');
+        str_addzz(&tmp, osr_tmpdir(), "/osr-theme-", app, "-", (const char *)NULL);
         str_addl(&tmp, osr_pid());
         str_addc(&tmp, '-');
         str_init(&base);

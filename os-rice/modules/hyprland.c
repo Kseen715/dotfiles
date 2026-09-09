@@ -47,11 +47,10 @@ int osrm_hyprland(void) {
 
     /* One mkdir for the four: the session's own config dir plus the three the
      * autostart scripts and screenshot bindings write into. */
-    str_init(&src); str_init(&dst);
+    str_initv(&src, &dst, (Str *)NULL);
     for (i = 0; i < 4; i++) {
         str_init(&paths[i]);
-        str_addz(&paths[i], osr_mod_home());
-        str_addz(&paths[i], dirs[i]);
+        str_addzz(&paths[i], osr_mod_home(), dirs[i], (const char *)NULL);
         made[i] = str_text(&paths[i]);
     }
     made[4] = NULL;
@@ -60,42 +59,42 @@ int osrm_hyprland(void) {
 
     if (*osr_mod_theme_dir() == '\0') { str_free(&src); str_free(&dst); return ok; }
 
-    str_init(&hd); str_init(&wd);
-    str_addz(&hd, osr_mod_theme_dir()); str_addz(&hd, "/config/hypr");
-    str_addz(&wd, osr_mod_theme_dir()); str_addz(&wd, "/config/wayland-sessions");
+    str_initv(&hd, &wd, (Str *)NULL);
+    str_addzz(&hd, osr_mod_theme_dir(), "/config/hypr", (const char *)NULL);
+    str_addzz(&wd, osr_mod_theme_dir(), "/config/wayland-sessions", (const char *)NULL);
 
     /* hyprland.conf exports `env = WALLPAPER_PATH,{{WALLPAPER_PATH}}` for the
      * session; the placeholder resolves to the same installed file hyprpaper and
      * gtklock paint. */
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, str_text(&hd)); str_addz(&src, "/hyprland.conf");
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/hypr/hyprland.conf");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, str_text(&hd), "/hyprland.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/hypr/hyprland.conf", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_wallpaper_layer(str_text(&src), str_text(&dst)) && ok;
 
     for (i = 0; autostart[i] != NULL; i++) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&src, str_text(&hd)); str_addc(&src, '/');
-        str_addz(&src, autostart[i]); str_addz(&src, ".sh");
-        str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/hypr/");
-        str_addz(&dst, autostart[i]); str_addz(&dst, ".sh");
+        str_reset(&src);
+        str_reset(&dst);
+        str_addzz(&src, str_text(&hd), "/", autostart[i], ".sh", (const char *)NULL);
+        str_addzz(&dst, osr_mod_home(), "/.config/hypr/", autostart[i], ".sh",
+            (const char *)NULL);
         if (!file_exists(str_text(&src))) continue;
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-        (void)osr_run_user(argv);
+        (void)osr_chmod("+x", dst.p, 0);
     }
 
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, osr_mod_theme_dir()); str_addz(&src, "/config/qt6ct/qt6ct.conf");
-    str_addz(&dst, osr_mod_home());      str_addz(&dst, "/.config/qt6ct/qt6ct.conf");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, osr_mod_theme_dir(), "/config/qt6ct/qt6ct.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/qt6ct/qt6ct.conf", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* The session launcher lives in a system path SDDM reads. It stays
      * root-owned and world-executable (0755) - the legacy config chowned it to
      * the target user so "sddm can run it", which SDDM never needed. */
-    str_reset(&src);
-    str_addz(&src, str_text(&wd)); str_addz(&src, "/hyprland.desktop");
+    str_setz(&src, str_text(&wd), "/hyprland.desktop", (const char *)NULL);
     if (file_exists(str_text(&src))) {
         Str launcher;
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
@@ -105,13 +104,11 @@ int osrm_hyprland(void) {
         argv[3] = (char *)"/usr/share/wayland-sessions/hyprland.desktop"; argv[4] = NULL;
         (void)osr_run_root(argv);
         str_init(&launcher);
-        str_addz(&launcher, str_text(&wd)); str_addz(&launcher, "/start-hyprland.sh");
+        str_addzz(&launcher, str_text(&wd), "/start-hyprland.sh", (const char *)NULL);
         argv[2] = launcher.p;
         argv[3] = (char *)"/usr/share/wayland-sessions/start-hyprland.sh";
         (void)osr_run_root(argv);
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"0755";
-        argv[2] = (char *)"/usr/share/wayland-sessions/start-hyprland.sh"; argv[3] = NULL;
-        (void)osr_run_root(argv);
+        (void)osr_chmod("0755", (char *)"/usr/share/wayland-sessions/start-hyprland.sh", 1);
         str_free(&launcher);
     }
 
@@ -119,8 +116,7 @@ int osrm_hyprland(void) {
      * renderer and cursor workarounds Hyprland needs without a real GPU. Offered
      * ALONGSIDE the normal entry rather than replacing it, so the greeter still
      * lists both (§9: a VM-only path, verified on hardware). */
-    str_reset(&src);
-    str_addz(&src, str_text(&wd)); str_addz(&src, "/hyprland-vmware.desktop");
+    str_setz(&src, str_text(&wd), "/hyprland-vmware.desktop", (const char *)NULL);
     if (strcmp(env_str("OSR_VIRT", "none"), "vmware") == 0 && file_exists(str_text(&src))) {
         Str launcher;
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
@@ -131,17 +127,13 @@ int osrm_hyprland(void) {
         argv[4] = NULL;
         (void)osr_run_root(argv);
         str_init(&launcher);
-        str_addz(&launcher, str_text(&wd));
-        str_addz(&launcher, "/start-hyprland-vmware.sh");
+        str_addzz(&launcher, str_text(&wd), "/start-hyprland-vmware.sh", (const char *)NULL);
         argv[2] = launcher.p;
         argv[3] = (char *)"/usr/share/wayland-sessions/start-hyprland-vmware.sh";
         (void)osr_run_root(argv);
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"0755";
-        argv[2] = (char *)"/usr/share/wayland-sessions/start-hyprland-vmware.sh";
-        argv[3] = NULL;
-        (void)osr_run_root(argv);
+        (void)osr_chmod("0755", (char *)"/usr/share/wayland-sessions/start-hyprland-vmware.sh", 1);
         str_free(&launcher);
     }
-    str_free(&hd); str_free(&wd); str_free(&src); str_free(&dst);
+    str_freev(&hd, &wd, &src, &dst, (Str *)NULL);
     return ok;
 }

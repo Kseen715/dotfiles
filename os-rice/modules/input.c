@@ -66,16 +66,15 @@ int osrm_input(void) {
         }
     }
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/input/libinput-gestures.conf");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/libinput-gestures.conf");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/input/libinput-gestures.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/libinput-gestures.conf", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* keyd's config is SEEDED, not owned: it remaps keys, and a user who has
      * edited it must not have that overwritten by a rerun. */
-    str_reset(&src);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/input/keyd-default.conf");
+    str_setz(&src, osr_mod_dotfiles(), "/input/keyd-default.conf", (const char *)NULL);
     if (!file_exists("/etc/keyd/default.conf") && file_exists(str_text(&src))) {
         osr_info("seeding /etc/keyd/default.conf");
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
@@ -85,7 +84,7 @@ int osrm_input(void) {
         argv[3] = (char *)"/etc/keyd/default.conf"; argv[4] = NULL;
         (void)osr_run_root(argv);
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
 
     if (!osr_service_enable("keyd")) osr_warn("could not enable keyd (needs a real init)");
     return ok;

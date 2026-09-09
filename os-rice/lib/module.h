@@ -274,6 +274,13 @@ void osr_pkgmap_resolve(Str *out, const char *name);
  * taking every later apt call on the box down with it. */
 void osr_apt_prune_bootstrap_lists(void);
 
+/* osr_apt_repo_configured -- does an apt list beside this path already describe
+ * this repository URI? Asked BEFORE a builder writes its own bootstrap list:
+ * two lists for one repo carrying two signed-by values is fatal to apt 3.0,
+ * and not creating the second one is a better answer than detecting and
+ * repairing it on the next run. Always 0 where apt is not the manager. */
+int osr_apt_repo_configured(const char *uri, const char *beside);
+
 /* --- boot ----------------------------------------------------------------- */
 /* osr_initramfs_regen -- rebuild the boot initramfs, for a change that takes
  * effect ONLY from there: an early-loaded CPU microcode blob, or a modprobe
@@ -300,6 +307,12 @@ int osr_install_file(const char *src, const char *dst);
 int osr_ensure_line(const char *file, const char *line);
 /* osr_mkdir_p -- as_user mkdir -p. */
 int osr_mkdir_p(const char *dir);
+
+/* osr_chmod -- `chmod <mode> <path>` as the riced account, or as root when
+ * as_root. Fifteen call sites spelled the same four argv assignments out by
+ * hand; the mode is a string because that is what chmod takes and what every
+ * one of them already wrote. Returns 1 when chmod exited 0. */
+int osr_chmod(const char *mode, const char *path, int as_root);
 /* osr_mkdir_p_all -- the same for several directories in ONE command, which is
  * what `as_user mkdir -p "$a" "$b"` was: not an optimisation, a module that
  * forks twice where the sh one forked once is a different command log. */

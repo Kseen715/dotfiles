@@ -64,12 +64,12 @@ int osrm_firefox(void) {
      * Firefox is untouched, because the layer landed in a directory the browser
      * never reads. */
     str_init(&root);
-    str_addz(&root, osr_mod_home()); str_addz(&root, "/.mozilla/firefox");
+    str_addzz(&root, osr_mod_home(), "/.mozilla/firefox", (const char *)NULL);
     if (!dir_exists(str_text(&root))) {
         for (i = 0; alts[i] != NULL; i++) {
             Str alt;
             str_init(&alt);
-            str_addz(&alt, osr_mod_home()); str_addz(&alt, alts[i]);
+            str_addzz(&alt, osr_mod_home(), alts[i], (const char *)NULL);
             if (dir_exists(str_text(&alt))) {
                 str_reset(&root);
                 str_addz(&root, str_text(&alt));
@@ -82,11 +82,11 @@ int osrm_firefox(void) {
         }
     }
 
-    str_init(&js); str_init(&css);
+    str_initv(&js, &css, (Str *)NULL);
     {
         Str base;
         str_init(&base);
-        str_addz(&base, osr_mod_dotfiles()); str_addz(&base, "/firefox/user.js");
+        str_addzz(&base, osr_mod_dotfiles(), "/firefox/user.js", (const char *)NULL);
         if (file_exists(str_text(&base))) str_addz(&js, str_text(&base));
         str_free(&base);
     }
@@ -150,6 +150,6 @@ int osrm_firefox(void) {
     }
     if (is_temp && css.len > 0) (void)unlink(str_text(&css));
 
-    str_free(&root); str_free(&js); str_free(&css); str_free(&profiles);
+    str_freev(&root, &js, &css, &profiles, (Str *)NULL);
     return ok;
 }

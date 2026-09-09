@@ -75,8 +75,7 @@ int osrm_helpers(void) {
     ok = osr_pkg_install_step("Installing desktop helper resolution", pkgs);
 
     str_init(&path);
-    str_addz(&path, osr_mod_home());
-    str_addz(&path, "/.config/xfce4/helpers.rc");
+    str_addzz(&path, osr_mod_home(), "/.config/xfce4/helpers.rc", (const char *)NULL);
     if (!osr_seed_file(str_text(&path), helpers_rc)) {
         osr_warnf("could not seed %s - Thunar's \"Open Terminal Here\" will do nothing",
                   str_text(&path));
@@ -96,8 +95,8 @@ int osrm_helpers(void) {
      * short-circuits and the test asserting the write fails. Same override
      * trick as OSR_DESKTOP_DIRS in yandex-browser. */
     str_init(&path);
-    str_addz(&path, env_str("OSR_XFCE_HELPERS_DIR", "/usr/share/xfce4/helpers"));
-    str_addz(&path, "/osr-term.desktop");
+    str_addzz(&path, env_str("OSR_XFCE_HELPERS_DIR", "/usr/share/xfce4/helpers"),
+        "/osr-term.desktop", (const char *)NULL);
     if (!osr_seed_file_root(str_text(&path), osrterm_helper)) {
         osr_warnf("could not write the osr-term helper entry - "
                   "set TerminalEmulator in ~/.config/xfce4/helpers.rc to a packaged terminal");

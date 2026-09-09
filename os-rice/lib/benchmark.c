@@ -102,9 +102,7 @@ static int save_baseline(const BenchResult *r, const char *name) {
     FILE *f;
     int ok = 0;
 
-    str_init(&dir);
-    str_init(&path);
-    str_init(&json);
+    str_initv(&dir, &path, &json, (Str *)NULL);
     store_dir(&dir);
     store_path(&path, name);
 
@@ -119,21 +117,17 @@ static int save_baseline(const BenchResult *r, const char *name) {
     if (ok) {
         Str msg;
         str_init(&msg);
-        str_addz(&msg, "saved baseline to ");
-        str_addz(&msg, str_text(&path));
+        str_addzz(&msg, "saved baseline to ", str_text(&path), (const char *)NULL);
         osr_info(str_text(&msg));
         str_free(&msg);
     } else {
         Str msg;
         str_init(&msg);
-        str_addz(&msg, "could not write ");
-        str_addz(&msg, str_text(&path));
+        str_addzz(&msg, "could not write ", str_text(&path), (const char *)NULL);
         osr_warn(str_text(&msg));
         str_free(&msg);
     }
-    str_free(&dir);
-    str_free(&path);
-    str_free(&json);
+    str_freev(&dir, &path, &json, (Str *)NULL);
     return ok;
 }
 
@@ -149,9 +143,7 @@ static int json_get_num(const char *buf, size_t len, const char *key, double *ou
     int found = 0;
 
     str_init(&pat);
-    str_addc(&pat, '"');
-    str_addz(&pat, key);
-    str_addz(&pat, "\":");
+    str_addzz(&pat, "\"", key, "\":", (const char *)NULL);
     klen = pat.len;
 
     end = buf + len;
@@ -192,14 +184,11 @@ static void delta_row(Str *out, const char *label, int have_now, double now,
 
     if (!have_now) return;
     n = strlen(label);
-    str_addz(out, "  ");
-    str_addz(out, label);
+    str_addzz(out, "  ", label, (const char *)NULL);
     while (n < 16) { str_addc(out, ' '); n++; }
 
     sprintf(buf, "%.0f", now);
-    str_addz(out, buf);
-    str_addc(out, ' ');
-    str_addz(out, unit);
+    str_addzz(out, buf, " ", unit, (const char *)NULL);
 
     if (json_get_num(base_buf, base_len, key, &was) && was != 0.0) {
         sprintf(buf, "   (%+.1f%% vs baseline)", (now - was) / was * 100.0);
@@ -219,11 +208,9 @@ static int compare_baseline(const BenchResult *r, const char *name) {
     if (buf == NULL) {
         Str msg;
         str_init(&msg);
-        str_addz(&msg, "no baseline at ");
-        str_addz(&msg, str_text(&path));
+        str_addzz(&msg, "no baseline at ", str_text(&path), (const char *)NULL);
         osr_warn(str_text(&msg));
-        str_free(&msg);
-        str_free(&path);
+        str_freev(&msg, &path, (Str *)NULL);
         return 0;
     }
 
@@ -239,8 +226,7 @@ static int compare_baseline(const BenchResult *r, const char *name) {
         }
     }
     out_flush(&out);
-    str_free(&out);
-    str_free(&path);
+    str_freev(&out, &path, (Str *)NULL);
     free(buf);
     return 1;
 }
@@ -290,11 +276,9 @@ static int cmd_cpu(int argc, char **argv) {
          * running build/osr directly still gets the name and the exit status. */
         Str msg;
         str_init(&msg);
-        str_addz(&msg, "not installed: ");
-        str_addz(&msg, str_text(&missing));
+        str_addzz(&msg, "not installed: ", str_text(&missing), (const char *)NULL);
         osr_info(str_text(&msg));
-        str_free(&msg);
-        str_free(&missing);
+        str_freev(&msg, &missing, (Str *)NULL);
         return BENCH_EXIT_DEPS;
     }
     str_free(&missing);

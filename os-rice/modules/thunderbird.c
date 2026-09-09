@@ -123,12 +123,12 @@ int osrm_thunderbird(void) {
                   str_text(&ver));
     str_free(&ver);
 
-    str_init(&js); str_init(&css); str_init(&root);
-    str_addz(&root, osr_mod_home()); str_addz(&root, "/.thunderbird");
+    str_initv(&js, &css, &root, (Str *)NULL);
+    str_addzz(&root, osr_mod_home(), "/.thunderbird", (const char *)NULL);
     {
         Str base;
         str_init(&base);
-        str_addz(&base, osr_mod_dotfiles()); str_addz(&base, "/thunderbird/user.js");
+        str_addzz(&base, osr_mod_dotfiles(), "/thunderbird/user.js", (const char *)NULL);
         if (file_exists(str_text(&base))) str_addz(&js, str_text(&base));
         str_free(&base);
     }
@@ -138,6 +138,6 @@ int osrm_thunderbird(void) {
                                        str_text(&css)) && ok;
     if (is_temp && css.len > 0) (void)unlink(str_text(&css));
 
-    str_free(&js); str_free(&css); str_free(&root);
+    str_freev(&js, &css, &root, (Str *)NULL);
     return ok;
 }

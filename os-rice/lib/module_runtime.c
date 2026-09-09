@@ -21,12 +21,14 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#include <time.h>
 #include <unistd.h>
 
 #define OSR_MODULE_RUNTIME_ABI "1"
 #define COMPILER_WORDS 16
 #define COMPILE_ARGS 32
 #define LOCK_TRIES 600
+#define LOCK_STALE_SECONDS 300
 
 static const char *const module_cflags[] = {
     "-std=c89", "-Wall", "-Wextra", "-pedantic", "-O2",
@@ -122,9 +124,7 @@ static int compile_module(const char *compiler, const char *root,
     for (i = 0; i < n; i++) argv[argc++] = words[i];
 
     str_init(&include);
-    str_addz(&include, "-I");
-    str_addz(&include, root);
-    str_addz(&include, "/lib");
+    str_addzz(&include, "-I", root, "/lib", (const char *)NULL);
     for (i = 0; i < MODULE_CFLAGS_COUNT; i++) argv[argc++] = (char *)module_cflags[i];
     argv[argc++] = include.p;
     argv[argc++] = (char *)"-o";
@@ -139,10 +139,28 @@ static int compile_module(const char *compiler, const char *root,
         if (diagnostics.len > 0) osr_warnf("module compilation failed: %s", str_text(&diagnostics));
         else osr_warnf("module compilation failed with %s", compiler);
     }
-    str_free(&diagnostics);
-    str_free(&include);
+    str_freev(&diagnostics, &include, (Str *)NULL);
     free(compiler_copy);
     return ok;
+}
+
+/* wait_for_lock -- the mkdir lock around one cache entry's compile.
+ *
+ * mkdir is the lock because it is the one atomic create POSIX gives without a
+ * file to leave behind. The cost is that a run killed mid-compile leaves the
+ * directory standing, and nothing on the system will ever remove it: without
+ * the takeover below, every later run of that module waits the full timeout
+ * and then fails permanently, on a machine whose only fault was a Ctrl-C.
+ *
+ * So a lock older than LOCK_STALE_SECONDS is treated as abandoned and removed.
+ * The window is far longer than any compile of a single module, and losing the
+ * race to remove it is harmless -- the loser simply finds the directory gone or
+ * re-created and keeps waiting. */
+static int lock_is_stale(const char *lock) {
+    struct stat st;
+    time_t now = time(NULL);
+    if (stat(lock, &st) != 0) return 0;
+    return now > st.st_mtime && now - st.st_mtime > LOCK_STALE_SECONDS;
 }
 
 static int wait_for_lock(const char *lock) {
@@ -150,6 +168,11 @@ static int wait_for_lock(const char *lock) {
     for (tries = 0; tries < LOCK_TRIES; tries++) {
         if (mkdir(lock, 0700) == 0) return 1;
         if (errno != EEXIST) return 0;
+        if (lock_is_stale(lock)) {
+            osr_warnf("removing stale module lock: %s", lock);
+            rmdir(lock);
+            continue;
+        }
         usleep(10000);
     }
     return 0;
@@ -182,11 +205,10 @@ int osr_module_runtime_run(const char *name) {
 
     if (!valid_name(name)) { osr_warn("invalid C module name"); return 0; }
 
-    str_init(&source); str_init(&header); str_init(&common_header);
-    str_init(&cache); str_init(&object); str_init(&lock);
-    str_init(&temporary); str_init(&symbol);
+    str_initv(&source, &header, &common_header, &cache, &object, &lock, &temporary, &symbol,
+        (Str *)NULL);
     add_path(&source, root, "modules/");
-    str_addz(&source, name); str_addz(&source, ".c");
+    str_addzz(&source, name, ".c", (const char *)NULL);
     add_path(&header, root, "lib/module.h");
     add_path(&common_header, root, "lib/common.h");
     if (!hash_file(&hash, str_text(&source)) ||
@@ -207,24 +229,22 @@ int osr_module_runtime_run(const char *name) {
 
     if (*cache_root != '\0') str_addz(&cache, cache_root);
     else { str_addz(&cache, osr_mod_home()); str_addz(&cache, "/.cache"); }
-    str_addz(&cache, "/os-rice/modules/abi-");
-    str_addz(&cache, OSR_MODULE_RUNTIME_ABI);
+    str_addzz(&cache, "/os-rice/modules/abi-", OSR_MODULE_RUNTIME_ABI, (const char *)NULL);
     if (!mkdir_private(str_text(&cache))) {
         osr_warnf("cannot create module cache: %s", str_text(&cache));
         goto fail;
     }
-    str_addz(&object, str_text(&cache)); str_addc(&object, '/');
-    str_addz(&object, name); str_addc(&object, '-'); str_addz(&object, key); str_addz(&object, ".so");
+    str_addzz(&object, str_text(&cache), "/", name, "-", key, ".so", (const char *)NULL);
 
     if (!file_exists(str_text(&object))) {
-        str_addz(&lock, str_text(&object)); str_addz(&lock, ".lock");
+        str_addzz(&lock, str_text(&object), ".lock", (const char *)NULL);
         if (!wait_for_lock(str_text(&lock))) {
             osr_warnf("cannot lock module cache entry: %s", str_text(&lock));
             goto fail;
         }
         have_lock = 1;
         if (!file_exists(str_text(&object))) {
-            str_addz(&temporary, str_text(&object)); str_addz(&temporary, ".tmp.XXXXXX");
+            str_addzz(&temporary, str_text(&object), ".tmp.XXXXXX", (const char *)NULL);
             fd = mkstemp(temporary.p);
             if (fd < 0) { osr_warn("cannot create temporary module output"); goto fail; }
             close(fd);
@@ -260,16 +280,14 @@ int osr_module_runtime_run(const char *name) {
         goto fail;
     }
     memcpy(&run, &address, sizeof(run));
-    str_free(&source); str_free(&header); str_free(&common_header);
-    str_free(&cache); str_free(&object); str_free(&lock);
-    str_free(&temporary); str_free(&symbol);
+    str_freev(&source, &header, &common_header, &cache, &object, &lock, &temporary, &symbol,
+        (Str *)NULL);
     return run();
 
 fail:
     if (have_lock) rmdir(str_text(&lock));
     if (temporary.len > 0) unlink(str_text(&temporary));
-    str_free(&source); str_free(&header); str_free(&common_header);
-    str_free(&cache); str_free(&object); str_free(&lock);
-    str_free(&temporary); str_free(&symbol);
+    str_freev(&source, &header, &common_header, &cache, &object, &lock, &temporary, &symbol,
+        (Str *)NULL);
     return 0;
 }

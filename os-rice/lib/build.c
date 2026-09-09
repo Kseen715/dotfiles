@@ -279,8 +279,7 @@ static const char *tmp_root(void) {
 static int make_tmp_dir(Str *out) {
     Str tpl;
     str_init(&tpl);
-    str_addz(&tpl, tmp_root());
-    str_addz(&tpl, "/tmp.XXXXXX");
+    str_addzz(&tpl, tmp_root(), "/tmp.XXXXXX", (const char *)NULL);
     if (mkdtemp(tpl.p) == NULL) {
         str_free(&tpl);
         return 0;
@@ -325,9 +324,7 @@ static int find_walk(Str *out, const char *dir, const char *name,
 
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
         str_init(&path);
-        str_addz(&path, dir);
-        str_addc(&path, '/');
-        str_addz(&path, e->d_name);
+        str_addzz(&path, dir, "/", e->d_name, (const char *)NULL);
         if (lstat(path.p, &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
                 found = find_walk(out, path.p, name, suffix, depth - 1);
@@ -361,22 +358,26 @@ static int find_path(Str *out, const char *dir, const char *suffix) {
 }
 
 /* first_subdir -- `find <dir> -mindepth 1 -maxdepth 1 -type d | head -n 1`: the
- * single versioned directory a vendor tarball unpacks into. */
+ * single versioned directory a vendor tarball unpacks into. Sorted, via
+ * osr_list_dir, because readdir order is the filesystem's and a tarball that
+ * unpacks into two directories would otherwise pick a different one per
+ * machine -- a build that succeeds here and fails there for no visible
+ * reason. */
 static int first_subdir(Str *out, const char *dir) {
-    DIR *d = opendir(dir);
-    struct dirent *e;
+    Str names;
+    size_t pos = 0;
+    Line line;
     int found = 0;
 
-    if (d == NULL) return 0;
-    while (!found && (e = readdir(d)) != NULL) {
+    str_init(&names);
+    osr_list_dir(&names, dir, NULL, NULL);
+    while (!found && next_line(str_text(&names), names.len, &pos, &line)) {
         Str path;
         struct stat st;
 
-        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
         str_init(&path);
-        str_addz(&path, dir);
-        str_addc(&path, '/');
-        str_addz(&path, e->d_name);
+        str_addzz(&path, dir, "/", (const char *)NULL);
+        str_add(&path, line.start, line.len);
         if (lstat(path.p, &st) == 0 && S_ISDIR(st.st_mode)) {
             str_reset(out);
             str_addz(out, path.p);
@@ -384,7 +385,7 @@ static int first_subdir(Str *out, const char *dir) {
         }
         str_free(&path);
     }
-    closedir(d);
+    str_free(&names);
     return found;
 }
 
@@ -394,8 +395,7 @@ static int make_tmp_file(Str *out) {
     int fd;
 
     str_init(&tpl);
-    str_addz(&tpl, tmp_root());
-    str_addz(&tpl, "/tmp.XXXXXX");
+    str_addzz(&tpl, tmp_root(), "/tmp.XXXXXX", (const char *)NULL);
     fd = mkstemp(tpl.p);
     if (fd < 0) { str_free(&tpl); return 0; }
     close(fd);
@@ -447,8 +447,7 @@ static void pkgconfig_env(Str *out) {
     str_reset(out);
     str_addz(out, "PKG_CONFIG_PATH=");
     if (*had != '\0') {
-        str_addz(out, had);
-        str_addc(out, ':');
+        str_addzz(out, had, ":", (const char *)NULL);
     }
     str_addz(out, "/usr/lib/");
     str_addz(out, uname(&u) == 0 ? u.machine : "");     /* `uname -m` */
@@ -486,9 +485,7 @@ static void jobs_flag(Str *out) {
     Str n;
     str_init(&n);
     build_jobs(&n);
-    str_reset(out);
-    str_addz(out, "-j");
-    str_addz(out, str_text(&n));
+    str_setz(out, "-j", str_text(&n), (const char *)NULL);
     str_free(&n);
 }
 
@@ -597,10 +594,9 @@ int osr_install_tarball_bin(const char *url, const char *bin) {
 
     if (osr_theme_only()) return osr_theme_only_skip("_osr_install_tarball_bin");
 
-    str_init(&tmp); str_init(&tar_path); str_init(&found); str_init(&dest);
+    str_initv(&tmp, &tar_path, &found, &dest, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/pkg.tar");
+    str_addzz(&tar_path, str_text(&tmp), "/pkg.tar", (const char *)NULL);
 
     if (!osr_fetch_download(url, tar_path.p, 0)) {
         rm_rf(str_text(&tmp));
@@ -616,14 +612,13 @@ int osr_install_tarball_bin(const char *url, const char *bin) {
         rm_rf(str_text(&tmp));
         osr_die("%s not found in %s", bin, url);
     }
-    str_addz(&dest, "/usr/local/bin/");
-    str_addz(&dest, bin);
+    str_addzz(&dest, "/usr/local/bin/", bin, (const char *)NULL);
     argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
     argv[3] = found.p; argv[4] = dest.p; argv[5] = NULL;
     ok = osr_run_root(argv) == 0;
     rm_rf(str_text(&tmp));
 
-    str_free(&tmp); str_free(&tar_path); str_free(&found); str_free(&dest);
+    str_freev(&tmp, &tar_path, &found, &dest, (Str *)NULL);
     return ok;
 }
 
@@ -648,10 +643,9 @@ static int install_zip_bins(const char *url, const char *const bins[]) {
         return 0;
     }
 
-    str_init(&tmp); str_init(&zip_path); str_init(&found); str_init(&dest);
+    str_initv(&tmp, &zip_path, &found, &dest, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&zip_path, str_text(&tmp));
-    str_addz(&zip_path, "/pkg.zip");
+    str_addzz(&zip_path, str_text(&tmp), "/pkg.zip", (const char *)NULL);
 
     if (!osr_fetch_download(url, zip_path.p, 0)) {
         osr_warnf("failed to download %s", url);
@@ -671,9 +665,7 @@ static int install_zip_bins(const char *url, const char *const bins[]) {
             ok = 0;
             break;
         }
-        str_reset(&dest);
-        str_addz(&dest, "/usr/local/bin/");
-        str_addz(&dest, bins[i]);
+        str_setz(&dest, "/usr/local/bin/", bins[i], (const char *)NULL);
         argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
         argv[3] = found.p; argv[4] = dest.p; argv[5] = NULL;
         if (osr_run_root(argv) != 0) {
@@ -684,7 +676,7 @@ static int install_zip_bins(const char *url, const char *const bins[]) {
     }
     rm_rf(str_text(&tmp));
 
-    str_free(&tmp); str_free(&zip_path); str_free(&found); str_free(&dest);
+    str_freev(&tmp, &zip_path, &found, &dest, (Str *)NULL);
     return ok;
 }
 
@@ -697,9 +689,7 @@ static int install_local_deb(const char *url, const char *deb, const char *what)
     int rc;
 
     str_init(&tmp);
-    str_addz(&tmp, tmp_root());
-    str_addc(&tmp, '/');
-    str_addz(&tmp, deb);
+    str_addzz(&tmp, tmp_root(), "/", deb, (const char *)NULL);
     if (!osr_fetch_download(url, tmp.p, 0)) osr_die("failed to download %s", url);
 
     argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
@@ -721,6 +711,35 @@ static void tag_of(Str *out, const char *repo) {
 /* arch -- $OSR_ARCH / $OSR_ARCH_DEB, which osr_detect exported. */
 static const char *arch(void)     { return env_str("OSR_ARCH", ""); }
 static const char *arch_deb(void) { return env_str("OSR_ARCH_DEB", ""); }
+
+/* tag_bare -- the release tag without its leading `v`: the version as the
+ * asset NAMES it (gh_2.63.0_..., fzf-0.74.3-...), where the tag itself is
+ * v2.63.0. Both spellings appear in one URL often enough that writing the
+ * conditional out by hand each time was its own source of typos. */
+static const char *tag_bare(const Str *tag) {
+    const char *t = str_text(tag);
+    return t + (t[0] == 'v' ? 1 : 0);
+}
+
+/* gh_asset -- https://github.com/<repo>/releases/download/<tag>/<asset>.
+ * The asset name is composed by the caller, because only the caller knows
+ * whether its vendor spells the arch amd64, x86_64 or x64. */
+static void gh_asset(Str *out, const char *repo, const Str *tag, const char *asset) {
+    str_setz(out, "https://github.com/", repo, "/releases/download/",
+             str_text(tag), "/", asset, (const char *)NULL);
+}
+
+/* arch_map -- translate this machine's uname arch into what one vendor calls
+ * it, from a NULL-terminated {uname, theirs, ...} table. An arch with no entry
+ * ends the run HERE, named, rather than becoming a 404 later. */
+static const char *arch_map(const char *const pairs[], const char *what) {
+    const char *a = arch();
+    size_t i;
+    for (i = 0; pairs[i] != NULL; i += 2)
+        if (strcmp(a, pairs[i]) == 0) return pairs[i + 1];
+    osr_die("no %s release binary for arch %s", what, a);
+    return NULL;
+}
 
 /* --- the builders ---------------------------------------------------------- */
 
@@ -748,20 +767,20 @@ static int provide_yazi_bin(void) {
     if (target == NULL) {
         osr_warnf("no yazi release binary for arch %s - falling back to cargo", a);
     } else {
-        str_init(&tag); str_init(&url);
+        str_initv(&tag, &url, (Str *)NULL);
         /* Quiet: an unreachable API is a reason to take the cargo route, not to
          * end the run. lib/build.sh spent a subshell on catching error() here
          * for exactly that. */
         if (osr_github_latest_quiet(&tag, "sxyazi/yazi")) {          /* v26.5.6 */
+            Str asset;
             osr_infof("installing yazi %s from the upstream release binary", str_text(&tag));
-            str_addz(&url, "https://github.com/sxyazi/yazi/releases/download/");
-            str_addz(&url, str_text(&tag));
-            str_addz(&url, "/yazi-");
-            str_addz(&url, target);
-            str_addz(&url, ".zip");
+            str_init(&asset);
+            str_setz(&asset, "yazi-", target, ".zip", (const char *)NULL);
+            gh_asset(&url, "sxyazi/yazi", &tag, str_text(&asset));
+            str_free(&asset);
             ok = install_zip_bins(str_text(&url), bins);
         }
-        str_free(&tag); str_free(&url);
+        str_freev(&tag, &url, (Str *)NULL);
         if (ok) return 1;
         osr_warnf("yazi release binary unavailable (%s) - falling back to cargo", target);
     }
@@ -836,18 +855,15 @@ static int provide_chafa(void) {
         str_free(&bare);
     }
 
-    str_init(&tmp); str_init(&tar_path); str_init(&src); str_init(&pc); str_init(&jobs);
+    str_initv(&tmp, &tar_path, &src, &pc, &jobs, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/chafa.tar.xz");
+    str_addzz(&tar_path, str_text(&tmp), "/chafa.tar.xz", (const char *)NULL);
     {
-        Str url;
-        str_init(&url);
-        str_addz(&url, "https://github.com/hpjansson/chafa/releases/download/");
-        str_addz(&url, str_text(&ver));
-        str_addz(&url, "/chafa-");
-        str_addz(&url, str_text(&ver));
-        str_addz(&url, ".tar.xz");
+        Str url, asset;
+        str_initv(&url, &asset, (Str *)NULL);
+        str_setz(&asset, "chafa-", str_text(&ver), ".tar.xz", (const char *)NULL);
+        gh_asset(&url, "hpjansson/chafa", &ver, str_text(&asset));
+        str_free(&asset);
         if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
             rm_rf(str_text(&tmp));
             osr_die("failed to download chafa %s", str_text(&ver));
@@ -860,9 +876,7 @@ static int provide_chafa(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract chafa %s", str_text(&ver));
     }
-    str_addz(&src, str_text(&tmp));
-    str_addz(&src, "/chafa-");
-    str_addz(&src, str_text(&ver));
+    str_addzz(&src, str_text(&tmp), "/chafa-", str_text(&ver), (const char *)NULL);
 
     /* The dist tarball is pre-autotooled -- ./configure is already generated,
      * so no autogen.sh run and no autoconf/automake/libtool in the dep list. */
@@ -891,8 +905,7 @@ static int provide_chafa(void) {
     (void)osr_run_root_quiet(argv);
     rm_rf(str_text(&tmp));
 
-    str_free(&ver); str_free(&tmp); str_free(&tar_path);
-    str_free(&src); str_free(&pc); str_free(&jobs);
+    str_freev(&ver, &tmp, &tar_path, &src, &pc, &jobs, (Str *)NULL);
     return 1;
 }
 
@@ -921,17 +934,14 @@ static int provide_ueberzugpp(void) {
     str_init(&ver);
     str_addz(&ver, str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0));
 
-    str_init(&tmp); str_init(&tar_path); str_init(&src); str_init(&bld);
-    str_init(&pc); str_init(&jobs); str_init(&cml);
+    str_initv(&tmp, &tar_path, &src, &bld, &pc, &jobs, &cml, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/ueberzugpp.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/ueberzugpp.tar.gz", (const char *)NULL);
     {
         Str url;
         str_init(&url);
         str_addz(&url, "https://github.com/jstkdng/ueberzugpp/archive/refs/tags/");
-        str_addz(&url, str_text(&tag));
-        str_addz(&url, ".tar.gz");
+        str_addzz(&url, str_text(&tag), ".tar.gz", (const char *)NULL);
         if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
             rm_rf(str_text(&tmp));
             osr_die("failed to download ueberzugpp %s", str_text(&tag));
@@ -944,17 +954,13 @@ static int provide_ueberzugpp(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract ueberzugpp %s", str_text(&tag));
     }
-    str_addz(&src, str_text(&tmp));
-    str_addz(&src, "/ueberzugpp-");
-    str_addz(&src, str_text(&ver));
-    str_addz(&cml, str_text(&src));
-    str_addz(&cml, "/CMakeLists.txt");
+    str_addzz(&src, str_text(&tmp), "/ueberzugpp-", str_text(&ver), (const char *)NULL);
+    str_addzz(&cml, str_text(&src), "/CMakeLists.txt", (const char *)NULL);
     if (!file_exists(str_text(&cml))) {
         rm_rf(str_text(&tmp));
         osr_die("no CMakeLists.txt in the ueberzugpp tarball - its layout changed");
     }
-    str_addz(&bld, str_text(&src));
-    str_addz(&bld, "/build");
+    str_addzz(&bld, str_text(&src), "/build", (const char *)NULL);
 
     pkgconfig_env(&pc);
     argv[0] = (char *)"env"; argv[1] = pc.p; argv[2] = (char *)"cmake";
@@ -979,8 +985,7 @@ static int provide_ueberzugpp(void) {
     {
         Str par;
         str_init(&par);
-        str_addz(&par, "CMAKE_BUILD_PARALLEL_LEVEL=");
-        str_addz(&par, str_text(&jobs));
+        str_addzz(&par, "CMAKE_BUILD_PARALLEL_LEVEL=", str_text(&jobs), (const char *)NULL);
         argv[0] = (char *)"env"; argv[1] = par.p; argv[2] = (char *)"cmake";
         argv[3] = (char *)"--build"; argv[4] = bld.p; argv[5] = NULL;
         if (osr_run(argv) != 0) {
@@ -999,8 +1004,7 @@ static int provide_ueberzugpp(void) {
     (void)osr_run_root_quiet(argv);
     rm_rf(str_text(&tmp));
 
-    str_free(&tag); str_free(&ver); str_free(&tmp); str_free(&tar_path);
-    str_free(&src); str_free(&bld); str_free(&pc); str_free(&jobs); str_free(&cml);
+    str_freev(&tag, &ver, &tmp, &tar_path, &src, &bld, &pc, &jobs, &cml, (Str *)NULL);
     if (!osr_have_cmd("ueberzugpp"))
         osr_die("ueberzugpp installed but not on PATH - yazi spawns it by that exact name");
     return 1;
@@ -1018,8 +1022,7 @@ static int provide_paru(void) {
 
     pkg(deps);
     str_init(&repo);
-    str_addz(&repo, tmp_root());
-    str_addz(&repo, "/osr-paru-build");
+    str_addzz(&repo, tmp_root(), "/osr-paru-build", (const char *)NULL);
 
     argv[0] = (char *)"rm"; argv[1] = (char *)"-rf"; argv[2] = repo.p; argv[3] = NULL;
     (void)osr_run_user(argv);
@@ -1065,9 +1068,9 @@ static void zig_candidates(Str *out, const char *json, const char *m) {
     Str new_style, old_style;
 
     str_init(&new_style);
-    str_addz(&new_style, "zig-"); str_addz(&new_style, m); str_addz(&new_style, "-linux-");
+    str_addzz(&new_style, "zig-", m, "-linux-", (const char *)NULL);
     str_init(&old_style);
-    str_addz(&old_style, "zig-linux-"); str_addz(&old_style, m); str_addc(&old_style, '-');
+    str_addzz(&old_style, "zig-linux-", m, "-", (const char *)NULL);
     str_reset(out);
 
     while ((p = strstr(p, base)) != NULL) {
@@ -1091,7 +1094,7 @@ static void zig_candidates(Str *out, const char *json, const char *m) {
         }
         p = last + 7;
     }
-    str_free(&new_style); str_free(&old_style);
+    str_freev(&new_style, &old_style, (Str *)NULL);
 }
 
 /* zig_url_version -- the sed script lib/build.sh runs over the resolved URL to
@@ -1136,7 +1139,7 @@ int osr_build_zig(const char *want) {
         (void)osr_pkg_install(xz);
     }
 
-    str_init(&json); str_init(&cands); str_init(&url);
+    str_initv(&json, &cands, &url, (Str *)NULL);
     (void)osr_fetch_buffer(&json, "https://ziglang.org/download/index.json");
     zig_candidates(&cands, str_text(&json), m);
     str_free(&json);
@@ -1147,7 +1150,7 @@ int osr_build_zig(const char *want) {
             Str pat;
             int hit;
             str_init(&pat);
-            str_addc(&pat, '/'); str_addz(&pat, want); str_addc(&pat, '/');
+            str_addzz(&pat, "/", want, "/", (const char *)NULL);
             hit = has_text(line.start, line.len, str_text(&pat));
             str_free(&pat);
             if (!hit) continue;
@@ -1163,19 +1166,16 @@ int osr_build_zig(const char *want) {
     str_init(&ver);
     if (!zig_url_version(&ver, str_text(&url))) str_addz(&ver, str_text(&url));
     str_init(&dir);
-    str_addz(&dir, "/usr/local/zig-");
-    str_addz(&dir, str_text(&ver));
+    str_addzz(&dir, "/usr/local/zig-", str_text(&ver), (const char *)NULL);
     str_init(&exe);
-    str_addz(&exe, str_text(&dir));
-    str_addz(&exe, "/zig");
+    str_addzz(&exe, str_text(&dir), "/zig", (const char *)NULL);
 
     if (access(str_text(&exe), X_OK) != 0) {
         Str tmp, tar_path;
 
-        str_init(&tmp); str_init(&tar_path);
+        str_initv(&tmp, &tar_path, (Str *)NULL);
         if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-        str_addz(&tar_path, str_text(&tmp));
-        str_addz(&tar_path, "/zig.tar.xz");
+        str_addzz(&tar_path, str_text(&tmp), "/zig.tar.xz", (const char *)NULL);
         if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
             rm_rf(str_text(&tmp));
             osr_die("failed to download %s", str_text(&url));
@@ -1190,13 +1190,13 @@ int osr_build_zig(const char *want) {
             osr_die("failed to extract zig %s", str_text(&ver));
         }
         rm_rf(str_text(&tmp));
-        str_free(&tmp); str_free(&tar_path);
+        str_freev(&tmp, &tar_path, (Str *)NULL);
     }
     argv[0] = (char *)"ln"; argv[1] = (char *)"-sf"; argv[2] = exe.p;
     argv[3] = (char *)"/usr/local/bin/zig"; argv[4] = NULL;
     (void)osr_run_root(argv);
 
-    str_free(&url); str_free(&ver); str_free(&dir); str_free(&exe);
+    str_freev(&url, &ver, &dir, &exe, (Str *)NULL);
     return 1;
 }
 
@@ -1298,18 +1298,15 @@ static int provide_ghostty(void) {
         str_free(&bare);
     }
 
-    str_init(&tmp); str_init(&tar_path); str_init(&src); str_init(&zigver); str_init(&pc);
+    str_initv(&tmp, &tar_path, &src, &zigver, &pc, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/ghostty.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/ghostty.tar.gz", (const char *)NULL);
     {
         Str url;
         str_init(&url);
         str_addz(&url, "https://release.files.ghostty.org/");
-        str_addz(&url, str_text(&ver));
-        str_addz(&url, "/ghostty-");
-        str_addz(&url, str_text(&ver));
-        str_addz(&url, ".tar.gz");
+        str_addzz(&url, str_text(&ver), "/ghostty-", str_text(&ver), ".tar.gz",
+            (const char *)NULL);
         if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
             rm_rf(str_text(&tmp));
             osr_die("failed to download ghostty %s", str_text(&ver));
@@ -1322,9 +1319,7 @@ static int provide_ghostty(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract ghostty");
     }
-    str_addz(&src, str_text(&tmp));
-    str_addz(&src, "/ghostty-");
-    str_addz(&src, str_text(&ver));
+    str_addzz(&src, str_text(&tmp), "/ghostty-", str_text(&ver), (const char *)NULL);
 
     /* `cat .zig-version | tr -d '[:space:]'`: the file is one line, and an
      * absent one leaves the version empty, which osr_build_zig reads as
@@ -1332,8 +1327,7 @@ static int provide_ghostty(void) {
     {
         Str vpath;
         str_init(&vpath);
-        str_addz(&vpath, str_text(&src));
-        str_addz(&vpath, "/.zig-version");
+        str_addzz(&vpath, str_text(&src), "/.zig-version", (const char *)NULL);
         pinned = slurp(str_text(&vpath), &len);
         str_free(&vpath);
     }
@@ -1365,8 +1359,7 @@ static int provide_ghostty(void) {
         }
     }
     rm_rf(str_text(&tmp));
-    str_free(&ver); str_free(&tmp); str_free(&tar_path);
-    str_free(&src); str_free(&zigver); str_free(&pc);
+    str_freev(&ver, &tmp, &tar_path, &src, &zigver, &pc, (Str *)NULL);
     return 1;
 }
 
@@ -1388,8 +1381,7 @@ static int provide_wezterm(void) {
 
     pkg(deps);
     str_init(&cargo);
-    str_addz(&cargo, osr_mod_home());
-    str_addz(&cargo, "/.cargo/bin/cargo");
+    str_addzz(&cargo, osr_mod_home(), "/.cargo/bin/cargo", (const char *)NULL);
     argv[0] = (char *)"test"; argv[1] = (char *)"-x"; argv[2] = cargo.p; argv[3] = NULL;
     if (osr_run_user(argv) != 0)
         osr_die("cargo not found - install 'rust' before wezterm (manifest order, section 4)");
@@ -1398,11 +1390,9 @@ static int provide_wezterm(void) {
      * 15-minute compile from scratch after a transient registry/network blip.
      * Only a successful install cleans it up. */
     str_init(&src);
-    str_addz(&src, tmp_root());
-    str_addz(&src, "/osr-wezterm-src");
+    str_addzz(&src, tmp_root(), "/osr-wezterm-src", (const char *)NULL);
     str_init(&cargo_tmpl);
-    str_addz(&cargo_tmpl, str_text(&src));
-    str_addz(&cargo_tmpl, "/Cargo.toml");
+    str_addzz(&cargo_tmpl, str_text(&src), "/Cargo.toml", (const char *)NULL);
     if (file_exists(str_text(&cargo_tmpl))) {
         osr_infof("reusing the existing wezterm checkout (%s) - rebuild is incremental",
                   str_text(&src));
@@ -1429,17 +1419,11 @@ static int provide_wezterm(void) {
      * /root/.rustup (empty -> "could not choose a version of rustc to run").
      * Point all three at OSR_USER's toolchain, or get-deps exits 1 on a box
      * where the deps installed fine. */
-    str_init(&path_env); str_init(&rustup); str_init(&cargo_home);
-    str_addz(&path_env, "PATH=");
-    str_addz(&path_env, osr_mod_home());
-    str_addz(&path_env, "/.cargo/bin:");
-    str_addz(&path_env, env_str("PATH", ""));
-    str_addz(&rustup, "RUSTUP_HOME=");
-    str_addz(&rustup, osr_mod_home());
-    str_addz(&rustup, "/.rustup");
-    str_addz(&cargo_home, "CARGO_HOME=");
-    str_addz(&cargo_home, osr_mod_home());
-    str_addz(&cargo_home, "/.cargo");
+    str_initv(&path_env, &rustup, &cargo_home, (Str *)NULL);
+    str_addzz(&path_env, "PATH=", osr_mod_home(), "/.cargo/bin:", env_str("PATH", ""),
+        (const char *)NULL);
+    str_addzz(&rustup, "RUSTUP_HOME=", osr_mod_home(), "/.rustup", (const char *)NULL);
+    str_addzz(&cargo_home, "CARGO_HOME=", osr_mod_home(), "/.cargo", (const char *)NULL);
     argv[0] = (char *)"env"; argv[1] = path_env.p; argv[2] = rustup.p;
     argv[3] = cargo_home.p; argv[4] = (char *)"./get-deps"; argv[5] = NULL;
     if (run_in_dir(str_text(&src), AS_ROOT, argv) != 0) osr_die("wezterm get-deps failed");
@@ -1453,33 +1437,24 @@ static int provide_wezterm(void) {
     if (run_in_dir(str_text(&src), AS_USER, argv) != 0)
         osr_die("wezterm build failed (checkout kept at %s - rerun to resume)", str_text(&src));
 
-    str_init(&from); str_init(&to);
+    str_initv(&from, &to, (Str *)NULL);
     for (i = 0; bins[i] != NULL; i++) {
-        str_reset(&from);
-        str_addz(&from, str_text(&src));
-        str_addz(&from, "/target/release/");
-        str_addz(&from, bins[i]);
-        str_reset(&to);
-        str_addz(&to, "/usr/local/bin/");
-        str_addz(&to, bins[i]);
+        str_setz(&from, str_text(&src), "/target/release/", bins[i], (const char *)NULL);
+        str_setz(&to, "/usr/local/bin/", bins[i], (const char *)NULL);
         argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
         argv[3] = from.p; argv[4] = to.p; argv[5] = NULL;
         if (osr_run_root(argv) != 0) osr_die("failed to install %s", bins[i]);
     }
 
     /* Desktop entry + icon so a DE launcher finds it. Cosmetic: warn, never fail. */
-    str_reset(&from);
-    str_addz(&from, str_text(&src));
-    str_addz(&from, "/assets/wezterm.desktop");
+    str_setz(&from, str_text(&src), "/assets/wezterm.desktop", (const char *)NULL);
     if (file_exists(str_text(&from))) {
         argv[0] = (char *)"install"; argv[1] = (char *)"-Dm"; argv[2] = (char *)"0644";
         argv[3] = from.p;
         argv[4] = (char *)"/usr/local/share/applications/org.wezfurlong.wezterm.desktop";
         argv[5] = NULL;
         if (osr_run_root(argv) != 0) osr_warn("failed to install the wezterm desktop entry");
-        str_reset(&from);
-        str_addz(&from, str_text(&src));
-        str_addz(&from, "/assets/icon/terminal.png");
+        str_setz(&from, str_text(&src), "/assets/icon/terminal.png", (const char *)NULL);
         argv[3] = from.p;
         argv[4] = (char *)"/usr/local/share/icons/hicolor/128x128/apps/org.wezfurlong.wezterm.png";
         if (osr_run_root(argv) != 0) osr_warn("failed to install the wezterm icon");
@@ -1487,53 +1462,42 @@ static int provide_wezterm(void) {
     argv[0] = (char *)"rm"; argv[1] = (char *)"-rf"; argv[2] = src.p; argv[3] = NULL;
     (void)osr_run_user(argv);
 
-    str_free(&cargo); str_free(&src); str_free(&cargo_tmpl); str_free(&pc);
-    str_free(&path_env); str_free(&rustup); str_free(&cargo_home);
-    str_free(&from); str_free(&to);
+    str_freev(&cargo, &src, &cargo_tmpl, &pc, &path_env, &rustup, &cargo_home, &from, &to,
+        (Str *)NULL);
     return 1;
 }
 
 /* provide_gh_tarball -- GitHub CLI from its release tarball (one static
  * binary), for apt releases with no native `gh` (Debian bullseye). */
 static int provide_gh_tarball(void) {
-    Str tag, url;
+    Str tag, asset, url;
     int ok;
 
-    str_init(&tag); str_init(&url);
+    str_initv(&tag, &asset, &url, (Str *)NULL);
     tag_of(&tag, "cli/cli");                                  /* v2.63.0 */
-    str_addz(&url, "https://github.com/cli/cli/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, "/gh_");
-    str_addz(&url, str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0));   /* 2.63.0 */
-    str_addz(&url, "_linux_");
-    str_addz(&url, arch_deb());
-    str_addz(&url, ".tar.gz");
+    str_setz(&asset, "gh_", tag_bare(&tag), "_linux_", arch_deb(), ".tar.gz",
+             (const char *)NULL);                             /* gh_2.63.0_linux_amd64 */
+    gh_asset(&url, "cli/cli", &tag, str_text(&asset));
     ok = osr_install_tarball_bin(str_text(&url), "gh");
-    str_free(&tag); str_free(&url);
+    str_freev(&tag, &asset, &url, (Str *)NULL);
     return ok;
 }
 
 /* provide_btop_tarball -- btop from its static release tarball (bullseye).
  * The asset arch is uname-style. */
 static int provide_btop_tarball(void) {
-    Str tag, url;
-    const char *a = arch();
+    /* btop's asset arch is uname's. */
+    static const char *const names[] = { "x86_64", "x86_64", "aarch64", "aarch64", NULL };
+    Str tag, asset, url;
+    const char *a = arch_map(names, "btop");
     int ok;
 
-    str_init(&tag); str_init(&url);
+    str_initv(&tag, &asset, &url, (Str *)NULL);
     tag_of(&tag, "aristocratos/btop");                        /* v1.4.0 */
-    /* The tag is resolved BEFORE the arch is judged, as in lib/build.sh: an
-     * unsupported arch stops the run either way, and keeping the order keeps
-     * the two tiers' command logs identical. */
-    if (strcmp(a, "x86_64") != 0 && strcmp(a, "aarch64") != 0)
-        osr_die("no btop tarball for arch %s", a);
-    str_addz(&url, "https://github.com/aristocratos/btop/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, "/btop-");
-    str_addz(&url, a);
-    str_addz(&url, "-unknown-linux-musl.tar.gz");
+    str_setz(&asset, "btop-", a, "-unknown-linux-musl.tar.gz", (const char *)NULL);
+    gh_asset(&url, "aristocratos/btop", &tag, str_text(&asset));
     ok = osr_install_tarball_bin(str_text(&url), "btop");
-    str_free(&tag); str_free(&url);
+    str_freev(&tag, &asset, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1552,24 +1516,18 @@ int osr_lsd_ok(void) {
 
 /* provide_lsd_tarball -- the lsd binary from the release .tar.gz (old dpkg). */
 static int provide_lsd_tarball(void) {
-    Str tag, url;
-    const char *a = arch();
+    static const char *const names[] = { "x86_64",  "x86_64-unknown-linux-gnu",
+                                         "aarch64", "aarch64-unknown-linux-gnu", NULL };
+    Str tag, asset, url;
+    const char *a = arch_map(names, "lsd");
     int ok;
 
-    str_init(&tag); str_init(&url);
+    str_initv(&tag, &asset, &url, (Str *)NULL);
     tag_of(&tag, "lsd-rs/lsd");                               /* v1.2.0 */
-    if (strcmp(a, "x86_64") == 0)        a = "x86_64-unknown-linux-gnu";
-    else if (strcmp(a, "aarch64") == 0)  a = "aarch64-unknown-linux-gnu";
-    else                                 osr_die("no lsd tarball for arch %s", a);
-    str_addz(&url, "https://github.com/lsd-rs/lsd/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, "/lsd-");
-    str_addz(&url, str_text(&tag));
-    str_addc(&url, '-');
-    str_addz(&url, a);
-    str_addz(&url, ".tar.gz");
+    str_setz(&asset, "lsd-", str_text(&tag), "-", a, ".tar.gz", (const char *)NULL);
+    gh_asset(&url, "lsd-rs/lsd", &tag, str_text(&asset));
     ok = osr_install_tarball_bin(str_text(&url), "lsd");
-    str_free(&tag); str_free(&url);
+    str_freev(&tag, &asset, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1597,17 +1555,15 @@ int osr_fzf_ok(void) {
  * route on musl. /usr/local/bin precedes /usr/bin, so the downloaded fzf wins
  * even where the old package stays installed. */
 static int provide_fzf(void) {
-    Str have, tag, url;
-    const char *a = arch();
+    /* fzf's asset arch is Go's (amd64/arm64/armv7), not uname's. */
+    static const char *const names[] = { "x86_64", "amd64", "aarch64", "arm64",
+                                         "armv7l", "armv7", NULL };
+    Str have, tag, asset, url;
+    const char *a;
     int ok;
 
     str_init(&have);
     if (tool_version_2(&have, "fzf") && version_ge(str_text(&have), FZF_MIN)) {
-        /* Asked a second time for the message, because lib/build.sh's line was
-         * `info "fzf $(_fzf_version) is already ..."` after its own _fzf_ok:
-         * two `fzf --version` runs, and the parity test compares the commands
-         * a builder ran, not just the ones that changed something. */
-        (void)tool_version_2(&have, "fzf");
         osr_infof("fzf %s is already >= %s - skipping the release binary",
                   str_text(&have), FZF_MIN);
         str_free(&have);
@@ -1615,23 +1571,14 @@ static int provide_fzf(void) {
     }
     str_free(&have);
 
-    str_init(&tag); str_init(&url);
+    a = arch_map(names, "fzf");
+    str_initv(&tag, &asset, &url, (Str *)NULL);
     tag_of(&tag, "junegunn/fzf");                             /* v0.74.3 */
-    /* fzf's asset arch is Go's (amd64/arm64/armv7), not uname's. */
-    if (strcmp(a, "x86_64") == 0)       a = "amd64";
-    else if (strcmp(a, "aarch64") == 0) a = "arm64";
-    else if (strcmp(a, "armv7l") == 0)  a = "armv7";
-    else                                osr_die("no fzf release binary for arch %s", a);
-
-    str_addz(&url, "https://github.com/junegunn/fzf/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, "/fzf-");
-    str_addz(&url, str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0));   /* 0.74.3 */
-    str_addz(&url, "-linux_");
-    str_addz(&url, a);
-    str_addz(&url, ".tar.gz");
+    str_setz(&asset, "fzf-", tag_bare(&tag), "-linux_", a, ".tar.gz",
+             (const char *)NULL);                             /* fzf-0.74.3-linux_amd64 */
+    gh_asset(&url, "junegunn/fzf", &tag, str_text(&asset));
     ok = osr_install_tarball_bin(str_text(&url), "fzf");
-    str_free(&tag); str_free(&url);
+    str_freev(&tag, &asset, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1648,21 +1595,18 @@ static const char *fastfetch_arch(void) {
 /* provide_fastfetch_tarball -- the fastfetch binary from the release .tar.gz
  * (old dpkg). */
 static int provide_fastfetch_tarball(void) {
-    Str tag, url;
+    Str tag, asset, url;
     const char *a = fastfetch_arch();
     int ok;
 
-    str_init(&tag); str_init(&url);
+    str_initv(&tag, &asset, &url, (Str *)NULL);
     tag_of(&tag, "fastfetch-cli/fastfetch");                  /* 2.66.0 */
     if (a == NULL || strcmp(a, "armv7l") == 0)
         osr_die("no fastfetch tarball for arch %s", arch());
-    str_addz(&url, "https://github.com/fastfetch-cli/fastfetch/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, "/fastfetch-linux-");
-    str_addz(&url, a);
-    str_addz(&url, ".tar.gz");
+    str_setz(&asset, "fastfetch-linux-", a, ".tar.gz", (const char *)NULL);
+    gh_asset(&url, "fastfetch-cli/fastfetch", &tag, str_text(&asset));
     ok = osr_install_tarball_bin(str_text(&url), "fastfetch");
-    str_free(&tag); str_free(&url);
+    str_freev(&tag, &asset, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1674,17 +1618,12 @@ static int provide_fastfetch_deb(void) {
     int ok;
 
     if (a == NULL) a = arch_deb();
-    str_init(&tag); str_init(&deb); str_init(&url);
+    str_initv(&tag, &deb, &url, (Str *)NULL);
     tag_of(&tag, "fastfetch-cli/fastfetch");                  /* 2.66.0, no v */
-    str_addz(&deb, "fastfetch-linux-");
-    str_addz(&deb, a);
-    str_addz(&deb, ".deb");
-    str_addz(&url, "https://github.com/fastfetch-cli/fastfetch/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addc(&url, '/');
-    str_addz(&url, str_text(&deb));
+    str_addzz(&deb, "fastfetch-linux-", a, ".deb", (const char *)NULL);
+    gh_asset(&url, "fastfetch-cli/fastfetch", &tag, str_text(&deb));
     ok = install_local_deb(str_text(&url), str_text(&deb), "fastfetch");
-    str_free(&tag); str_free(&deb); str_free(&url);
+    str_freev(&tag, &deb, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1694,19 +1633,13 @@ static int provide_lsd_deb(void) {
     Str tag, deb, url;
     int ok;
 
-    str_init(&tag); str_init(&deb); str_init(&url);
+    str_initv(&tag, &deb, &url, (Str *)NULL);
     tag_of(&tag, "lsd-rs/lsd");                               /* v1.2.0 */
-    str_addz(&deb, "lsd_");
-    str_addz(&deb, str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0));   /* 1.2.0 */
-    str_addc(&deb, '_');
-    str_addz(&deb, arch_deb());
-    str_addz(&deb, ".deb");                                   /* lsd_1.2.0_amd64.deb */
-    str_addz(&url, "https://github.com/lsd-rs/lsd/releases/download/");
-    str_addz(&url, str_text(&tag));
-    str_addc(&url, '/');
-    str_addz(&url, str_text(&deb));
+    str_setz(&deb, "lsd_", tag_bare(&tag), "_", arch_deb(), ".deb",
+             (const char *)NULL);                             /* lsd_1.2.0_amd64.deb */
+    gh_asset(&url, "lsd-rs/lsd", &tag, str_text(&deb));
     ok = install_local_deb(str_text(&url), str_text(&deb), "lsd");
-    str_free(&tag); str_free(&deb); str_free(&url);
+    str_freev(&tag, &deb, &url, (Str *)NULL);
     return ok;
 }
 
@@ -1754,10 +1687,9 @@ static int provide_thunderbird_tarball(void) {
                 "package (an ESR without Exchange/EWS) on this arch", arch());
     pkg(deps);
 
-    str_init(&tmp); str_init(&tar_path); str_init(&unpacked);
+    str_initv(&tmp, &tar_path, &unpacked, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/thunderbird.tar.xz");
+    str_addzz(&tar_path, str_text(&tmp), "/thunderbird.tar.xz", (const char *)NULL);
     osr_info("downloading the latest Thunderbird from download.mozilla.org");
     if (!osr_fetch_download(
             "https://download.mozilla.org/?product=thunderbird-latest&os=linux64&lang=en-US",
@@ -1771,14 +1703,12 @@ static int provide_thunderbird_tarball(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the Thunderbird tarball");
     }
-    str_addz(&unpacked, str_text(&tmp));
-    str_addz(&unpacked, "/thunderbird");
+    str_addzz(&unpacked, str_text(&tmp), "/thunderbird", (const char *)NULL);
     {
         Str binary;
         int ok;
         str_init(&binary);
-        str_addz(&binary, str_text(&unpacked));
-        str_addz(&binary, "/thunderbird");
+        str_addzz(&binary, str_text(&unpacked), "/thunderbird", (const char *)NULL);
         ok = access(str_text(&binary), X_OK) == 0;
         str_free(&binary);
         if (!ok) {
@@ -1808,7 +1738,7 @@ static int provide_thunderbird_tarball(void) {
     refresh_desktop_db();
     /* /opt is root-owned, so Thunderbird's own updater cannot apply updates:
      * `osr install thunderbird` (this builder) is the update path. */
-    str_free(&tmp); str_free(&tar_path); str_free(&unpacked);
+    str_freev(&tmp, &tar_path, &unpacked, (Str *)NULL);
     return 1;
 }
 
@@ -1825,19 +1755,16 @@ static int provide_proteus(void) {
     int rc;
 
     str_init(&cargo);
-    str_addz(&cargo, osr_mod_home());
-    str_addz(&cargo, "/.cargo/bin/cargo");
+    str_addzz(&cargo, osr_mod_home(), "/.cargo/bin/cargo", (const char *)NULL);
     argv[0] = (char *)"test"; argv[1] = (char *)"-x"; argv[2] = cargo.p; argv[3] = NULL;
     if (osr_run_user(argv) != 0)
         osr_die("cargo not found for proteus - install 'rust' before proteus "
                 "(manifest order, section 4)");
 
     str_init(&src);
-    str_addz(&src, osr_mod_dotfiles());
-    str_addz(&src, "/proteus");
+    str_addzz(&src, osr_mod_dotfiles(), "/proteus", (const char *)NULL);
     str_init(&manifest);
-    str_addz(&manifest, str_text(&src));
-    str_addz(&manifest, "/Cargo.toml");
+    str_addzz(&manifest, str_text(&src), "/Cargo.toml", (const char *)NULL);
     if (!file_exists(str_text(&manifest)))
         osr_die("proteus sources not found at %s", str_text(&src));
 
@@ -1846,15 +1773,14 @@ static int provide_proteus(void) {
      * install prefix; the binary lands in $OSR_HOME/.local/bin, which is on
      * PATH for the shell layers. */
     str_init(&root);
-    str_addz(&root, osr_mod_home());
-    str_addz(&root, "/.local");
+    str_addzz(&root, osr_mod_home(), "/.local", (const char *)NULL);
     argv[0] = cargo.p; argv[1] = (char *)"install"; argv[2] = (char *)"--locked";
     argv[3] = (char *)"--path"; argv[4] = src.p; argv[5] = (char *)"--root";
     argv[6] = root.p; argv[7] = (char *)"--force"; argv[8] = NULL;
     rc = osr_run_user(argv);
     if (rc != 0) osr_die("proteus build failed (exit %d)", rc);
 
-    str_free(&cargo); str_free(&src); str_free(&manifest); str_free(&root);
+    str_freev(&cargo, &src, &manifest, &root, (Str *)NULL);
     return 1;
 }
 
@@ -1889,11 +1815,18 @@ static int provide_yandex_browser(void) {
     (void)osr_run_root(argv);
     (void)unlink(str_text(&tmp));
 
-    str_init(&list);
-    str_addz(&list, "deb [arch=amd64 signed-by=");
-    str_addz(&list, key_path);
-    str_addz(&list, "] https://repo.yandex.ru/yandex-browser/deb stable main\n");
-    (void)osr_write_root("/etc/apt/sources.list.d/yandex-browser.list", str_text(&list));
+    /* Only if nothing already describes the repo. The vendor's own .deb writes
+     * an equivalent list in its postinst, so on a box that has had the browser
+     * before, writing ours makes a SECOND list for the same repo with a second
+     * signed-by -- which apt 3.0 refuses outright. */
+    if (!osr_apt_repo_configured("repo.yandex.ru/yandex-browser",
+                                 "/etc/apt/sources.list.d/yandex-browser.list")) {
+        str_init(&list);
+        str_addzz(&list, "deb [arch=amd64 signed-by=", key_path, (const char *)NULL);
+        str_addz(&list, "] https://repo.yandex.ru/yandex-browser/deb stable main\n");
+        (void)osr_write_root("/etc/apt/sources.list.d/yandex-browser.list", str_text(&list));
+        str_free(&list);
+    }
 
     argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
     argv[2] = (char *)"apt-get"; argv[3] = (char *)"update"; argv[4] = (char *)"-q";
@@ -1926,7 +1859,7 @@ static int provide_yandex_browser(void) {
     if (osr_run_root(argv) != 0)
         osr_warn("apt-get update failed after handing the Yandex repo to the vendor list");
 
-    str_free(&tmp); str_free(&list);
+    str_free(&tmp);
     return 1;
 }
 
@@ -1952,13 +1885,11 @@ static int provide_betterlockscreen(void) {
     str_init(&tag);
     tag_of(&tag, "betterlockscreen/betterlockscreen");            /* v4.3.2 */
 
-    str_init(&tmp); str_init(&tar_path); str_init(&url); str_init(&src); str_init(&unit);
+    str_initv(&tmp, &tar_path, &url, &src, &unit, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/bls.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/bls.tar.gz", (const char *)NULL);
     str_addz(&url, "https://github.com/betterlockscreen/betterlockscreen/archive/refs/tags/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, ".tar.gz");
+    str_addzz(&url, str_text(&tag), ".tar.gz", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download betterlockscreen %s", str_text(&tag));
@@ -1994,8 +1925,7 @@ static int provide_betterlockscreen(void) {
     }
     rm_rf(str_text(&tmp));
 
-    str_free(&tag); str_free(&tmp); str_free(&tar_path);
-    str_free(&url); str_free(&src); str_free(&unit);
+    str_freev(&tag, &tmp, &tar_path, &url, &src, &unit, (Str *)NULL);
     if (!osr_have_cmd("betterlockscreen"))
         osr_die("betterlockscreen installed but is not on PATH");
     return 1;
@@ -2027,10 +1957,9 @@ static int provide_tcc(void) {
     }
     pkg(deps);
 
-    str_init(&tmp); str_init(&tar_path); str_init(&src); str_init(&jobs);
+    str_initv(&tmp, &tar_path, &src, &jobs, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/tcc.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/tcc.tar.gz", (const char *)NULL);
     if (!osr_fetch_download(
             "https://github.com/TinyCC/tinycc/archive/refs/heads/mob.tar.gz",
             tar_path.p, 0)) {
@@ -2043,8 +1972,7 @@ static int provide_tcc(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the tinycc tarball");
     }
-    str_addz(&src, str_text(&tmp));
-    str_addz(&src, "/tinycc-mob");
+    str_addzz(&src, str_text(&tmp), "/tinycc-mob", (const char *)NULL);
 
     /* configure picks the libc (glibc/musl) and the CPU off the build host, so
      * it needs no arguments beyond the prefix - except the bounds checker, whose
@@ -2071,7 +1999,7 @@ static int provide_tcc(void) {
     }
     rm_rf(str_text(&tmp));
 
-    str_free(&tmp); str_free(&tar_path); str_free(&src); str_free(&jobs);
+    str_freev(&tmp, &tar_path, &src, &jobs, (Str *)NULL);
     if (!osr_have_cmd("tcc"))
         osr_die("tcc installed but is not on PATH");
     return 1;
@@ -2092,13 +2020,11 @@ static int provide_autotiling(void) {
     str_init(&tag);
     tag_of(&tag, "nwg-piotr/autotiling");                         /* v1.9.4 */
 
-    str_init(&tmp); str_init(&tar_path); str_init(&url); str_init(&src);
+    str_initv(&tmp, &tar_path, &url, &src, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/at.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/at.tar.gz", (const char *)NULL);
     str_addz(&url, "https://github.com/nwg-piotr/autotiling/archive/refs/tags/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, ".tar.gz");
+    str_addzz(&url, str_text(&tag), ".tar.gz", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download autotiling %s", str_text(&tag));
@@ -2124,7 +2050,7 @@ static int provide_autotiling(void) {
     }
     rm_rf(str_text(&tmp));
 
-    str_free(&tag); str_free(&tmp); str_free(&tar_path); str_free(&url); str_free(&src);
+    str_freev(&tag, &tmp, &tar_path, &url, &src, (Str *)NULL);
     if (!osr_have_cmd("autotiling"))
         osr_die("autotiling installed but is not on PATH");
     return 1;
@@ -2152,10 +2078,7 @@ static int stage_dir(Str *out, const char *parent, const char *what) {
     char *argv[5];
 
     str_init(&tpl);
-    str_addz(&tpl, parent);
-    str_addz(&tpl, "/.");
-    str_addz(&tpl, what);
-    str_addz(&tpl, "-XXXXXX");
+    str_addzz(&tpl, parent, "/.", what, "-XXXXXX", (const char *)NULL);
     argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = (char *)parent; argv[3] = NULL;
     (void)osr_run_root(argv);
 
@@ -2236,9 +2159,7 @@ static const char *dg_path(const char *suffix) {
     static Str held;
     static int ready = 0;
     if (!ready) { str_init(&held); ready = 1; }
-    str_reset(&held);
-    str_addz(&held, datagrip_prefix());
-    str_addz(&held, suffix);
+    str_setz(&held, datagrip_prefix(), suffix, (const char *)NULL);
     return str_text(&held);
 }
 #define DATAGRIP_FEED \
@@ -2270,9 +2191,7 @@ static void datagrip_latest(Str *ver, Str *url, long *size) {
     (void)osr_json_string_field(ver, str_text(&feed), "version");
 
     str_init(&pat);
-    str_addc(&pat, '"');
-    str_addz(&pat, key);
-    str_addz(&pat, "\":{\"link\":\"");
+    str_addzz(&pat, "\"", key, "\":{\"link\":\"", (const char *)NULL);
     str_reset(url);
     *size = 0;
     p = strstr(str_text(&feed), str_text(&pat));
@@ -2284,8 +2203,7 @@ static void datagrip_latest(Str *ver, Str *url, long *size) {
             *size = atol(p);
         }
     }
-    str_free(&pat);
-    str_free(&feed);
+    str_freev(&pat, &feed, (Str *)NULL);
 
     if (strncmp(str_text(url), "https://", 8) != 0 || !ends_with(str_text(url), ".tar.gz"))
         osr_die("could not resolve the DataGrip %s tarball from the JetBrains feed", key);
@@ -2302,8 +2220,7 @@ static int datagrip_version_at(Str *out, const char *dir) {
     int ok = 0;
 
     str_init(&path);
-    str_addz(&path, dir);
-    str_addz(&path, "/product-info.json");
+    str_addzz(&path, dir, "/product-info.json", (const char *)NULL);
     text = slurp(str_text(&path), &len);
     str_free(&path);
     if (text == NULL) return 0;
@@ -2338,9 +2255,7 @@ static void warn_glob(const char *dir, const char *prefix, const char *skip,
         }
         if (!hit) continue;
         str_init(&path);
-        str_addz(&path, dir);
-        str_addc(&path, '/');
-        str_addz(&path, e->d_name);
+        str_addzz(&path, dir, "/", e->d_name, (const char *)NULL);
         if (stat(str_text(&path), &st) == 0 && S_ISDIR(st.st_mode) &&
             (skip == NULL || strcmp(str_text(&path), skip) != 0)) {
             osr_warnf(fmt, str_text(&path));
@@ -2378,8 +2293,8 @@ static void datagrip_report_foreign(void) {
                  DATAGRIP_PREFIX ", not upgraded here");
 
     str_init(&toolbox);
-    str_addz(&toolbox, osr_mod_home());
-    str_addz(&toolbox, "/.local/share/JetBrains/Toolbox/apps");
+    str_addzz(&toolbox, osr_mod_home(), "/.local/share/JetBrains/Toolbox/apps",
+        (const char *)NULL);
     warn_glob(str_text(&toolbox), "datagrip", NULL,
               "JetBrains Toolbox has its own DataGrip at %s - Toolbox updates that one, "
               "this module updates " DATAGRIP_PREFIX);
@@ -2420,10 +2335,9 @@ static void datagrip_desktop_entry(void) {
     /* StartupWMClass is what the IDE actually sets on its window; without it the
      * taskbar shows a second, unnamed entry. */
     str_init(&entry);
-    str_addz(&entry, "[Desktop Entry]\nName=DataGrip\nComment=Database IDE\nExec=");
-    str_addz(&entry, str_text(&exe));
-    str_addz(&entry, " %f\nIcon=");
-    str_addz(&entry, icon.len > 0 ? str_text(&icon) : "datagrip");
+    str_addzz(&entry, "[Desktop Entry]\nName=DataGrip\nComment=Database IDE\nExec=",
+        str_text(&exe), " %f\nIcon=", icon.len > 0 ? str_text(&icon) : "datagrip",
+        (const char *)NULL);
     str_addz(&entry, "\nTerminal=false\nType=Application\n"
                      "Categories=Development;IDE;Database;\n"
                      "Keywords=sql;database;jetbrains;\n"
@@ -2431,7 +2345,7 @@ static void datagrip_desktop_entry(void) {
     (void)osr_write_root("/usr/share/applications/datagrip.desktop", str_text(&entry));
     refresh_desktop_db();
 
-    str_free(&exe); str_free(&icon); str_free(&entry);
+    str_freev(&exe, &icon, &entry, (Str *)NULL);
 }
 
 /* provide_datagrip -- install or UPGRADE DataGrip from the vendor tarball.
@@ -2448,7 +2362,7 @@ static int provide_datagrip(void) {
     char *argv[6];
 
     pkg(deps);
-    str_init(&ver); str_init(&url);
+    str_initv(&ver, &url, (Str *)NULL);
     datagrip_latest(&ver, &url, &size);
     datagrip_report_foreign();
 
@@ -2458,7 +2372,7 @@ static int provide_datagrip(void) {
         osr_infof("DataGrip %s is already the current release - skipping the download",
                   str_text(&ver));
         datagrip_desktop_entry();
-        str_free(&ver); str_free(&url); str_free(&have);
+        str_freev(&ver, &url, &have, (Str *)NULL);
         return 1;
     }
     if (have.len > 0) osr_infof("upgrading DataGrip %s -> %s", str_text(&have), str_text(&ver));
@@ -2488,8 +2402,7 @@ static int provide_datagrip(void) {
         str_free(&base);
     }
     str_init(&tar_path);
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/datagrip.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/datagrip.tar.gz", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), tar_path.p, size)) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
@@ -2512,8 +2425,7 @@ static int provide_datagrip(void) {
         Str info;
         int ok;
         str_init(&info);
-        str_addz(&info, str_text(&src));
-        str_addz(&info, "/product-info.json");
+        str_addzz(&info, str_text(&src), "/product-info.json", (const char *)NULL);
         ok = file_exists(str_text(&info));
         str_free(&info);
         if (!ok) {
@@ -2535,8 +2447,7 @@ static int provide_datagrip(void) {
     datagrip_desktop_entry();
     /* /opt is root-owned, so the IDE's own updater cannot patch this tree:
      * `osr module datagrip` (this builder) is the update path. */
-    str_free(&ver); str_free(&url); str_free(&tmp); str_free(&tar_path);
-    str_free(&src); str_free(&parent);
+    str_freev(&ver, &url, &tmp, &tar_path, &src, &parent, (Str *)NULL);
     return 1;
 }
 
@@ -2611,13 +2522,13 @@ static int provide_telegram(void) {
     char *argv[6];
 
     pkg(deps);
-    str_init(&ver); str_init(&url);
+    str_initv(&ver, &url, (Str *)NULL);
     telegram_latest(&ver, &url, &size);
     telegram_report_foreign();
 
-    str_init(&stamp); str_init(&binary);
-    str_addz(&stamp, prefix); str_addz(&stamp, "/.osr-version");
-    str_addz(&binary, prefix); str_addz(&binary, "/Telegram");
+    str_initv(&stamp, &binary, (Str *)NULL);
+    str_addzz(&stamp, prefix, "/.osr-version", (const char *)NULL);
+    str_addzz(&binary, prefix, "/Telegram", (const char *)NULL);
     if (access(str_text(&binary), X_OK) == 0 && file_exists(str_text(&stamp))) {
         char *text;
         size_t len;
@@ -2638,7 +2549,7 @@ static int provide_telegram(void) {
             argv[0] = (char *)"ln"; argv[1] = (char *)"-sf"; argv[2] = binary.p;
             argv[3] = (char *)"/usr/local/bin/telegram-desktop"; argv[4] = NULL;
             (void)osr_run_root(argv);
-            str_free(&ver); str_free(&url); str_free(&stamp); str_free(&binary);
+            str_freev(&ver, &url, &stamp, &binary, (Str *)NULL);
             return 1;
         }
     }
@@ -2654,8 +2565,7 @@ static int provide_telegram(void) {
         osr_die("failed to create a staging directory under %s", str_text(&parent));
     osr_infof("installing Telegram Desktop %s", str_text(&ver));
     str_init(&tar_path);
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/telegram.tar.xz");
+    str_addzz(&tar_path, str_text(&tmp), "/telegram.tar.xz", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), tar_path.p, size)) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
@@ -2677,8 +2587,7 @@ static int provide_telegram(void) {
         Str exe, mark;
         int ok;
         str_init(&exe);
-        str_addz(&exe, str_text(&src));
-        str_addz(&exe, "/Telegram");
+        str_addzz(&exe, str_text(&src), "/Telegram", (const char *)NULL);
         ok = access(str_text(&exe), X_OK) == 0;
         str_free(&exe);
         if (!ok) {
@@ -2686,8 +2595,7 @@ static int provide_telegram(void) {
             osr_die("the Telegram tarball has an unexpected layout (no Telegram binary)");
         }
         str_init(&mark);
-        str_addz(&mark, str_text(&src));
-        str_addz(&mark, "/.osr-version");
+        str_addzz(&mark, str_text(&src), "/.osr-version", (const char *)NULL);
         {
             FILE *f = fopen(str_text(&mark), "w");
             if (f != NULL) { fprintf(f, "%s\n", str_text(&ver)); fclose(f); }
@@ -2710,8 +2618,7 @@ static int provide_telegram(void) {
     argv[3] = (char *)"/usr/local/bin/telegram-desktop"; argv[4] = NULL;
     (void)osr_run_root(argv);
 
-    str_free(&ver); str_free(&url); str_free(&tmp); str_free(&tar_path);
-    str_free(&src); str_free(&stamp); str_free(&binary); str_free(&parent);
+    str_freev(&ver, &url, &tmp, &tar_path, &src, &stamp, &binary, &parent, (Str *)NULL);
     return 1;
 }
 
@@ -2746,8 +2653,7 @@ static void yb_deb_url(Str *out) {
     {
         Str feed;
         str_init(&feed);
-        str_addz(&feed, base);
-        str_addz(&feed, "/dists/stable/main/binary-amd64/Packages");
+        str_addzz(&feed, base, "/dists/stable/main/binary-amd64/Packages", (const char *)NULL);
         (void)osr_fetch_buffer(&index, str_text(&feed));
         str_free(&feed);
     }
@@ -2761,8 +2667,7 @@ static void yb_deb_url(Str *out) {
         } else if (in_stanza && strncmp(str_text(&line), "Filename:", 9) == 0) {
             const char *p = str_text(&line) + 9;
             while (is_space(*p)) p++;
-            str_addz(out, base);
-            str_addc(out, '/');
+            str_addzz(out, base, "/", (const char *)NULL);
             while (*p != '\0' && !is_space(*p)) str_addc(out, *p++);
             found = 1;
         }
@@ -2788,7 +2693,7 @@ static int provide_yandex_browser_deb(void) {
 
     str_init(&url);
     yb_deb_url(&url);
-    str_init(&tmp); str_init(&deb); str_init(&data); str_init(&root); str_init(&browser);
+    str_initv(&tmp, &deb, &data, &root, &browser, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
     {
         Str base;
@@ -2797,8 +2702,7 @@ static int provide_yandex_browser_deb(void) {
         osr_infof("downloading Yandex Browser (%s)", str_text(&base));
         str_free(&base);
     }
-    str_addz(&deb, str_text(&tmp));
-    str_addz(&deb, "/yb.deb");
+    str_addzz(&deb, str_text(&tmp), "/yb.deb", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), deb.p, 0)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
@@ -2816,9 +2720,7 @@ static int provide_yandex_browser_deb(void) {
         if (d != NULL) {
             while (data.len == 0 && (e = readdir(d)) != NULL) {
                 if (strncmp(e->d_name, "data.tar", 8) != 0) continue;
-                str_addz(&data, str_text(&tmp));
-                str_addc(&data, '/');
-                str_addz(&data, e->d_name);
+                str_addzz(&data, str_text(&tmp), "/", e->d_name, (const char *)NULL);
             }
             closedir(d);
         }
@@ -2827,8 +2729,7 @@ static int provide_yandex_browser_deb(void) {
         rm_rf(str_text(&tmp));
         osr_die("no data.tar in the Yandex Browser .deb");
     }
-    str_addz(&root, str_text(&tmp));
-    str_addz(&root, "/root");
+    str_addzz(&root, str_text(&tmp), "/root", (const char *)NULL);
     argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = root.p; argv[3] = NULL;
     (void)osr_run(argv);
     argv[0] = (char *)"bsdtar"; argv[1] = (char *)"-xf"; argv[2] = data.p;
@@ -2837,8 +2738,8 @@ static int provide_yandex_browser_deb(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to unpack the Yandex Browser .deb");
     }
-    str_addz(&browser, str_text(&root));
-    str_addz(&browser, "/opt/yandex/browser/yandex_browser");
+    str_addzz(&browser, str_text(&root), "/opt/yandex/browser/yandex_browser",
+        (const char *)NULL);
     if (access(str_text(&browser), X_OK) != 0) {
         rm_rf(str_text(&tmp));
         osr_die("no /opt/yandex/browser/yandex_browser in the .deb - its layout changed");
@@ -2848,9 +2749,7 @@ static int provide_yandex_browser_deb(void) {
     argv[2] = (char *)"/opt/yandex"; argv[3] = NULL;
     (void)osr_run_root(argv);
     rm_rf_root("/opt/yandex/browser");
-    str_reset(&browser);
-    str_addz(&browser, str_text(&root));
-    str_addz(&browser, "/opt/yandex/browser");
+    str_setz(&browser, str_text(&root), "/opt/yandex/browser", (const char *)NULL);
     argv[0] = (char *)"cp"; argv[1] = (char *)"-a"; argv[2] = browser.p;
     argv[3] = (char *)"/opt/yandex/"; argv[4] = NULL;
     if (osr_run_root(argv) != 0) {
@@ -2858,25 +2757,20 @@ static int provide_yandex_browser_deb(void) {
         osr_die("failed to install Yandex Browser into /opt");
     }
     /* ./usr is the launcher symlink, the two .desktop entries, icons and appdata. */
-    str_reset(&browser);
-    str_addz(&browser, str_text(&root));
-    str_addz(&browser, "/usr/.");
+    str_setz(&browser, str_text(&root), "/usr/.", (const char *)NULL);
     argv[0] = (char *)"cp"; argv[1] = (char *)"-a"; argv[2] = browser.p;
     argv[3] = (char *)"/usr/"; argv[4] = NULL;
     (void)osr_run_root(argv);
     rm_rf(str_text(&tmp));
 
-    argv[0] = (char *)"chmod"; argv[1] = (char *)"4755";
-    argv[2] = (char *)"/opt/yandex/browser/yandex_browser-sandbox"; argv[3] = NULL;
-    (void)osr_run_root(argv);
+    (void)osr_chmod("4755", (char *)"/opt/yandex/browser/yandex_browser-sandbox", 1);
     argv[0] = (char *)"ln"; argv[1] = (char *)"-sf";
     argv[2] = (char *)"/opt/yandex/browser/yandex-browser";
     argv[3] = (char *)"/usr/local/bin/yandex-browser"; argv[4] = NULL;
     (void)osr_run_root(argv);
     refresh_desktop_db();
 
-    str_free(&url); str_free(&tmp); str_free(&deb);
-    str_free(&data); str_free(&root); str_free(&browser);
+    str_freev(&url, &tmp, &deb, &data, &root, &browser, (Str *)NULL);
     return 1;
 }
 
@@ -2900,15 +2794,12 @@ static int provide_amneziavpn(void) {
     /* Quiet: an unreachable API is a reason to fall back, not to end the run. */
     str_init(&tag);
     if (osr_github_latest_quiet(&tag, "amnezia-vpn/amnezia-client")) {   /* 4.8.21.0, no v */
-        str_init(&tmp); str_init(&tar_path); str_init(&url); str_init(&bin);
+        str_initv(&tmp, &tar_path, &url, &bin, (Str *)NULL);
         if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-        str_addz(&tar_path, str_text(&tmp));
-        str_addz(&tar_path, "/amnezia.tar");
-        str_addz(&url, "https://github.com/amnezia-vpn/amnezia-client/releases/download/");
-        str_addz(&url, str_text(&tag));
-        str_addz(&url, "/AmneziaVPN_");
-        str_addz(&url, str_text(&tag));
-        str_addz(&url, "_linux_x64.tar");
+        str_addzz(&tar_path, str_text(&tmp), "/amnezia.tar", (const char *)NULL);
+        str_setz(&bin, "AmneziaVPN_", str_text(&tag), "_linux_x64.tar", (const char *)NULL);
+        gh_asset(&url, "amnezia-vpn/amnezia-client", &tag, str_text(&bin));
+        str_reset(&bin);
         if (osr_fetch_download(str_text(&url), tar_path.p, 0)) {
             argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
             argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
@@ -2930,12 +2821,11 @@ static int provide_amneziavpn(void) {
             argv[2] = (char *)"/opt/AmneziaVPN/AmneziaVPN";
             argv[3] = (char *)"/usr/local/bin/amneziavpn"; argv[4] = NULL;
             (void)osr_run_root(argv);
-            str_free(&tag); str_free(&tmp); str_free(&tar_path);
-            str_free(&url); str_free(&bin);
+            str_freev(&tag, &tmp, &tar_path, &url, &bin, (Str *)NULL);
             return 1;
         }
         rm_rf(str_text(&tmp));
-        str_free(&tmp); str_free(&tar_path); str_free(&url); str_free(&bin);
+        str_freev(&tmp, &tar_path, &url, &bin, (Str *)NULL);
     }
     osr_warnf("AmneziaVPN release binary unavailable (tag='%s') - falling back to the "
               "source build. Have God with you: a full Qt/QML compile and link, plus its "
@@ -2982,11 +2872,9 @@ static int provide_amneziavpn_source(void) {
     /* A failed build KEEPS the checkout so a retry resumes instead of
      * recompiling from scratch (same contract as provide_wezterm). */
     str_init(&src);
-    str_addz(&src, tmp_root());
-    str_addz(&src, "/osr-amneziavpn-src");
+    str_addzz(&src, tmp_root(), "/osr-amneziavpn-src", (const char *)NULL);
     str_init(&cml);
-    str_addz(&cml, str_text(&src));
-    str_addz(&cml, "/CMakeLists.txt");
+    str_addzz(&cml, str_text(&src), "/CMakeLists.txt", (const char *)NULL);
     if (file_exists(str_text(&cml))) {
         osr_infof("reusing the existing amnezia-client checkout (%s) - rebuild is incremental",
                   str_text(&src));
@@ -3007,8 +2895,7 @@ static int provide_amneziavpn_source(void) {
     }
 
     str_init(&bld);
-    str_addz(&bld, str_text(&src));
-    str_addz(&bld, "/build");
+    str_addzz(&bld, str_text(&src), "/build", (const char *)NULL);
     /* Configure and build as OSR_USER: cmake's conan provider writes ~/.conan2
      * and pulls the prebuilt recipes, which must NOT land in root's home (§8).
      * CMAKE_PREFIX_PATH=/usr points it at the distro Qt6. */
@@ -3021,8 +2908,8 @@ static int provide_amneziavpn_source(void) {
     if (osr_run_user(argv) != 0) osr_die("amnezia-client cmake configure failed");
 
     str_init(&jobs);
-    str_addz(&jobs, "CMAKE_BUILD_PARALLEL_LEVEL=");
-    str_addz(&jobs, env_str("OSR_BUILD_JOBS", "1"));
+    str_addzz(&jobs, "CMAKE_BUILD_PARALLEL_LEVEL=", env_str("OSR_BUILD_JOBS", "1"),
+        (const char *)NULL);
     argv[0] = (char *)"env"; argv[1] = jobs.p; argv[2] = (char *)"cmake";
     argv[3] = (char *)"--build"; argv[4] = bld.p; argv[5] = NULL;
     if (osr_run_user(argv) != 0)
@@ -3070,7 +2957,7 @@ static int provide_amneziavpn_source(void) {
     argv[0] = (char *)"rm"; argv[1] = (char *)"-rf"; argv[2] = src.p; argv[3] = NULL;
     (void)osr_run_user(argv);
 
-    str_free(&src); str_free(&bld); str_free(&cml); str_free(&jobs);
+    str_freev(&src, &bld, &cml, &jobs, (Str *)NULL);
     return 1;
 }
 
@@ -3188,9 +3075,7 @@ static void gpaste_tag(Str *out, const char *major) {
     (void)osr_fetch_buffer(&json,
         "https://api.github.com/repos/" GPASTE_REPO "/tags?per_page=100");
     str_init(&want);
-    str_addc(&want, 'v');
-    str_addz(&want, major);
-    str_addc(&want, '.');
+    str_addzz(&want, "v", major, ".", (const char *)NULL);
     str_reset(out);
 
     /* Every `"name": "v..."` in the payload, not just the first: the sh version
@@ -3216,8 +3101,7 @@ static void gpaste_tag(Str *out, const char *major) {
         }
         str_free(&tag);
     }
-    str_free(&json);
-    str_free(&want);
+    str_freev(&json, &want, (Str *)NULL);
     if (out->len == 0) tag_of(out, GPASTE_REPO);
 }
 
@@ -3293,8 +3177,7 @@ static void gpaste_clear_usr_local(void) {
         char *argv[9];
 
         str_init(&path);
-        str_addz(&path, "/usr/local/");
-        str_addz(&path, dirs[i]);
+        str_addzz(&path, "/usr/local/", dirs[i], (const char *)NULL);
         if (dir_exists(str_text(&path))) {
             argv[0] = (char *)"find"; argv[1] = path.p; argv[2] = (char *)"-iname";
             argv[3] = (char *)"*gpaste*"; argv[4] = (char *)"-depth";
@@ -3350,7 +3233,7 @@ static int provide_gpaste(void) {
         str_trim_trailing(&full, '\n');
         osr_infof("GPaste %s already matches GNOME Shell %s - skipping the source build",
                   str_text(&full), str_text(&major));
-        str_free(&full); str_free(&client); str_free(&major);
+        str_freev(&full, &client, &major, (Str *)NULL);
         return 1;
     }
     str_free(&client);
@@ -3363,14 +3246,11 @@ static int provide_gpaste(void) {
     gpaste_tag(&tag, str_text(&major));
     osr_infof("building GPaste %s for GNOME Shell %s", str_text(&tag), str_text(&major));
 
-    str_init(&tmp); str_init(&tar_path); str_init(&url);
-    str_init(&src); str_init(&bld); str_init(&pc); str_init(&libdir); str_init(&jobs);
+    str_initv(&tmp, &tar_path, &url, &src, &bld, &pc, &libdir, &jobs, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
-    str_addz(&tar_path, str_text(&tmp));
-    str_addz(&tar_path, "/gpaste.tar.gz");
+    str_addzz(&tar_path, str_text(&tmp), "/gpaste.tar.gz", (const char *)NULL);
     str_addz(&url, "https://github.com/" GPASTE_REPO "/archive/refs/tags/");
-    str_addz(&url, str_text(&tag));
-    str_addz(&url, ".tar.gz");
+    str_addzz(&url, str_text(&tag), ".tar.gz", (const char *)NULL);
     if (!osr_fetch_download(str_text(&url), tar_path.p, 0)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download GPaste %s", str_text(&tag));
@@ -3381,15 +3261,13 @@ static int provide_gpaste(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract GPaste %s", str_text(&tag));
     }
-    str_addz(&src, str_text(&tmp));
-    str_addz(&src, "/GPaste-");
-    str_addz(&src, str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0));
+    str_addzz(&src, str_text(&tmp), "/GPaste-",
+        str_text(&tag) + (str_text(&tag)[0] == 'v' ? 1 : 0), (const char *)NULL);
     {
         Str meson;
         int ok;
         str_init(&meson);
-        str_addz(&meson, str_text(&src));
-        str_addz(&meson, "/meson.build");
+        str_addzz(&meson, str_text(&src), "/meson.build", (const char *)NULL);
         ok = file_exists(str_text(&meson));
         str_free(&meson);
         if (!ok) {
@@ -3397,8 +3275,7 @@ static int provide_gpaste(void) {
             osr_die("no meson.build in the GPaste tarball - its layout changed");
         }
     }
-    str_addz(&bld, str_text(&src));
-    str_addz(&bld, "/build");
+    str_addzz(&bld, str_text(&src), "/build", (const char *)NULL);
 
     /* Debian/Ubuntu put libs and typelibs under a multiarch libdir. Only pass it
      * when that dir is really there - the point is to land beside the system's
@@ -3406,13 +3283,9 @@ static int provide_gpaste(void) {
     if (uname(&u) == 0) {
         Str probe;
         str_init(&probe);
-        str_addz(&probe, "/usr/lib/");
-        str_addz(&probe, u.machine);
-        str_addz(&probe, "-linux-gnu");
+        str_addzz(&probe, "/usr/lib/", u.machine, "-linux-gnu", (const char *)NULL);
         if (dir_exists(str_text(&probe))) {
-            str_addz(&libdir, "--libdir=lib/");
-            str_addz(&libdir, u.machine);
-            str_addz(&libdir, "-linux-gnu");
+            str_addzz(&libdir, "--libdir=lib/", u.machine, "-linux-gnu", (const char *)NULL);
         }
         str_free(&probe);
     }
@@ -3454,9 +3327,8 @@ static int provide_gpaste(void) {
     (void)osr_run_root_quiet(argv);
     rm_rf(str_text(&tmp));
 
-    str_free(&major); str_free(&tag); str_free(&tmp); str_free(&tar_path);
-    str_free(&url); str_free(&src); str_free(&bld); str_free(&pc);
-    str_free(&libdir); str_free(&jobs);
+    str_freev(&major, &tag, &tmp, &tar_path, &url, &src, &bld, &pc, &libdir, &jobs,
+        (Str *)NULL);
     if (!osr_have_cmd("gpaste-client"))
         osr_die("GPaste installed but gpaste-client is not on PATH");
     return 1;

@@ -73,9 +73,7 @@ static int temp_by_label(char *out, size_t cap) {
 
     d = opendir(base);
     if (d == NULL) return 0;
-    str_init(&path);
-    str_init(&label);
-    str_init(&best);
+    str_initv(&path, &label, &best, (Str *)NULL);
 
     while ((e = readdir(d)) != NULL) {
         int idx;
@@ -91,11 +89,11 @@ static int temp_by_label(char *out, size_t cap) {
             str_addz(&leaf, "/temp");
             str_addl(&leaf, idx);
             str_addz(&leaf, "_label");
-            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_setz(&path, base, e->d_name, str_text(&leaf), (const char *)NULL);
             str_free(&leaf);
 
             str_reset(&label);
-            if (!bench_read_trim(&label, str_text(&path))) continue;
+            if (!osr_read_trim(&label, str_text(&path))) continue;
             rank = temp_label_rank(str_text(&label));
             if (rank <= best_rank) continue;
 
@@ -103,9 +101,9 @@ static int temp_by_label(char *out, size_t cap) {
             str_addz(&leaf, "/temp");
             str_addl(&leaf, idx);
             str_addz(&leaf, "_input");
-            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_setz(&path, base, e->d_name, str_text(&leaf), (const char *)NULL);
             str_free(&leaf);
-            if (!bench_read_long(str_text(&path), &probe)) continue;
+            if (!osr_read_long(str_text(&path), &probe)) continue;
 
             best_rank = rank;
             str_reset(&best);
@@ -114,9 +112,7 @@ static int temp_by_label(char *out, size_t cap) {
     }
     closedir(d);
     if (best_rank > 0) bench_set_str(out, cap, str_text(&best));
-    str_free(&path);
-    str_free(&label);
-    str_free(&best);
+    str_freev(&path, &label, &best, (Str *)NULL);
     return best_rank > 0;
 }
 
@@ -134,15 +130,14 @@ static int temp_by_driver(char *out, size_t cap) {
 
     d = opendir(base);
     if (d == NULL) return 0;
-    str_init(&path);
-    str_init(&name);
+    str_initv(&path, &name, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {
         int idx;
         if (e->d_name[0] == '.') continue;
         str_reset(&name);
-        bench_join3(&path, base, e->d_name, "/name");
-        if (!bench_read_trim(&name, str_text(&path))) continue;
+        str_setz(&path, base, e->d_name, "/name", (const char *)NULL);
+        if (!osr_read_trim(&name, str_text(&path))) continue;
 
         for (i = 0; i < sizeof(drivers) / sizeof(drivers[0]); i++) {
             if (strcmp(str_text(&name), drivers[i]) == 0) break;
@@ -156,16 +151,15 @@ static int temp_by_driver(char *out, size_t cap) {
             str_addz(&leaf, "/temp");
             str_addl(&leaf, idx);
             str_addz(&leaf, "_input");
-            bench_join3(&path, base, e->d_name, str_text(&leaf));
+            str_setz(&path, base, e->d_name, str_text(&leaf), (const char *)NULL);
             str_free(&leaf);
-            if (!bench_read_long(str_text(&path), &probe)) continue;
+            if (!osr_read_long(str_text(&path), &probe)) continue;
             bench_set_str(out, cap, str_text(&path));
             found = 1;
         }
     }
     closedir(d);
-    str_free(&path);
-    str_free(&name);
+    str_freev(&path, &name, (Str *)NULL);
     return found;
 }
 
@@ -180,8 +174,7 @@ static int temp_by_thermal_zone(char *out, size_t cap) {
     int zone;
     int found = 0;
 
-    str_init(&path);
-    str_init(&type);
+    str_initv(&path, &type, (Str *)NULL);
     /* Preference is by TYPE, not by zone number, so the outer loop is the
      * type: zone 0 being acpitz must not win over zone 3 being x86_pkg_temp. */
     for (i = 0; !found && i < sizeof(types) / sizeof(types[0]); i++) {
@@ -193,20 +186,19 @@ static int temp_by_thermal_zone(char *out, size_t cap) {
             str_addz(&dir, "thermal_zone");
             str_addl(&dir, zone);
             str_reset(&type);
-            bench_join3(&path, base, str_text(&dir), "/type");
-            if (!bench_read_trim(&type, str_text(&path))) { str_free(&dir); continue; }
+            str_setz(&path, base, str_text(&dir), "/type", (const char *)NULL);
+            if (!osr_read_trim(&type, str_text(&path))) { str_free(&dir); continue; }
             if (strcmp(str_text(&type), types[i]) != 0) { str_free(&dir); continue; }
 
-            bench_join3(&path, base, str_text(&dir), "/temp");
+            str_setz(&path, base, str_text(&dir), "/temp", (const char *)NULL);
             str_free(&dir);
-            if (!bench_read_long(str_text(&path), &probe)) continue;
+            if (!osr_read_long(str_text(&path), &probe)) continue;
             bench_set_str(out, cap, str_text(&path));
             found = 1;
             break;
         }
     }
-    str_free(&path);
-    str_free(&type);
+    str_freev(&path, &type, (Str *)NULL);
     return found;
 }
 
@@ -234,11 +226,8 @@ static int sample_freq(long *out) {
         long v;
         if (strncmp(e->d_name, "cpu", 3) != 0) continue;
         if (e->d_name[3] < '0' || e->d_name[3] > '9') continue;
-        str_reset(&path);
-        str_addz(&path, base);
-        str_addz(&path, e->d_name);
-        str_addz(&path, "/cpufreq/scaling_cur_freq");
-        if (!bench_read_long(str_text(&path), &v)) continue;
+        str_setz(&path, base, e->d_name, "/cpufreq/scaling_cur_freq", (const char *)NULL);
+        if (!osr_read_long(str_text(&path), &v)) continue;
         if (v > best) best = v;
         found = 1;
     }
@@ -269,7 +258,7 @@ static void poll_once(Poller *p) {
     long v;
 
     pwr_sample(p->meter);
-    if (p->temp_path[0] != '\0' && bench_read_long(p->temp_path, &v)) {
+    if (p->temp_path[0] != '\0' && osr_read_long(p->temp_path, &v)) {
         note_temp(p, (double)v / 1000.0);   /* hwmon reports millidegrees */
     }
     if (sample_freq(&v)) {
@@ -480,12 +469,9 @@ static void phase(int on, int n, int total, const char *what,
     str_addl(&m, n);
     str_addc(&m, '/');
     str_addl(&m, total);
-    str_addz(&m, "] ");
-    str_addz(&m, what);
-    str_addz(&m, " - ");
+    str_addzz(&m, "] ", what, " - ", (const char *)NULL);
     str_addl(&m, secs);
-    str_addz(&m, "s, ");
-    str_addz(&m, detail);
+    str_addzz(&m, "s, ", detail, (const char *)NULL);
     osr_info(str_text(&m));
     str_free(&m);
 }
@@ -521,8 +507,7 @@ static void census(Str *out, const char *base, const char *leaf, const char *pre
         str_addz(out, "absent (this kernel has no such class)");
         return;
     }
-    str_init(&path);
-    str_init(&val);
+    str_initv(&path, &val, (Str *)NULL);
     while ((e = readdir(d)) != NULL) {
         if (e->d_name[0] == '.') continue;
         /* /sys/class/thermal holds cooling devices (fans, cpufreq throttles)
@@ -532,11 +517,9 @@ static void census(Str *out, const char *base, const char *leaf, const char *pre
         if (n > 0) str_addz(out, ", ");
         if (leaf != NULL) {
             str_reset(&val);
-            bench_join3(&path, base, e->d_name, leaf);
-            if (bench_read_trim(&val, str_text(&path)) && val.len > 0) {
-                str_addz(out, e->d_name);
-                str_addz(out, "=");
-                str_addz(out, str_text(&val));
+            str_setz(&path, base, e->d_name, leaf, (const char *)NULL);
+            if (osr_read_trim(&val, str_text(&path)) && val.len > 0) {
+                str_addzz(out, e->d_name, "=", str_text(&val), (const char *)NULL);
             } else {
                 str_addz(out, e->d_name);
             }
@@ -546,13 +529,10 @@ static void census(Str *out, const char *base, const char *leaf, const char *pre
         n++;
     }
     closedir(d);
-    str_free(&path);
-    str_free(&val);
+    str_freev(&path, &val, (Str *)NULL);
     if (n == 0) {
         if (skipped > 0) {
-            str_addz(out, "no ");
-            str_addz(out, prefix);
-            str_addz(out, "* (");
+            str_addzz(out, "no ", prefix, "* (", (const char *)NULL);
             str_addl(out, skipped);
             str_addz(out, " other entries)");
         } else {

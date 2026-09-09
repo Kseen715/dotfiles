@@ -95,17 +95,16 @@ int osrm_theming(void) {
      * the systemd user session, whose only env source is
      * ~/.config/environment.d. Not theme-owned -- one constant value, so it is a
      * plain layer, not a template. */
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/environment.d/90-qt.conf");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/environment.d/90-qt.conf");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/environment.d/90-qt.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/environment.d/90-qt.conf", (const char *)NULL);
     ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     if (*osr_mod_theme() == '\0') { str_free(&src); str_free(&dst); return ok; }
 
     /* --- GTK 2/3/4 and Qt5/6 ---------------------------------------------- */
     for (i = 0; layers[i] != NULL; i += 3) {
-        str_reset(&dst);
-        str_addz(&dst, osr_mod_home()); str_addz(&dst, layers[i + 2]);
+        str_setz(&dst, osr_mod_home(), layers[i + 2], (const char *)NULL);
         (void)osr_install_theme_layer(layers[i], layers[i + 1], str_text(&dst));
     }
 
@@ -131,9 +130,8 @@ int osrm_theming(void) {
     }
 
     /* --- cursor theme: the root window needs telling separately ------------ */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/icons/default/index.theme");
+    str_setz(&dst, osr_mod_home(), "/.local/share/icons/default/index.theme",
+        (const char *)NULL);
     (void)osr_install_theme_layer("icons", "default-index.theme", str_text(&dst));
 
     /* --- ~/.Xresources: dotfiles base + rice palette (§5 by composition) ----
@@ -144,8 +142,8 @@ int osrm_theming(void) {
         Str colors, base, body, tmp;
         int is_temp = 0;
 
-        str_init(&colors); str_init(&base); str_init(&body); str_init(&tmp);
-        str_addz(&base, osr_mod_dotfiles()); str_addz(&base, "/xresources/Xresources");
+        str_initv(&colors, &base, &body, &tmp, (Str *)NULL);
+        str_addzz(&base, osr_mod_dotfiles(), "/xresources/Xresources", (const char *)NULL);
         if (file_exists(str_text(&base))
             && osr_theme_source(&colors, "xresources", "colors", &is_temp)) {
             char *a, *b;
@@ -157,16 +155,14 @@ int osrm_theming(void) {
             if (b != NULL) str_add(&body, b, blen);
             free(a); free(b);
 
-            str_addz(&tmp, env_str("TMPDIR", "/tmp"));
-            str_addz(&tmp, "/osr-xresources-");
+            str_addzz(&tmp, env_str("TMPDIR", "/tmp"), "/osr-xresources-", (const char *)NULL);
             str_addl(&tmp, (long)getpid());
             {
                 FILE *f = fopen(str_text(&tmp), "wb");
                 if (f != NULL) {
                     if (body.len > 0) (void)fwrite(str_text(&body), 1, body.len, f);
                     fclose(f);
-                    str_reset(&dst);
-                    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.Xresources");
+                    str_setz(&dst, osr_mod_home(), "/.Xresources", (const char *)NULL);
                     ok = osr_install_file(str_text(&tmp), str_text(&dst)) && ok;
                 }
                 (void)unlink(str_text(&tmp));
@@ -174,16 +170,15 @@ int osrm_theming(void) {
             if (is_temp) (void)unlink(str_text(&colors));
             if (env_is_set("DISPLAY") && osr_have_cmd("xrdb")) {
                 char *argv[4];
-                str_reset(&dst);
-                str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.Xresources");
+                str_setz(&dst, osr_mod_home(), "/.Xresources", (const char *)NULL);
                 argv[0] = (char *)"xrdb"; argv[1] = (char *)"-merge";
                 argv[2] = dst.p; argv[3] = NULL;
                 (void)osr_run_user_quiet(argv);
             }
         }
-        str_free(&colors); str_free(&base); str_free(&body); str_free(&tmp);
+        str_freev(&colors, &base, &body, &tmp, (Str *)NULL);
     }
 
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

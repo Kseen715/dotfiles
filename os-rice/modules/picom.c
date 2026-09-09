@@ -29,26 +29,25 @@ int osrm_picom(void) {
 
     ok = osr_pkg_install_step("Installing picom", pkgs);
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/picom/picom.conf");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/picom/picom.conf");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/picom/picom.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/picom/picom.conf", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/picom/launch.sh");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/picom/launch.sh");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, osr_mod_dotfiles(), "/picom/launch.sh", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/picom/launch.sh", (const char *)NULL);
     if (file_exists(str_text(&src))) {
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-        (void)osr_run_user(argv);
+        (void)osr_chmod("+x", dst.p, 0);
     }
 
-    str_reset(&src); str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/picom/90-theme.conf");
+    str_reset(&src);
+    str_setz(&dst, osr_mod_home(), "/.config/picom/90-theme.conf", (const char *)NULL);
     if (*osr_mod_theme_dir() != '\0') {
-        str_addz(&src, osr_mod_theme_dir());
-        str_addz(&src, "/config/picom/90-theme.conf");
+        str_addzz(&src, osr_mod_theme_dir(), "/config/picom/90-theme.conf", (const char *)NULL);
     }
     if (src.len > 0 && file_exists(str_text(&src))) {
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
@@ -58,6 +57,6 @@ int osrm_picom(void) {
          * start - no compositor, and nothing saying why. */
         ok = osr_seed_empty(str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

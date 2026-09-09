@@ -254,8 +254,7 @@ int osr_install_nerd_font(const char *name) {
     if (name == NULL || *name == '\0') name = "JetBrainsMono";
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.local/share/fonts");
+    str_addzz(&dir, osr_mod_home(), "/.local/share/fonts", (const char *)NULL);
 
     if (font_registered(name) || font_unpacked(name, str_text(&dir))) {
         osr_infof("%s Nerd Font already installed - skipping", name);
@@ -269,17 +268,11 @@ int osr_install_nerd_font(const char *name) {
     }
 
     str_init(&url);
-    str_addz(&url, NERD_FONT_RELEASES);
-    str_addz(&url, env_str("OSR_NERD_FONT_VERSION", "v3.4.0"));
-    str_addc(&url, '/');
-    str_addz(&url, name);
-    str_addz(&url, ".zip");
+    str_addzz(&url, NERD_FONT_RELEASES, env_str("OSR_NERD_FONT_VERSION", "v3.4.0"), "/", name,
+        ".zip", (const char *)NULL);
 
     str_init(&zip);
-    str_addz(&zip, env_str("TMPDIR", "/tmp"));
-    str_addc(&zip, '/');
-    str_addz(&zip, name);
-    str_addc(&zip, '-');
+    str_addzz(&zip, env_str("TMPDIR", "/tmp"), "/", name, "-", (const char *)NULL);
     str_addl(&zip, (long)getpid());
     str_addz(&zip, ".zip");
 
@@ -308,9 +301,7 @@ int osr_install_nerd_font(const char *name) {
         }
     }
 
-    str_free(&url);
-    str_free(&dir);
-    str_free(&zip);
+    str_freev(&url, &dir, &zip, (Str *)NULL);
     return 1;
 }
 

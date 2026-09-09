@@ -26,8 +26,7 @@ int osrm_rofi(void) {
     ok = osr_pkg_install_step("Installing rofi", pkgs);
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.config/rofi");
+    str_addzz(&dir, osr_mod_home(), "/.config/rofi", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
 
     /* The layouts are the dotfiles' unless this rice ships its own. rofi has no
@@ -36,20 +35,18 @@ int osrm_rofi(void) {
      * blocks - which means a rice that wants a different border-radius (or any
      * other structural value) has no way to express it except a whole layout.
      * i3-rosemary is square-cornered and does exactly that. */
-    str_init(&src); str_init(&dst);
+    str_initv(&src, &dst, (Str *)NULL);
     for (i = 0; files[i] != NULL; i++) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&dst, str_text(&dir)); str_addc(&dst, '/'); str_addz(&dst, files[i]);
+        str_reset(&src);
+        str_setz(&dst, str_text(&dir), "/", files[i], (const char *)NULL);
         if (osr_install_theme_layer("rofi", files[i], str_text(&dst))) continue;
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/rofi/");
-        str_addz(&src, files[i]);
+        str_addzz(&src, osr_mod_dotfiles(), "/rofi/", files[i], (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/colors.rasi");
+    str_setz(&dst, str_text(&dir), "/colors.rasi", (const char *)NULL);
     (void)osr_install_theme_layer("rofi", "colors.rasi", str_text(&dst));
 
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

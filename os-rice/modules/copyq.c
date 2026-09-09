@@ -61,10 +61,10 @@ int osrm_copyq(void) {
 
     ok = osr_pkg_install_step("Installing CopyQ", pkgs);
 
-    str_init(&dir); str_init(&theme); str_init(&conf);
-    str_addz(&dir, osr_mod_home());   str_addz(&dir, "/.config/copyq");
-    str_addz(&theme, str_text(&dir)); str_addz(&theme, "/themes/osr.ini");
-    str_addz(&conf, str_text(&dir));  str_addz(&conf, "/copyq.conf");
+    str_initv(&dir, &theme, &conf, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/copyq", (const char *)NULL);
+    str_addzz(&theme, str_text(&dir), "/themes/osr.ini", (const char *)NULL);
+    str_addzz(&conf, str_text(&dir), "/copyq.conf", (const char *)NULL);
     (void)osr_install_theme_layer("copyq", "theme.ini", str_text(&theme));
 
     if (file_exists(str_text(&theme))) {
@@ -94,6 +94,6 @@ int osrm_copyq(void) {
             }
         }
     }
-    str_free(&dir); str_free(&theme); str_free(&conf);
+    str_freev(&dir, &theme, &conf, (Str *)NULL);
     return ok;
 }

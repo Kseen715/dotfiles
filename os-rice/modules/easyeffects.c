@@ -29,11 +29,11 @@ int osrm_easyeffects(void) {
     /* One mkdir, not two: the dconf dir is here because EasyEffects writes its
      * presets through dconf, and a first launch that finds neither directory
      * makes root create them. */
-    str_init(&effects); str_init(&dconf);
-    str_addz(&effects, osr_mod_home()); str_addz(&effects, "/.config/easyeffects");
-    str_addz(&dconf,   osr_mod_home()); str_addz(&dconf,   "/.config/dconf");
+    str_initv(&effects, &dconf, (Str *)NULL);
+    str_addzz(&effects, osr_mod_home(), "/.config/easyeffects", (const char *)NULL);
+    str_addzz(&dconf, osr_mod_home(), "/.config/dconf", (const char *)NULL);
     dirs[0] = str_text(&effects); dirs[1] = str_text(&dconf); dirs[2] = NULL;
     ok = osr_mkdir_p_all(dirs) && ok;
-    str_free(&effects); str_free(&dconf);
+    str_freev(&effects, &dconf, (Str *)NULL);
     return ok;
 }

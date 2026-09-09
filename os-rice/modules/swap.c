@@ -131,7 +131,7 @@ static void read_swaps(Plan *p) {
         Str name, type, size;
         long m;
         if (first) { first = 0; continue; }              /* awk's NR > 1 */
-        str_init(&name); str_init(&type); str_init(&size);
+        str_initv(&name, &type, &size, (Str *)NULL);
         field(&name, line.start, line.len, 1);
         field(&type, line.start, line.len, 2);
         field(&size, line.start, line.len, 3);
@@ -139,7 +139,7 @@ static void read_swaps(Plan *p) {
         if (strncmp(str_text(&name), "/dev/zram", 9) == 0)      p->have_zram += m;
         else if (strcmp(str_text(&type), "partition") == 0)     p->have_part += m;
         else                                                    p->have_file += m;
-        str_free(&name); str_free(&type); str_free(&size);
+        str_freev(&name, &type, &size, (Str *)NULL);
     }
     free(buf);
 }
@@ -259,10 +259,9 @@ static void zram_conf(Str *out, const Plan *p) {
  * ZRAM_MAX_SIZE an MB cap); zstd and priority 100 keep it in step with the
  * zram-generator drop-in so both inits land on the same policy. */
 static void zramen_conf(Str *out, const Plan *p) {
-    str_addz(out, "# managed by os-rice (modules/swap.sh)\n");
-    str_addz(out, "export ZRAM_COMP_ALGORITHM=zstd\n");
-    str_addz(out, "export ZRAM_PRIORITY=100\n");
-    str_addz(out, "export ZRAM_SIZE=");
+    str_addzz(out, "# managed by os-rice (modules/swap.sh)\n",
+        "export ZRAM_COMP_ALGORITHM=zstd\n", "export ZRAM_PRIORITY=100\n", "export ZRAM_SIZE=",
+        (const char *)NULL);
     str_addl(out, p->zram_pct);
     str_addz(out, "\nexport ZRAM_MAX_SIZE=");
     str_addl(out, p->zram_want);
@@ -393,7 +392,7 @@ static int make_file(void *ctx) {
     char *argv[4];
     int rc;
 
-    str_init(&s); str_init(&prio);
+    str_initv(&s, &prio, (Str *)NULL);
     str_addl(&prio, file_prio());
     str_addz(&s,
         "\n"
@@ -501,7 +500,7 @@ static int make_file(void *ctx) {
         "    ");
     argv[0] = (char *)"sh"; argv[1] = (char *)"-c"; argv[2] = s.p; argv[3] = NULL;
     rc = osr_run_root(argv);
-    str_free(&s); str_free(&prio);
+    str_freev(&s, &prio, (Str *)NULL);
     return rc == 0;
 }
 
@@ -511,8 +510,7 @@ static int add_fstab(void *ctx) {
     int ok;
     (void)ctx;
     str_init(&line);
-    str_addz(&line, swapfile_path());
-    str_addz(&line, " none swap defaults,pri=");
+    str_addzz(&line, swapfile_path(), " none swap defaults,pri=", (const char *)NULL);
     str_addl(&line, file_prio());
     str_addz(&line, " 0 0\n");
     ok = osr_append_root(fstab_path(), str_text(&line));
@@ -625,7 +623,7 @@ int osrm_swap(void) {
     } else {
         Str desc;
         str_init(&desc);
-        str_addz(&desc, "Creating "); str_addz(&desc, swapfile_path());
+        str_addzz(&desc, "Creating ", swapfile_path(), (const char *)NULL);
         str_addz(&desc, " ("); str_addl(&desc, p.file_want); str_addz(&desc, "M)");
         ok = osr_step(str_text(&desc), make_file, &p) && ok;
         str_free(&desc);
@@ -633,8 +631,8 @@ int osrm_swap(void) {
             osr_infof("swap: %s already in %s", swapfile_path(), fstab_path());
         } else {
             str_init(&desc);
-            str_addz(&desc, "Adding "); str_addz(&desc, swapfile_path());
-            str_addz(&desc, " to "); str_addz(&desc, fstab_path());
+            str_addzz(&desc, "Adding ", swapfile_path(), " to ", fstab_path(),
+                (const char *)NULL);
             ok = osr_step(str_text(&desc), add_fstab, NULL) && ok;
             str_free(&desc);
         }

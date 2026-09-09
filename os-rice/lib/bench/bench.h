@@ -53,10 +53,6 @@
  * because the alternative is two files disagreeing about what a malformed
  * wattage means.
  */
-int bench_read_trim(Str *out, const char *path);
-int bench_read_long(const char *path, long *out);
-int bench_read_ulong(const char *path, unsigned long *out);
-void bench_join3(Str *out, const char *a, const char *b, const char *c);
 void bench_set_str(char *dst, size_t cap, const char *src);
 double bench_now_sec(void);
 /* bench_row -- "  label           value", the shape of every report here. */

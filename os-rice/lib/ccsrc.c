@@ -39,10 +39,7 @@ static int run_sh_user(const char *desc, const char *script) {
 
 /* say -- "<what> <name>" into out, for the step descriptions. */
 static void say(Str *out, const char *what, const char *name) {
-    str_reset(out);
-    str_addz(out, what);
-    str_addc(out, ' ');
-    str_addz(out, name);
+    str_setz(out, what, " ", name, (const char *)NULL);
 }
 
 /* quoted -- append "<text>" (double quotes included) to a script under
@@ -50,22 +47,17 @@ static void say(Str *out, const char *what, const char *name) {
  * this repo supports anywhere, so the text is not escaped further. */
 static void quoted(Str *s, const char *text) {
     str_addc(s, '"');
-    str_addz(s, text);
-    str_addc(s, '"');
+    str_addzz(s, text, "\"", (const char *)NULL);
 }
 
 int osr_cc_from_source(const OsrCcSource *cc) {
     Str prefix, exe, script, desc;
     int ok = 1;
 
-    str_init(&prefix); str_init(&exe); str_init(&script); str_init(&desc);
+    str_initv(&prefix, &exe, &script, &desc, (Str *)NULL);
 
-    str_addz(&prefix, osr_mod_home());
-    str_addz(&prefix, "/.local/share/");
-    str_addz(&prefix, cc->name);
-    str_addz(&exe, str_text(&prefix));
-    str_addz(&exe, "/bin/");
-    str_addz(&exe, cc->name);
+    str_addzz(&prefix, osr_mod_home(), "/.local/share/", cc->name, (const char *)NULL);
+    str_addzz(&exe, str_text(&prefix), "/bin/", cc->name, (const char *)NULL);
 
     /* Idempotency probe (SS2). */
     if (is_exec(str_text(&exe))) {
@@ -82,9 +74,7 @@ int osr_cc_from_source(const OsrCcSource *cc) {
     quoted(&script, str_text(&prefix));
     str_addz(&script, "; mkdir -p ");
     quoted(&script, str_text(&prefix));
-    str_addz(&script, "/bin; git clone --depth 1 ");
-    str_addz(&script, cc->repo);
-    str_addc(&script, ' ');
+    str_addzz(&script, "/bin; git clone --depth 1 ", cc->repo, " ", (const char *)NULL);
     quoted(&script, str_text(&prefix));
     str_addz(&script, "/src");
     say(&desc, "Fetching the source of", cc->name);
@@ -99,8 +89,8 @@ int osr_cc_from_source(const OsrCcSource *cc) {
     quoted(&script, str_text(&prefix));
     str_addz(&script, "; SRC=\"$PREFIX/src\"; MODROOT=$(cd ");
     quoted(&script, osr_mod_root());
-    str_addz(&script, " && pwd); export PREFIX SRC MODROOT; cd \"$SRC\"; ");
-    str_addz(&script, cc->script);
+    str_addzz(&script, " && pwd); export PREFIX SRC MODROOT; cd \"$SRC\"; ", cc->script,
+        (const char *)NULL);
     say(&desc, "Building", cc->name);
     if (!run_sh_user(str_text(&desc), str_text(&script))) { ok = 0; goto out; }
 
@@ -116,9 +106,7 @@ int osr_cc_from_source(const OsrCcSource *cc) {
      * one that cross-compiles is taken at its word, since its output cannot
      * be executed here. */
     if (cc->hosted) {
-        str_reset(&script);
-        str_addz(&script, str_text(&prefix));
-        str_addz(&script, "/src/hello.c");
+        str_setz(&script, str_text(&prefix), "/src/hello.c", (const char *)NULL);
         osr_write_user(str_text(&script),
             "#include <stdio.h>\nint main(void){printf(\"ok\\n\");return 0;}\n");
         str_reset(&script);
@@ -152,6 +140,6 @@ int osr_cc_from_source(const OsrCcSource *cc) {
     osr_successf("%s installed at %s", cc->name, str_text(&prefix));
 
 out:
-    str_free(&prefix); str_free(&exe); str_free(&script); str_free(&desc);
+    str_freev(&prefix, &exe, &script, &desc, (Str *)NULL);
     return ok;
 }

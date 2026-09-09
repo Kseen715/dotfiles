@@ -52,9 +52,24 @@ void str_add(Str *s, const char *b, size_t n);
 void str_addz(Str *s, const char *z);
 void str_addc(Str *s, char c);
 void str_addl(Str *s, long n);
+/* str_setz -- reset and append every argument, NULL-terminated:
+ *   str_setz(&path, home, "/.config/", name, (const char *)NULL);
+ * The whole tree composes paths and command words this way, and spelling it
+ * out as a reset plus one append per piece turned a single value into five
+ * lines that a reader has to re-assemble in their head. The NULL is required;
+ * a missing one walks off the argument list. */
+void str_setz(Str *s, const char *first, ...);
+/* str_addzz -- the same, without the reset. */
+void str_addzz(Str *s, const char *first, ...);
 /* str_reset -- empty the buffer, keeping the allocation. */
 void str_reset(Str *s);
 void str_free(Str *s);
+/* str_initv / str_freev -- init or free several buffers at once, NULL-terminated:
+ *   str_initv(&src, &dst, (Str *)NULL);
+ * A function that composes four paths opened with four lines that said nothing
+ * and closed with four more; this is the same statement, once. */
+void str_initv(Str *first, ...);
+void str_freev(Str *first, ...);
 /* str_text -- the bytes, never NULL (an untouched Str reads as ""). */
 const char *str_text(const Str *s);
 /* str_trim_trailing -- drop trailing bytes of the given class, which is what
@@ -239,6 +254,17 @@ typedef struct {
     int had_newline;
 } Line;
 int next_line(const char *buf, size_t buf_len, size_t *pos, Line *out);
+/* osr_read_trim -- a file's contents with surrounding whitespace removed, 1
+ * when it was readable. Every sysfs value this tree reads is short and
+ * newline-terminated, which is the whole reason this is not just slurp.
+ *
+ * osr_read_long / osr_read_ulong -- the same, then strtol/strtoul over the
+ * WHOLE string. An attribute that exists but holds junk reads as absent, in
+ * both: acting on a half-parsed wattage is worse than acting on none. */
+int osr_read_trim(Str *out, const char *path);
+int osr_read_long(const char *path, long *out);
+int osr_read_ulong(const char *path, unsigned long *out);
+
 /* is_space -- POSIX [[:space:]] in the C locale. */
 int is_space(char c);
 

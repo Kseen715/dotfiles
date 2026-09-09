@@ -23,17 +23,13 @@ int osrm_dunst(void) {
      * beside it. dunst reads the *.conf files in dunstrc.d/ after dunstrc, so
      * the palette can
      * be a separate file and the base one stays the rice's. */
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles());
-    str_addz(&src, "/dunst/dunstrc");
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/dunst/dunstrc");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/dunst/dunstrc", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/dunst/dunstrc", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/dunst/dunstrc.d/90-theme.conf");
+    str_setz(&dst, osr_mod_home(), "/.config/dunst/dunstrc.d/90-theme.conf", (const char *)NULL);
     (void)osr_install_theme_layer("dunst", "90-theme.conf", str_text(&dst));
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

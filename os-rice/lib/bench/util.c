@@ -50,63 +50,9 @@ int bench_is_wsl(void) {
  * cpu.c alike, and two copies would drift apart by a space. */
 void bench_row(Str *out, const char *label, const char *value) {
     size_t n = strlen(label);
-    str_addz(out, "  ");
-    str_addz(out, label);
+    str_addzz(out, "  ", label, (const char *)NULL);
     while (n < BENCH_LABEL) { str_addc(out, ' '); n++; }
-    str_addz(out, value);
-    str_addc(out, '\n');
-}
-
-int bench_read_trim(Str *out, const char *path) {
-    char *buf;
-    size_t len, start, end;
-    buf = slurp(path, &len);
-    if (buf == NULL) return 0;
-    start = 0;
-    while (start < len && is_space(buf[start])) start++;
-    end = len;
-    while (end > start && is_space(buf[end - 1])) end--;
-    str_add(out, buf + start, end - start);
-    free(buf);
-    return 1;
-}
-
-/* A sysfs attribute that exists but holds something unparseable reads as
- * absent, in both readers. Acting on half a number is worse than acting on
- * none -- especially when the number is a wattage the report will print. */
-int bench_read_long(const char *path, long *out) {
-    Str s;
-    char *endp;
-    long v;
-    int ok = 0;
-    str_init(&s);
-    if (bench_read_trim(&s, path) && s.len > 0) {
-        v = strtol(str_text(&s), &endp, 10);
-        if (*endp == '\0') { *out = v; ok = 1; }
-    }
-    str_free(&s);
-    return ok;
-}
-
-int bench_read_ulong(const char *path, unsigned long *out) {
-    Str s;
-    char *endp;
-    unsigned long v;
-    int ok = 0;
-    str_init(&s);
-    if (bench_read_trim(&s, path) && s.len > 0) {
-        v = strtoul(str_text(&s), &endp, 10);
-        if (*endp == '\0') { *out = v; ok = 1; }
-    }
-    str_free(&s);
-    return ok;
-}
-
-void bench_join3(Str *out, const char *a, const char *b, const char *c) {
-    str_reset(out);
-    str_addz(out, a);
-    str_addz(out, b);
-    str_addz(out, c);
+    str_addzz(out, value, "\n", (const char *)NULL);
 }
 
 void bench_set_str(char *dst, size_t cap, const char *src) {

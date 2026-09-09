@@ -144,8 +144,7 @@ int osr_reload_x11(void) {
     {
         Str xres;
         str_init(&xres);
-        str_addz(&xres, home_of());
-        str_addz(&xres, "/.Xresources");
+        str_addzz(&xres, home_of(), "/.Xresources", (const char *)NULL);
         if (file_exists(str_text(&xres)) && osr_have_cmd("xrdb")) {
             argv[0] = (char *)"xrdb";
             argv[1] = (char *)"-merge";
@@ -172,8 +171,7 @@ int osr_reload_x11(void) {
     if (running("polybar")) {
         Str launch;
         str_init(&launch);
-        str_addz(&launch, home_of());
-        str_addz(&launch, "/.config/polybar/launch.sh");
+        str_addzz(&launch, home_of(), "/.config/polybar/launch.sh", (const char *)NULL);
         if (access(str_text(&launch), X_OK) == 0) {
             argv[0] = (char *)str_text(&launch);
             argv[1] = NULL;
@@ -292,12 +290,8 @@ int osr_reload_gtk(void) {
      * it are not. The value comes back from gsettings already quoted, and is
      * spliced in unquoted for exactly that reason. */
     str_init(&cmd);
-    str_addz(&cmd, "gsettings set ");
-    str_addz(&cmd, iface);
-    str_addz(&cmd, " gtk-theme 'Adwaita' && gsettings set ");
-    str_addz(&cmd, iface);
-    str_addz(&cmd, " gtk-theme ");
-    str_addz(&cmd, str_text(&theme));
+    str_addzz(&cmd, "gsettings set ", iface, " gtk-theme 'Adwaita' && gsettings set ", iface,
+        " gtk-theme ", str_text(&theme), (const char *)NULL);
 
     argv[0] = (char *)"sh";
     argv[1] = (char *)"-c";
@@ -305,8 +299,7 @@ int osr_reload_gtk(void) {
     argv[3] = NULL;
     (void)try_reload("gtk", argv);
 
-    str_free(&cmd);
-    str_free(&theme);
+    str_freev(&cmd, &theme, (Str *)NULL);
     return 1;
 }
 

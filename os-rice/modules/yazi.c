@@ -71,17 +71,18 @@ int osrm_yazi(void) {
                                   ueberzug) && ok;
 
     str_init(&cfg);
-    str_addz(&cfg, osr_mod_home()); str_addz(&cfg, "/.config/yazi");
+    str_addzz(&cfg, osr_mod_home(), "/.config/yazi", (const char *)NULL);
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/yazi/yazi.toml");
-    str_addz(&dst, str_text(&cfg));     str_addz(&dst, "/yazi.toml");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/yazi/yazi.toml", (const char *)NULL);
+    str_addzz(&dst, str_text(&cfg), "/yazi.toml", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
-    str_reset(&src); str_reset(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/yazi/package.toml");
-    str_addz(&dst, str_text(&cfg));     str_addz(&dst, "/package.toml");
+    str_reset(&src);
+    str_reset(&dst);
+    str_addzz(&src, osr_mod_dotfiles(), "/yazi/package.toml", (const char *)NULL);
+    str_addzz(&dst, str_text(&cfg), "/package.toml", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
@@ -91,24 +92,23 @@ int osrm_yazi(void) {
     if (*osr_mod_theme() != '\0') {
         Str fl;
         str_init(&fl);
-        str_addz(&fl, str_text(&cfg)); str_addz(&fl, "/flavors/");
-        str_addz(&fl, osr_mod_theme()); str_addz(&fl, ".yazi");
+        str_addzz(&fl, str_text(&cfg), "/flavors/", osr_mod_theme(), ".yazi",
+            (const char *)NULL);
         (void)osr_mkdir_p(str_text(&fl));
-        str_reset(&dst); str_addz(&dst, str_text(&fl)); str_addz(&dst, "/flavor.toml");
+        str_setz(&dst, str_text(&fl), "/flavor.toml", (const char *)NULL);
         (void)osr_install_theme_layer("yazi", "flavor.toml", str_text(&dst));
-        str_reset(&dst); str_addz(&dst, str_text(&fl)); str_addz(&dst, "/tmtheme.xml");
+        str_setz(&dst, str_text(&fl), "/tmtheme.xml", (const char *)NULL);
         (void)osr_install_theme_layer("yazi", "tmtheme.xml", str_text(&dst));
         str_free(&fl);
     }
 
     /* ...and the one-line file that selects it. */
-    str_reset(&dst); str_addz(&dst, str_text(&cfg)); str_addz(&dst, "/theme.toml");
+    str_setz(&dst, str_text(&cfg), "/theme.toml", (const char *)NULL);
     if (!osr_install_theme_layer("yazi", "theme.toml", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/yazi/theme.toml");
+        str_setz(&src, osr_mod_dotfiles(), "/yazi/theme.toml", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst); str_free(&cfg);
+    str_freev(&src, &dst, &cfg, (Str *)NULL);
     return ok;
 }

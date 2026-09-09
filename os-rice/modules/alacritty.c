@@ -65,22 +65,20 @@ int osrm_alacritty(void) {
     /* Through install_alacritty_config, not install_layer: alacritty moved
      * several top-level keys under [general] in 0.14, and the adapter is what
      * makes one config file work on both sides of that. */
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/alacritty/alacritty.toml");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/alacritty/alacritty.toml");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/alacritty/alacritty.toml", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/alacritty/alacritty.toml", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_alacritty_config(str_text(&src), str_text(&dst)) && ok;
 
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/alacritty/alacritty-theme.toml");
+    str_setz(&dst, osr_mod_home(), "/.config/alacritty/alacritty-theme.toml",
+        (const char *)NULL);
     if (!osr_install_theme_layer("alacritty", "alacritty-theme.toml", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles());
-        str_addz(&src, "/alacritty/alacritty-theme.toml");
+        str_setz(&src, osr_mod_dotfiles(), "/alacritty/alacritty-theme.toml",
+            (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

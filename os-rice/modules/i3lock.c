@@ -63,9 +63,9 @@ int osrm_i3lock(void) {
 
     ok = osr_pkg_install_step("Installing lock screen", pkgs);
 
-    str_init(&cargo); str_init(&bin);
-    str_addz(&cargo, osr_mod_home()); str_addz(&cargo, "/.cargo/bin/cargo");
-    str_addz(&bin, osr_mod_home());   str_addz(&bin, "/.cargo/bin/xidlehook");
+    str_initv(&cargo, &bin, (Str *)NULL);
+    str_addzz(&cargo, osr_mod_home(), "/.cargo/bin/cargo", (const char *)NULL);
+    str_addzz(&bin, osr_mod_home(), "/.cargo/bin/xidlehook", (const char *)NULL);
     argv[0] = (char *)"test"; argv[1] = (char *)"-x"; argv[2] = cargo.p; argv[3] = NULL;
     if (osr_run_user(argv) == 0) {
         Str rhs;
@@ -92,16 +92,17 @@ int osrm_i3lock(void) {
         ok = osr_pkg_install_step("Installing xautolock", xauto) && ok;
     }
 
-    str_init(&src); str_init(&dst);
+    str_initv(&src, &dst, (Str *)NULL);
     if (*osr_mod_theme_dir() != '\0') {
         static const char *const files[] = { "betterlockscreenrc", "custom-pre.sh", NULL };
         size_t i;
         for (i = 0; files[i] != NULL; i++) {
-            str_reset(&src); str_reset(&dst);
-            str_addz(&src, osr_mod_theme_dir());
-            str_addz(&src, "/config/betterlockscreen/"); str_addz(&src, files[i]);
-            str_addz(&dst, osr_mod_home());
-            str_addz(&dst, "/.config/betterlockscreen/"); str_addz(&dst, files[i]);
+            str_reset(&src);
+            str_reset(&dst);
+            str_addzz(&src, osr_mod_theme_dir(), "/config/betterlockscreen/", files[i],
+                (const char *)NULL);
+            str_addzz(&dst, osr_mod_home(), "/.config/betterlockscreen/", files[i],
+                (const char *)NULL);
             if (file_exists(str_text(&src)))
                 ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
         }
@@ -121,6 +122,6 @@ int osrm_i3lock(void) {
         osr_infof("no DISPLAY - skipping lock screen cache (run: betterlockscreen -u '%s')",
                   str_text(&wp));
     }
-    str_free(&cargo); str_free(&bin); str_free(&src); str_free(&dst); str_free(&wp);
+    str_freev(&cargo, &bin, &src, &dst, &wp, (Str *)NULL);
     return ok;
 }

@@ -18,8 +18,7 @@ int osrm_mako(void) {
     /* `|| :` in the sh: a theme with no mako layer is not a failure, mako has
      * its own defaults. */
     str_init(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/mako/config");
+    str_addzz(&dst, osr_mod_home(), "/.config/mako/config", (const char *)NULL);
     (void)osr_install_theme_layer("mako", "config", str_text(&dst));
     str_free(&dst);
     return ok;

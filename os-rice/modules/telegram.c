@@ -35,10 +35,10 @@ int osrm_telegram(void) {
     ok = osr_step("Installing Telegram", build_telegram, NULL);
     ok = osr_pkg_install_step("Installing the Telegram webview runtime", webview) && ok;
 
-    str_init(&dir); str_init(&dst);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.local/share/TelegramDesktop");
+    str_initv(&dir, &dst, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.local/share/TelegramDesktop", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/os-rice.tdesktop-palette");
+    str_addzz(&dst, str_text(&dir), "/os-rice.tdesktop-palette", (const char *)NULL);
 
     if (osr_install_theme_layer("telegram", "os-rice.tdesktop-palette", str_text(&dst))) {
         /* Applying it is a click, and that is Telegram's limitation: the
@@ -57,6 +57,6 @@ int osrm_telegram(void) {
         osr_info("after that Telegram watches the file - every later 'osr theme' "
                  "re-themes it live");
     }
-    str_free(&dir); str_free(&dst);
+    str_freev(&dir, &dst, (Str *)NULL);
     return ok;
 }

@@ -43,17 +43,15 @@ int osrm_cliphist(void) {
     ok = osr_pkg_install_step("Installing cliphist", pkgs);
 
     /* ---- Hyprland: themed start script ----------------------------------- */
-    str_init(&src); str_init(&dst);
+    str_initv(&src, &dst, (Str *)NULL);
     if (*osr_mod_theme_dir() != '\0') {
-        str_addz(&src, osr_mod_theme_dir());
-        str_addz(&src, "/config/hypr/start-cliphist-store.sh");
+        str_addzz(&src, osr_mod_theme_dir(), "/config/hypr/start-cliphist-store.sh",
+            (const char *)NULL);
         if (file_exists(str_text(&src))) {
-            str_addz(&dst, osr_mod_home());
-            str_addz(&dst, "/.config/hypr/start-cliphist-store.sh");
+            str_addzz(&dst, osr_mod_home(), "/.config/hypr/start-cliphist-store.sh",
+                (const char *)NULL);
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-            argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p;
-            argv[3] = NULL;
-            (void)osr_run_user(argv);
+            (void)osr_chmod("+x", dst.p, 0);
         }
     }
 
@@ -67,8 +65,7 @@ int osrm_cliphist(void) {
      * as_root). */
     if (access("/usr/local/bin/cliphist-wofi-img", X_OK) != 0) {
         str_init(&tmp);
-        str_addz(&tmp, env_str("TMPDIR", "/tmp"));
-        str_addz(&tmp, "/cliphist-wofi-img");
+        str_addzz(&tmp, env_str("TMPDIR", "/tmp"), "/cliphist-wofi-img", (const char *)NULL);
         if (osr_fetch_download(WOFI_IMG_URL, str_text(&tmp), 0)) {
             argv[0] = (char *)"install"; argv[1] = (char *)"-m"; argv[2] = (char *)"0755";
             argv[3] = tmp.p; argv[4] = (char *)"/usr/local/bin/cliphist-wofi-img";
@@ -81,8 +78,7 @@ int osrm_cliphist(void) {
         str_free(&tmp);
     }
 
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.cache/cliphist/thumbs");
+    str_setz(&dst, osr_mod_home(), "/.cache/cliphist/thumbs", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dst)) && ok;
 
     /* ---- GNOME: autostart daemon + Super+V shortcut ----------------------
@@ -93,14 +89,12 @@ int osrm_cliphist(void) {
     if (osr_gnome_is_session()) {
         Str autostart;
         str_init(&autostart);
-        str_addz(&autostart, osr_mod_home()); str_addz(&autostart, "/.config/autostart");
+        str_addzz(&autostart, osr_mod_home(), "/.config/autostart", (const char *)NULL);
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = autostart.p;
         argv[3] = NULL;
         ok = osr_run_step_user("cliphist GNOME autostart", argv) && ok;
 
-        str_reset(&dst);
-        str_addz(&dst, str_text(&autostart));
-        str_addz(&dst, "/cliphist-store.desktop");
+        str_setz(&dst, str_text(&autostart), "/cliphist-store.desktop", (const char *)NULL);
         if (!file_exists(str_text(&dst)))
             ok = osr_write_user(str_text(&dst), AUTOSTART_DESKTOP) && ok;
         str_free(&autostart);
@@ -115,6 +109,6 @@ int osrm_cliphist(void) {
     /* ---- wofi config (theme-aware) --------------------------------------- */
     if (*osr_mod_theme_dir() != '\0') ok = osr_apply_config("wofi") && ok;
 
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }

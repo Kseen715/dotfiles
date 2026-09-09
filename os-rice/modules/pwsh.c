@@ -59,13 +59,12 @@ int osrm_pwsh(void) {
     }
 
     str_init(&src);
-    str_addz(&src, osr_mod_dotfiles());
-    str_addz(&src, "/PowerShell7-profile/Microsoft.PowerShell_profile.ps1");
+    str_addzz(&src, osr_mod_dotfiles(), "/PowerShell7-profile/Microsoft.PowerShell_profile.ps1",
+        (const char *)NULL);
     ok = osr_install_layer(str_text(&src), str_text(&profile)) && ok;
     if (ok) osr_successf("pwsh: profile installed -> %s", str_text(&profile));
 
-    str_free(&src);
-    str_free(&profile);
+    str_freev(&src, &profile, (Str *)NULL);
     return ok;
 }
 

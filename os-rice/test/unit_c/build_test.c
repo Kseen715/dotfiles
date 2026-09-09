@@ -73,13 +73,7 @@ int main(void) {
     osr_sb_init(&sb);
     hs_init(&p);
 
-    osr_sb_env(&sb, "OSR_PKG", "apt");
-    osr_sb_env(&sb, "OSR_DISTRO", "ubuntu");
-    osr_sb_env(&sb, "OSR_ID_LIKE", "debian");
-    osr_sb_env(&sb, "OSR_CODENAME", "noble");
-    osr_sb_env(&sb, "OSR_VERSION_ID", "24.04");
-    osr_sb_env(&sb, "OSR_ARCH", "x86_64");
-    osr_sb_env(&sb, "OSR_ARCH_DEB", "amd64");
+    osr_sb_env_ubuntu(&sb);
     /* Pinned so the `-j` a builder passes is the scenario's rather than the
      * build machine's core count. */
     osr_sb_env(&sb, "OSR_BUILD_JOBS", "4");

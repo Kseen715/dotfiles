@@ -120,14 +120,14 @@ static void gsettings_apply(const char *file) {
         trim_line(&line, raw.start, raw.len);
         if (line.len == 0 || str_text(&line)[0] == '#') { str_free(&line); continue; }
 
-        str_init(&schema); str_init(&key);
+        str_initv(&schema, &key, (Str *)NULL);
         first_word(&schema, str_text(&line));
         rest = after_word(str_text(&line), str_text(&schema));
         first_word(&key, rest);
         val = after_word(rest, str_text(&key));
 
         if (schema.len == 0 || key.len == 0 || *val == '\0') {
-            str_free(&line); str_free(&schema); str_free(&key);
+            str_freev(&line, &schema, &key, (Str *)NULL);
             continue;
         }
         if (has_key(str_text(&schema), str_text(&key))) {
@@ -139,7 +139,7 @@ static void gsettings_apply(const char *file) {
         } else {
             skip++;
         }
-        str_free(&line); str_free(&schema); str_free(&key);
+        str_freev(&line, &schema, &key, (Str *)NULL);
     }
     osr_infof("%s: %ld key(s) applied, %ld not present in this version",
               str_text(&base), set, skip);
@@ -183,12 +183,11 @@ int osrm_evolution(void) {
 
     /* --- 1. GSettings ---------------------------------------------------- */
     str_init(&path);
-    str_addz(&path, osr_mod_dotfiles()); str_addz(&path, "/evolution/gsettings.conf");
+    str_addzz(&path, osr_mod_dotfiles(), "/evolution/gsettings.conf", (const char *)NULL);
     gsettings_apply(str_text(&path));           /* behaviour, dotfiles-owned */
     if (*osr_mod_theme_dir() != '\0') {
-        str_reset(&path);
-        str_addz(&path, osr_mod_theme_dir());
-        str_addz(&path, "/config/evolution/gsettings.conf");
+        str_setz(&path, osr_mod_theme_dir(), "/config/evolution/gsettings.conf",
+            (const char *)NULL);
         gsettings_apply(str_text(&path));       /* appearance, rice-owned (§6) */
     }
 
@@ -197,10 +196,10 @@ int osrm_evolution(void) {
      * GTK3 has no per-application CSS selector, so anything written there would
      * restyle every GTK app on the machine. The theme imports Adwaita-dark from
      * GTK's own resource bundle and only overrides on top of it. */
-    str_init(&theme_dir); str_init(&dst);
-    str_addz(&theme_dir, osr_mod_home());
-    str_addz(&theme_dir, "/.local/share/themes/osr-evolution/gtk-3.0");
-    str_addz(&dst, str_text(&theme_dir)); str_addz(&dst, "/gtk.css");
+    str_initv(&theme_dir, &dst, (Str *)NULL);
+    str_addzz(&theme_dir, osr_mod_home(), "/.local/share/themes/osr-evolution/gtk-3.0",
+        (const char *)NULL);
+    str_addzz(&dst, str_text(&theme_dir), "/gtk.css", (const char *)NULL);
     if (osr_mkdir_p(str_text(&theme_dir))
         && osr_install_theme_layer("evolution", "gtk.css", str_text(&dst))) {
         /* .desktop override that selects it. A user-level copy in
@@ -211,7 +210,7 @@ int osrm_evolution(void) {
         int done = 0;
 
         str_init(&apps);
-        str_addz(&apps, osr_mod_home()); str_addz(&apps, "/.local/share/applications");
+        str_addzz(&apps, osr_mod_home(), "/.local/share/applications", (const char *)NULL);
         ok = osr_mkdir_p(str_text(&apps)) && ok;
 
         for (i = 0; launchers[i] != NULL && !done; i++) {
@@ -223,18 +222,16 @@ int osrm_evolution(void) {
             entry = slurp(launchers[i], &elen);
             if (entry == NULL) continue;
 
-            str_init(&base); str_init(&body);
+            str_initv(&base, &body, (Str *)NULL);
             base_of(&base, launchers[i]);
             osr_infof("installing themed launcher: %s", str_text(&base));
             prefix_exec(&body, entry, elen);
             free(entry);
 
-            str_reset(&dst);
-            str_addz(&dst, str_text(&apps)); str_addc(&dst, '/');
-            str_addz(&dst, str_text(&base));
+            str_setz(&dst, str_text(&apps), "/", str_text(&base), (const char *)NULL);
             ok = osr_write_user(str_text(&dst), str_text(&body)) && ok;
             done = 1;
-            str_free(&base); str_free(&body);
+            str_freev(&base, &body, (Str *)NULL);
         }
         /* The theme is installed either way, but without the launcher nothing
          * selects it -- say so instead of leaving a theme dir nobody reads. */
@@ -262,6 +259,6 @@ int osrm_evolution(void) {
         (void)osr_run_user_quiet(argv);
     }
 
-    str_free(&path); str_free(&theme_dir); str_free(&dst);
+    str_freev(&path, &theme_dir, &dst, (Str *)NULL);
     return ok;
 }

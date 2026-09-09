@@ -15,8 +15,7 @@ int osrm_qbittorrent(void) {
 
     ok = osr_pkg_install_step("Installing qBittorrent", pkgs);
     str_init(&dir);
-    str_addz(&dir, osr_mod_home());
-    str_addz(&dir, "/.config/qBittorrent");
+    str_addzz(&dir, osr_mod_home(), "/.config/qBittorrent", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
     str_free(&dir);
     return ok;

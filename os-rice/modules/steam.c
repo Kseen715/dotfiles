@@ -26,12 +26,9 @@ int osrm_steam(void) {
     ok = osr_pkg_install_step("Installing Steam", pkgs);
 
     str_init(&path);
-    str_addz(&path, osr_mod_home());
-    str_addz(&path, "/.bashrc");
+    str_addzz(&path, osr_mod_home(), "/.bashrc", (const char *)NULL);
     ok = osr_ensure_line(str_text(&path), "export STEAM_FORCE_DESKTOPUI_SCALING=1") && ok;
-    str_reset(&path);
-    str_addz(&path, osr_mod_home());
-    str_addz(&path, "/.local/share/Steam");
+    str_setz(&path, osr_mod_home(), "/.local/share/Steam", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&path)) && ok;
     str_free(&path);
 

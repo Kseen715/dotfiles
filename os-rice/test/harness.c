@@ -278,6 +278,56 @@ void osr_sb_env(OsrSandbox *sb, const char *name, const char *value) {
     hs_free(&e);
 }
 
+/* osr_sb_at -- "<sandbox root>/<rel>", as a string the caller does not own.
+ * Every test here composes such a path a dozen times to hand to a stub or an
+ * assertion, and a per-call HStr means an init and a free around each one. The
+ * ring holds the last four, which is enough for the several arguments of a
+ * single call; a fifth overwrites the first, so do not hold one across calls. */
+const char *osr_sb_at(OsrSandbox *sb, const char *rel) {
+    static HStr ring[4];
+    static int ready = 0;
+    static int next = 0;
+    HStr *p;
+
+    if (!ready) {
+        int i;
+        for (i = 0; i < 4; i++) hs_init(&ring[i]);
+        ready = 1;
+    }
+    p = &ring[next];
+    next = (next + 1) % 4;
+    hs_path(p, hs_text(&sb->root), rel);
+    return hs_text(p);
+}
+
+/* osr_sb_slurp -- the contents of <root>/<rel>, or "" when it is not there.
+ * The caller frees. */
+char *osr_sb_slurp(OsrSandbox *sb, const char *rel) {
+    return h_slurp(osr_sb_at(sb, rel));
+}
+
+/* osr_sb_env_ubuntu / osr_sb_env_arch -- the baseline "what box is this?"
+ * answers a suite states before it starts flipping single variables. Named
+ * rather than repeated so that a test's own env calls are only the ones that
+ * matter to it. */
+void osr_sb_env_ubuntu(OsrSandbox *sb) {
+    osr_sb_env(sb, "OSR_PKG", "apt");
+    osr_sb_env(sb, "OSR_DISTRO", "ubuntu");
+    osr_sb_env(sb, "OSR_ID_LIKE", "debian");
+    osr_sb_env(sb, "OSR_CODENAME", "noble");
+    osr_sb_env(sb, "OSR_VERSION_ID", "24.04");
+    osr_sb_env(sb, "OSR_ARCH", "x86_64");
+    osr_sb_env(sb, "OSR_ARCH_DEB", "amd64");
+}
+
+void osr_sb_env_arch(OsrSandbox *sb) {
+    osr_sb_env(sb, "OSR_PKG", "pacman");
+    osr_sb_env(sb, "OSR_DISTRO", "arch");
+    osr_sb_env(sb, "OSR_ID_LIKE", "");
+    osr_sb_env(sb, "OSR_CODENAME", "");
+    osr_sb_env(sb, "OSR_VERSION_ID", "");
+}
+
 void osr_sb_drop(OsrSandbox *sb, const char *line) {
     if (sb->drop_n >= OSR_SB_MAX_DROP) h_die("too many drop patterns");
     sb->drop[sb->drop_n++] = h_dup(line);
@@ -985,6 +1035,14 @@ void osr_assert_absent(OsrSandbox *sb, const char *rel, const char *label) {
     if (lstat(hs_text(&path), &st) != 0) osr_ok(label);
     else osr_fail(label, "the path exists");
     hs_free(&path);
+}
+
+/* osr_assert_file -- the file the code wrote contains `needle`. */
+void osr_assert_file(OsrSandbox *sb, const char *rel, const char *needle,
+                     const char *label) {
+    char *got = osr_sb_slurp(sb, rel);
+    osr_assert_true(strstr(got, needle) != NULL, label);
+    free(got);
 }
 
 void osr_assert_rc(int actual, int expected, const char *label) {

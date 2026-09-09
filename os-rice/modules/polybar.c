@@ -33,36 +33,33 @@ int osrm_polybar(void) {
 
     ok = osr_pkg_install_step("Installing polybar", pkgs);
 
-    str_init(&dir); str_init(&src); str_init(&dst);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/polybar");
+    str_initv(&dir, &src, &dst, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/polybar", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
 
     for (i = 0; files[i] != NULL; i++) {
-        str_reset(&src); str_reset(&dst);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/polybar/");
-        str_addz(&src, files[i]);
-        str_addz(&dst, str_text(&dir)); str_addc(&dst, '/'); str_addz(&dst, files[i]);
+        str_reset(&src);
+        str_reset(&dst);
+        str_addzz(&src, osr_mod_dotfiles(), "/polybar/", files[i], (const char *)NULL);
+        str_addzz(&dst, str_text(&dir), "/", files[i], (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/launch.sh");
+    str_setz(&dst, str_text(&dir), "/launch.sh", (const char *)NULL);
     if (file_exists(str_text(&dst))) {
-        argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-        (void)osr_run_user(argv);
+        (void)osr_chmod("+x", dst.p, 0);
     }
 
     /* The bar's own modules are scripts, and a script that is not executable is
      * a bar segment that silently stays empty. */
-    str_reset(&src);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/polybar/scripts");
+    str_setz(&src, osr_mod_dotfiles(), "/polybar/scripts", (const char *)NULL);
     if (dir_exists(str_text(&src))) {
         DIR *d;
         struct dirent *e;
         Str sdir;
 
         str_init(&sdir);
-        str_addz(&sdir, str_text(&dir)); str_addz(&sdir, "/scripts");
+        str_addzz(&sdir, str_text(&dir), "/scripts", (const char *)NULL);
         ok = osr_mkdir_p(str_text(&sdir)) && ok;
         d = opendir(str_text(&src));
         if (d != NULL) {
@@ -70,27 +67,22 @@ int osrm_polybar(void) {
                 size_t n = strlen(e->d_name);
                 Str from, to;
                 if (n < 4 || strcmp(e->d_name + n - 3, ".sh") != 0) continue;
-                str_init(&from); str_init(&to);
-                str_addz(&from, str_text(&src)); str_addc(&from, '/');
-                str_addz(&from, e->d_name);
-                str_addz(&to, str_text(&sdir)); str_addc(&to, '/');
-                str_addz(&to, e->d_name);
+                str_initv(&from, &to, (Str *)NULL);
+                str_addzz(&from, str_text(&src), "/", e->d_name, (const char *)NULL);
+                str_addzz(&to, str_text(&sdir), "/", e->d_name, (const char *)NULL);
                 if (file_exists(str_text(&from))) {
                     ok = osr_install_layer(str_text(&from), str_text(&to)) && ok;
-                    argv[0] = (char *)"chmod"; argv[1] = (char *)"+x";
-                    argv[2] = to.p; argv[3] = NULL;
-                    (void)osr_run_user(argv);
+                    (void)osr_chmod("+x", to.p, 0);
                 }
-                str_free(&from); str_free(&to);
+                str_freev(&from, &to, (Str *)NULL);
             }
             closedir(d);
         }
         str_free(&sdir);
     }
-    str_reset(&dst);
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/colors.ini");
+    str_setz(&dst, str_text(&dir), "/colors.ini", (const char *)NULL);
     (void)osr_install_theme_layer("polybar", "colors.ini", str_text(&dst));
 
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

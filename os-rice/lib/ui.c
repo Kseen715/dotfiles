@@ -403,8 +403,7 @@ static int paint_one(int painted, int frame, const char *desc, const char *log_p
     str_init(&out);
     drawn = paint_block(&out, painted, log_path, str_text(&status));
     out_flush(&out);
-    str_free(&out);
-    str_free(&status);
+    str_freev(&out, &status, (Str *)NULL);
     return drawn;
 }
 
@@ -420,6 +419,23 @@ static void cursor_hide_if_tty(void) {
         fputs("\033[?25l", stdout);
         fflush(stdout);
     }
+}
+
+/* spin_until_gone -- spin beside a process this program did NOT fork, so it
+ * cannot be waited for: kill(pid, 0) is the only "still alive?" POSIX offers a
+ * non-parent. Returns the painted-line count the caller hands to
+ * osr_ui_result. */
+static int spin_until_gone(pid_t pid, const char *desc, const char *log_path) {
+    int painted = 0;
+    int frame = 0;
+
+    cursor_hide_if_tty();
+    while (kill(pid, 0) == 0) {
+        painted = paint_one(painted, frame, desc, log_path);
+        spin_sleep();
+        frame++;
+    }
+    return painted;
 }
 
 int osr_ui_spin_child(pid_t pid, const char *desc, const char *log_path, int *exit_status) {
@@ -442,39 +458,7 @@ int osr_ui_spin_child(pid_t pid, const char *desc, const char *log_path, int *ex
 }
 
 int osr_ui_spin_pid(pid_t pid, const char *desc, const char *log_path) {
-    static const char frames[4] = { '|', '/', '-', '\\' };
-    int painted = 0;
-    int frame = 0;
-
-    if (isatty(1)) {
-        fputs("\033[?25l", stdout);
-        fflush(stdout);
-    }
-    while (kill(pid, 0) == 0) {
-        Str status;
-        Str out;
-        struct timespec ts;
-
-        str_init(&status);
-        if (!expand_b(&status, color("OSR_CYAN"))) {
-            str_addc(&status, frames[frame % 4]);
-            if (!expand_b(&status, color("OSR_NC"))) {
-                tag_pad(&status, 1);
-                str_addz(&status, desc);
-            }
-        }
-        str_init(&out);
-        painted = paint_block(&out, painted, log_path, str_text(&status));
-        out_flush(&out);
-        str_free(&out);
-        str_free(&status);
-
-        ts.tv_sec = 0;
-        ts.tv_nsec = OSR_SPIN_INTERVAL_NS;
-        nanosleep(&ts, NULL);
-        frame++;
-    }
-    return painted;
+    return spin_until_gone(pid, desc, log_path);
 }
 
 void osr_ui_result(int painted, int ok, const char *desc) {
@@ -492,8 +476,7 @@ void osr_ui_result(int painted, int ok, const char *desc) {
     str_init(&out);
     done_block(&out, painted, str_text(&line));
     out_flush(&out);
-    str_free(&out);
-    str_free(&line);
+    str_freev(&out, &line, (Str *)NULL);
 }
 
 void osr_ui_fail_tail(long n, const char *log_path) {
@@ -521,45 +504,10 @@ void osr_ui_append_log(const char *step_log) {
 }
 
 static int cmd_spin(const char *pid_s, const char *desc, const char *log, const char *state_path) {
-    static const char frames[4] = { '|', '/', '-', '\\' };
-    pid_t pid = (pid_t)parse_int(pid_s);
-    int painted = 0;
-    int frame = 0;
+    /* The description stays raw here and is expanded by the `%b` in
+     * emit_status_line -- exactly one expansion, as in sh. */
+    int painted = spin_until_gone((pid_t)parse_int(pid_s), desc, log);
     FILE *fp;
-
-    if (isatty(1)) {
-        fputs("\033[?25l", stdout);
-        fflush(stdout);
-    }
-
-    while (kill(pid, 0) == 0) {
-        Str status;
-        Str out;
-        struct timespec ts;
-
-        /* printf '%b%s%b %s' "$OSR_CYAN" "$frame" "$OSR_NC" "$desc" -- the
-         * description stays raw here and is expanded by the `%b` in
-         * emit_status_line, exactly one expansion, as in sh. */
-        str_init(&status);
-        if (!expand_b(&status, color("OSR_CYAN"))) {
-            str_addc(&status, frames[frame % 4]);
-            if (!expand_b(&status, color("OSR_NC"))) {
-                tag_pad(&status, 1);
-                str_addz(&status, desc);
-            }
-        }
-
-        str_init(&out);
-        painted = paint_block(&out, painted, log, str_text(&status));
-        out_flush(&out);
-        str_free(&out);
-        str_free(&status);
-
-        ts.tv_sec = 0;
-        ts.tv_nsec = OSR_SPIN_INTERVAL_NS;
-        nanosleep(&ts, NULL);
-        frame++;
-    }
 
     fp = fopen(state_path, "wb");
     if (fp != NULL) {
@@ -613,8 +561,7 @@ static int cmd_result(const char *state_path, const char *status, const char *de
     str_init(&out);
     done_block(&out, painted, str_text(&line));
     out_flush(&out);
-    str_free(&out);
-    str_free(&line);
+    str_freev(&out, &line, (Str *)NULL);
 
     remove(state_path);
     return 0;

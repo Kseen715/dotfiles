@@ -41,12 +41,10 @@ int osrm_fcitx5(void) {
     /* Two files in two different trees: the theme is data under
      * .local/share, the classicui conf that selects it is config. */
     str_init(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.local/share/fcitx5/themes/osr/theme.conf");
+    str_addzz(&dst, osr_mod_home(), "/.local/share/fcitx5/themes/osr/theme.conf",
+        (const char *)NULL);
     (void)osr_install_theme_layer("fcitx5", "theme.conf", str_text(&dst));
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/fcitx5/conf/classicui.conf");
+    str_setz(&dst, osr_mod_home(), "/.config/fcitx5/conf/classicui.conf", (const char *)NULL);
     (void)osr_install_theme_layer("fcitx5", "classicui.conf", str_text(&dst));
     str_free(&dst);
     return ok;

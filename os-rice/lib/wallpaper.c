@@ -79,13 +79,10 @@ static void resolve_theme(void) {
         osr_die("recorded theme '%s' no longer exists (see: osr themes)", str_text(&theme));
 
     str_init(&dir);
-    str_addz(&dir, root_dir());
-    str_addz(&dir, "/themes/");
-    str_addz(&dir, str_text(&theme));
+    str_addzz(&dir, root_dir(), "/themes/", str_text(&theme), (const char *)NULL);
     osr_setenv("OSR_THEME", str_text(&theme));
     osr_setenv("OSR_THEME_DIR", str_text(&dir));
-    str_free(&dir);
-    str_free(&theme);
+    str_freev(&dir, &theme, (Str *)NULL);
 }
 
 /* next_in_library -- the wrap-around step a single hotkey cycles wallpapers
@@ -110,8 +107,7 @@ static void next_in_library(Str *out) {
     str_init(&cur_base);
     base_of(&cur_base, str_text(&cur));
 
-    str_init(&first);
-    str_init(&base);
+    str_initv(&first, &base, (Str *)NULL);
     while (next_line(str_text(&lib), lib.len, &pos, &l)) {
         Str img;
         str_init(&img);
@@ -129,11 +125,7 @@ static void next_in_library(Str *out) {
     }
     if (out->len == 0) str_add(out, str_text(&first), first.len);
 
-    str_free(&base);
-    str_free(&first);
-    str_free(&cur_base);
-    str_free(&cur);
-    str_free(&lib);
+    str_freev(&base, &first, &cur_base, &cur, &lib, (Str *)NULL);
 }
 
 int osr_wallpaper_main(int argc, char **argv) {

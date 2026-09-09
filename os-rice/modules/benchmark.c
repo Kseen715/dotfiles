@@ -108,8 +108,7 @@ static int persist_sensor_modules(void *ctx) {
     if (!dir_exists("/etc/modules-load.d")) return 1;
 
     str_init(&tmp);
-    str_addz(&tmp, env_str("TMPDIR", "/tmp"));
-    str_addz(&tmp, "/osr-bench-modules-");
+    str_addzz(&tmp, env_str("TMPDIR", "/tmp"), "/osr-bench-modules-", (const char *)NULL);
     str_addl(&tmp, (long)getpid());
     f = fopen(str_text(&tmp), "wb");
     if (f == NULL) { str_free(&tmp); return 0; }

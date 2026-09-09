@@ -73,9 +73,9 @@ int osrm_starship(void) {
                   (void *)"JetBrainsMono") && ok;
     ok = osrm_osrvv() && ok;
 
-    str_init(&base); str_init(&dst); str_init(&pal);
-    str_addz(&base, osr_mod_dotfiles()); str_addz(&base, "/starship/starship.toml");
-    str_addz(&dst, osr_mod_home());      str_addz(&dst, "/.config/starship.toml");
+    str_initv(&base, &dst, &pal, (Str *)NULL);
+    str_addzz(&base, osr_mod_dotfiles(), "/starship/starship.toml", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/starship.toml", (const char *)NULL);
     if (file_exists(str_text(&base))) {
         if (osr_theme_source(&pal, "starship", "starship.palette.toml", &is_temp)) {
             /* One file, two owners: the prompt layout is the dotfiles' and the
@@ -89,6 +89,6 @@ int osrm_starship(void) {
             ok = osr_install_layer(str_text(&base), str_text(&dst)) && ok;
         }
     }
-    str_free(&base); str_free(&dst); str_free(&pal);
+    str_freev(&base, &dst, &pal, (Str *)NULL);
     return ok;
 }

@@ -84,9 +84,7 @@ static void list_dir(const char *dir, const char *marker, const char *strip_suff
     Line line;
 
     str_init(&path);
-    str_addz(&path, osr_root());
-    str_addc(&path, '/');
-    str_addz(&path, dir);
+    str_addzz(&path, osr_root(), "/", dir, (const char *)NULL);
 
     str_init(&names);
     osr_list_dir(&names, str_text(&path), marker, strip_suffix);
@@ -108,9 +106,7 @@ static void collect_dir(Str *out, const char *dir, const char *strip_suffix) {
     Str path;
 
     str_init(&path);
-    str_addz(&path, osr_root());
-    str_addc(&path, '/');
-    str_addz(&path, dir);
+    str_addzz(&path, osr_root(), "/", dir, (const char *)NULL);
     osr_list_dir(out, str_text(&path), NULL, strip_suffix);
     str_free(&path);
 }
@@ -153,15 +149,12 @@ static void cmd_list_modules(void) {
 
     str_init(&out);
     for (i = 0; i < count; i++) {
-        str_addz(&out, "  ");
-        str_addz(&out, names[i]);
-        str_addc(&out, '\n');
+        str_addzz(&out, "  ", names[i], "\n", (const char *)NULL);
         free(names[i]);
     }
     free(names);
     out_flush(&out);
-    str_free(&out);
-    str_free(&all);
+    str_freev(&out, &all, (Str *)NULL);
 }
 
 /* ---------------------------------------------------------------------
@@ -171,24 +164,23 @@ static void cmd_list_modules(void) {
 static void usage_to(FILE *fp) {
     Str o;
     str_init(&o);
-    str_addz(&o, "Usage:\n");
-    str_addz(&o, "  install.sh [--user <name>] [--verbose] [--theme <name>] <rice>\n");
-    str_addz(&o, "                                                    install a rice\n");
-    str_addz(&o, "  install.sh --module [--theme <name>] <name>...    install module(s), no rice\n");
-    str_addz(&o, "  install.sh --theme-only --theme <name>            apply a theme only (no\n");
-    str_addz(&o, "                                                    packages, no sudo) - see osr\n");
-    str_addz(&o, "  install.sh --list                                 list available rices\n");
-    str_addz(&o, "  install.sh --list-themes                          list available themes\n");
-    str_addz(&o, "  install.sh --list-modules                         list available modules\n");
-    str_addz(&o, "\n");
-    str_addz(&o, "  <rice>            name of a directory under os-rice/rices/\n");
-    str_addz(&o, "  --module          treat positionals as module names, not a rice\n");
-    str_addz(&o, "  --theme <name>    which theme supplies the 90-* appearance layers. In rice\n");
-    str_addz(&o, "                    mode it overrides the manifest's own `theme:`; in --module\n");
-    str_addz(&o, "                    mode it is the interactive picker's answer (default theme\n");
-    str_addz(&o, "                    if no TTY)\n");
-    str_addz(&o, "  --user <name>     account to install for (default: invoking user)\n");
-    str_addz(&o, "  --verbose         stream command output instead of spinners\n");
+    str_addzz(&o, "Usage:\n",
+        "  install.sh [--user <name>] [--verbose] [--theme <name>] <rice>\n",
+        "                                                    install a rice\n",
+        "  install.sh --module [--theme <name>] <name>...    install module(s), no rice\n",
+        "  install.sh --theme-only --theme <name>            apply a theme only (no\n",
+        "                                                    packages, no sudo) - see osr\n",
+        "  install.sh --list                                 list available rices\n",
+        "  install.sh --list-themes                          list available themes\n",
+        "  install.sh --list-modules                         list available modules\n", "\n",
+        "  <rice>            name of a directory under os-rice/rices/\n",
+        "  --module          treat positionals as module names, not a rice\n",
+        "  --theme <name>    which theme supplies the 90-* appearance layers. In rice\n",
+        "                    mode it overrides the manifest's own `theme:`; in --module\n",
+        "                    mode it is the interactive picker's answer (default theme\n",
+        "                    if no TTY)\n",
+        "  --user <name>     account to install for (default: invoking user)\n",
+        "  --verbose         stream command output instead of spinners\n", (const char *)NULL);
     fwrite(str_text(&o), 1, o.len, fp);
     fflush(fp);
     str_free(&o);
@@ -310,8 +302,7 @@ static int cmd_parse_args(int argc, char **argv) {
     sh_assign(&out, "OSR_ACTION_ARG", a.action_arg);
     if (a.verbose) str_addz(&out, "OSR_VERBOSE=1; export OSR_VERBOSE\n");
     out_flush(&out);
-    str_free(&out);
-    str_free(&a.pos);
+    str_freev(&out, &a.pos, (Str *)NULL);
     return 0;
 }
 
@@ -394,20 +385,16 @@ static int read_manifest(Str *modules, Str *requires_, const char *path) {
 static int cmd_manifest(const char *path) {
     Str modules, requires_, out;
 
-    str_init(&modules);
-    str_init(&requires_);
+    str_initv(&modules, &requires_, (Str *)NULL);
     if (!read_manifest(&modules, &requires_, path)) {
-        str_free(&modules);
-        str_free(&requires_);
+        str_freev(&modules, &requires_, (Str *)NULL);
         return 1;
     }
     str_init(&out);
     sh_assign(&out, "OSR_MODULES", str_text(&modules));
     sh_assign(&out, "OSR_REQUIRES", str_text(&requires_));
     out_flush(&out);
-    str_free(&out);
-    str_free(&modules);
-    str_free(&requires_);
+    str_freev(&out, &modules, &requires_, (Str *)NULL);
     return 0;
 }
 
@@ -444,9 +431,7 @@ static void info_line(Str *out, const char *msg) {
 static void opt(Str *s, const char *lead, const char *var, const char *tail) {
     const char *v = env_str(var, NULL);
     if (v == NULL) return;
-    str_addz(s, lead);
-    str_addz(s, v);
-    str_addz(s, tail);
+    str_addzz(s, lead, v, tail, (const char *)NULL);
 }
 
 /* kernel_release -- `uname -r` on POSIX; on Windows the closest true statement
@@ -466,8 +451,7 @@ static void report_base(Str *out) {
     Str l;
 
     str_init(&l);
-    str_addz(&l, "distro=");
-    str_addz(&l, env_str("OSR_DISTRO", ""));
+    str_addzz(&l, "distro=", env_str("OSR_DISTRO", ""), (const char *)NULL);
     opt(&l, " version_id=", "OSR_VERSION_ID", "");
     opt(&l, " codename=", "OSR_CODENAME", "");
     opt(&l, " version=\"", "OSR_VERSION", "\"");
@@ -475,10 +459,8 @@ static void report_base(Str *out) {
 
     str_reset(&l);
     opt(&l, "id_like=\"", "OSR_ID_LIKE", "\" ");
-    str_addz(&l, "pkg=");
-    str_addz(&l, env_str("OSR_PKG", ""));
-    str_addz(&l, " init=");
-    str_addz(&l, env_str("OSR_INIT", ""));
+    str_addzz(&l, "pkg=", env_str("OSR_PKG", ""), " init=", env_str("OSR_INIT", ""),
+        (const char *)NULL);
     info_line(out, str_text(&l));
 
     str_reset(&l);
@@ -486,11 +468,8 @@ static void report_base(Str *out) {
     kernel_release(&l);                          /* sh: $(uname -r) */
     info_line(out, str_text(&l));
 
-    str_reset(&l);
-    str_addz(&l, "user=");
-    str_addz(&l, env_str("OSR_USER", ""));
-    str_addz(&l, " home=");
-    str_addz(&l, env_str("OSR_HOME", ""));
+    str_setz(&l, "user=", env_str("OSR_USER", ""), " home=", env_str("OSR_HOME", ""),
+        (const char *)NULL);
     info_line(out, str_text(&l));
 
     str_free(&l);
@@ -509,13 +488,11 @@ static void report_hw(Str *out) {
      * actually doubles them up ("cores=4 threads=4" is noise). */
     str_init(&hw);
     opt(&hw, "cpu=", "OSR_CPU_MODEL", " ");
-    str_addz(&hw, "arch=");
-    str_addz(&hw, env_str("OSR_CPU_ARCH", ""));
+    str_addzz(&hw, "arch=", env_str("OSR_CPU_ARCH", ""), (const char *)NULL);
     if (cores > 0) { str_addz(&hw, " cores="); str_addl(&hw, cores); }
     if (threads > cores) { str_addz(&hw, " threads="); str_addl(&hw, threads); }
     if (strcmp(env_str("OSR_VIRT", ""), "none") != 0) {
-        str_addz(&hw, " virt=");
-        str_addz(&hw, env_str("OSR_VIRT", ""));
+        str_addzz(&hw, " virt=", env_str("OSR_VIRT", ""), (const char *)NULL);
     }
     info_line(out, str_text(&hw));
     str_free(&hw);
@@ -537,16 +514,13 @@ static void report_hw(Str *out) {
 
     str_init(&accel);
     if (env_str("OSR_GPU_MODEL", NULL) != NULL) {
-        str_addz(&accel, "gpu=");
-        str_addz(&accel, env_str("OSR_GPU_MODEL", ""));
+        str_addzz(&accel, "gpu=", env_str("OSR_GPU_MODEL", ""), (const char *)NULL);
     } else if (env_str("OSR_GPU_VENDOR", NULL) != NULL) {
-        str_addz(&accel, "gpu=");
-        str_addz(&accel, env_str("OSR_GPU_VENDOR", ""));
+        str_addzz(&accel, "gpu=", env_str("OSR_GPU_VENDOR", ""), (const char *)NULL);
     }
     if (env_str("OSR_NPU_VENDOR", NULL) != NULL) {
         if (accel.len > 0) str_addc(&accel, ' ');
-        str_addz(&accel, "npu=");
-        str_addz(&accel, env_str("OSR_NPU_VENDOR", ""));
+        str_addzz(&accel, "npu=", env_str("OSR_NPU_VENDOR", ""), (const char *)NULL);
     }
     if (accel.len > 0) {
         Str line;
@@ -579,23 +553,18 @@ static void final_line(const char *module_mode, const char *modules,
 
     str_init(&l);
     if (module_mode[0] != '\0') {
-        str_addz(&l, "module(s) installed:");
-        str_addz(&l, modules);
+        str_addzz(&l, "module(s) installed:", modules, (const char *)NULL);
     } else if (strcmp(mode, "switch") == 0) {
-        str_addz(&l, "switched to rice '");
-        str_addz(&l, rice);
-        str_addz(&l, "' (packages accreted, theme layers replaced)");
+        str_addzz(&l, "switched to rice '", rice,
+            "' (packages accreted, theme layers replaced)", (const char *)NULL);
     } else {
-        str_addz(&l, "rice '");
-        str_addz(&l, rice);
-        str_addz(&l, "' installed");
+        str_addzz(&l, "rice '", rice, "' installed", (const char *)NULL);
     }
 
     str_init(&out);
     log_line(&out, "OSR_GREEN", "[DONE]", NULL, str_text(&l));
     out_flush(&out);
-    str_free(&out);
-    str_free(&l);
+    str_freev(&out, &l, (Str *)NULL);
 }
 
 static int cmd_final(const char *module_mode, const char *modules,
@@ -638,17 +607,15 @@ static void list_themes(void) {
         Str name, desc, out;
         size_t pad;
         if (line.len == 0) continue;
-        str_init(&name); str_init(&desc); str_init(&out);
+        str_initv(&name, &desc, &out, (Str *)NULL);
         str_add(&name, line.start, line.len);
         osr_theme_meta(&desc, str_text(&name), "description");
-        str_addz(&out, "  ");
-        str_addz(&out, str_text(&name));
+        str_addzz(&out, "  ", str_text(&name), (const char *)NULL);
         for (pad = name.len; pad < 12; pad++) str_addc(&out, ' ');  /* %-12s */
         str_addc(&out, ' ');
-        str_addz(&out, str_text(&desc));
-        str_addc(&out, '\n');
+        str_addzz(&out, str_text(&desc), "\n", (const char *)NULL);
         out_flush(&out);
-        str_free(&name); str_free(&desc); str_free(&out);
+        str_freev(&name, &desc, &out, (Str *)NULL);
     }
     str_free(&all);
 }
@@ -745,10 +712,18 @@ static void privilege_warmup(const char *modules) {
         }
         keep[0] = (char *)"sudo"; keep[1] = (char *)"-n"; keep[2] = (char *)"true";
         keep[3] = NULL;
+        /* Polled once a second rather than slept a whole minute: the ticket
+         * only needs re-stamping every 60s, but the parent's death has to be
+         * noticed promptly -- a keeper that sleeps through it holds a live
+         * sudo ticket for up to a minute after the run it belonged to is
+         * gone, and re-stamps it once more before finding out. */
         for (;;) {
+            int i;
             (void)osr_run_quiet(keep);
-            sleep(60);
-            if (kill(parent, 0) != 0) _exit(0);
+            for (i = 0; i < 60; i++) {
+                sleep(1);
+                if (kill(parent, 0) != 0) _exit(0);
+            }
         }
     }
 }
@@ -822,8 +797,7 @@ static void run_one(const char *mod, long *n) {
         osr_setenv("OSR_STEP_N", num);
     }
     str_init(&msg);
-    str_addz(&msg, "module: ");
-    str_addz(&msg, mod);
+    str_addzz(&msg, "module: ", mod, (const char *)NULL);
     osr_log_step(str_text(&msg));
     str_free(&msg);
 
@@ -833,10 +807,7 @@ static void run_one(const char *mod, long *n) {
         str_free(&path);
         return;
     }
-    str_addz(&path, osr_root());
-    str_addz(&path, "/modules/");
-    str_addz(&path, mod);
-    str_addz(&path, ".sh");
+    str_addzz(&path, osr_root(), "/modules/", mod, ".sh", (const char *)NULL);
     if (!file_exists(str_text(&path)))
         osr_die("module not found: %s (%s)", mod, str_text(&path));
     if (!run_sh_module(str_text(&path))) exit(1);
@@ -865,10 +836,7 @@ static void check_module_name(const char *m, void *ctx) {
     (void)ctx;
     if (osr_module_has(m)) return;
     str_init(&path);
-    str_addz(&path, osr_root());
-    str_addz(&path, "/modules/");
-    str_addz(&path, m);
-    str_addz(&path, ".sh");
+    str_addzz(&path, osr_root(), "/modules/", m, ".sh", (const char *)NULL);
     if (!file_exists(str_text(&path)))
         osr_die("module not found: %s (try --list-modules)", m);
     str_free(&path);
@@ -924,9 +892,8 @@ static int cmd_run(int argc, char **argv) {
         {
             Str msg;
             str_init(&msg);
-            str_addz(&msg, "theme '");
-            str_addz(&msg, env_str("OSR_THEME", ""));
-            str_addz(&msg, "' applied");
+            str_addzz(&msg, "theme '", env_str("OSR_THEME", ""), "' applied",
+                (const char *)NULL);
             osr_success_line(str_text(&msg));
             str_free(&msg);
         }
@@ -946,7 +913,7 @@ static int cmd_run(int argc, char **argv) {
     (void)cmd_report("hw");
 
     /* --- resolve what to run: a rice manifest, or explicit --module names -- */
-    str_init(&modules); str_init(&requires_); str_init(&rice);
+    str_initv(&modules, &requires_, &rice, (Str *)NULL);
     if (a.module_mode[0] != '\0') {
         int themable = 0;
         Str want;
@@ -978,9 +945,7 @@ static int cmd_run(int argc, char **argv) {
             Str dir;
             osr_state_get(&want, "theme");
             str_init(&dir);
-            str_addz(&dir, osr_root());
-            str_addz(&dir, "/themes/");
-            str_addz(&dir, str_text(&want));
+            str_addzz(&dir, osr_root(), "/themes/", str_text(&want), (const char *)NULL);
             if (want.len == 0 || !dir_exists(str_text(&dir))) str_reset(&want);
             str_free(&dir);
         }
@@ -993,9 +958,7 @@ static int cmd_run(int argc, char **argv) {
         each_word(str_text(&a.pos), one_rice, &rice);
         if (rice.len == 0) { usage_to(stderr); osr_die("no rice specified"); }
         str_init(&list);
-        str_addz(&list, osr_root());
-        str_addz(&list, "/rices/");
-        str_addz(&list, str_text(&rice));
+        str_addzz(&list, osr_root(), "/rices/", str_text(&rice), (const char *)NULL);
         osr_setenv("OSR_RICE_DIR", str_text(&list));
         str_addz(&list, "/rice.list");
         if (!file_exists(str_text(&list)))
@@ -1082,7 +1045,7 @@ static int cmd_run(int argc, char **argv) {
     final_line(a.module_mode, str_text(&modules),
                env_str("OSR_MODE", "install"), str_text(&rice));
 
-    str_free(&modules); str_free(&requires_); str_free(&rice); str_free(&a.pos);
+    str_freev(&modules, &requires_, &rice, &a.pos, (Str *)NULL);
     return 0;
 }
 

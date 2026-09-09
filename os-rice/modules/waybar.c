@@ -20,33 +20,27 @@ int osrm_waybar(void) {
     if (*osr_mod_theme_dir() == '\0') return ok;
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_theme_dir());
-    str_addz(&dir, "/config/waybar");
+    str_addzz(&dir, osr_mod_theme_dir(), "/config/waybar", (const char *)NULL);
     if (!dir_exists(str_text(&dir))) { str_free(&dir); return ok; }
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, str_text(&dir)); str_addz(&src, "/config.jsonc");
-    str_addz(&dst, osr_mod_home());  str_addz(&dst, "/.config/waybar/config.jsonc");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, str_text(&dir), "/config.jsonc", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/waybar/config.jsonc", (const char *)NULL);
     ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* The stylesheet is the palette half and comes from the shared template
      * (§6b); config.jsonc and the ddc script are this rice's own layout. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/waybar/style.css");
+    str_setz(&dst, osr_mod_home(), "/.config/waybar/style.css", (const char *)NULL);
     if (!osr_install_theme_layer("waybar", "style.css", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, str_text(&dir)); str_addz(&src, "/style.css");
+        str_setz(&src, str_text(&dir), "/style.css", (const char *)NULL);
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
 
-    str_reset(&src);
-    str_addz(&src, str_text(&dir)); str_addz(&src, "/waybar-ddc-module.sh");
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/waybar/waybar-ddc-module.sh");
+    str_setz(&src, str_text(&dir), "/waybar-ddc-module.sh", (const char *)NULL);
+    str_setz(&dst, osr_mod_home(), "/.config/waybar/waybar-ddc-module.sh", (const char *)NULL);
     ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-    argv[0] = (char *)"chmod"; argv[1] = (char *)"+x"; argv[2] = dst.p; argv[3] = NULL;
-    (void)osr_run_user(argv);
+    (void)osr_chmod("+x", dst.p, 0);
 
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

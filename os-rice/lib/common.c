@@ -104,6 +104,45 @@ void str_addl(Str *s, long n) {
     str_addz(s, buf);
 }
 
+void str_initv(Str *first, ...) {
+    va_list ap;
+    Str *s = first;
+    va_start(ap, first);
+    while (s != NULL) { str_init(s); s = va_arg(ap, Str *); }
+    va_end(ap);
+}
+
+void str_freev(Str *first, ...) {
+    va_list ap;
+    Str *s = first;
+    va_start(ap, first);
+    while (s != NULL) { str_free(s); s = va_arg(ap, Str *); }
+    va_end(ap);
+}
+
+static void str_addv(Str *s, const char *first, va_list ap) {
+    const char *piece = first;
+    while (piece != NULL) {
+        str_addz(s, piece);
+        piece = va_arg(ap, const char *);
+    }
+}
+
+void str_setz(Str *s, const char *first, ...) {
+    va_list ap;
+    str_reset(s);
+    va_start(ap, first);
+    str_addv(s, first, ap);
+    va_end(ap);
+}
+
+void str_addzz(Str *s, const char *first, ...) {
+    va_list ap;
+    va_start(ap, first);
+    str_addv(s, first, ap);
+    va_end(ap);
+}
+
 void str_reset(Str *s) {
     s->len = 0;
     if (s->p != NULL) s->p[0] = '\0';
@@ -155,8 +194,7 @@ void sh_quote(Str *out, const char *value) {
 }
 
 void sh_assign(Str *out, const char *name, const char *value) {
-    str_addz(out, name);
-    str_addc(out, '=');
+    str_addzz(out, name, "=", (const char *)NULL);
     sh_quote(out, value);
     str_addc(out, '\n');
 }
@@ -274,8 +312,7 @@ void log_line(Str *out, const char *color_env, const char *tag,
     for (pad = strlen(tag); pad < OSR_TAG_WIDTH; pad++) str_addc(out, ' ');
     if (expand_b(out, color("OSR_NC"))) return;
     if (prefix != NULL) str_addz(out, prefix);
-    str_addz(out, msg);
-    str_addc(out, '\n');
+    str_addzz(out, msg, "\n", (const char *)NULL);
 }
 
 /* log_now -- one whole log line, printed now.
@@ -459,6 +496,48 @@ int next_line(const char *buf, size_t buf_len, size_t *pos, Line *out) {
     out->had_newline = (i < buf_len);
     *pos = out->had_newline ? i + 1 : i;
     return 1;
+}
+
+int osr_read_trim(Str *out, const char *path) {
+    char *buf;
+    size_t len, start, end;
+    buf = slurp(path, &len);
+    if (buf == NULL) return 0;
+    start = 0;
+    while (start < len && is_space(buf[start])) start++;
+    end = len;
+    while (end > start && is_space(buf[end - 1])) end--;
+    str_add(out, buf + start, end - start);
+    free(buf);
+    return 1;
+}
+
+int osr_read_long(const char *path, long *out) {
+    Str s;
+    char *endp;
+    long v;
+    int ok = 0;
+    str_init(&s);
+    if (osr_read_trim(&s, path) && s.len > 0) {
+        v = strtol(str_text(&s), &endp, 10);
+        if (*endp == '\0') { *out = v; ok = 1; }
+    }
+    str_free(&s);
+    return ok;
+}
+
+int osr_read_ulong(const char *path, unsigned long *out) {
+    Str s;
+    char *endp;
+    unsigned long v;
+    int ok = 0;
+    str_init(&s);
+    if (osr_read_trim(&s, path) && s.len > 0) {
+        v = strtoul(str_text(&s), &endp, 10);
+        if (*endp == '\0') { *out = v; ok = 1; }
+    }
+    str_free(&s);
+    return ok;
 }
 
 int is_space(char c) {
@@ -960,9 +1039,7 @@ void osr_setenv(const char *name, const char *value) {
 #ifdef _WIN32
     Str kv;
     str_init(&kv);
-    str_addz(&kv, name);
-    str_addc(&kv, '=');
-    str_addz(&kv, value);
+    str_addzz(&kv, name, "=", value, (const char *)NULL);
     _putenv(str_text(&kv));
     str_free(&kv);
 #else
@@ -976,8 +1053,7 @@ void osr_unsetenv(const char *name) {
 #ifdef _WIN32
     Str kv;
     str_init(&kv);
-    str_addz(&kv, name);
-    str_addc(&kv, '=');
+    str_addzz(&kv, name, "=", (const char *)NULL);
     _putenv(str_text(&kv));
     str_free(&kv);
 #else
@@ -1033,9 +1109,7 @@ int osr_scratch_fd(const char *tag, const char *text, size_t len) {
     str_init(&path);
     str_addz(&path, osr_tmpdir());
     str_trim_trailing(&path, '/');
-    str_addz(&path, "/osr-");
-    str_addz(&path, tag);
-    str_addc(&path, '-');
+    str_addzz(&path, "/osr-", tag, "-", (const char *)NULL);
     str_addl(&path, osr_pid());
 
     fd = OSR_SCRATCH_OPEN(str_text(&path));
@@ -1159,8 +1233,7 @@ void osr_list_dir(Str *out, const char *dir, const char *marker,
 
     if (count > 1) qsort(names, count, sizeof *names, name_cmp_qsort);
     for (i = 0; i < count; i++) {
-        str_addz(out, names[i]);
-        str_addc(out, '\n');
+        str_addzz(out, names[i], "\n", (const char *)NULL);
         free(names[i]);
     }
     free(names);

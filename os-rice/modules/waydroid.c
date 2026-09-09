@@ -28,8 +28,7 @@ int osrm_waydroid(void) {
     /* waydroid_script is what installs the ARM translation layer: upstream
      * ships no package, and the libs it fetches are per-vendor. */
     str_init(&src);
-    str_addz(&src, env_str("TMPDIR", "/tmp"));
-    str_addz(&src, "/waydroid_script");
+    str_addzz(&src, env_str("TMPDIR", "/tmp"), "/waydroid_script", (const char *)NULL);
     {
         char *shallow[3];
         shallow[0] = (char *)"--depth"; shallow[1] = (char *)"1"; shallow[2] = NULL;
@@ -38,12 +37,12 @@ int osrm_waydroid(void) {
                           str_text(&src), shallow) && ok;
     }
 
-    str_init(&venv); str_init(&pip); str_init(&py); str_init(&req); str_init(&main);
-    str_addz(&venv, str_text(&src)); str_addz(&venv, "/venv");
-    str_addz(&pip,  str_text(&venv)); str_addz(&pip, "/bin/pip");
-    str_addz(&py,   str_text(&venv)); str_addz(&py,  "/bin/python");
-    str_addz(&req,  str_text(&src));  str_addz(&req, "/requirements.txt");
-    str_addz(&main, str_text(&src));  str_addz(&main, "/main.py");
+    str_initv(&venv, &pip, &py, &req, &main, (Str *)NULL);
+    str_addzz(&venv, str_text(&src), "/venv", (const char *)NULL);
+    str_addzz(&pip, str_text(&venv), "/bin/pip", (const char *)NULL);
+    str_addzz(&py, str_text(&venv), "/bin/python", (const char *)NULL);
+    str_addzz(&req, str_text(&src), "/requirements.txt", (const char *)NULL);
+    str_addzz(&main, str_text(&src), "/main.py", (const char *)NULL);
 
     /* --clear: a venv left over from a failed run has whatever half-resolved
      * dependency set killed it. */
@@ -67,7 +66,6 @@ int osrm_waydroid(void) {
     }
     ok = osr_service_enable("waydroid-container") && ok;
 
-    str_free(&src); str_free(&venv); str_free(&pip);
-    str_free(&py); str_free(&req); str_free(&main);
+    str_freev(&src, &venv, &pip, &py, &req, &main, (Str *)NULL);
     return ok;
 }

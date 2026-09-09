@@ -40,16 +40,14 @@ int osrm_fastfetch(void) {
     ok = osr_pkg_install_step("Installing fastfetch", pkgs);
 
     str_init(&dst);
-    str_addz(&dst, osr_mod_home());
-    str_addz(&dst, "/.config/fastfetch/config.jsonc");
+    str_addzz(&dst, osr_mod_home(), "/.config/fastfetch/config.jsonc", (const char *)NULL);
 
     if (!osr_install_theme_layer("fastfetch", "config.jsonc", str_text(&dst))) {
 #ifndef _WIN32
         /* No theme version of it: the dotfiles base is the fallback. */
         Str fallback;
         str_init(&fallback);
-        str_addz(&fallback, osr_mod_dotfiles());
-        str_addz(&fallback, "/fastfetch/config.jsonc");
+        str_addzz(&fallback, osr_mod_dotfiles(), "/fastfetch/config.jsonc", (const char *)NULL);
         if (file_exists(str_text(&fallback))) {
             osr_install_layer(str_text(&fallback), str_text(&dst));
         }

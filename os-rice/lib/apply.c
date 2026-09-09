@@ -104,8 +104,7 @@ void osr_apply_verbs(Str *out) {
     Line file;
 
     str_init(&dir);
-    str_addz(&dir, osr_mod_root());
-    str_addz(&dir, "/lib");
+    str_addzz(&dir, osr_mod_root(), "/lib", (const char *)NULL);
     /* osr_list_dir rather than readdir: it is the same glob-shaped listing --
      * every *.c under lib/, sorted, dotfiles skipped -- and it is the one
      * enumeration this tree has that both systems answer, MSVC having no
@@ -161,14 +160,12 @@ void osr_apply_verbs(Str *out) {
         str_free(&current);
         free(buf);
     }
-    str_free(&list);
-    str_free(&dir);
+    str_freev(&list, &dir, (Str *)NULL);
 
     /* Sorted, so the listing is the same on every filesystem. */
     qsort(found, count, sizeof(found[0]), cmp_str);
     for (i = 0; i < count; i++) {
-        str_addz(out, found[i]);
-        str_addc(out, '\n');
+        str_addzz(out, found[i], "\n", (const char *)NULL);
         free(found[i]);
     }
     free(found);
@@ -207,10 +204,7 @@ static int module_is_themable(const char *name) {
     int ok;
 
     str_init(&path);
-    str_addz(&path, osr_mod_root());
-    str_addz(&path, "/modules/");
-    str_addz(&path, name);
-    str_addz(&path, ".sh");
+    str_addzz(&path, osr_mod_root(), "/modules/", name, ".sh", (const char *)NULL);
     ok = file_exists(str_text(&path)) ? is_theme_module(str_text(&path))
                                       : osr_module_themable(name);
     str_free(&path);
@@ -219,10 +213,7 @@ static int module_is_themable(const char *name) {
 
 /* module_path -- os-rice/modules/<name>.sh */
 static void module_path(Str *out, const char *name) {
-    str_addz(out, osr_mod_root());
-    str_addz(out, "/modules/");
-    str_addz(out, name);
-    str_addz(out, ".sh");
+    str_addzz(out, osr_mod_root(), "/modules/", name, ".sh", (const char *)NULL);
 }
 
 /* --- the apply itself ------------------------------------------------------
@@ -293,9 +284,8 @@ int osr_apply_theme(const char *name) {
     if (rice.len > 0) {
         Str dir;
         str_init(&dir);
-        str_addz(&dir, env_str("OSR_ROOT", "."));
-        str_addz(&dir, "/rices/");
-        str_addz(&dir, str_text(&rice));
+        str_addzz(&dir, env_str("OSR_ROOT", "."), "/rices/", str_text(&rice),
+            (const char *)NULL);
         osr_setenv("OSR_RICE_DIR", str_text(&dir));
         str_free(&dir);
     }
@@ -310,13 +300,9 @@ int osr_apply_theme(const char *name) {
     osr_setenv("OSR_STEP_N", "0");
 
     str_init(&msg);
-    str_addz(&msg, "applying theme '");
-    str_addz(&msg, env_str("OSR_THEME", ""));
-    str_addc(&msg, '\'');
+    str_addzz(&msg, "applying theme '", env_str("OSR_THEME", ""), "'", (const char *)NULL);
     if (rice.len > 0) {
-        str_addz(&msg, " over rice '");
-        str_addz(&msg, str_text(&rice));
-        str_addc(&msg, '\'');
+        str_addzz(&msg, " over rice '", str_text(&rice), "'", (const char *)NULL);
     }
     str_addz(&msg, " (");
     str_addl(&msg, (long)total);
@@ -364,10 +350,7 @@ void osr_theme_modules(Str *out, const char *rice) {
 
     str_init(&list);
     if (rice != NULL && rice[0] != '\0') {
-        str_addz(&list, osr_mod_root());
-        str_addz(&list, "/rices/");
-        str_addz(&list, rice);
-        str_addz(&list, "/rice.list");
+        str_addzz(&list, osr_mod_root(), "/rices/", rice, "/rice.list", (const char *)NULL);
         buf = slurp(str_text(&list), &len);
     }
 
@@ -407,8 +390,7 @@ void osr_theme_modules(Str *out, const char *rice) {
         Line f;
 
         str_init(&dir);
-        str_addz(&dir, osr_mod_root());
-        str_addz(&dir, "/modules");
+        str_addzz(&dir, osr_mod_root(), "/modules", (const char *)NULL);
         /* Every *.sh under modules/, through osr_list_dir, which is what the
          * shell's glob was and what both systems can answer. The ".sh" comes
          * back on immediately: the names go into the same sorted sweep as the

@@ -30,8 +30,7 @@ int osrm_zen_browser(void) {
     str_init(&css);
     if (osr_theme_source(&css, "firefox", "userChrome.css", &is_temp)) {
         str_init(&root);
-        str_addz(&root, osr_mod_home());
-        str_addz(&root, "/.zen");
+        str_addzz(&root, osr_mod_home(), "/.zen", (const char *)NULL);
         ok = osr_install_mozilla_layer(str_text(&root), "", str_text(&css)) && ok;
         str_free(&root);
         if (is_temp) (void)unlink(str_text(&css));

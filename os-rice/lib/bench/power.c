@@ -67,9 +67,7 @@ static int rapl_driver_loaded(void) {
 
     str_init(&path);
     for (i = 0; !found && i < sizeof(names) / sizeof(names[0]); i++) {
-        str_reset(&path);
-        str_addz(&path, base);
-        str_addz(&path, names[i]);
+        str_setz(&path, base, names[i], (const char *)NULL);
         found = dir_exists(str_text(&path));
     }
     str_free(&path);
@@ -104,9 +102,7 @@ static int detect_rapl(PwrMeter *m) {
                 "no /sys/class/powercap - this kernel has no powercap support");
         return 0;
     }
-    str_init(&path);
-    str_init(&name);
-    str_init(&best_path);
+    str_initv(&path, &name, &best_path, (Str *)NULL);
 
     while ((e = readdir(d)) != NULL) {
         unsigned long probe;
@@ -118,13 +114,13 @@ static int detect_rapl(PwrMeter *m) {
         entries++;
 
         str_reset(&name);
-        bench_join3(&path, base, e->d_name, "/name");
-        if (!bench_read_trim(&name, str_text(&path))) continue;
+        str_setz(&path, base, e->d_name, "/name", (const char *)NULL);
+        if (!osr_read_trim(&name, str_text(&path))) continue;
         rank = rapl_rank(str_text(&name));
         if (rank <= best) continue;
 
-        bench_join3(&path, base, e->d_name, "/energy_uj");
-        if (!bench_read_ulong(str_text(&path), &probe)) {
+        str_setz(&path, base, e->d_name, "/energy_uj", (const char *)NULL);
+        if (!osr_read_ulong(str_text(&path), &probe)) {
             /* Present but unreadable is the common case: since the PLATYPUS
              * side channel (CVE-2020-8694) these are 0400. Worth saying so
              * explicitly, because "run it as root" is an actionable answer. */
@@ -136,8 +132,8 @@ static int detect_rapl(PwrMeter *m) {
         str_reset(&best_path);
         str_addz(&best_path, str_text(&path));
         m->max_range_uj = 0;
-        bench_join3(&path, base, e->d_name, "/max_energy_range_uj");
-        bench_read_ulong(str_text(&path), &m->max_range_uj);
+        str_setz(&path, base, e->d_name, "/max_energy_range_uj", (const char *)NULL);
+        osr_read_ulong(str_text(&path), &m->max_range_uj);
         str_reset(&path);
         str_addz(&path, rank == 3 ? "RAPL package energy counter"
                                   : "RAPL psys (platform) energy counter - whole board, not just the CPU");
@@ -183,9 +179,7 @@ static int detect_rapl(PwrMeter *m) {
                 "powercap has no package or psys domain - only per-domain children");
     }
 
-    str_free(&path);
-    str_free(&name);
-    str_free(&best_path);
+    str_freev(&path, &name, &best_path, (Str *)NULL);
     return best > 0;
 }
 
@@ -214,9 +208,7 @@ static int detect_hwmon(PwrMeter *m) {
 
     d = opendir(base);
     if (d == NULL) return 0;
-    str_init(&path);
-    str_init(&name);
-    str_init(&found_at);
+    str_initv(&path, &name, &found_at, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {
         unsigned long probe;
@@ -232,9 +224,9 @@ static int detect_hwmon(PwrMeter *m) {
                 str_addl(&leaf, idx);
                 str_addc(&leaf, '_');
                 str_addz(&leaf, attrs[a]);
-                bench_join3(&path, base, e->d_name, str_text(&leaf));
+                str_setz(&path, base, e->d_name, str_text(&leaf), (const char *)NULL);
                 str_free(&leaf);
-                if (!bench_read_ulong(str_text(&path), &probe)) continue;
+                if (!osr_read_ulong(str_text(&path), &probe)) continue;
 
                 str_reset(&found_at);
                 str_addz(&found_at, str_text(&path));
@@ -246,23 +238,19 @@ static int detect_hwmon(PwrMeter *m) {
 
         str_reset(&name);
         bench_set_str(m->path, sizeof(m->path), str_text(&found_at));
-        bench_join3(&path, base, e->d_name, "/name");
-        bench_read_trim(&name, str_text(&path));
+        str_setz(&path, base, e->d_name, "/name", (const char *)NULL);
+        osr_read_trim(&name, str_text(&path));
 
         m->source = PWR_HWMON;
         str_reset(&path);
         str_addz(&path, "hwmon power sensor");
         if (name.len > 0) {
-            str_addz(&path, " (");
-            str_addz(&path, str_text(&name));
-            str_addc(&path, ')');
+            str_addzz(&path, " (", str_text(&name), ")", (const char *)NULL);
         }
         bench_set_str(m->detail, sizeof(m->detail), str_text(&path));
     }
     closedir(d);
-    str_free(&path);
-    str_free(&name);
-    str_free(&found_at);
+    str_freev(&path, &name, &found_at, (Str *)NULL);
     return found;
 }
 
@@ -286,23 +274,22 @@ static int detect_battery(PwrMeter *m) {
 
     d = opendir(base);
     if (d == NULL) return 0;
-    str_init(&path);
-    str_init(&status);
+    str_initv(&path, &status, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {
         unsigned long probe, volts;
         if (strncmp(e->d_name, "BAT", 3) != 0) continue;
 
         str_reset(&status);
-        bench_join3(&path, base, e->d_name, "/status");
-        if (!bench_read_trim(&status, str_text(&path))) continue;
+        str_setz(&path, base, e->d_name, "/status", (const char *)NULL);
+        if (!osr_read_trim(&status, str_text(&path))) continue;
         if (strcmp(str_text(&status), "Discharging") != 0) {
             on_ac = 1;
             continue;
         }
 
-        bench_join3(&path, base, e->d_name, "/power_now");
-        if (bench_read_ulong(str_text(&path), &probe) && probe > 0) {
+        str_setz(&path, base, e->d_name, "/power_now", (const char *)NULL);
+        if (osr_read_ulong(str_text(&path), &probe) && probe > 0) {
             bench_set_str(m->path, sizeof(m->path), str_text(&path));
             m->path_v[0] = '\0';
             m->source = PWR_BATTERY;
@@ -312,11 +299,11 @@ static int detect_battery(PwrMeter *m) {
             continue;
         }
 
-        bench_join3(&path, base, e->d_name, "/current_now");
-        if (!bench_read_ulong(str_text(&path), &probe) || probe == 0) continue;
+        str_setz(&path, base, e->d_name, "/current_now", (const char *)NULL);
+        if (!osr_read_ulong(str_text(&path), &probe) || probe == 0) continue;
         bench_set_str(m->path, sizeof(m->path), str_text(&path));
-        bench_join3(&path, base, e->d_name, "/voltage_now");
-        if (!bench_read_ulong(str_text(&path), &volts) || volts == 0) continue;
+        str_setz(&path, base, e->d_name, "/voltage_now", (const char *)NULL);
+        if (!osr_read_ulong(str_text(&path), &volts) || volts == 0) continue;
         bench_set_str(m->path_v, sizeof(m->path_v), str_text(&path));
         m->source = PWR_BATTERY;
         bench_set_str(m->detail, sizeof(m->detail),
@@ -324,8 +311,7 @@ static int detect_battery(PwrMeter *m) {
         found = 1;
     }
     closedir(d);
-    str_free(&path);
-    str_free(&status);
+    str_freev(&path, &status, (Str *)NULL);
 
     if (!found && on_ac) {
         /* Named as an INSTRUCTION, not just a state. On a laptop with no RAPL
@@ -373,8 +359,7 @@ void pwr_probe_report(Str *out) {
         if (sources[i].probe(&m)) {
             Str v;
             str_init(&v);
-            str_addz(&v, "FOUND - ");
-            str_addz(&v, m.detail);
+            str_addzz(&v, "FOUND - ", m.detail, (const char *)NULL);
             bench_row(out, sources[i].label, str_text(&v));
             str_free(&v);
         } else {
@@ -391,19 +376,19 @@ void pwr_begin(PwrMeter *m) {
     m->samples = 0;
     m->e_start = 0;
     m->t_start = bench_now_sec();
-    if (m->source == PWR_RAPL) bench_read_ulong(m->path, &m->e_start);
+    if (m->source == PWR_RAPL) osr_read_ulong(m->path, &m->e_start);
 }
 
 void pwr_sample(PwrMeter *m) {
     unsigned long uw;
     if (m->source != PWR_HWMON && m->source != PWR_BATTERY) return;
-    if (!bench_read_ulong(m->path, &uw)) return;
+    if (!osr_read_ulong(m->path, &uw)) return;
     if (m->path_v[0] != '\0') {
         /* microamps x microvolts, so the product is picowatts. Done in double
          * because 3_000_000 uA x 12_000_000 uV overflows 32-bit long by four
          * orders of magnitude. */
         unsigned long uv;
-        if (!bench_read_ulong(m->path_v, &uv)) return;
+        if (!osr_read_ulong(m->path_v, &uv)) return;
         m->sum_w += ((double)uw * (double)uv) / 1e12;
     } else {
         m->sum_w += (double)uw / 1e6;
@@ -417,7 +402,7 @@ int pwr_end(PwrMeter *m, double *watts) {
     if (m->source == PWR_RAPL) {
         unsigned long e_end = 0;
         if (elapsed <= 0.0) return 0;
-        if (!bench_read_ulong(m->path, &e_end)) return 0;
+        if (!osr_read_ulong(m->path, &e_end)) return 0;
         *watts = ((double)pwr_energy_delta(m->e_start, e_end, m->max_range_uj) / 1e6) / elapsed;
         return 1;
     }

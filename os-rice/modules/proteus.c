@@ -36,13 +36,13 @@ int osrm_proteus(void) {
     int ok;
 
     ok = osr_pkg_install_step("Installing proteus", pkgs);
-    str_init(&dir); str_init(&src); str_init(&dst);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/proteus");
+    str_initv(&dir, &src, &dst, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/proteus", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/proteus/proteus.toml");
-    str_addz(&dst, str_text(&dir));     str_addz(&dst, "/proteus.toml");
+    str_addzz(&src, osr_mod_dotfiles(), "/proteus/proteus.toml", (const char *)NULL);
+    str_addzz(&dst, str_text(&dir), "/proteus.toml", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
-    str_free(&dir); str_free(&src); str_free(&dst);
+    str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;
 }

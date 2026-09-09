@@ -37,18 +37,12 @@ static const char *dnf_conf(void)   { return env_str("OSR_DNF_CONF", "/etc/dnf/d
 
 /* pac_path -- <pacman dir>/<name>, into a caller-owned Str. */
 static void pac_path(Str *out, const char *name) {
-    str_reset(out);
-    str_addz(out, pacman_dir());
-    str_addc(out, '/');
-    str_addz(out, name);
+    str_setz(out, pacman_dir(), "/", name, (const char *)NULL);
 }
 
 /* tmp_path -- the sh module's `${TMPDIR:-/tmp}/<name>.$$`. */
 static void tmp_path(Str *out, const char *name) {
-    str_addz(out, env_str("TMPDIR", "/tmp"));
-    str_addc(out, '/');
-    str_addz(out, name);
-    str_addc(out, '.');
+    str_addzz(out, env_str("TMPDIR", "/tmp"), "/", name, ".", (const char *)NULL);
     str_addl(out, (long)getpid());
 }
 
@@ -144,8 +138,7 @@ static int rank_pacman(void *ctx) {
     FILE *f;
 
     (void)ctx;
-    str_init(&out); str_init(&ranked);
-    str_init(&backup); str_init(&live); str_init(&stamp);
+    str_initv(&out, &ranked, &backup, &live, &stamp, (Str *)NULL);
     pac_path(&backup, "mirrorlist.backup");
     pac_path(&live, "mirrorlist");
     pac_path(&stamp, ".osr-mirrors-ranked");
@@ -175,7 +168,7 @@ static int rank_pacman(void *ctx) {
         (void)osr_run_root(touch);
     }
     (void)unlink(str_text(&out));
-    str_free(&out); str_free(&backup); str_free(&live); str_free(&stamp);
+    str_freev(&out, &backup, &live, &stamp, (Str *)NULL);
     return 1;
 }
 
@@ -188,13 +181,13 @@ int osrm_mirrors(void) {
     if (strcmp(mgr, "pacman") == 0) {
         Str desc, live, backup, stamp;
 
-        str_init(&live); str_init(&backup); str_init(&stamp);
+        str_initv(&live, &backup, &stamp, (Str *)NULL);
         pac_path(&live, "mirrorlist");
         pac_path(&backup, "mirrorlist.backup");
         pac_path(&stamp, ".osr-mirrors-ranked");
 
         if (file_exists(str_text(&stamp)) && !env_is_set("OSR_MIRRORS_FORCE")) {
-            str_free(&live); str_free(&backup); str_free(&stamp);
+            str_freev(&live, &backup, &stamp, (Str *)NULL);
             osr_info("mirrors already ranked - skipping (OSR_MIRRORS_FORCE=1 to redo)");
             return 1;
         }
@@ -241,8 +234,7 @@ int osrm_mirrors(void) {
 
         ok = osr_pkg_install_step("Installing mirror-ranking tools", contrib) && ok;
         str_init(&desc);
-        str_addz(&desc, "Ranking the "); str_addz(&desc, n);
-        str_addz(&desc, " fastest mirrors");
+        str_addzz(&desc, "Ranking the ", n, " fastest mirrors", (const char *)NULL);
         ok = osr_step(str_text(&desc), rank_pacman, NULL) && ok;
         str_free(&desc);
 
@@ -253,7 +245,7 @@ int osrm_mirrors(void) {
         } else {
             osr_warn("rankmirrors produced no usable list - keeping the existing mirrorlist");
         }
-        str_free(&live); str_free(&backup); str_free(&stamp);
+        str_freev(&live, &backup, &stamp, (Str *)NULL);
     } else if (strcmp(mgr, "dnf") == 0) {
         /* dnf ranks on its own; the config just has to ask it to. Appended once
          * (a user-set value is left alone, G2). */

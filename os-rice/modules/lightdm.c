@@ -74,9 +74,7 @@ static void pick_session(Str *out) {
         Str p;
         int here;
         str_init(&p);
-        str_addz(&p, "/usr/share/xsessions/");
-        str_addz(&p, want[i]);
-        str_addz(&p, ".desktop");
+        str_addzz(&p, "/usr/share/xsessions/", want[i], ".desktop", (const char *)NULL);
         here = file_exists(str_text(&p));
         str_free(&p);
         if (here) { str_addz(out, want[i]); return; }
@@ -168,9 +166,7 @@ int osrm_lightdm(void) {
              "[Seat:*]\n"
              "greeter-session=lightdm-gtk-greeter\n");
     if (session.len > 0) {
-        str_addz(&conf, "user-session=");
-        str_addz(&conf, str_text(&session));
-        str_addc(&conf, '\n');
+        str_addzz(&conf, "user-session=", str_text(&session), "\n", (const char *)NULL);
     }
     (void)osr_write_root("/etc/lightdm/lightdm.conf.d/10-osr.conf", str_text(&conf));
 
@@ -197,8 +193,8 @@ int osrm_lightdm(void) {
          * that fails to start still leaves a way in. */
         Str link;
         str_init(&link);
-        str_addz(&link, env_str("OSR_SERVICE_DIR", "/var/service"));
-        str_addz(&link, "/agetty-tty1");
+        str_addzz(&link, env_str("OSR_SERVICE_DIR", "/var/service"), "/agetty-tty1",
+            (const char *)NULL);
         if (file_exists(str_text(&link)) || dir_exists(str_text(&link))) {
             osr_info("disabling agetty-tty1 (LightDM owns vt1; tty2-tty6 unchanged)");
             (void)osr_service_disable("agetty-tty1");
@@ -270,23 +266,20 @@ int osrm_lightdm(void) {
         osr_install_wallpaper(&wp);
         if (wp.len > 0 && file_exists(str_text(&wp))) {
             Str base, sys;
-            str_init(&base); str_init(&sys);
+            str_initv(&base, &sys, (Str *)NULL);
             base_of(&base, str_text(&wp));
-            str_addz(&sys, "/usr/share/backgrounds/osr/");
-            str_addz(&sys, str_text(&base));
+            str_addzz(&sys, "/usr/share/backgrounds/osr/", str_text(&base), (const char *)NULL);
             argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p";
             argv[2] = (char *)"/usr/share/backgrounds/osr"; argv[3] = NULL;
             (void)osr_run_root(argv);
             argv[0] = (char *)"cp"; argv[1] = (char *)"-f"; argv[2] = wp.p;
             argv[3] = sys.p; argv[4] = NULL;
             (void)osr_run_root(argv);
-            argv[0] = (char *)"chmod"; argv[1] = (char *)"0644"; argv[2] = sys.p;
-            argv[3] = NULL;
-            (void)osr_run_root(argv);
+            (void)osr_chmod("0644", sys.p, 1);
             osr_infof("greeter background: %s", str_text(&sys));
             str_reset(&wp);
             str_addz(&wp, str_text(&sys));
-            str_free(&base); str_free(&sys);
+            str_freev(&base, &sys, (Str *)NULL);
         } else {
             osr_warn("this theme ships no wallpaper - the greeter keeps its plain background");
         }
@@ -294,8 +287,7 @@ int osrm_lightdm(void) {
         str_init(&body);
         substitute(&body, str_text(&layer), str_text(&wp));
         (void)osr_write_root("/etc/lightdm/lightdm-gtk-greeter.conf", str_text(&body));
-        str_free(&body);
-        str_free(&wp);
+        str_freev(&body, &wp, (Str *)NULL);
         if (is_temp) (void)unlink(str_text(&layer));
     }
     str_free(&layer);
@@ -315,9 +307,9 @@ int osrm_lightdm(void) {
             char *buf;
             size_t len;
 
-            str_init(&dir); str_init(&dst);
-            str_addz(&dir, str_text(&home)); str_addz(&dir, "/.config/gtk-3.0");
-            str_addz(&dst, str_text(&dir));  str_addz(&dst, "/gtk.css");
+            str_initv(&dir, &dst, (Str *)NULL);
+            str_addzz(&dir, str_text(&home), "/.config/gtk-3.0", (const char *)NULL);
+            str_addzz(&dst, str_text(&dir), "/gtk.css", (const char *)NULL);
             osr_infof("installing greeter CSS into %s", str_text(&dst));
             argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = dir.p;
             argv[3] = NULL;
@@ -336,7 +328,7 @@ int osrm_lightdm(void) {
             {
                 Str cfg;
                 str_init(&cfg);
-                str_addz(&cfg, str_text(&home)); str_addz(&cfg, "/.config");
+                str_addzz(&cfg, str_text(&home), "/.config", (const char *)NULL);
                 argv[0] = (char *)"chown"; argv[1] = (char *)"-R";
                 argv[2] = (char *)"lightdm:lightdm"; argv[3] = cfg.p; argv[4] = NULL;
                 if (osr_run_root_quiet(argv) != 0)
@@ -344,7 +336,7 @@ int osrm_lightdm(void) {
                               str_text(&cfg));
                 str_free(&cfg);
             }
-            str_free(&dir); str_free(&dst);
+            str_freev(&dir, &dst, (Str *)NULL);
         } else {
             osr_warnf("no greeter home at %s - skipping greeter CSS", str_text(&home));
         }
@@ -356,6 +348,6 @@ int osrm_lightdm(void) {
     if (!osr_service_enable("lightdm"))
         osr_warn("could not enable lightdm (needs a real init)");
 
-    str_free(&session); str_free(&conf);
+    str_freev(&session, &conf, (Str *)NULL);
     return ok;
 }

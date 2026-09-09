@@ -81,9 +81,9 @@ int osrm_ghostty(void) {
     ok = osr_step("Installing JetBrains Mono Nerd Font", nerd_font,
                   (void *)"JetBrainsMono") && ok;
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/ghostty/config");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/ghostty/config");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/ghostty/config", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/ghostty/config", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
@@ -94,7 +94,7 @@ int osrm_ghostty(void) {
      * asking for them costs `sudo` and `title` as well as the ssh comfort -- a
      * strictly worse terminal than saying nothing. Hence: probe, then write only
      * what this build knows. */
-    str_init(&out); str_init(&ver);
+    str_initv(&out, &ver, (Str *)NULL);
     argv[0] = (char *)"ghostty"; argv[1] = (char *)"+version"; argv[2] = NULL;
     (void)osr_run_capture(argv, &out);
     version_line(&ver, str_text(&out));
@@ -111,8 +111,7 @@ int osrm_ghostty(void) {
                   ver.len > 0 ? str_text(&ver) : "0");
     }
 
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/ghostty");
+    str_setz(&dst, osr_mod_home(), "/.config/ghostty", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dst)) && ok;
     str_addz(&dst, "/ghostty-features");
     if (*features != '\0') {
@@ -137,11 +136,9 @@ int osrm_ghostty(void) {
 
     /* Palette (rice-owned theme, swapped on switch §6). Rice override wins; the
      * dotfiles default covers a rice that ships no palette. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/ghostty/ghostty-theme");
+    str_setz(&dst, osr_mod_home(), "/.config/ghostty/ghostty-theme", (const char *)NULL);
     if (!osr_install_theme_layer("ghostty", "ghostty-theme", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/ghostty/ghostty-theme");
+        str_setz(&src, osr_mod_dotfiles(), "/ghostty/ghostty-theme", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
@@ -166,6 +163,6 @@ int osrm_ghostty(void) {
                                argv) && ok;
     }
 
-    str_free(&src); str_free(&dst); str_free(&out); str_free(&ver);
+    str_freev(&src, &dst, &out, &ver, (Str *)NULL);
     return ok;
 }

@@ -70,12 +70,9 @@ void osr_service_resolve(Str *out, const char *name) {
         size_t pos = 0;
         Line line;
 
-        str_reset(&path);
-        str_addz(&path, env_str("OSR_LIB", "lib"));
-        str_addz(&path, "/servicemap/");
+        str_setz(&path, env_str("OSR_LIB", "lib"), "/servicemap/", (const char *)NULL);
         if (which == 0) {
-            str_addz(&path, env_str("OSR_INIT", ""));
-            str_addz(&path, ".map");
+            str_addzz(&path, env_str("OSR_INIT", ""), ".map", (const char *)NULL);
         } else {
             str_addz(&path, "any.map");
         }
@@ -219,13 +216,11 @@ int osr_service_enable(const char *name) {
         Str sv;
         Str run;
         str_init(&sv);
-        str_addz(&sv, env_str("OSR_SV_DIR", "/etc/sv"));
-        str_addc(&sv, '/');
-        str_addz(&sv, str_text(&svc));
+        str_addzz(&sv, env_str("OSR_SV_DIR", "/etc/sv"), "/", str_text(&svc),
+            (const char *)NULL);
         str_init(&run);
-        str_addz(&run, env_str("OSR_SERVICE_DIR", "/var/service"));
-        str_addc(&run, '/');
-        str_addz(&run, str_text(&svc));
+        str_addzz(&run, env_str("OSR_SERVICE_DIR", "/var/service"), "/", str_text(&svc),
+            (const char *)NULL);
         /* ln -s succeeds even when the target is missing, so an unpackaged
          * service would silently leave a dangling link that runsvdir then
          * complains about forever. Check first and degrade to a warning. */
@@ -237,8 +232,7 @@ int osr_service_enable(const char *name) {
             argv[4] = NULL;
             rc = osr_run_root(argv) == 0;
         }
-        str_free(&sv);
-        str_free(&run);
+        str_freev(&sv, &run, (Str *)NULL);
     } else if (strcmp(init, "sysvinit") == 0) {
         argv[0] = (char *)"update-rc.d"; argv[1] = (char *)str_text(&svc);
         argv[2] = (char *)"enable"; argv[3] = NULL;
@@ -286,9 +280,8 @@ int osr_service_disable(const char *name) {
     } else if (strcmp(init, "runit") == 0) {
         Str run;
         str_init(&run);
-        str_addz(&run, env_str("OSR_SERVICE_DIR", "/var/service"));
-        str_addc(&run, '/');
-        str_addz(&run, str_text(&svc));
+        str_addzz(&run, env_str("OSR_SERVICE_DIR", "/var/service"), "/", str_text(&svc),
+            (const char *)NULL);
         if (file_exists(str_text(&run)) || dir_exists(str_text(&run))) {
             argv[0] = (char *)"rm"; argv[1] = (char *)"-f";
             argv[2] = (char *)str_text(&run); argv[3] = NULL;

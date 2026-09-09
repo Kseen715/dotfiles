@@ -46,10 +46,10 @@ int osrm_xdg(void) {
 
     ok = osr_pkg_install_step("Installing XDG portals + basics", pkgs);
 
-    str_init(&dir); str_init(&dst); str_init(&src);
-    str_addz(&dir, osr_mod_home()); str_addz(&dir, "/.config/xdg-desktop-portal");
+    str_initv(&dir, &dst, &src, (Str *)NULL);
+    str_addzz(&dir, osr_mod_home(), "/.config/xdg-desktop-portal", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
-    str_addz(&dst, str_text(&dir)); str_addz(&dst, "/i3-portals.conf");
+    str_addzz(&dst, str_text(&dir), "/i3-portals.conf", (const char *)NULL);
     ok = osr_write_user(str_text(&dst), portals) && ok;
 
     argv[0] = (char *)"xdg-user-dirs-update"; argv[1] = NULL;
@@ -68,12 +68,11 @@ int osrm_xdg(void) {
         (void)osr_run_root_quiet(argv);
     }
     /* Seeded, not owned: which app opens what is the user's to change. */
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/xdg/mimeapps.list");
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/mimeapps.list");
+    str_addzz(&src, osr_mod_dotfiles(), "/xdg/mimeapps.list", (const char *)NULL);
+    str_setz(&dst, osr_mod_home(), "/.config/mimeapps.list", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_seed_once(str_text(&src), str_text(&dst)) && ok;
 
-    str_free(&dir); str_free(&dst); str_free(&src);
+    str_freev(&dir, &dst, &src, (Str *)NULL);
     return ok;
 }

@@ -47,11 +47,8 @@
 static int not_yet(const char *verb, const char *step) {
     Str s;
     str_init(&s);
-    str_addz(&s, "undervolt cpu ");
-    str_addz(&s, verb);
-    str_addz(&s, ": not implemented yet (");
-    str_addz(&s, step);
-    str_addz(&s, ")");
+    str_addzz(&s, "undervolt cpu ", verb, ": not implemented yet (", step, ")",
+        (const char *)NULL);
     osr_error_line(str_text(&s));
     str_free(&s);
     return 1;
@@ -88,13 +85,11 @@ static int cmd_probe(void) {
     Str report, line;
     int d, tunable;
 
-    str_init(&report);
-    str_init(&line);
+    str_initv(&report, &line, (Str *)NULL);
 
     be = uv_detect(&caps, &report);
 
-    str_addz(&line, "backend: ");
-    str_addz(&line, be->name);
+    str_addzz(&line, "backend: ", be->name, (const char *)NULL);
     osr_info(str_text(&line));
 
     fputs(str_text(&report), stdout);
@@ -129,8 +124,7 @@ static int cmd_probe(void) {
     fputs("\n", stdout);
     fflush(stdout);
 
-    str_free(&report);
-    str_free(&line);
+    str_freev(&report, &line, (Str *)NULL);
     return tunable ? 0 : 1;
 }
 

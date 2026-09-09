@@ -52,12 +52,7 @@ static const char *osr_root(void) { return env_str("OSR_ROOT", "."); }
 
 /* path_of -- "<root>/<a>/<b>[/<c>]" into out. */
 static void path_of(Str *out, const char *a, const char *b, const char *c) {
-    str_reset(out);
-    str_addz(out, osr_root());
-    str_addc(out, '/');
-    str_addz(out, a);
-    str_addc(out, '/');
-    str_addz(out, b);
+    str_setz(out, osr_root(), "/", a, "/", b, (const char *)NULL);
     if (c != NULL) {
         str_addc(out, '/');
         str_addz(out, c);
@@ -222,8 +217,7 @@ void osr_theme_list(Str *out) {
     Str dir;
 
     str_init(&dir);
-    str_addz(&dir, osr_root());
-    str_addz(&dir, "/themes");
+    str_addzz(&dir, osr_root(), "/themes", (const char *)NULL);
     /* "carries a theme.list" is the definition, not a convention: a stray
      * folder under themes/ is not a theme and is not offered as one. */
     osr_list_dir(out, str_text(&dir), "theme.list", NULL);
@@ -365,8 +359,7 @@ static int cmd_color(const char *name, const char *role) {
         directives_free(&d);
     }
     out_flush(&out);
-    str_free(&out);
-    str_free(&manifest);
+    str_freev(&out, &manifest, (Str *)NULL);
     return 0;
 }
 
@@ -491,8 +484,7 @@ static void rules_add(Rules *r, const char *key_open, const char *key_extra,
         r->items = bigger;
     }
     str_init(&from);
-    str_addz(&from, "{{");
-    str_addz(&from, key_open);
+    str_addzz(&from, "{{", key_open, (const char *)NULL);
     if (key_extra != NULL) str_addz(&from, key_extra);
     str_addz(&from, "}}");
     str_init(&to);
@@ -505,8 +497,7 @@ static void rules_add(Rules *r, const char *key_open, const char *key_extra,
 void osr_theme_rules_free(Rules *r) {
     size_t i;
     for (i = 0; i < r->count; i++) {
-        str_free(&r->items[i].from);
-        str_free(&r->items[i].to);
+        str_freev(&r->items[i].from, &r->items[i].to, (Str *)NULL);
     }
     free(r->items);
     r->items = NULL;
@@ -536,9 +527,7 @@ void osr_theme_rules(Rules *out, const char *name, int *drop_final_newline) {
     path_of(&manifest, "themes", name, "theme.list");
     rules_add(out, "THEME", NULL, name, strlen(name));
 
-    str_init(&role);
-    str_init(&value);
-    str_init(&tmp);
+    str_initv(&role, &value, &tmp, (Str *)NULL);
     if (theme_lines(&d, str_text(&manifest))) {
         for (i = 0; i < d.count; i++) {
             const char *v;
@@ -573,10 +562,7 @@ void osr_theme_rules(Rules *out, const char *name, int *drop_final_newline) {
         if (drop_final_newline != NULL) *drop_final_newline = d.last_incomplete;
         directives_free(&d);
     }
-    str_free(&tmp);
-    str_free(&role);
-    str_free(&value);
-    str_free(&manifest);
+    str_freev(&tmp, &role, &value, &manifest, (Str *)NULL);
 }
 
 /* cmd_sed -- the rules as the sed script lib/config.sh fed to `sed -f`. The
@@ -592,9 +578,7 @@ static int cmd_sed(const char *name) {
     str_init(&out);
     for (i = 0; i < rules.count; i++) {
         const char *from = str_text(&rules.items[i].from);
-        str_addz(&out, "s|");
-        str_addz(&out, from);
-        str_addc(&out, '|');
+        str_addzz(&out, "s|", from, "|", (const char *)NULL);
         str_add(&out, str_text(&rules.items[i].to), rules.items[i].to.len);
         str_addz(&out, "|g\n");
     }
@@ -620,8 +604,7 @@ static int cmd_session(const char *name) {
         str_addz(&out, "any");
     }
     out_flush(&out);
-    str_free(&out);
-    str_free(&manifest);
+    str_freev(&out, &manifest, (Str *)NULL);
     return 0;
 }
 
@@ -642,9 +625,7 @@ static int cmd_rice_themes(const char *rice) {
     str_init(&out);
     split_words(&out, str_text(&value));
     out_flush(&out);
-    str_free(&out);
-    str_free(&value);
-    str_free(&manifest);
+    str_freev(&out, &value, &manifest, (Str *)NULL);
     return 0;
 }
 
@@ -716,8 +697,7 @@ static void swatch(Str *out, const char *name) {
         str_addz(out, "m    ");
     }
     str_addz(out, "\033[0m");
-    str_free(&value);
-    str_free(&manifest);
+    str_freev(&value, &manifest, (Str *)NULL);
 }
 
 static int cmd_swatch(const char *name) {
@@ -781,8 +761,7 @@ void osr_theme_menu(Str *out) {
         char num[32];
         size_t pad;
         sprintf(num, "  %lu) ", (unsigned long)(i + 1));
-        str_addz(&prompt, num);
-        str_addz(&prompt, items[i]);
+        str_addzz(&prompt, num, items[i], (const char *)NULL);
         for (pad = strlen(items[i]); pad < 12; pad++) str_addc(&prompt, ' '); /* %-12s */
         str_addc(&prompt, ' ');
         str_init(&sw);
@@ -791,9 +770,7 @@ void osr_theme_menu(Str *out) {
         str_addc(&prompt, '\n');
         str_free(&sw);
     }
-    str_addz(&prompt, "Enter number [default ");
-    str_addz(&prompt, dflt);
-    str_addz(&prompt, "]: ");
+    str_addzz(&prompt, "Enter number [default ", dflt, "]: ", (const char *)NULL);
     if (tty_out != NULL) {
         fwrite(str_text(&prompt), 1, prompt.len, tty_out);
         fflush(tty_out);
@@ -848,7 +825,7 @@ static int cmd_menu(void) {
 void osr_resolve_theme(const char *want) {
     Str pick, dir;
 
-    str_init(&pick); str_init(&dir);
+    str_initv(&pick, &dir, (Str *)NULL);
     if (want != NULL && *want != '\0') {
         if (!osr_theme_exists(want))
             osr_die("no such theme: '%s' (see: osr themes)", want);
@@ -860,13 +837,11 @@ void osr_resolve_theme(const char *want) {
         osr_infof("no interactive terminal - using default theme '%s'", str_text(&pick));
     }
 
-    str_addz(&dir, osr_root());
-    str_addz(&dir, "/themes/");
-    str_addz(&dir, str_text(&pick));
+    str_addzz(&dir, osr_root(), "/themes/", str_text(&pick), (const char *)NULL);
     osr_setenv("OSR_THEME", str_text(&pick));
     osr_setenv("OSR_THEME_DIR", str_text(&dir));
     osr_infof("theme: %s", str_text(&pick));
-    str_free(&pick); str_free(&dir);
+    str_freev(&pick, &dir, (Str *)NULL);
 }
 
 /* osr_unset_theme -- "this run paints nothing", explicitly.

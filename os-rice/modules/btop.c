@@ -45,23 +45,21 @@ int osrm_btop(void) {
     if (strstr(env_str("OSR_GPU_VENDOR", ""), "Intel") != NULL)
         (void)osr_setcap("cap_perfmon+ep", "btop");
 
-    str_init(&src); str_init(&dst);
-    str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/btop/btop.conf");
-    str_addz(&dst, osr_mod_home());     str_addz(&dst, "/.config/btop/btop.conf");
+    str_initv(&src, &dst, (Str *)NULL);
+    str_addzz(&src, osr_mod_dotfiles(), "/btop/btop.conf", (const char *)NULL);
+    str_addzz(&dst, osr_mod_home(), "/.config/btop/btop.conf", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
 
     /* One theme file under a fixed name, so btop.conf can point at it without
      * knowing which theme is current. The theme's own version wins; the
      * dotfiles one is the fallback for a theme that ships none. */
-    str_reset(&dst);
-    str_addz(&dst, osr_mod_home()); str_addz(&dst, "/.config/btop/themes/rice.theme");
+    str_setz(&dst, osr_mod_home(), "/.config/btop/themes/rice.theme", (const char *)NULL);
     if (!osr_install_theme_layer("btop", "btop.theme", str_text(&dst))) {
-        str_reset(&src);
-        str_addz(&src, osr_mod_dotfiles()); str_addz(&src, "/btop/btop.theme");
+        str_setz(&src, osr_mod_dotfiles(), "/btop/btop.theme", (const char *)NULL);
         if (file_exists(str_text(&src)))
             ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;
     }
-    str_free(&src); str_free(&dst);
+    str_freev(&src, &dst, (Str *)NULL);
     return ok;
 }
