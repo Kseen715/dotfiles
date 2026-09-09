@@ -1,0 +1,1 @@
+sudo env SSH_AUTH_SOCK="$SSH_AUTH_SOCK" python3 ./client.py <IP> <client-TUN>
