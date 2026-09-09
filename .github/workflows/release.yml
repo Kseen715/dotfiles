@@ -222,8 +222,130 @@ jobs:
           path: os-rice/build/osr${{ matrix.exe }}
           if-no-files-found: error
 
+  # Optional gate: does the tree still build under every front end the README
+  # claims, and at what cost. One job per compiler, all on the same
+  # ubuntu-latest x86_64 image, because the numbers are RATIOS against that
+  # host's gcc -- comparing a time measured on one runner against a size
+  # measured on another would be meaningless.
+  #
+  # `required: true` on gcc, clang and zig: those three are the compilers CI
+  # already builds and ships with, so a failure there is a real regression and
+  # the release must not go out. Everything else is a courtesy row -- tcc,
+  # pcc, lacc, cproc are C89 front ends of varying completeness, and one of
+  # them breaking on a new upstream release is news for the notes, not a
+  # reason to withhold nine binaries. Those legs record "failed to compile"
+  # and exit 0.
+  #
+  # The awkward compilers are installed by os-rice itself (`osr module <x>`),
+  # not hand-rolled here: the module is the thing that knows lacc needs its
+  # preprocessor patch and that cproc wants QBE in the same prefix, and
+  # duplicating that into a workflow would leave two copies to drift. pcc is
+  # the exception -- it has no module, it is one apt package.
+  ccbench:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: os-rice
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: gcc
+            name: '[gcc](https://gcc.gnu.org/)'
+            cc: gcc
+            required: true
+          - slug: clang
+            name: '[clang](https://clang.llvm.org/)'
+            cc: clang
+            required: true
+          - slug: zig
+            name: '[zig](https://ziglang.org/)'
+            cc: zig cc
+            zig: '0.14.1'
+            required: true
+          - slug: tcc
+            name: '[tcc](https://bellard.org/tcc/)'
+            cc: tcc
+            module: tcc
+          - slug: pcc
+            name: '[pcc](http://pcc.ludd.ltu.se/)'
+            cc: pcc
+            apt: pcc
+          - slug: lacc
+            name: '[lacc](https://github.com/larmel/lacc)'
+            # The module symlinks its prefix into ~/.local/bin, which the
+            # bench step puts on PATH.
+            cc: lacc
+            module: lacc
+            note: 'C89 by design, own assembler and ELF writer'
+          - slug: cproc
+            name: '[cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/)'
+            cc: cproc
+            module: cproc
+            note: 'QBE built into the same prefix'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zig
+        if: matrix.zig != ''
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig }}
+
+      - name: Install ${{ matrix.apt }}
+        if: matrix.apt != ''
+        run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.apt }}
+
+      # `osr module` builds osr first with whatever the ladder finds, then
+      # installs the compiler; the bench below re-bootstraps nob and cleans,
+      # so nothing that happens here is timed.
+      - name: Install ${{ matrix.module }} via osr
+        if: matrix.module != ''
+        run: sh osr module ${{ matrix.module }}
+
+      # nob -t is serial and times every command it issues -- so it has to be
+      # given something to issue. `nob clean` first, or an up-to-date tree
+      # reports nothing at all (nob.c: "an up-to-date tree runs nothing and
+      # reports nothing"). The total line and the size come off stderr; the
+      # size is re-read with stat because bytes divide and "1.2M" does not.
+      #
+      # A failing optional compiler still has to leave a row behind, which is
+      # why the whole thing is `|| ok=0` rather than `set -e`.
+      - name: Time ${{ matrix.slug }}
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          ok=1 secs=0 bytes=0
+          mkdir -p build
+          cc -o build/nob nob.c || ok=0
+          if [ $ok = 1 ]; then ./build/nob clean || ok=0; fi
+          if [ $ok = 1 ]; then CC="$CC" ./build/nob -t 2>build/time.log || ok=0; fi
+          if [ $ok = 1 ]; then
+            cat build/time.log
+            secs=$(sed -n 's/^  total  *\([0-9.]*\)s$/\1/p' build/time.log | tail -1)
+            bytes=$(stat -c %s build/osr 2>/dev/null || echo 0)
+            [ -n "$secs" ] && [ "$bytes" != 0 ] || ok=0
+          fi
+          ver=$($CC --version 2>/dev/null | head -1 | cut -c1-60)
+          [ -n "$ver" ] || ver='-'
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \
+            "${secs:-0}" "$bytes" "$ver" '${{ matrix.note || '-' }}' > row.tsv
+          cat row.tsv
+          # A required compiler that cannot build the tree fails the release.
+          [ $ok = 1 ] || [ '${{ matrix.required }}' != true ]
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ccbench-${{ matrix.slug }}
+          path: os-rice/row.tsv
+          if-no-files-found: error
+
   release:
-    needs: build
+    needs: [build, ccbench]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The only write scope in the file, and only here: this job runs no
@@ -275,6 +397,9 @@ jobs:
           for d in artifacts/*/; do
             slug=$(basename "$d")
             for f in "$d"osr*; do
+              # artifacts/ also holds the ccbench-* rows, which match no
+              # osr* -- an unmatched glob comes back as its own literal.
+              [ -e "$f" ] || continue
               case "$f" in *.exe) ext=.exe ;; *) ext= ;; esac
               cp "$f" "dist/osr-${{ steps.v.outputs.tag }}-$slug$ext"
             done
@@ -282,6 +407,45 @@ jobs:
           chmod +x dist/*
           cd dist && sha256sum osr-* > SHA256SUMS
           cat SHA256SUMS
+
+      # The compiler table, assembled here rather than in the bench jobs
+      # because it is the only place that has all seven rows at once -- and
+      # the ratios are meaningless without the gcc row to divide by. Rows
+      # come pre-sorted (successes first, then by time) so awk can print in
+      # input order and stay a one-pass script.
+      - name: Render the compiler table
+        run: |
+          {
+            echo "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`."
+            echo
+            echo "#### Compiler autotests (x86_64, ubuntu-latest)"
+            echo
+            echo "Lower x is faster/smaller. The ratio is against this runner's gcc."
+            echo
+            echo "| Compiler | Version | Notes | _Compilation time_ | Output size |"
+            echo "| --- | --- | --- | --- | --- |"
+            cat artifacts/ccbench-*/row.tsv |
+              sort -t"$(printf '\t')" -k3,3n -k4,4g |
+              awk -F'\t' '
+                { n++; f[n]=$0; if ($1 == "gcc" && $3 == 0) { bs=$4; bz=$5 } }
+                END {
+                  for (i = 1; i <= n; i++) {
+                    split(f[i], c, "\t")
+                    if (c[3] != 0) {
+                      printf "| %s | %s | %s | _failed to compile_ | - |\n", c[2], c[6], c[7]
+                      continue
+                    }
+                    t = sprintf("%.3fs", c[4]); z = sprintf("%.0f KiB", c[5] / 1024)
+                    if (c[1] == "gcc") { t = t " **BASE**"; z = z " **BASE**" }
+                    else if (bs > 0) {
+                      t = sprintf("%s %.3fx", t, c[4] / bs)
+                      z = sprintf("%s %.3fx", z, c[5] / bz)
+                    }
+                    printf "| %s | %s | %s | %s | %s |\n", c[2], c[6], c[7], t, z
+                  }
+                }'
+          } > notes.md
+          cat notes.md
 
       # `gh release create` creates the tag itself, at this commit, as part of
       # making the release -- so there is no separate `git tag && git push`,
@@ -292,5 +456,5 @@ jobs:
         run: |
           gh release create "${{ steps.v.outputs.tag }}" \
             --title "${{ steps.v.outputs.tag }}" \
-            --notes "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`." \
+            --notes-file notes.md \
             dist/*
