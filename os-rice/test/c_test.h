@@ -14,6 +14,22 @@
  *       return osr_t_finish();
  *   }
  */
+/* Feature macros before the first libc header, because this header IS the
+ * first include of every unit test and those tests are unity builds: a test
+ * that pulls in lib/common.c gets common.c's own _POSIX_C_SOURCE block far
+ * too late to matter, and setenv/lstat/realpath then compile as implicit
+ * declarations -- which clang reads as an error the moment one of them
+ * returns a pointer. Same values common.c asks for, so the later definition
+ * is an identical redefinition. */
+#ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#define _DEFAULT_SOURCE 1
+#define _BSD_SOURCE 1
+#define _DARWIN_C_SOURCE 1
+#endif
+
 #ifndef OSR_C_TEST_H
 #define OSR_C_TEST_H
 

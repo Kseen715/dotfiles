@@ -151,7 +151,9 @@ int osr_fonts_main(int argc, char **argv) {
 
 #else /* !_WIN32 */
 
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "fonts.h"
 #include "module.h"

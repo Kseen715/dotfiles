@@ -13,7 +13,9 @@
  */
 /* Before any include: c_test.h pulls in <stdio.h>, which locks the
  * feature-test macros in. See uv_journal_test.c. */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "../c_test.h"
 

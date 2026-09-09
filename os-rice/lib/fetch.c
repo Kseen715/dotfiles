@@ -23,7 +23,9 @@
 
 /* Feature macro before any header: glibc <features.h> sets it itself
  * once a header is in, and redefining it after that warns. */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "fetch.h"
 #include "common.h"

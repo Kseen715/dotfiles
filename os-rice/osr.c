@@ -42,7 +42,9 @@
  * C89 + POSIX, and C89 + Win32.
  */
 #ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 #endif
 
 #include "lib/common.h"

@@ -14,7 +14,9 @@
 /* Before any include: the test itself uses mkdtemp/setenv, and c_test.h pulls
  * in <stdio.h> first, which locks the feature-test macros in. The .c files
  * below define this too, but by then it is too late to matter. */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "../c_test.h"
 

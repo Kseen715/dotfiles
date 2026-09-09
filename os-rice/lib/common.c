@@ -10,7 +10,11 @@
  * #ifdef rather than being scattered through the file.
  */
 #ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
+#endif
 #define _DEFAULT_SOURCE 1
 #define _BSD_SOURCE 1
 #define _DARWIN_C_SOURCE 1

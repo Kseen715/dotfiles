@@ -30,7 +30,9 @@
  * Idempotent (SS2): when ~/.local/share/lcc/lcc already exists the whole
  * build is skipped. Not themable. C89.
  */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 #include "../lib/module.h"
 #include "../lib/fetch.h"
 

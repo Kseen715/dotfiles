@@ -9,7 +9,9 @@
  * composes strings with a buffer type rather than a printf family C89 does not
  * have, and this file follows it.
  */
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "harness.h"
 

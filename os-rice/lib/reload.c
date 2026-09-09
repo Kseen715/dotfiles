@@ -14,7 +14,9 @@
  */
 #ifndef _WIN32
 
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <pwd.h>
 #include <stdio.h>

@@ -14,7 +14,9 @@
 /* Feature macro before any header, as lib/fetch.c does: -std=c89 sets
  * __STRICT_ANSI__, under which glibc hides getaddrinfo and struct addrinfo. */
 #ifndef _WIN32
+#ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200112L
+#endif
 #endif
 
 #include "tls.h"
