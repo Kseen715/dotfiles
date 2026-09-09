@@ -28,6 +28,7 @@
 
 #include "common.h"
 #include "module.h"
+#include "cmds.h"
 #include "ui.h"
 #include "render.h"
 
@@ -46,7 +47,29 @@ const char *osr_mod_user(void)      { return env_str("OSR_USER", ""); }
 const char *osr_mod_home(void)      { return env_str("OSR_HOME", env_str("HOME", "")); }
 const char *osr_mod_theme(void)     { return env_str("OSR_THEME", ""); }
 const char *osr_mod_theme_dir(void) { return env_str("OSR_THEME_DIR", ""); }
-const char *osr_mod_pkg(void)       { return env_str("OSR_PKG", ""); }
+/* osr_mod_pkg -- the package manager, detected here when nothing exported it.
+ *
+ * Every consumer of the fact goes through this accessor (lib/pkg.c and nine
+ * modules), which makes it the one place that can notice the facts were never
+ * published. The runner exports them before its first step (lib/install.c's
+ * osr_detect_export), but there are entry points with no runner above them --
+ * `osr module run <name>`, `osr pkg install ...`, the released standalone
+ * binary run straight off disk -- and without this they reached lib/pkg.c with
+ * OSR_PKG='' and died there ("no native installer for OSR_PKG=''").
+ *
+ * "all" rather than one facet: the maps key off the release and arch facets
+ * too (lib/pkgmap), so a half-detected box resolves the wrong rows. Probed at
+ * most once per process, so a box with no recognised manager does not
+ * re-probe -- and warn -- on every call.
+ */
+const char *osr_mod_pkg(void) {
+    static int probed = 0;
+    if (!probed && env_str("OSR_PKG", "")[0] == '\0') {
+        probed = 1;
+        osr_detect_export("all");
+    }
+    return env_str("OSR_PKG", "");
+}
 const char *osr_mod_distro(void)    { return env_str("OSR_DISTRO", ""); }
 const char *osr_mod_init(void)      { return env_str("OSR_INIT", ""); }
 

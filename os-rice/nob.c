@@ -1622,6 +1622,17 @@ static bool run_runtime_module_tests(void) {
     return nob_cmd_run(&cmd);
 }
 
+/* The released binary run from a directory with no checkout in it: it detects
+ * the box and fetches its own tree (osr.c's provision_tree). A sandbox cannot
+ * stand in for that -- the whole scenario IS the absence of a tree, and the
+ * clone is a real git run -- so it is a script here rather than a unit test. */
+static bool run_standalone_tree_tests(void) {
+    Nob_Cmd cmd = {0};
+    nob_log(NOB_INFO, "--- standalone_tree ---");
+    cmd_append_args(&cmd, "sh", "test/standalone_tree.sh", NULL);
+    return nob_cmd_run(&cmd);
+}
+
 static bool run_all_tests(void) {
     bool ok = true;
     size_t i;
@@ -1645,6 +1656,7 @@ static bool run_all_tests(void) {
             if (!run_test(posix_test_names[i])) ok = false;
         }
         if (!run_runtime_module_tests()) ok = false;
+        if (!run_standalone_tree_tests()) ok = false;
     }
     return ok;
 }

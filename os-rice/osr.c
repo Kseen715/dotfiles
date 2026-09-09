@@ -50,42 +50,52 @@
 #include "lib/common.h"
 #include "lib/cmds.h"
 #include "lib/elevate.h"
+#include "lib/git.h"
+#include "lib/module.h"
 
 typedef struct {
     const char *name;
     int (*fn)(int argc, char **argv);
+    /* Does this command read the checkout -- themes/, rices/, modules/*.sh,
+     * lib/pkgmap, lib/servicemap, or the dotfiles configs beside it? Those are
+     * data files, not compiled-in text, so a binary standing alone somewhere
+     * (the release artifact, a copy in ~/wd) has none of them and the command
+     * quietly does half its job. Marked here rather than probed, because the
+     * answer is fixed per command and provision_tree() may CLONE: `osr log
+     * info hi` must never reach for the network. */
+    int needs_tree;
     const char *blurb;
 } Command;
 
 static const Command commands[] = {
-    { "ui",       osr_ui_main,      "live step window, palette, step counter" },
-    { "log",      osr_log_main,     "info / debug / warn / success / error lines" },
-    { "state",    osr_state_main,   "~/.config/osr/state: what is applied" },
-    { "user",     osr_user_main,    "target user, login shell, config-file writes" },
-    { "detect",   osr_detect_main,  "distro + hardware facts, as shell assignments" },
-    { "theme",    osr_theme_main,   "theme discovery, manifest, palette" },
-    { "install",  osr_install_main, "install.sh's text, option loop and manifest" },
-    { "module",   osr_module_main,  "the modules written in C" },
-    { "pkg",      osr_pkg_main,     "resolve, install and probe packages" },
-    { "net",      osr_net_main,     "fetch a URL, resolve a GitHub tag" },
-    { "build",    osr_build_main,   "the source: builders (lib/build.sh)" },
-    { "config",   osr_config_main,  "layered config: seeds, blocks, composed files" },
-    { "git",      osr_git_main,     "clone/update a repo, oh-my-zsh and its plugins" },
-    { "service",  osr_service_main, "enable/disable a service on any init" },
-    { "preflight", osr_preflight_main, "rice preconditions, before any mutation" },
-    { "fonts",    osr_fonts_main,   "install a Nerd Font" },
-    { "migrate",  osr_migrate_main, "patch a seeded, user-owned layer in place" },
-    { "apply",    osr_apply_main,   "the lists a theme-only apply is built out of" },
-    { "reload",   osr_reload_main,  "tell the running apps to re-read their config" },
-    { "wallpaper", osr_wallpaper_main, "set or query the current theme's wallpaper" },
+    { "ui",       osr_ui_main,         0, "live step window, palette, step counter" },
+    { "log",      osr_log_main,        0, "info / debug / warn / success / error lines" },
+    { "state",    osr_state_main,      0, "~/.config/osr/state: what is applied" },
+    { "user",     osr_user_main,       0, "target user, login shell, config-file writes" },
+    { "detect",   osr_detect_main,     0, "distro + hardware facts, as shell assignments" },
+    { "theme",    osr_theme_main,      1, "theme discovery, manifest, palette" },
+    { "install",  osr_install_main,    1, "install.sh's text, option loop and manifest" },
+    { "module",   osr_module_main,     1, "the modules written in C" },
+    { "pkg",      osr_pkg_main,        1, "resolve, install and probe packages" },
+    { "net",      osr_net_main,        0, "fetch a URL, resolve a GitHub tag" },
+    { "build",    osr_build_main,      1, "the source: builders (lib/build.sh)" },
+    { "config",   osr_config_main,     0, "layered config: seeds, blocks, composed files" },
+    { "git",      osr_git_main,        0, "clone/update a repo, oh-my-zsh and its plugins" },
+    { "service",  osr_service_main,    1, "enable/disable a service on any init" },
+    { "preflight", osr_preflight_main,  0, "rice preconditions, before any mutation" },
+    { "fonts",    osr_fonts_main,      0, "install a Nerd Font" },
+    { "migrate",  osr_migrate_main,    0, "patch a seeded, user-owned layer in place" },
+    { "apply",    osr_apply_main,      1, "the lists a theme-only apply is built out of" },
+    { "reload",   osr_reload_main,     0, "tell the running apps to re-read their config" },
+    { "wallpaper", osr_wallpaper_main,  1, "set or query the current theme's wallpaper" },
 #ifndef _WIN32
     /* The four that have no Windows answer -- a GNOME session, MSRs, sysfs
      * hwmon, and a suite that drives this binary under sh. lib/cmds.h says
      * why each. */
-    { "gnome",    osr_gnome_main,   "GNOME session probe and custom keybindings" },
-    { "benchmark", osr_benchmark_main, "measure CPU throughput, power and thermals" },
-    { "undervolt", osr_undervolt_main, "CPU voltage offsets: probe, set, auto-tune" },
-    { "test-run", osr_testrun_main, "run the test suite" }
+    { "gnome",    osr_gnome_main,      0, "GNOME session probe and custom keybindings" },
+    { "benchmark", osr_benchmark_main,  0, "measure CPU throughput, power and thermals" },
+    { "undervolt", osr_undervolt_main,  0, "CPU voltage offsets: probe, set, auto-tune" },
+    { "test-run", osr_testrun_main,    0, "run the test suite" }
 #endif
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
@@ -138,6 +148,90 @@ static void resolve_roots(const char *argv0) {
         osr_dirname(env_str("OSR_ROOT", root), buf, sizeof(buf));
         osr_setenv("OSR_DOTFILES", buf);
     }
+}
+
+/* The checkout provision_tree() fetches when there is none around the binary.
+ * Same defaults as the `osr` launcher's self-bootstrap block, and the same two
+ * env overrides, because it is the same job done from the other side: that
+ * script clones because it has no binary, this clones because it has no tree.
+ */
+#define OSR_REPO_URL_DEFAULT "https://github.com/Kseen715/dotfiles.git"
+#define OSR_TREE_DIR_DEFAULT "os-rice-dotfiles"
+
+/* tree_at -- is <root> an os-rice tree, rather than whatever directory the
+ * binary happens to be sitting in?
+ *
+ * Either lib/ or themes/ answers yes, because a tree is not always the whole
+ * checkout: the test sandboxes assemble a root out of exactly the part the
+ * scenario needs -- a lib/ and a modules/ for the module tier, a themes/ for
+ * the theme tier -- and each of those is a real tree for what runs against it.
+ * A downloaded binary's directory has neither, which is the case this exists
+ * to catch, so demanding both would only make sandboxes clone.
+ */
+static int tree_at(const char *root) {
+    char buf[OSR_PATH_MAX];
+    if (*root == '\0') return 0;
+    if (osr_path_join(buf, sizeof(buf), root, "lib") && dir_exists(buf)) return 1;
+    return osr_path_join(buf, sizeof(buf), root, "themes") && dir_exists(buf);
+}
+
+/* provision_tree -- make OSR_ROOT/OSR_LIB/OSR_DOTFILES point at a real
+ * checkout, cloning one when this binary has none around it.
+ *
+ * The released binary is a single file: people download osr-<version>-<arch>
+ * and run it from wherever it landed. Everything compiled into it works there,
+ * and everything that is a FILE in the repository does not -- themes/, rices/,
+ * lib/pkgmap, lib/servicemap, and the dotfiles configs a module copies. Before
+ * this, resolve_roots() above still pointed OSR_DOTFILES at the download
+ * directory's parent, so `module run zsh` installed the packages and then
+ * warned its way past every layer it was supposed to write:
+ *
+ *     [WARN] install: source not found: ./zsh/rc.d/10-omz.zsh
+ *
+ * The clone is shallow and lands in $TMPDIR (OSR_DEST overrides), and a tree
+ * already sitting there is used as it is -- no fetch, so a second run costs
+ * nothing and works offline. Only the commands marked needs_tree in the table
+ * above reach this, so no `osr log` or `osr detect` ever touches the network.
+ */
+static void provision_tree(void) {
+    const char *url = env_str("OSR_REPO_URL", OSR_REPO_URL_DEFAULT);
+    char dest[OSR_PATH_MAX];
+    char root[OSR_PATH_MAX];
+    char buf[OSR_PATH_MAX];
+
+    if (tree_at(env_str("OSR_ROOT", ""))) return;
+
+    if (env_is_set("OSR_DEST")) {
+        osr_copy_bounded(dest, sizeof(dest), env_str("OSR_DEST", ""));
+    } else if (!osr_path_join(dest, sizeof(dest), osr_tmpdir(), OSR_TREE_DIR_DEFAULT)) {
+        return;
+    }
+    /* The tree is os-rice/ INSIDE the dotfiles repo, and the configs the
+     * modules copy are the repo itself -- the same two roots the launcher
+     * exports from a checkout. */
+    if (!osr_path_join(root, sizeof(root), dest, "os-rice")) return;
+
+    if (!tree_at(root)) {
+        char *clone_args[3];
+        const char *git_pkg[2];
+
+        osr_infof("no os-rice tree beside this binary - fetching %s into %s", url, dest);
+        git_pkg[0] = "git"; git_pkg[1] = NULL;
+        /* The package half detects the box on its way through (osr_mod_pkg),
+         * so nothing has to be exported before this point. */
+        if (!osr_have_cmd("git")) (void)osr_pkg_install(git_pkg);
+        /* osr_git_repo writes the tree as OSR_USER (§8), so that account has
+         * to be resolved first. A later --user still wins: the runner calls
+         * osr_resolve_user again with the name it was given. */
+        osr_resolve_user(NULL);
+        clone_args[0] = (char *)"--depth"; clone_args[1] = (char *)"1"; clone_args[2] = NULL;
+        (void)osr_git_repo("os-rice dotfiles", url, dest, clone_args);
+        if (!tree_at(root)) osr_die("cloned %s but found no tree at %s", url, root);
+    }
+
+    osr_setenv("OSR_DOTFILES", dest);
+    osr_setenv("OSR_ROOT", root);
+    if (osr_path_join(buf, sizeof(buf), root, "lib")) osr_setenv("OSR_LIB", buf);
 }
 
 /* startup_env -- the shell-level state lib/ui.sh used to establish before any
@@ -204,6 +298,7 @@ int main(int argc, char **argv) {
     if (argc < 2) return usage();
     for (i = 0; i < COMMAND_COUNT; i++) {
         if (strcmp(argv[1], commands[i].name) == 0) {
+            if (commands[i].needs_tree) provision_tree();
             /* Each command sees the vector from its own word onward, so its
              * argv[0] is the command name -- the shape every one of them
              * already had when it was a separate program. */
