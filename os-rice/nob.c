@@ -320,6 +320,19 @@ static const char *core_srcs[] = {
      * rather than static-only: config parsing is what it is here for, and
      * that lives in the runtime host too. */
     "lib/yaml.c",
+    /* The vendored decoders (thirdparty/lzmasdk.h, miniz.h, bzip2.h, zstd.h,
+     * rar.h), one implementation unit each in the style of lib/yaml.c and
+     * lib/bearssl.c. Unconditional: an archive is opened on every tier, and
+     * the tiers where the system has no extractor at all -- Windows XP, a
+     * minimal POSIX box -- are the ones that cannot ask for a build flag.
+     * lib/rar_shim.c is ours: the read stack libarchive's RAR readers expect
+     * under them, so it is warned about like the rest of the tree. */
+    "lib/lzmasdk.c",
+    "lib/miniz.c",
+    "lib/bzip2.c",
+    "lib/zstd.c",
+    "lib/rar.c",
+    "lib/rar_shim.c",
     /* Modules both systems have. */
     "modules/fastfetch.c",
     "modules/osrvv.c",
@@ -998,11 +1011,22 @@ static bool unoptimized_src(const char *src) {
            (strcmp(src, "lib/yaml.c") == 0 || strcmp(src, "lib/bearssl.c") == 0);
 }
 
-/* vendored_tls_src -- the unit that carries thirdparty/bearssl.h. Upstream
- * code: it is compiled, never edited, so its warnings are not this tree's to
- * fix and are turned off rather than read past on every build. */
-static bool vendored_tls_src(const char *src) {
-    return src != NULL && strcmp(src, "lib/bearssl.c") == 0;
+/* vendored_src -- the units that carry an amalgamated thirdparty/*.h.
+ * Upstream code: compiled, never edited, so its warnings are not this tree's
+ * to fix and are turned off rather than read past on every build. Note what
+ * is NOT here -- lib/rar_shim.c is ours, and lib/yaml.c is not either,
+ * because thirdparty/yaml.h is included tree-wide and its warnings would
+ * have to be silenced everywhere or nowhere. */
+static bool vendored_src(const char *src) {
+    static const char *units[] = {
+        "lib/bearssl.c", "lib/lzmasdk.c", "lib/miniz.c",
+        "lib/bzip2.c", "lib/zstd.c", "lib/rar.c",
+    };
+    size_t i;
+    if (src == NULL) return false;
+    for (i = 0; i < sizeof(units) / sizeof(units[0]); i++)
+        if (strcmp(src, units[i]) == 0) return true;
+    return false;
 }
 
 /* append_common_flags -- the same std/warning/XP-floor flags every binary
@@ -1024,7 +1048,7 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * /wd4505 is -Wno-unused-function; the CRT one silences the
          * fopen/getenv "deprecation" that C89 code cannot avoid. cl only
          * ever targets Windows, so the XP defines are unconditional here. */
-        cmd_append_args(cmd, "/nologo", vendored_tls_src(src) ? "/W0" : "/W4",
+        cmd_append_args(cmd, "/nologo", vendored_src(src) ? "/W0" : "/W4",
                         o0 ? "/Od" : "/O2", NULL);
         cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
         cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
@@ -1051,11 +1075,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * invoked bare -- append_cc(cmd) above already put it on the line. */
         return;
     }
-    if (vendored_tls_src(src)) {
-        /* C89 like the rest of the tree -- thirdparty/amalgamate_bearssl.py
-         * rewrites upstream's `inline` away, and nothing else in BearSSL is
-         * post-C90. Upstream's warnings are upstream's, so they are off
-         * rather than read past on every build. */
+    if (vendored_src(src)) {
+        /* C89 like the rest of the tree -- each thirdparty/amalgamate_*.py
+         * rewrites upstream's `//` comments and `inline` away, and nothing
+         * else in what they carry is post-C90. Upstream's warnings are
+         * upstream's, so they are off rather than read past on every build. */
         cmd_append_args(cmd, "-std=c89", "-w", o0 ? "-O0" : "-O2", NULL);
         if (target_windows())
             cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);

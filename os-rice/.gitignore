@@ -15,3 +15,5 @@ nob
 install
 wallpaper
 test/unit_c/*_test
+
+__pycache__/

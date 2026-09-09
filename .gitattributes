@@ -13,3 +13,23 @@ os-rice/thirdparty/yaml.h linguist-vendored
 # os-rice/thirdparty/amalgamate_bearssl.py
 os-rice/thirdparty/bearssl.h linguist-vendored
 os-rice/thirdparty/cacert.pem linguist-vendored
+
+# Vendored: miniz, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_miniz.py
+os-rice/thirdparty/miniz.h linguist-vendored
+
+# Vendored: lzmasdk, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_lzmasdk.py
+os-rice/thirdparty/lzmasdk.h linguist-vendored
+
+# Vendored: bzip2, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_bzip2.py
+os-rice/thirdparty/bzip2.h linguist-vendored
+
+# Vendored: zstd, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_zstd.py
+os-rice/thirdparty/zstd.h linguist-vendored
+
+# Vendored: rar, amalgamated into one C89 header by
+# os-rice/thirdparty/amalgamate_rar.py
+os-rice/thirdparty/rar.h linguist-vendored
