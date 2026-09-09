@@ -1228,8 +1228,13 @@ int osr_absolute_dir(const char *dir, char *out, unsigned long out_sz) {
     DWORD n = GetFullPathNameA(dir, (DWORD)out_sz, out, NULL);
     return n > 0 && n < out_sz;
 #else
-    char buf[OSR_PATH_MAX];
-    if (realpath(dir, buf) == NULL) return 0;
-    return osr_copy_bounded(out, out_sz, buf);
+    /* realpath into a caller buffer needs PATH_MAX bytes, which OSR_PATH_MAX
+     * is deliberately not; let libc size the answer and copy it bounded. */
+    char *buf = realpath(dir, NULL);
+    int ok;
+    if (buf == NULL) return 0;
+    ok = osr_copy_bounded(out, out_sz, buf);
+    free(buf);
+    return ok;
 #endif
 }

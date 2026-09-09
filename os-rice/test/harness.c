@@ -123,8 +123,8 @@ static void h_write(const char *path, const char *contents, int mode) {
     if (contents != NULL && *contents != '\0') {
         if (fwrite(contents, 1, strlen(contents), f) != strlen(contents)) h_die(path);
     }
+    if (fchmod(fileno(f), (mode_t)mode) != 0) h_die(path);
     if (fclose(f) != 0) h_die(path);
-    if (chmod(path, (mode_t)mode) != 0) h_die(path);
 }
 
 /* h_slurp -- the whole file, or "" when it does not exist. The caller frees. */
@@ -177,12 +177,11 @@ static void h_mkdir_p(const char *path) {
 static void h_rm_rf(const char *path) {
     DIR *d;
     struct dirent *e;
-    struct stat st;
-    if (lstat(path, &st) != 0) return;
-    if (!S_ISDIR(st.st_mode)) {
-        unlink(path);
-        return;
-    }
+    /* unlink first, no stat: it never follows a symlink, so a link into
+     * /usr/bin loses the link and not the target, and there is no window
+     * between deciding what the path is and acting on it. Only a directory
+     * survives the attempt. */
+    if (unlink(path) == 0) return;
     d = opendir(path);
     if (d == NULL) return;
     while ((e = readdir(d)) != NULL) {

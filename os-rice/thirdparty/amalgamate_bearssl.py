@@ -218,7 +218,7 @@ parts += ['',
 # linkage -- the public API, everything inner.h publishes -- can be caught by
 # it. The renames are #defines around one file's body, so the asserts below
 # rule out the two spellings a #define would also rewrite by mistake.
-STATIC_DECL = re.compile(r'^static\b(?:[^;{=]|\n)*?([A-Za-z_]\w*)\s*[\(\[=;]', re.M)
+STATIC_DECL = re.compile(r'^static\b[^;{=]*?([A-Za-z_]\w*)\s*[\(\[=;]', re.M)
 # File-local typedefs collide the same way (two ec_*.c files each define
 # their own `p256_jacobian`), and a #define renames a type name as readily as
 # a function name.
