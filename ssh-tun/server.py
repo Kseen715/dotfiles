@@ -23,8 +23,11 @@ def main():
             print("[*] Enabling PermitTunnel in sshd_config...")
             with open(sshd_config, "a") as f_append:
                 f_append.write("\nPermitTunnel yes\n")
-            run_cmd("systemctl restart sshd")
-            print("[!] sshd restarted. Please reconnect and run again.")
+            
+            # Restart whichever SSH service exists
+            print("[*] Restarting SSH service...")
+            run_cmd("systemctl restart ssh || systemctl restart sshd")
+            print("[!] SSH service restarted. Please reconnect your SSH session and run this script again.")
             sys.exit(0)
 
     print("[*] Waiting for client to establish tunnel (tun0)...")
@@ -43,12 +46,10 @@ def main():
 
     # 3. Create Independent Watchdog
     watchdog_sh = f"""#!/bin/bash
-    # Wait until either the python script dies OR tun0 goes down
     while ip link show tun0 >/dev/null 2>&1 && kill -0 {os.getpid()} 2>/dev/null; do
         sleep 2
     done
     
-    # Restore Network
     ip route del default 2>/dev/null
     ip route del 10.0.0.0/8 2>/dev/null
     ip route del 172.16.0.0/12 2>/dev/null
@@ -70,7 +71,6 @@ def main():
         f.write(watchdog_sh)
     os.chmod("/tmp/net_restore.sh", 0o755)
 
-    # Launch watchdog completely detached from this process
     subprocess.Popen(["nohup", "/tmp/net_restore.sh"], 
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
                      preexec_fn=os.setpgrp)
@@ -101,7 +101,7 @@ def main():
     print("[+] Local subnets remain on original gateway.")
     print("[*] Watchdog active. Network will restore automatically if connection drops or script is killed.")
 
-    # 5. Monitor Loop (purely to keep the terminal open)
+    # 5. Monitor Loop
     try:
         while run_cmd("ip link show tun0", ignore_error=True) != "":
             time.sleep(2)
