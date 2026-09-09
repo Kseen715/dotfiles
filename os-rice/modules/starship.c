@@ -53,7 +53,17 @@ int osrm_osrvv(void);
 static int nerd_font(void *ctx) { return osr_install_nerd_font((const char *)ctx); }
 
 int osrm_starship(void) {
+    /* unzip and fontconfig are the Nerd Font install's own dependencies on
+     * POSIX (same list as wezterm/foot/alacritty/ghostty). Without them the
+     * first run skips the font for want of unzip, a later module drags unzip
+     * in, and the SECOND run downloads 120 MiB -- an idempotency break the
+     * matrix job catches. On Windows the font goes through a package manager
+     * that brings its own, and the map has no row for either. */
+#ifndef _WIN32
+    static const char *const pkgs[] = { "starship", "unzip", "fontconfig", NULL };
+#else
     static const char *const pkgs[] = { "starship", NULL };
+#endif
     Str base, dst, pal;
     int is_temp = 0;
     int ok;
