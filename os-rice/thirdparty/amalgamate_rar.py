@@ -117,6 +117,19 @@ PROLOGUE = r'''/*
 #include <time.h>
 #include <errno.h>
 
+/* ssize_t and mode_t: POSIX puts them in <sys/types.h>, MSVC's ucrt spells
+ * mode_t in <sys/stat.h> and has no ssize_t at all, so spell that one out. */
+#include <sys/types.h>
+#include <sys/stat.h>
+#if defined(_MSC_VER) && !defined(_SSIZE_T_DEFINED)
+#define _SSIZE_T_DEFINED
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef int ssize_t;
+#endif
+#endif
+
 /* archive_platform.h's tail: the error codes archive.h only lists as
  * comments, and the attribute spellings the sources use. EILSEQ over
  * upstream's BSD-only EFTYPE, which is the fallback it picks anyway. */
