@@ -80,10 +80,9 @@
 #include <errno.h>
 
 /* ssize_t and mode_t: POSIX puts them in <sys/types.h>, and the RAR readers
- * use both spellings raw. MSVC's ucrt has no ssize_t at all, and hides
- * mode_t behind the non-standard-names switch <sys/stat.h> only honours when
- * _CRT_INTERNAL_NONSTDC_NAMES is on -- newer cl builds leave it off -- so
- * supply both there. The underscored _mode_t is always declared. */
+ * use both spellings raw. MSVC's ucrt declares neither under any name -- it
+ * only has the underscored _mode_t, which corecrt.h always provides -- so
+ * supply both here. */
 #include <sys/types.h>
 #include <sys/stat.h>
 #if defined(_MSC_VER)
@@ -95,9 +94,7 @@ typedef __int64 ssize_t;
 typedef int ssize_t;
 #endif
 #endif
-#if !defined(_CRT_INTERNAL_NONSTDC_NAMES) || !_CRT_INTERNAL_NONSTDC_NAMES
 typedef _mode_t mode_t;
-#endif
 #endif
 
 /* archive_platform.h's tail: the error codes archive.h only lists as
