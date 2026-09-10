@@ -79,16 +79,24 @@
 #include <time.h>
 #include <errno.h>
 
-/* ssize_t and mode_t: POSIX puts them in <sys/types.h>, MSVC's ucrt spells
- * mode_t in <sys/stat.h> and has no ssize_t at all, so spell that one out. */
+/* ssize_t and mode_t: POSIX puts them in <sys/types.h>, and the RAR readers
+ * use both spellings raw. MSVC's ucrt has no ssize_t at all, and hides
+ * mode_t behind the non-standard-names switch <sys/stat.h> only honours when
+ * _CRT_INTERNAL_NONSTDC_NAMES is on -- newer cl builds leave it off -- so
+ * supply both there. The underscored _mode_t is always declared. */
 #include <sys/types.h>
 #include <sys/stat.h>
-#if defined(_MSC_VER) && !defined(_SSIZE_T_DEFINED)
+#if defined(_MSC_VER)
+#if !defined(_SSIZE_T_DEFINED)
 #define _SSIZE_T_DEFINED
 #ifdef _WIN64
 typedef __int64 ssize_t;
 #else
 typedef int ssize_t;
+#endif
+#endif
+#if !defined(_CRT_INTERNAL_NONSTDC_NAMES) || !_CRT_INTERNAL_NONSTDC_NAMES
+typedef _mode_t mode_t;
 #endif
 #endif
 
