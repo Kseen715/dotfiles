@@ -276,6 +276,13 @@ jobs:
   # has no aarch64 backend, and tcc's is not a thing to hang a release gate
   # on. A blank row for each of them on arm would say less than their absence.
   #
+  # Four architectures, not two: the release ships three Windows binaries, and
+  # until now no row in these tables was produced by a Windows compiler on a
+  # Windows host at all -- the shipped PE files are cross-linked on Linux, and
+  # nothing here said what building this tree natively costs. The Windows rows
+  # are `runner:`-pinned like the arm64 ones and carry a `boot:` (see there);
+  # everything downstream is the same script and the same TSV row.
+  #
   # `required: true` on gcc, clang and zig: those three are the compilers CI
   # already builds and ships with, so a failure there is a real regression and
   # the release must not go out. Everything else is a courtesy row -- tcc,
@@ -291,10 +298,13 @@ jobs:
   # the exception -- it has no module, it is one apt package.
   ccbench:
     needs: test
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.runner || 'ubuntu-latest' }}
     timeout-minutes: 45
     defaults:
       run:
+        # bash on the Windows legs too (the runner default there is pwsh), so
+        # the one bench step below is a single script for every row.
+        shell: bash
         working-directory: os-rice
     strategy:
       fail-fast: false
@@ -317,16 +327,19 @@ jobs:
             zig: '0.14.1'
             required: true
           - arch: arm64
+            runner: ubuntu-24.04-arm
             slug: gcc
             name: '[gcc](https://gcc.gnu.org/)'
             cc: gcc
             required: true
           - arch: arm64
+            runner: ubuntu-24.04-arm
             slug: clang
             name: '[clang](https://clang.llvm.org/)'
             cc: clang
             required: true
           - arch: arm64
+            runner: ubuntu-24.04-arm
             slug: zig
             name: '[zig](https://ziglang.org/)'
             cc: zig cc
@@ -356,6 +369,52 @@ jobs:
             cc: cproc
             module: cproc
             note: 'QBE built into the same prefix'
+          # The Windows rows. `boot` exists for them: the Linux legs bootstrap
+          # nob with the host `cc`, which Windows has no such thing as, and
+          # MSVC additionally spells the whole command differently (/Fe:, /Fo)
+          # -- that dialect split is nob.c's own (is_msvc_name), so the
+          # bootstrap has to speak it before nob is there to.
+          #
+          # Courtesy rows, all four: none is `required`. What actually gates a
+          # release on Windows is os-rice-ci.yml's unit-windows legs, which
+          # build AND run the units under both dialects. These time the build.
+          - arch: windows-x86_64
+            runner: windows-latest
+            slug: gcc
+            name: '[mingw gcc](https://www.mingw-w64.org/)'
+            cc: gcc
+            boot: gcc -o build/nob.exe nob.c
+            exe: .exe
+          - arch: windows-x86_64
+            runner: windows-latest
+            slug: clang
+            name: '[clang](https://clang.llvm.org/)'
+            cc: clang
+            boot: clang -o build/nob.exe nob.c
+            exe: .exe
+            note: 'MSVC ABI, GNU flag dialect'
+          # cl.exe is the one front end here that is a different DIALECT rather
+          # than a different compiler: nob.c spells every flag twice and only
+          # this row exercises the /W4 /c /Fo half.
+          - arch: windows-x86_64
+            runner: windows-latest
+            slug: msvc
+            name: '[MSVC cl](https://learn.microsoft.com/cpp/build/reference/compiling-a-c-cpp-program)'
+            cc: cl.exe
+            boot: cl /nologo /Fe:build/nob.exe /Fobuild/ nob.c
+            msvc: x64
+            exe: .exe
+          # Windows-on-ARM is MSVC only: the arm64 image ships Visual Studio
+          # and no MinGW gcc, so this table has no gcc row and therefore no
+          # BASE to divide by -- the renderer below prints its times bare.
+          - arch: windows-arm64
+            runner: windows-11-arm
+            slug: msvc
+            name: '[MSVC cl](https://learn.microsoft.com/cpp/build/reference/compiling-a-c-cpp-program)'
+            cc: cl.exe
+            boot: cl /nologo /Fe:build/nob.exe /Fobuild/ nob.c
+            msvc: arm64
+            exe: .exe
     steps:
       - uses: actions/checkout@v7
 
@@ -368,6 +427,17 @@ jobs:
       - name: Install ${{ matrix.apt }}
         if: matrix.apt != ''
         run: sudo apt-get update -q && sudo apt-get install -y ${{ matrix.apt }}
+
+      # cl.exe is only a compiler once vcvars has run, and a workflow `run:` is
+      # its own process -- so the environment has to come from a step that
+      # exports into the job, not from a `call vcvarsall.bat` the next step
+      # would never see. That is all this action does; `arch` names the
+      # host/target pair the way the vcvars script name does in os-rice-ci.yml.
+      - name: Set up MSVC (${{ matrix.msvc }})
+        if: matrix.msvc != ''
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc }}
 
       # `osr module` builds osr first with whatever the ladder finds, then
       # installs the compiler; the bench below re-bootstraps nob and cleans,
@@ -390,22 +460,33 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           ok=1 secs=0 bytes=0
+          nob=./build/nob${{ matrix.exe }}
           mkdir -p build
-          cc -o build/nob nob.c || ok=0
-          if [ $ok = 1 ]; then ./build/nob clean || ok=0; fi
-          if [ $ok = 1 ]; then CC="$CC" ./build/nob -t 2>build/time.log || ok=0; fi
+          ${{ matrix.boot || 'cc -o build/nob nob.c' }} || ok=0
+          if [ $ok = 1 ]; then $nob clean || ok=0; fi
+          if [ $ok = 1 ]; then CC="$CC" $nob -t 2>build/time.log || ok=0; fi
           if [ $ok = 1 ]; then
             cat build/time.log
-            secs=$(sed -n 's/^  total  *\([0-9.]*\)s$/\1/p' build/time.log | tail -1)
-            bytes=$(stat -c %s build/osr 2>/dev/null || echo 0)
+            # tr -d '\r': a native Windows nob.exe writes its stderr in text
+            # mode, so every line of the log arrives CRLF-terminated and the
+            # anchored sed below would match nothing at all.
+            secs=$(tr -d '\r' <build/time.log | sed -n 's/^  total  *\([0-9.]*\)s$/\1/p' | tail -1)
+            bytes=$(stat -c %s build/osr${{ matrix.exe }} 2>/dev/null || echo 0)
             [ -n "$secs" ] && [ "$bytes" != 0 ] || ok=0
           fi
           # zig cc reports "clang version 19.1.7 (https://github.com/ziglang/
           # zig-bootstrap ...)" -- a URL is noise in the table and cut(1) would
           # leave half of it dangling. Drop parentheticals holding a URL only;
           # gcc's "(Ubuntu 13.3.0-6ubuntu2~24.04.1)" is the distro build and stays.
-          ver=$($CC --version 2>/dev/null | head -1 \
-                | sed 's| *([^()]*://[^()]*)||g; s|  *| |g; s| *$||' | cut -c1-60)
+          # 2>&1, not 2>/dev/null: cl.exe has no --version and prints its
+          # banner (the only version string it has) on stderr before
+          # complaining about the flag. head -1 takes the banner either way.
+          # The MSVC banner spends its first 39 characters on the product
+          # name before reaching a version number, which cut -c1-60 would then
+          # amputate; drop that prefix so the column holds the version.
+          ver=$($CC --version 2>&1 | head -1 \
+                | sed 's|^Microsoft (R) C/C++ Optimizing Compiler ||; s| *([^()]*://[^()]*)||g; s|  *| |g; s| *$||' \
+                | cut -c1-60)
           [ -n "$ver" ] || ver='-'
           printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             '${{ matrix.arch }}' '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \
@@ -492,17 +573,22 @@ jobs:
       #
       # One table per architecture, filtered on the row's own arch column: an
       # x86_64 second and an arm64 second are different seconds, and a single
-      # merged table with one BASE would silently be claiming otherwise.
+      # merged table with one BASE would silently be claiming otherwise. The
+      # same holds twice over for the Windows hosts, whose fastest row is a
+      # different compiler on a different OS. windows-arm64 has no gcc at all,
+      # so its table has no BASE and its times print unratioed -- which the
+      # `bs > 0` guard below already handled.
       - name: Render the compiler tables
         run: |
           {
             echo "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`."
-            for a in x86_64:ubuntu-latest arm64:ubuntu-24.04-arm; do
+            for a in x86_64:ubuntu-latest arm64:ubuntu-24.04-arm \
+                     windows-x86_64:windows-latest windows-arm64:windows-11-arm; do
               arch=${a%:*} host=${a#*:}
               echo
               echo "#### Compiler autotests ($arch, $host)"
               echo
-              echo "Lower x is faster/smaller. The ratio is against this runner's gcc."
+              echo "Lower x is faster/smaller. Ratios, where shown, are against this runner's gcc."
               echo
               echo "| Compiler | Version | Notes | _Compilation time_ | Output size |"
               echo "| --- | --- | --- | --- | --- |"
