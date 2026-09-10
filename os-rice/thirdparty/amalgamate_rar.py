@@ -118,9 +118,9 @@ PROLOGUE = r'''/*
 #include <errno.h>
 
 /* ssize_t and mode_t: POSIX puts them in <sys/types.h>, and the RAR readers
- * use both spellings raw. MSVC's ucrt declares neither under any name -- it
- * only has the underscored _mode_t, which corecrt.h always provides -- so
- * supply both here. */
+ * use both spellings raw. MSVC's ucrt declares neither -- not mode_t, and not
+ * the underscored _mode_t either -- so spell both out here. unsigned short is
+ * the width archive_entry.h's __LA_MODE_T already uses on _WIN32. */
 #include <sys/types.h>
 #include <sys/stat.h>
 #if defined(_MSC_VER)
@@ -132,7 +132,27 @@ typedef __int64 ssize_t;
 typedef int ssize_t;
 #endif
 #endif
-typedef _mode_t mode_t;
+#if !defined(_MODE_T_DEFINED)
+#define _MODE_T_DEFINED
+typedef unsigned short mode_t;
+#endif
+/* The RAR 1.5-3.x reader spells the POSIX permission bits raw when it
+ * translates a DOS/Windows attribute word into a mode. MSVC's <sys/stat.h>
+ * carries only the S_IREAD/S_IWRITE/S_IEXEC trio, so define the rest at
+ * their POSIX values -- what libarchive's own archive_windows.h does. */
+#if !defined(S_IRUSR)
+#define S_IRUSR 0000400
+#define S_IWUSR 0000200
+#define S_IXUSR 0000100
+#define S_IRGRP 0000040
+#define S_IXGRP 0000010
+#define S_IROTH 0000004
+#define S_IXOTH 0000001
+#endif
+/* The RAR 5 reader's debug printfs use PRIx32, and archive.h deliberately
+ * skips <inttypes.h> on _MSC_VER for MSVC versions that predate it. Every
+ * MSVC that can build this tree (2015 and up) ships the header. */
+#include <inttypes.h>
 #endif
 
 /* archive_platform.h's tail: the error codes archive.h only lists as
