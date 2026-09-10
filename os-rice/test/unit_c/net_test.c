@@ -271,6 +271,24 @@ int main(void) {
      * without ever publishing a GitHub Release object, and for those the
      * /releases/latest endpoint answers 404 forever.
      * ================================================================ */
+    /* github.com is asked BEFORE api.github.com: the API allows 60
+     * unauthenticated requests an hour PER IP, and a CI runner shares its
+     * address with every other runner on that host -- the idempotency matrix
+     * failed every version lookup in an image at once for want of that
+     * budget. The stub answers both, and the redirect's tag is what comes
+     * back. */
+    curl_stub(
+        "case \"$*\" in\n"
+        "  *-fsSLI*) printf 'HTTP/1.1 302 Found\\r\\nLocation: "
+        "https://github.com/cli/cli/releases/tag/v3.0.0-redirect\\r\\n\\r\\n'\n"
+        "            printf 'HTTP/1.1 200 OK\\r\\n\\r\\n' ;;\n"
+        "  *) printf '{\"tag_name\": \"v2.63.0-api\"}\\n' ;;\n"
+        "esac\n");
+    net1("github-latest", "cli/cli");
+    osr_assert_out_is(&sb, "v3.0.0-redirect",
+        "github-latest: the tag github.com redirects to answers, leaving the "
+        "rate-limited API for repos that publish no release");
+
     curl_stub(
         "case \"$*\" in\n"
         "  *releases/latest*) printf '{\"url\":\"x\",\"tag_name\": \"v2.63.0\","

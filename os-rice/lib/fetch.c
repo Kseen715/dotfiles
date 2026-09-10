@@ -186,6 +186,39 @@ int osr_json_string_field(Str *out, const char *json, const char *key) {
     return found;
 }
 
+/* github_tag_via_redirect -- the tag github.com/<repo>/releases/latest sends a
+ * client to. api.github.com allows 60 unauthenticated requests an hour PER IP,
+ * and a CI runner shares its address with every other runner on that host, so
+ * the limit is reached by someone else's jobs: the matrix run saw every
+ * version lookup in an image fail at once ("could not resolve a tag for
+ * lsd-rs/lsd") while the same image passed locally. github.com itself is not
+ * metered that way, and its redirect carries the same tag, so it is asked
+ * first and the API stays the fallback.
+ *
+ * A repo with no published release lands on /releases with no /tag/ in it,
+ * which reads here as no answer and falls through to the API's own tags
+ * lookup. So does a box whose downloader has no header-only mode (busybox
+ * wget), where osr_fetch_final_url cannot see a redirect at all. */
+static int github_tag_via_redirect(Str *out, const char *repo) {
+    static const char marker[] = "/releases/tag/";
+    Str url, resolved;
+    const char *tag;
+    int ok = 0;
+
+    str_initv(&url, &resolved, (Str *)NULL);
+    str_addz(&url, "https://github.com/");
+    str_addzz(&url, repo, "/releases/latest", (const char *)NULL);
+    if (osr_fetch_final_url(&resolved, str_text(&url))) {
+        tag = strstr(str_text(&resolved), marker);
+        if (tag != NULL) {
+            tag += sizeof(marker) - 1;
+            if (*tag != '\0') { str_addz(out, tag); ok = 1; }
+        }
+    }
+    str_freev(&url, &resolved, (Str *)NULL);
+    return ok;
+}
+
 /* github_tag -- the body both entry points share. quiet drops the "could not
  * resolve" warning, which is what a caller with a fallback wants: lib/build.sh
  * spelled that `github_latest ... 2>/dev/null || _tag=""`. */
@@ -193,6 +226,8 @@ static int github_tag(Str *out, const char *repo, int quiet) {
     Str url, json;
 
     if (osr_theme_only()) return !osr_theme_only_skip("github_latest");
+
+    if (github_tag_via_redirect(out, repo)) return 1;
 
     str_init(&url);
     str_addz(&url, "https://api.github.com/repos/");
