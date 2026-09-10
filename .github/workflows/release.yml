@@ -45,10 +45,16 @@ jobs:
   test:
     uses: ./.github/workflows/os-rice-ci.yml
 
-  # One job per shipped binary, all on ubuntu-latest, because nob.c picks its
+  # One job per shipped binary, on a Linux runner, because nob.c picks its
   # target purely from $CC (see target_windows() / target_needs_own_tls()) --
   # cross-compiling is the normal way this tree is built, not a special case,
   # and a Linux runner can produce all nine artifacts.
+  #
+  # The exception is the HOST for the two aarch64 Linux legs, which is an
+  # aarch64 runner (`runner:` below, defaulting to ubuntu-latest). The Windows
+  # legs stay cross-compiled: a PE file does not care which machine linked it,
+  # and what a Windows runner would add -- actually executing the thing -- is
+  # what os-rice-ci.yml's windows-latest and windows-11-arm jobs already do.
   #
   # Two toolchain families, for two different reasons:
   #
@@ -80,7 +86,7 @@ jobs:
   # name-based tier detection concludes on its own.
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner || 'ubuntu-latest' }}
     timeout-minutes: 30
     defaults:
       run:
@@ -105,10 +111,19 @@ jobs:
           - slug: linux-x86_64-musl
             cc: zig cc -target x86_64-linux-musl
             expect: 'ELF 64-bit.*x86-64.*statically linked'
+          # The two aarch64 legs build on an aarch64 runner, so `zig cc
+          # -target aarch64-linux-*` is a NATIVE build here, not a cross one.
+          # Same driver and same -target as before -- keeping them explicit is
+          # what makes the glibc/musl split a property of the matrix rather
+          # than of whatever libc the host happens to have -- but the compiler
+          # now sees the machine the artifact is for, and the CI gate above
+          # has already run the suite on that machine.
           - slug: linux-aarch64-glibc
+            runner: ubuntu-24.04-arm
             cc: zig cc -target aarch64-linux-gnu
             expect: 'ELF 64-bit.*aarch64.*dynamically linked'
           - slug: linux-aarch64-musl
+            runner: ubuntu-24.04-arm
             cc: zig cc -target aarch64-linux-musl
             expect: 'ELF 64-bit.*aarch64.*statically linked'
           - slug: linux-x86-glibc
@@ -223,10 +238,18 @@ jobs:
           if-no-files-found: error
 
   # Optional gate: does the tree still build under every front end the README
-  # claims, and at what cost. One job per compiler, all on the same
-  # ubuntu-latest x86_64 image, because the numbers are RATIOS against that
-  # host's gcc -- comparing a time measured on one runner against a size
-  # measured on another would be meaningless.
+  # claims, and at what cost. One job per compiler and architecture. The
+  # numbers are RATIOS against that host's gcc -- comparing a time measured on
+  # one runner against a size measured on another would be meaningless -- so
+  # each architecture carries its own gcc row and is rendered as its own
+  # table; nothing is ever divided across the two.
+  #
+  # arm64 runs the three REQUIRED compilers only. gcc, clang and zig are the
+  # ones that ship binaries, so their arm64 numbers are about a target the
+  # release actually has. The courtesy front ends are x86_64-only by their own
+  # nature rather than by choice here: lacc emits x86_64 and nothing else, pcc
+  # has no aarch64 backend, and tcc's is not a thing to hang a release gate
+  # on. A blank row for each of them on arm would say less than their absence.
   #
   # `required: true` on gcc, clang and zig: those three are the compilers CI
   # already builds and ships with, so a failure there is a real regression and
@@ -243,7 +266,7 @@ jobs:
   # the exception -- it has no module, it is one apt package.
   ccbench:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 45
     defaults:
       run:
@@ -252,35 +275,58 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - slug: gcc
+          - arch: x86_64
+            slug: gcc
             name: '[gcc](https://gcc.gnu.org/)'
             cc: gcc
             required: true
-          - slug: clang
+          - arch: x86_64
+            slug: clang
             name: '[clang](https://clang.llvm.org/)'
             cc: clang
             required: true
-          - slug: zig
+          - arch: x86_64
+            slug: zig
             name: '[zig](https://ziglang.org/)'
             cc: zig cc
             zig: '0.14.1'
             required: true
-          - slug: tcc
+          - arch: arm64
+            slug: gcc
+            name: '[gcc](https://gcc.gnu.org/)'
+            cc: gcc
+            required: true
+          - arch: arm64
+            slug: clang
+            name: '[clang](https://clang.llvm.org/)'
+            cc: clang
+            required: true
+          - arch: arm64
+            slug: zig
+            name: '[zig](https://ziglang.org/)'
+            cc: zig cc
+            zig: '0.14.1'
+            required: true
+          - arch: x86_64
+            slug: tcc
             name: '[tcc](https://bellard.org/tcc/)'
             cc: tcc
             module: tcc
-          - slug: pcc
+          - arch: x86_64
+            slug: pcc
             name: '[pcc](http://pcc.ludd.ltu.se/)'
             cc: pcc
             apt: pcc
-          - slug: lacc
+          - arch: x86_64
+            slug: lacc
             name: '[lacc](https://github.com/larmel/lacc)'
             # The module symlinks its prefix into ~/.local/bin, which the
             # bench step puts on PATH.
             cc: lacc
             module: lacc
             note: 'C89 by design, own assembler and ELF writer'
-          - slug: cproc
+          - arch: x86_64
+            slug: cproc
             name: '[cproc](https://github.com/michaelforney/cproc) + [QBE](https://c9x.me/compile/)'
             cc: cproc
             module: cproc
@@ -313,7 +359,7 @@ jobs:
       #
       # A failing optional compiler still has to leave a row behind, which is
       # why the whole thing is `|| ok=0` rather than `set -e`.
-      - name: Time ${{ matrix.slug }}
+      - name: Time ${{ matrix.slug }} (${{ matrix.arch }})
         env:
           CC: ${{ matrix.cc }}
         run: |
@@ -336,8 +382,8 @@ jobs:
           ver=$($CC --version 2>/dev/null | head -1 \
                 | sed 's| *([^()]*://[^()]*)||g; s|  *| |g; s| *$||' | cut -c1-60)
           [ -n "$ver" ] || ver='-'
-          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \
+          printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            '${{ matrix.arch }}' '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \
             "${secs:-0}" "$bytes" "$ver" '${{ matrix.note || '-' }}' > row.tsv
           cat row.tsv
           # A required compiler that cannot build the tree fails the release.
@@ -345,7 +391,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ccbench-${{ matrix.slug }}
+          name: ccbench-${{ matrix.arch }}-${{ matrix.slug }}
           path: os-rice/row.tsv
           if-no-files-found: error
 
@@ -413,42 +459,50 @@ jobs:
           cd dist && sha256sum osr-* > SHA256SUMS
           cat SHA256SUMS
 
-      # The compiler table, assembled here rather than in the bench jobs
-      # because it is the only place that has all seven rows at once -- and
-      # the ratios are meaningless without the gcc row to divide by. Rows
-      # come pre-sorted (successes first, then by time) so awk can print in
-      # input order and stay a one-pass script.
-      - name: Render the compiler table
+      # The compiler tables, assembled here rather than in the bench jobs
+      # because it is the only place that has every row at once -- and the
+      # ratios are meaningless without that architecture's gcc row to divide
+      # by. Rows come pre-sorted (successes first, then by time) so awk can
+      # print in input order and stay a one-pass script.
+      #
+      # One table per architecture, filtered on the row's own arch column: an
+      # x86_64 second and an arm64 second are different seconds, and a single
+      # merged table with one BASE would silently be claiming otherwise.
+      - name: Render the compiler tables
         run: |
           {
             echo "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`."
-            echo
-            echo "#### Compiler autotests (x86_64, ubuntu-latest)"
-            echo
-            echo "Lower x is faster/smaller. The ratio is against this runner's gcc."
-            echo
-            echo "| Compiler | Version | Notes | _Compilation time_ | Output size |"
-            echo "| --- | --- | --- | --- | --- |"
-            cat artifacts/ccbench-*/row.tsv |
-              sort -t"$(printf '\t')" -k3,3n -k4,4g |
-              awk -F'\t' '
-                { n++; f[n]=$0; if ($1 == "gcc" && $3 == 0) { bs=$4; bz=$5 } }
-                END {
-                  for (i = 1; i <= n; i++) {
-                    split(f[i], c, "\t")
-                    if (c[3] != 0) {
-                      printf "| %s | %s | %s | _failed to compile_ | - |\n", c[2], c[6], c[7]
-                      continue
+            for a in x86_64:ubuntu-latest arm64:ubuntu-24.04-arm; do
+              arch=${a%:*} host=${a#*:}
+              echo
+              echo "#### Compiler autotests ($arch, $host)"
+              echo
+              echo "Lower x is faster/smaller. The ratio is against this runner's gcc."
+              echo
+              echo "| Compiler | Version | Notes | _Compilation time_ | Output size |"
+              echo "| --- | --- | --- | --- | --- |"
+              cat artifacts/ccbench-*/row.tsv |
+                awk -F'\t' -v arch="$arch" '$1 == arch' |
+                sort -t"$(printf '\t')" -k4,4n -k5,5g |
+                awk -F'\t' '
+                  { n++; f[n]=$0; if ($2 == "gcc" && $4 == 0) { bs=$5; bz=$6 } }
+                  END {
+                    for (i = 1; i <= n; i++) {
+                      split(f[i], c, "\t")
+                      if (c[4] != 0) {
+                        printf "| %s | %s | %s | _failed to compile_ | - |\n", c[3], c[7], c[8]
+                        continue
+                      }
+                      t = sprintf("%.3fs", c[5]); z = sprintf("%.0f KiB", c[6] / 1024)
+                      if (c[2] == "gcc") { t = t " **BASE**"; z = z " **BASE**" }
+                      else if (bs > 0) {
+                        t = sprintf("%s %.3fx", t, c[5] / bs)
+                        z = sprintf("%s %.3fx", z, c[6] / bz)
+                      }
+                      printf "| %s | %s | %s | %s | %s |\n", c[3], c[7], c[8], t, z
                     }
-                    t = sprintf("%.3fs", c[4]); z = sprintf("%.0f KiB", c[5] / 1024)
-                    if (c[1] == "gcc") { t = t " **BASE**"; z = z " **BASE**" }
-                    else if (bs > 0) {
-                      t = sprintf("%s %.3fx", t, c[4] / bs)
-                      z = sprintf("%s %.3fx", z, c[5] / bz)
-                    }
-                    printf "| %s | %s | %s | %s | %s |\n", c[2], c[6], c[7], t, z
-                  }
-                }'
+                  }'
+            done
           } > notes.md
           cat notes.md
 

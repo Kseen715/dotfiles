@@ -25,18 +25,28 @@ jobs:
   # `osr test` rather than `nob test` directly: it is the entry point a
   # contributor runs, it bootstraps build/nob with the same $CC, and it adds
   # the lint pass (dash -n + shellcheck) the C tests do not cover.
+  #
+  # The second axis is the HOST ARCHITECTURE. The release ships aarch64 Linux
+  # binaries, and until now nothing in this repository ever RAN one: they were
+  # cross-compiled on x86_64 and checked with file(1), which proves the ELF
+  # header and nothing about the code. GitHub's arm64 Linux runners are
+  # standard-tier, so the same three front ends now also build and run the
+  # suite on the machine those artifacts are for -- where the tests can catch
+  # what a cross build cannot (alignment, unsigned char, anything the x86
+  # memory model was hiding).
   lint-and-unit:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
         cc: [gcc, clang, tcc]
     steps:
       - uses: actions/checkout@v7
       - name: Install dash, shellcheck, zsh, ${{ matrix.cc }}
         run: sudo apt-get update -q && sudo apt-get install -y dash shellcheck zsh ${{ matrix.cc }}
-      - name: Lint + unit tests (CC=${{ matrix.cc }})
+      - name: Lint + unit tests (CC=${{ matrix.cc }}, ${{ matrix.os }})
         run: CC=${{ matrix.cc }} sh os-rice/osr test
 
   # The Windows tier, which nothing else in this file covers: the matrix images
@@ -53,17 +63,33 @@ jobs:
   # Two compilers again, and here they are not merely different front ends but
   # different DIALECTS: nob.c spells its flags twice (is_msvc_name -> /W4 /c
   # /Fo versus -Wall -c -o), and only cl.exe exercises the MSVC half.
+  #
+  # Three legs, not two: windows-11-arm is a standard runner, so the MSVC leg
+  # also runs on native Windows-on-ARM. That is the host the release's
+  # windows-aarch64 artifact targets, and the only place its code has ever
+  # been executed rather than merely linked. No mingw leg there -- the arm64
+  # image ships Visual Studio, not a MinGW gcc, and adding one via MSYS2 would
+  # buy a front end that leg's x64 twin already covers.
   unit-windows:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
           - toolchain: mingw-gcc
+            os: windows-latest
             cc: gcc
           - toolchain: msvc
+            os: windows-latest
             cc: cl.exe
+            # The vcvars script names the HOST/TARGET pair, so it is the one
+            # thing that differs between the two MSVC legs.
+            vcvars: vcvars64.bat
+          - toolchain: msvc-arm64
+            os: windows-11-arm
+            cc: cl.exe
+            vcvars: vcvarsarm64.bat
     env:
       # Explicit rather than left to nob.c's ladder: clang is on the runner
       # too, so an unset $CC would quietly give both legs the same front end.
@@ -88,13 +114,13 @@ jobs:
           gcc -o build\nob.exe nob.c || exit /b 1
           build\nob.exe || exit /b 1
           build\nob.exe test || exit /b 1
-      - name: Build + unit tests (MSVC)
-        if: matrix.toolchain == 'msvc'
+      - name: Build + unit tests (MSVC, ${{ matrix.vcvars }})
+        if: matrix.vcvars != ''
         shell: cmd
         run: |
           if not exist build mkdir build
           for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VSDIR=%%i"
-          call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" || exit /b 1
+          call "%VSDIR%\VC\Auxiliary\Build\${{ matrix.vcvars }}" || exit /b 1
           cl /nologo /Fe:build\nob.exe /Fobuild\ nob.c || exit /b 1
           build\nob.exe || exit /b 1
           build\nob.exe test || exit /b 1
@@ -105,12 +131,24 @@ jobs:
   # script test/matrix.sh runs locally -- here it is launched directly, one image
   # per job, so a failure is annotated against that image and its log is the
   # plain container output rather than a rendered table.
+  #
+  # Also both architectures: the install path is shell, but what it installs is
+  # PACKAGES, and a distro's arm64 repository is not its amd64 repository with
+  # the same names -- a missing candidate there is exactly the kind of failure
+  # that turns "second run is all skips" into a second install attempt. The
+  # images are pulled by the same tag on both hosts; a multi-arch manifest
+  # hands each runner its native variant, so nothing is emulated.
+  #
+  # archlinux is x86_64 only -- upstream publishes no arm64 image (Arch ARM is
+  # a separate project with separate images), so that pair is excluded rather
+  # than left to fail on the pull.
   idempotency-matrix:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        arch: [x86_64, arm64]
         image:
           - ubuntu:jammy
           - ubuntu:noble
@@ -119,13 +157,16 @@ jobs:
           - alpine:latest
           - archlinux:latest
           - fedora:latest
+        exclude:
+          - arch: arm64
+            image: archlinux:latest
     steps:
       - uses: actions/checkout@v7
       # The checkout goes in read-only -- the test must not write into the tree
       # it is testing -- with a tmpfs over os-rice/build, which is the one path
       # that HAS to be writable: os-rice is a C program and `osr` builds it
       # before it runs anything. exec, because what is built there is then run.
-      - name: Double-run install on ${{ matrix.image }}
+      - name: Double-run install on ${{ matrix.image }} (${{ matrix.arch }})
         run: |
           # The mountpoint has to exist before the tmpfs can go over it, and a
           # fresh checkout has no build/ -- the engine cannot create it either,
