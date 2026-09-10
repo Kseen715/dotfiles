@@ -3038,7 +3038,11 @@ crc32(unsigned long crc, const void *_p, size_t len)
 {
 	unsigned long crc2, b, i;
 	const unsigned char *p = _p;
-	static volatile int crc_tbl_inited = 0;
+	/* amalgamated: `volatile` dropped -- cproc, one of the compilers
+	 * nob.c drives, has no volatile store. The flag guards a lazy
+	 * table of 256 constants that any racing thread would fill
+	 * identically, and upstream reads it with a plain load. */
+	static int crc_tbl_inited = 0;
 	static unsigned long crc_tbl[256];
 
 	if (_p == NULL)

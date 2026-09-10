@@ -215,6 +215,15 @@ PACKED_FALLBACK = re.compile(
     re.M)
 
 
+# archive_crc32.h's crc32() guards its lazy table init with a `static
+# volatile int`, which cproc -- one of the compilers nob.c drives -- rejects
+# outright ("volatile store is not yet supported"). The qualifier buys
+# nothing here even where it compiles: the table is filled with the same 256
+# constants by whoever gets there first, and libarchive reads the flag with
+# an ordinary load either way.
+CRC_TBL_VOLATILE = re.compile(r'^\tstatic volatile int crc_tbl_inited = 0;$', re.M)
+
+
 def clean(text, path):
     """Two upstream edits: C99's lldiv(), and BLAKE2_PACKED's _Pragma.
 
@@ -234,6 +243,15 @@ def clean(text, path):
             " * is why the MSVC and GNU branches above agree with it. */\n"
             '#define BLAKE2_PACKED(x) x', text)
         assert n == 1, 'archive_blake2.h no longer has the _Pragma BLAKE2_PACKED'
+        return text
+    if os.path.basename(path) == 'archive_crc32.h':
+        text, n = CRC_TBL_VOLATILE.subn(
+            '\t/* amalgamated: `volatile` dropped -- cproc, one of the compilers\n'
+            '\t * nob.c drives, has no volatile store. The flag guards a lazy\n'
+            '\t * table of 256 constants that any racing thread would fill\n'
+            '\t * identically, and upstream reads it with a plain load. */\n'
+            '\tstatic int crc_tbl_inited = 0;', text)
+        assert n == 1, 'archive_crc32.h no longer guards its table with a volatile int'
         return text
     if os.path.basename(path) != 'archive_time.c':
         return text

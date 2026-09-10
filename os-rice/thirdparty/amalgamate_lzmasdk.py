@@ -161,6 +161,14 @@ NO_CPUID = re.compile(
 # fallback upstream already wrote.
 UINTPTR = re.compile(r'^  #elif 1\n    uintptr_t\n', re.M)
 
+# 7zTypes.h guards its _Pragma("GCC diagnostic ...") cast-qual suppression
+# on __clang__ || __GNUC__. pcc -- another front end nob.c drives -- defines
+# __GNUC__ 4 for glibc's headers and then rejects the pragma its ccom has
+# never heard of, from every function using Z7_CONTAINER_FROM_VTBL. The #else
+# branch upstream already wrote defines the macros empty.
+CAST_QUAL = re.compile(r'^#if defined \(__clang__\) \|\| defined\(__GNUC__\)\n'
+                       r'(?=#define Z7_DIAGNOSTIC_IGNORE_BEGIN_CAST_QUAL)', re.M)
+
 PACK_PUSH = re.compile(r'^MY_CPU_pragma_pack_push_1$', re.M)
 PACK_POP = re.compile(r'^MY_CPU_pragma_pop$', re.M)
 
@@ -216,6 +224,21 @@ def clean(text, path):
         assert n == 1, "CpuArch.c no longer has the no-cpuid branch"
         return _clean_sha(text, path)
     if os.path.basename(path) == '7zTypes.h':
+        text, n = CAST_QUAL.subn(
+            '/* amalgamated: !__PCC__ added to upstream\'s guard. pcc defines'
+            ' __GNUC__ (4,\n'
+            ' * for glibc\'s headers) but its ccom rejects a'
+            ' _Pragma("GCC diagnostic ...")\n'
+            ' * outright -- "bad argument to #pragma", from every function'
+            ' that uses\n'
+            ' * Z7_CONTAINER_FROM_VTBL. The #else below defines both macros'
+            ' empty, which\n'
+            ' * costs a warning suppression and nothing else; nob.c builds'
+            ' this file with\n'
+            ' * -w anyway. */\n'
+            '#if (defined (__clang__) || defined(__GNUC__))'
+            ' && !defined(__PCC__)\n', text)
+        assert n == 1, '7zTypes.h no longer guards CAST_QUAL on __clang__/__GNUC__'
         text, n = FORCE_INLINE.subn(r'\1', text)
         assert n == 1, '7zTypes.h no longer spells Z7_FORCE_INLINE with `inline`'
         return text

@@ -614,7 +614,13 @@ struct ISzAlloc
 /*
 #define Z7_CONTAINER_FROM_VTBL_CLS(ptr, type, m) Z7_CONTAINER_FROM_VTBL(ptr, type, m)
 */
-#if defined (__clang__) || defined(__GNUC__)
+/* amalgamated: !__PCC__ added to upstream's guard. pcc defines __GNUC__ (4,
+ * for glibc's headers) but its ccom rejects a _Pragma("GCC diagnostic ...")
+ * outright -- "bad argument to #pragma", from every function that uses
+ * Z7_CONTAINER_FROM_VTBL. The #else below defines both macros empty, which
+ * costs a warning suppression and nothing else; nob.c builds this file with
+ * -w anyway. */
+#if (defined (__clang__) || defined(__GNUC__)) && !defined(__PCC__)
 #define Z7_DIAGNOSTIC_IGNORE_BEGIN_CAST_QUAL \
   _Pragma("GCC diagnostic push") \
   _Pragma("GCC diagnostic ignored \"-Wcast-qual\"")

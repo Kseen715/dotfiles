@@ -1074,6 +1074,30 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * invoked bare -- append_cc(cmd) above already put it on the line. */
         return;
     }
+    if (is_cproc()) {
+        /* cproc preprocesses with an external `cpp -undef` (its config.h
+         * preprocesscmd), and the cpp it finds is gcc's -- whose <limits.h>
+         * comes first on the include path and spells CHAR_BIT, SHRT_MAX and
+         * the rest as the __CHAR_BIT__/__SHRT_MAX__ builtins that -undef just
+         * removed. Undefined identifiers are 0 in #if, so thirdparty/zstd.h's
+         * "char must be exactly 8-bit" checks fail on a host where char is
+         * eight bits. cproc's own configure defines the __SIZEOF_* half of
+         * this set for the same reason (its comment: "used by freebsd"); the
+         * width macros below are the rest of it. One set of values covers
+         * every cproc row: its configure supports lp64 targets only, so long
+         * is 64-bit wherever cproc runs at all.
+         *
+         * Hex, and __LONG_LONG_MAX__ suffixed L rather than LL, to match
+         * cproc's own spelling of the two it already defines character for
+         * character: cpp compares the token text, so 2147483647 for its
+         * 0x7fffffff would be a "redefined" warning on every translation
+         * unit. Older cproc defines neither, which is why both stay here. */
+        cmd_append_args(cmd, "-D__CHAR_BIT__=8", "-D__SCHAR_MAX__=0x7f",
+                        "-D__SHRT_MAX__=0x7fff", "-D__INT_MAX__=0x7fffffff",
+                        "-D__LONG_MAX__=0x7fffffffffffffffL", NULL);
+        cmd_append_args(cmd, "-D__LONG_LONG_MAX__=0x7fffffffffffffffL",
+                        "-D__WCHAR_MAX__=0x7fffffff", NULL);
+    }
     if (vendored_src(src)) {
         /* C89 like the rest of the tree -- each thirdparty/amalgamate_*.py
          * rewrites upstream's `//` comments and `inline` away, and nothing

@@ -22,9 +22,13 @@
 #endif
 
 /* tcc defines neither __GNUC__ nor an ARM inline assembler, so upstream's
- * prefetch falls through to the aarch64 `prfm` asm it cannot compile. The
- * hint is an optimisation; dropping it only costs speed. */
-#if defined(__TINYC__)
+ * prefetch falls through to the aarch64 `prfm` asm it cannot compile. pcc
+ * takes the other branch and fails there instead: it defines __GNUC__ (4,
+ * for glibc's headers) and has a one-argument __builtin_prefetch, while
+ * upstream calls it with three ("wrong argument count to
+ * __builtin_prefetch"). The hint is an optimisation; dropping it only costs
+ * speed. */
+#if defined(__TINYC__) || defined(__PCC__)
 #define NO_PREFETCH 1
 #endif
 

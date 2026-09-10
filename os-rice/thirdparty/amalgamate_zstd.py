@@ -110,6 +110,33 @@ REPEAT = ('zstd_deps.h',)
 # it is gated on __GNUC__ like its neighbours. Non-GNU compilers fall out of
 # the chain with the feature words left at zero, which is what ZSTD_cpuid
 # already returns everywhere that is not x86.
+# zstd_deps.h routes ZSTD_memcpy/memmove/memset through the __builtin_
+# spellings on any __GNUC__ >= 4. pcc -- another front end nob.c drives --
+# claims __GNUC__ 4 so glibc's headers work, and implements the memcpy and
+# memset builtins but not memmove, which then goes undefined at link time.
+# The #else branch upstream already wrote calls libc directly.
+MEM_BUILTINS = re.compile(
+    r'^#if defined\(__GNUC__\) && __GNUC__ >= 4$\n'
+    r'(?=# define ZSTD_memcpy)', re.M)
+
+
+# zstd_trace.h turns on its weak-symbol hooks for any __GNUC__ on ELF. pcc
+# claims both and then ignores __attribute__((__weak__)), leaving the four
+# ZSTD_trace_* calls undefined at link time; with the guard off, ZSTD_TRACE
+# is 0 and they are never declared.
+WEAK_SYMBOLS = re.compile(
+    r'^#if !defined\(ZSTD_HAVE_WEAK_SYMBOLS\) && \\$', re.M)
+
+
+WEAK_SYMBOLS_REPL = (
+    "/* amalgamated: !__PCC__ added to upstream's guard. pcc defines __GNUC__ 4\n"
+    ' * and __ELF__ but drops __attribute__((__weak__)) on the floor, so the four\n'
+    ' * ZSTD_trace_* hooks below become undefined references at link time instead\n'
+    ' * of weak no-ops. With this 0, ZSTD_TRACE is 0 and the hooks are never\n'
+    ' * declared or called at all -- which is what every non-ELF target does. */\n'
+    '#if !defined(ZSTD_HAVE_WEAK_SYMBOLS) && !defined(__PCC__) && \\')
+
+
 CPUID_ASM = re.compile(
     r'^#elif defined\(__x86_64__\) \|\| defined\(_M_X64\) \|\| defined\(__i386__\)$',
     re.M)
@@ -121,6 +148,18 @@ def clean(text, path):
             '#elif (defined(__x86_64__) || defined(_M_X64) '
             '|| defined(__i386__)) && defined(__GNUC__)', text)
         assert n == 1, 'cpu.h no longer selects its asm cpuid on arch alone'
+    if os.path.basename(path) == 'zstd_trace.h':
+        # lambda, not a template: the replacement ends in the guard's line
+        # continuation and re would read that backslash as an escape.
+        text, n = WEAK_SYMBOLS.subn(lambda m: WEAK_SYMBOLS_REPL, text)
+        assert n == 1, 'zstd_trace.h no longer opens its guard on ZSTD_HAVE_WEAK_SYMBOLS'
+    if os.path.basename(path) == 'zstd_deps.h':
+        text, n = MEM_BUILTINS.subn(
+            "/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers\n"
+            ' * but has no __builtin_memmove, so every use below is an undefined\n'
+            ' * reference at link time. The #else spells the same three calls. */\n'
+            '#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)\n', text)
+        assert n == 1, 'zstd_deps.h no longer picks the mem builtins on __GNUC__ >= 4'
     return text
 
 

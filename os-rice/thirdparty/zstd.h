@@ -3499,7 +3499,10 @@ ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* bloc
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -3631,7 +3634,10 @@ ZSTDLIB_STATIC_API size_t ZSTD_insertBlock    (ZSTD_DCtx* dctx, const void* bloc
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -4409,7 +4415,10 @@ unsigned char* ZSTD_maybeNullPtrAdd(unsigned char* ptr, ptrdiff_t add)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -4591,7 +4600,10 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -5139,7 +5151,10 @@ MEM_STATIC void MEM_check(void) { DEBUG_STATIC_ASSERT((sizeof(size_t)==4) || (si
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -5421,7 +5436,10 @@ void _force_has_format_string(const char *format, ...) {
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -6827,7 +6845,10 @@ MEM_STATIC unsigned FSE_endOfDState(const FSE_DState_t* DStatePtr)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -7620,7 +7641,10 @@ const char* ERR_getErrorString(ERR_enum code)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -15443,7 +15467,12 @@ MEM_STATIC ZSTD_cpuid_t ZSTD_cpuid(void) {
  * Also, explicitly disable on platforms known not to work so they aren't
  * forgotten in the future.
  */
-#if !defined(ZSTD_HAVE_WEAK_SYMBOLS) && \
+/* amalgamated: !__PCC__ added to upstream's guard. pcc defines __GNUC__ 4
+ * and __ELF__ but drops __attribute__((__weak__)) on the floor, so the four
+ * ZSTD_trace_* hooks below become undefined references at link time instead
+ * of weak no-ops. With this 0, ZSTD_TRACE is 0 and the hooks are never
+ * declared or called at all -- which is what every non-ELF target does. */
+#if !defined(ZSTD_HAVE_WEAK_SYMBOLS) && !defined(__PCC__) && \
     defined(__GNUC__) && defined(__ELF__) && \
     (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || \
      defined(_M_IX86) || defined(__aarch64__) || defined(__riscv)) && \
@@ -15956,7 +15985,10 @@ const char* ZSTD_getErrorString(ZSTD_ErrorCode code) { return ERR_getErrorString
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -18061,7 +18093,10 @@ size_t HUF_decompress4X_hufOnly_wksp(HUF_DTable* dctx, void* dst, size_t dstSize
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -18225,7 +18260,10 @@ MEM_STATIC void ZSTD_customFree(void* ptr, ZSTD_customMem customMem)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -18613,7 +18651,10 @@ void ZSTD_checkContinuity(ZSTD_DCtx* dctx, const void* dst, size_t dstSize);
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -20437,7 +20478,10 @@ unsigned ZSTD_getDictID_fromDDict(const ZSTD_DDict* ddict)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -20590,7 +20634,10 @@ unsigned ZSTD_getDictID_fromDDict(const ZSTD_DDict* ddict)
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))
@@ -23137,7 +23184,10 @@ size_t ZSTD_decompressStream_simpleArgs (
 #include <stddef.h>
 #include <string.h>
 
-#if defined(__GNUC__) && __GNUC__ >= 4
+/* amalgamated: !__PCC__ -- pcc defines __GNUC__ 4 for glibc's headers
+ * but has no __builtin_memmove, so every use below is an undefined
+ * reference at link time. The #else spells the same three calls. */
+#if defined(__GNUC__) && __GNUC__ >= 4 && !defined(__PCC__)
 # define ZSTD_memcpy(d,s,l) __builtin_memcpy((d),(s),(l))
 # define ZSTD_memmove(d,s,l) __builtin_memmove((d),(s),(l))
 # define ZSTD_memset(p,v,l) __builtin_memset((p),(v),(l))

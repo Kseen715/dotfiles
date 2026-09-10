@@ -408,9 +408,23 @@ jobs:
             boot: cl -nologo -Fe:build/nob.exe -Fobuild/ nob.c
             msvc: x64
             exe: .exe
-          # Windows-on-ARM is MSVC only: the arm64 image ships Visual Studio
-          # and no MinGW gcc, so this table has no gcc row and therefore no
-          # BASE to divide by -- the renderer below prints its times bare.
+          # zig on a Windows host, with the ABI pinned rather than native:
+          # `zig cc` with no -target picks the MSVC ABI when it finds a Visual
+          # Studio (both runner images have one) and the gnu one otherwise, so
+          # an unpinned row would silently be measuring a different toolchain
+          # on a runner image change. -gnu is also what the shipped
+          # windows-aarch64 binary is built with in the build job above.
+          - arch: windows-x86_64
+            runner: windows-latest
+            slug: zig
+            name: '[zig](https://ziglang.org/)'
+            cc: zig cc -target x86_64-windows-gnu
+            boot: zig cc -target x86_64-windows-gnu -o build/nob.exe nob.c
+            zig: '0.14.1'
+            exe: .exe
+            note: 'ABI pinned to -gnu'
+          # Windows-on-ARM: the arm64 image ships Visual Studio and no MinGW
+          # gcc, so MSVC is the BASE of that table (see the renderer below).
           - arch: windows-arm64
             runner: windows-11-arm
             slug: msvc
@@ -419,11 +433,28 @@ jobs:
             boot: cl -nologo -Fe:build/nob.exe -Fobuild/ nob.c
             msvc: arm64
             exe: .exe
+          - arch: windows-arm64
+            runner: windows-11-arm
+            slug: zig
+            name: '[zig](https://ziglang.org/)'
+            cc: zig cc -target aarch64-windows-gnu
+            boot: zig cc -target aarch64-windows-gnu -o build/nob.exe nob.c
+            zig: '0.14.1'
+            exe: .exe
+            note: 'ABI pinned to -gnu'
     steps:
       - uses: actions/checkout@v7
 
+      # continue-on-error, unlike the build job's copy of this step: a leg
+      # whose zig download has no build for that host (windows-11-arm is the
+      # candidate) would otherwise fail the JOB, and `release: needs: ccbench`
+      # makes that withhold every binary. Failing soft leaves $CC missing, the
+      # bench step below records "failed to compile" and the row is honest --
+      # and on the three `required: true` zig legs that row still fails the
+      # step, so nothing is papered over where it matters.
       - name: Install zig
         if: matrix.zig != ''
+        continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
           version: ${{ matrix.zig }}
@@ -577,7 +608,7 @@ jobs:
 
       # The compiler tables, assembled here rather than in the bench jobs
       # because it is the only place that has every row at once -- and the
-      # ratios are meaningless without that architecture's gcc row to divide
+      # ratios are meaningless without that architecture's BASE row to divide
       # by. Rows come pre-sorted (successes first, then by time) so awk can
       # print in input order and stay a one-pass script.
       #
@@ -585,28 +616,34 @@ jobs:
       # x86_64 second and an arm64 second are different seconds, and a single
       # merged table with one BASE would silently be claiming otherwise. The
       # same holds twice over for the Windows hosts, whose fastest row is a
-      # different compiler on a different OS. windows-arm64 has no gcc at all,
-      # so its table has no BASE and its times print unratioed -- which the
-      # `bs > 0` guard below already handled.
+      # different compiler on a different OS.
+      #
+      # Each architecture also names its OWN base compiler, third field of the
+      # loop below: gcc on Linux, MSVC on both Windows hosts. cl is the native
+      # front end there and the only one present on windows-arm64, so dividing
+      # by it is the comparison a Windows reader wants -- and it is the one
+      # base that exists in every Windows table. A base row that failed to
+      # compile leaves bs unset and the `bs > 0` guard prints times bare.
       - name: Render the compiler tables
         run: |
           {
             echo "Built from ${{ github.sha }}. Verify with \`sha256sum -c SHA256SUMS\`."
-            for a in x86_64:ubuntu-latest arm64:ubuntu-24.04-arm \
-                     windows-x86_64:windows-latest windows-arm64:windows-11-arm; do
-              arch=${a%:*} host=${a#*:}
+            for a in x86_64:ubuntu-latest:gcc arm64:ubuntu-24.04-arm:gcc \
+                     windows-x86_64:windows-latest:msvc \
+                     windows-arm64:windows-11-arm:msvc; do
+              IFS=: read -r arch host base <<<"$a"
               echo
               echo "#### Compiler autotests ($arch, $host)"
               echo
-              echo "Lower x is faster/smaller. Ratios, where shown, are against this runner's gcc."
+              echo "Lower x is faster/smaller. Ratios, where shown, are against this runner's $base."
               echo
               echo "| Compiler | Version | Notes | _Compilation time_ | Output size |"
               echo "| --- | --- | --- | --- | --- |"
               cat artifacts/ccbench-*/row.tsv |
                 awk -F'\t' -v arch="$arch" '$1 == arch' |
                 sort -t"$(printf '\t')" -k4,4n -k5,5g |
-                awk -F'\t' '
-                  { n++; f[n]=$0; if ($2 == "gcc" && $4 == 0) { bs=$5; bz=$6 } }
+                awk -F'\t' -v base="$base" '
+                  { n++; f[n]=$0; if ($2 == base && $4 == 0) { bs=$5; bz=$6 } }
                   END {
                     for (i = 1; i <= n; i++) {
                       split(f[i], c, "\t")
@@ -615,7 +652,7 @@ jobs:
                         continue
                       }
                       t = sprintf("%.3fs", c[5]); z = sprintf("%.0f KiB", c[6] / 1024)
-                      if (c[2] == "gcc") { t = t " **BASE**"; z = z " **BASE**" }
+                      if (c[2] == base) { t = t " **BASE**"; z = z " **BASE**" }
                       else if (bs > 0) {
                         t = sprintf("%s %.3fx", t, c[5] / bs)
                         z = sprintf("%s %.3fx", z, c[6] / bz)
