@@ -87,6 +87,24 @@ void osr_mozilla_profiles(Str *out, const char *root);
  * guessing a name the app would ignore. */
 int osr_install_mozilla_layer(const char *root, const char *user_js, const char *user_chrome);
 
+/* --- .desktop launcher switches --------------------------------------------
+ * osr_desktop_add_flags -- add command-line switches to every installed
+ * launcher matching pattern ("*chromium*.desktop"), by writing a patched copy
+ * into ~/.local/share/applications, which XDG ranks above the system one: the
+ * vendor's file is never touched and a package update cannot fight it (SS5).
+ *
+ * The switches go straight after the binary in each Exec= line, before the %U
+ * field code. A launcher that already carries this flag string is left alone,
+ * and a launcher already patched by another module is patched ON TOP of that
+ * copy, so two modules stamping the same browser keep both sets of switches.
+ *
+ * Returns how many launchers matched -- 0 means the app is not installed (or
+ * ships no entry), which is the caller's cue to say the switches went nowhere.
+ * Reads OSR_DESKTOP_DIRS for the system directories to scan. */
+#ifndef _WIN32
+int osr_desktop_add_flags(const char *pattern, const char *flags);
+#endif
+
 
 /* --- wallpaper: one resolution, one installed copy (§6) --------------------
  *

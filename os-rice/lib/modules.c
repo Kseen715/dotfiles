@@ -87,6 +87,7 @@ typedef struct {
     X("archives",        archives,        "x11+wayland", 0) \
     X("arocc",           arocc,           "x11+wayland", 0) \
     X("audio",           audio,           "x11+wayland", 0) \
+    X("autoscroll",      autoscroll,      "x11+wayland", 0) \
     X("avahi",           avahi,           "x11+wayland", 0) \
     X("benchmark",       benchmark,       "x11+wayland", 0) \
     X("blueman",         blueman,         "x11+wayland", 0) \

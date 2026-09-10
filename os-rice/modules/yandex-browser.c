@@ -27,8 +27,7 @@
  */
 #include "../lib/module.h"
 #include "../lib/common.h"
-
-#include <glob.h>
+#include "../lib/config.h"
 #include <stddef.h>
 
 /* flatten_flags -- the sh module's sed/tr pipeline: one switch per line with
@@ -59,36 +58,12 @@ static void flatten_flags(Str *out, const char *text, size_t len) {
     str_free(&joined);
 }
 
-/* stamp_exec -- `sed "s|^Exec=\\([^ ]*\\)|Exec=\\1 <flags>|"`: insert the
- * switches straight after the binary in every Exec= line ([Desktop Action]
- * entries included) and before the %U field code -- positional arguments after
- * it are URLs, not switches. */
-static void stamp_exec(Str *out, const char *text, size_t len, const char *flags) {
-    size_t pos = 0;
-    Line line;
-
-    while (next_line(text, len, &pos, &line)) {
-        if (line.len >= 5 && strncmp(line.start, "Exec=", 5) == 0) {
-            size_t i = 5;
-            while (i < line.len && line.start[i] != ' ') i++;
-            str_add(out, line.start, i);
-            str_addc(out, ' ');
-            str_addz(out, flags);
-            str_add(out, line.start + i, line.len - i);
-        } else {
-            str_add(out, line.start, line.len);
-        }
-        str_addc(out, '\n');
-    }
-}
-
 int osrm_yandex_browser(void) {
     static const char *const pkgs[] = { "yandex-browser", NULL };
-    Str path, flags, apps, dst, body;
+    Str path, flags;
     char *buf;
     size_t len;
     int ok;
-    int done = 0;
 
     ok = osr_pkg_install_step("Installing Yandex Browser", pkgs);
 
@@ -101,76 +76,18 @@ int osrm_yandex_browser(void) {
     flatten_flags(&flags, buf, len);
     free(buf);
 
-    str_init(&apps);
-    str_addzz(&apps, osr_mod_home(), "/.local/share/applications", (const char *)NULL);
-    ok = osr_mkdir_p(str_text(&apps)) && ok;
-
-    str_initv(&dst, &body, (Str *)NULL);
-    {
-        /* A variable only so the unit test can aim at a fixture dir. */
-        const char *dirs = env_str("OSR_DESKTOP_DIRS",
-                                   "/usr/share/applications /usr/local/share/applications");
-        const char *p = dirs;
-        while (*p != '\0') {
-            const char *start;
-            Str pattern;
-            glob_t g;
-            size_t i;
-
-            while (*p == ' ') p++;
-            start = p;
-            while (*p != '\0' && *p != ' ') p++;
-            if (p == start) continue;
-
-            str_init(&pattern);
-            str_add(&pattern, start, (size_t)(p - start));
-            /* Two entries ship with the deb under different names -- the
-             * reverse-DNS ru.yandex.desktop.browser.desktop and the plain
-             * yandex-browser.desktop (the one that is the http handler). Both
-             * exec the same binary and both get the flags: which one a launcher
-             * picks is not ours to predict. */
-            str_addz(&pattern, "/*yandex*browser*.desktop");
-            if (glob(str_text(&pattern), 0, NULL, &g) == 0) {
-                for (i = 0; i < g.gl_pathc; i++) {
-                    Str base;
-                    char *entry;
-                    size_t elen;
-
-                    if (!file_exists(g.gl_pathv[i])) continue;
-                    entry = slurp(g.gl_pathv[i], &elen);
-                    if (entry == NULL) continue;
-
-                    str_init(&base);
-                    base_of(&base, g.gl_pathv[i]);
-                    osr_infof("installing low-RAM launcher: %s", str_text(&base));
-
-                    str_reset(&body);
-                    stamp_exec(&body, entry, elen, str_text(&flags));
-                    free(entry);
-
-                    str_setz(&dst, str_text(&apps), "/", str_text(&base), (const char *)NULL);
-                    ok = osr_write_user(str_text(&dst), str_text(&body)) && ok;
-                    done = 1;
-                    str_free(&base);
-                }
-            }
-            globfree(&g);
-            str_free(&pattern);
-        }
-    }
-
-    /* The browser is installed either way, but without a launcher nothing
+    /* Two entries ship with the deb under different names -- the reverse-DNS
+     * ru.yandex.desktop.browser.desktop and the plain yandex-browser.desktop
+     * (the one that is the http handler). Both exec the same binary and both
+     * get the flags: which one a launcher picks is not ours to predict.
+     *
+     * The browser is installed either way, but without a launcher nothing
      * carries the flags -- say so instead of leaving the tuning silently
      * unapplied. */
-    if (!done)
+    if (osr_desktop_add_flags("*yandex*browser*.desktop", str_text(&flags)) == 0)
         osr_warn("no yandex-browser .desktop found - the low-RAM flags are not "
                  "applied (rerun this module after the install)");
-    if (osr_have_cmd("update-desktop-database")) {
-        char *argv[3];
-        argv[0] = (char *)"update-desktop-database"; argv[1] = apps.p; argv[2] = NULL;
-        (void)osr_run_user_quiet(argv);
-    }
 
-    str_freev(&path, &flags, &apps, &dst, &body, (Str *)NULL);
+    str_freev(&path, &flags, (Str *)NULL);
     return ok;
 }

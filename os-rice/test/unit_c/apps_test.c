@@ -272,7 +272,70 @@ int main(void) {
         "doing nothing -- the flags are the whole point of the module");
 
     /* ================================================================
-     * 3b. Thunderbird -- replace what the distro shipped, in the right order
+     * 3b. autoscroll -- middle-click autoscroll in both engine families
+     *
+     * The Chromium half rides the SAME launcher patch as the low-RAM flags,
+     * which is the interesting case: whichever module runs second must add its
+     * switches to the copy the first one wrote, not replace it.
+     * ================================================================ */
+    osr_sb_rm(&sb, "usr/share/applications");
+    osr_sb_rm(&sb, "home/.local/share/applications");
+    osr_sb_mkdir(&sb, "usr/share/applications");
+    osr_sb_write(&sb, "usr/share/applications/yandex-browser.desktop",
+        "[Desktop Entry]\n"
+        "Name=Yandex Browser\n"
+        "Exec=/usr/bin/yandex-browser-stable %U\n", 0644);
+    osr_sb_write(&sb, "usr/share/applications/chromium.desktop",
+        "[Desktop Entry]\n"
+        "Name=Chromium\n"
+        "Exec=/usr/bin/chromium %U\n", 0644);
+    /* A profile the browser has already made, named through profiles.ini the
+     * way a real Firefox root names it. */
+    osr_sb_mkdir(&sb, "home/.mozilla/firefox/abc123.default-release");
+    osr_sb_write(&sb, "home/.mozilla/firefox/profiles.ini",
+        "[Profile0]\nName=default-release\nPath=abc123.default-release\n", 0644);
+
+    run_module("yandex-browser");
+    run_module("autoscroll");
+    holds("home/.local/share/applications/chromium.desktop",
+        "Exec=/usr/bin/chromium --enable-blink-features=MiddleClickAutoscroll %U",
+        "autoscroll: the Blink feature is a command-line switch only, so it "
+        "goes into the launcher, before the %U field code");
+    holds("home/.local/share/applications/yandex-browser.desktop",
+        "--enable-blink-features=MiddleClickAutoscroll",
+        "autoscroll: a browser two modules both patch is patched on top of the "
+        "copy the first one wrote");
+    holds("home/.local/share/applications/yandex-browser.desktop",
+        "--process-per-site",
+        "autoscroll: and the other module's switches survive that -- the user "
+        "copy is the source when there is one");
+    holds("home/.mozilla/firefox/abc123.default-release/user.js",
+        "user_pref(\"general.autoScroll\", true);",
+        "autoscroll: the Firefox half is a pref, ensured in every profile "
+        "profiles.ini names");
+    holds("home/.mozilla/firefox/abc123.default-release/user.js",
+        "user_pref(\"middlemouse.paste\", false);",
+        "autoscroll: with the primary-selection paste that owns the same "
+        "button turned off, or the click pastes instead of scrolling");
+
+    run_module("autoscroll");
+    file_is("home/.local/share/applications/chromium.desktop",
+        "[Desktop Entry]\n"
+        "Name=Chromium\n"
+        "Exec=/usr/bin/chromium --enable-blink-features=MiddleClickAutoscroll %U\n",
+        "autoscroll: a rerun is a no-op -- a launcher already carrying the "
+        "switch is left alone rather than stamped twice");
+
+    osr_sb_rm(&sb, "usr/share/applications");
+    osr_sb_rm(&sb, "home/.mozilla");
+    osr_sb_mkdir(&sb, "usr/share/applications");
+    run_module("autoscroll");
+    said("not applied anywhere",
+        "autoscroll: with no launcher and no profile it warns rather than "
+        "reporting success having changed nothing");
+
+    /* ================================================================
+     * 3c. Thunderbird -- replace what the distro shipped, in the right order
      *
      * Ubuntu ships Thunderbird as a snap plus a transitional deb that points
      * at it. Both have to go BEFORE the real one is installed, and the order

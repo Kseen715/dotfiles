@@ -374,6 +374,7 @@ static const char *posix_srcs[] = {
     "modules/archives.c",
     "modules/arocc.c",
     "modules/audio.c",
+    "modules/autoscroll.c",
     "modules/avahi.c",
     "modules/benchmark.c",
     "modules/blueman.c",

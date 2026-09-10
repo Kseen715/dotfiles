@@ -35,6 +35,9 @@
 #define close _close
 #endif
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <glob.h>
+#endif
 
 #include "config.h"
 #include "build.h"
@@ -696,6 +699,113 @@ static void write_as_user(const char *path, const char *text, size_t len) {
     }
     str_free(&tmp);
 }
+
+/* --- .desktop launcher switches --------------------------------------------- */
+#ifndef _WIN32
+/* stamp_exec -- `sed "s|^Exec=\\([^ ]*\\)|Exec=\\1 <flags>|"`: insert the
+ * switches straight after the binary in every Exec= line ([Desktop Action]
+ * entries included) and before the %U field code -- positional arguments after
+ * it are URLs, not switches. */
+static void stamp_exec(Str *out, const char *text, size_t len, const char *flags) {
+    size_t pos = 0;
+    Line line;
+
+    while (next_line(text, len, &pos, &line)) {
+        if (line.len >= 5 && strncmp(line.start, "Exec=", 5) == 0) {
+            size_t i = 5;
+            while (i < line.len && line.start[i] != ' ') i++;
+            str_add(out, line.start, i);
+            str_addc(out, ' ');
+            str_addz(out, flags);
+            str_add(out, line.start + i, line.len - i);
+        } else {
+            str_add(out, line.start, line.len);
+        }
+        str_addc(out, '\n');
+    }
+}
+
+/* contains -- `grep -F`, over bytes that are not NUL-terminated. */
+static int contains(const char *text, size_t len, const char *needle) {
+    size_t n = strlen(needle);
+    size_t i;
+    if (n == 0 || n > len) return 0;
+    for (i = 0; i + n <= len; i++)
+        if (memcmp(text + i, needle, n) == 0) return 1;
+    return 0;
+}
+
+int osr_desktop_add_flags(const char *pattern, const char *flags) {
+    /* A variable only so a unit test can aim at a fixture dir. */
+    const char *dirs = env_str("OSR_DESKTOP_DIRS",
+                               "/usr/share/applications /usr/local/share/applications");
+    const char *p = dirs;
+    Str apps, dst, body;
+    int n = 0;
+
+    str_init(&apps);
+    str_addzz(&apps, osr_mod_home(), "/.local/share/applications", (const char *)NULL);
+    osr_mkdir_p(str_text(&apps));
+    str_initv(&dst, &body, (Str *)NULL);
+
+    while (*p != '\0') {
+        const char *start;
+        Str glob_pattern;
+        glob_t g;
+        size_t i;
+
+        while (*p == ' ') p++;
+        start = p;
+        while (*p != '\0' && *p != ' ') p++;
+        if (p == start) continue;
+
+        str_init(&glob_pattern);
+        str_add(&glob_pattern, start, (size_t)(p - start));
+        str_addz(&glob_pattern, "/");
+        str_addz(&glob_pattern, pattern);
+        if (glob(str_text(&glob_pattern), 0, NULL, &g) == 0) {
+            for (i = 0; i < g.gl_pathc; i++) {
+                Str base;
+                char *entry;
+                size_t elen;
+
+                if (!file_exists(g.gl_pathv[i])) continue;
+                str_init(&base);
+                base_of(&base, g.gl_pathv[i]);
+                str_setz(&dst, str_text(&apps), "/", str_text(&base), (const char *)NULL);
+
+                /* The user-level copy is the source when there is one, so two
+                 * modules stamping the same launcher ACCUMULATE their switches
+                 * instead of the second one dropping the first one's. */
+                entry = slurp(file_exists(str_text(&dst)) ? str_text(&dst) : g.gl_pathv[i], &elen);
+                if (entry == NULL) { str_free(&base); continue; }
+                n++;
+                if (contains(entry, elen, flags)) {   /* already stamped: rerun */
+                    free(entry);
+                    str_free(&base);
+                    continue;
+                }
+                osr_infof("stamping launcher switches into %s", str_text(&base));
+                str_reset(&body);
+                stamp_exec(&body, entry, elen, flags);
+                free(entry);
+                osr_write_user(str_text(&dst), str_text(&body));
+                str_free(&base);
+            }
+        }
+        globfree(&g);
+        str_free(&glob_pattern);
+    }
+
+    if (n > 0 && osr_have_cmd("update-desktop-database")) {
+        char *argv[3];
+        argv[0] = (char *)"update-desktop-database"; argv[1] = apps.p; argv[2] = NULL;
+        (void)osr_run_user_quiet(argv);
+    }
+    str_freev(&apps, &dst, &body, (Str *)NULL);
+    return n;
+}
+#endif /* !_WIN32 */
 
 /* --- wallpaper -------------------------------------------------------------
  *

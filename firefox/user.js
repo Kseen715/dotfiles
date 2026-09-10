@@ -73,3 +73,12 @@ user_pref("browser.tabs.inTitlebar", 0);
 
 // Required for chrome/userChrome.css (the rice's colors) to be read at all.
 user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+
+// Middle-click autoscroll, the Windows behaviour: hold the wheel button and the
+// page follows the pointer. Off by default on Linux because X11 gave the middle
+// button to primary-selection paste — which is exactly what the other two prefs
+// turn off, since otherwise the same click pastes the selection or loads it as
+// a URL. modules/autoscroll.c ensures these same three lines in every profile.
+user_pref("general.autoScroll", true);
+user_pref("middlemouse.paste", false);
+user_pref("middlemouse.contentLoadURL", false);
