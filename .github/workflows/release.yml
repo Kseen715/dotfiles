@@ -153,8 +153,12 @@ jobs:
             exe: .exe
             expect: 'PE32 .*(80386|i386)'
             bearssl: present
+          # -s in $CC rather than a strip pass below: nothing on the runner
+          # strips an ARM64 PE (GNU strip is x86-only for mingw, `zig objcopy`
+          # is ELF-only), and this is the one leg whose checks below do not
+          # read symbols out of the image, so it can be linked stripped.
           - slug: windows-aarch64
-            cc: zig cc -target aarch64-windows-gnu
+            cc: zig cc -s -target aarch64-windows-gnu
             nob_target: windows
             exe: .exe
             expect: 'PE32\+.*([Aa]arch64|ARM64)'
@@ -226,6 +230,27 @@ jobs:
             present:*) echo "BearSSL linked, as expected" ;;
             absent:*)  echo "::error::${{ matrix.slug }}: vendored BearSSL linked in; this target should use schannel"; exit 1 ;;
           esac
+
+      # Stripped HERE, after both checks and not with a link-time -s: the
+      # BearSSL assertion above reads symbol names out of the linked image, so
+      # stripping first would delete the evidence it needs. Re-running nob with
+      # a different $CC is also not an option -- a changed compiler string is a
+      # full rebuild by nob's own rule -- so this operates on the finished
+      # binary. Tool per format: GNU strip for the mingw legs, `zig objcopy`
+      # for ELF (it refuses COFF outright). windows-aarch64 has neither and was
+      # linked stripped instead, so it is skipped.
+      - name: Strip ${{ matrix.slug }}
+        if: matrix.slug != 'windows-aarch64'
+        run: |
+          bin=build/osr${{ matrix.exe }}
+          before=$(stat -c%s "$bin")
+          case "${{ matrix.slug }}" in
+            windows-x86_64) x86_64-w64-mingw32-strip "$bin" ;;
+            windows-x86)    i686-w64-mingw32-strip "$bin" ;;
+            *)              zig objcopy --strip-all "$bin" "$bin.stripped"
+                            mv "$bin.stripped" "$bin" ;;
+          esac
+          echo "$bin: $before -> $(stat -c%s "$bin") bytes"
 
       # Uploaded under the bare target slug; the release job adds the version
       # to the filename once it has computed it. Doing it the other way would
