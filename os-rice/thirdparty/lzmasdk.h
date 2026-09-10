@@ -9377,6 +9377,20 @@ UInt32 Z7_FASTCALL z7_x86_cpuid_GetMaxFunc(void)
 {
   return 0;
 }
+/* amalgamated: upstream's no-cpuid branch forgets
+ * z7_x86_cpuid_subFunc, which CPU_IsSupported_SHA512 below calls
+ * unconditionally -- so on a compiler that is neither GNU nor
+ * MSVC (tcc 0.9.27, which nob.c drives) every other unit links
+ * and this one symbol does not. Zeros match the branch above it,
+ * and GetMaxFunc returning 0 means SHA512 answers False before
+ * this is ever reached; it exists to be defined, not called. */
+static
+void Z7_FASTCALL z7_x86_cpuid_subFunc(UInt32 p[4], UInt32 func, UInt32 subFunc)
+{
+  UNUSED_VAR(func)
+  UNUSED_VAR(subFunc)
+  p[0] = p[1] = p[2] = p[3] = 0;
+}
 
 #else /* _MSC_VER */
 

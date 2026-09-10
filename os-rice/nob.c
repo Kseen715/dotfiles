@@ -333,6 +333,12 @@ static const char *core_srcs[] = {
     "lib/zstd.c",
     "lib/rar.c",
     "lib/rar_shim.c",
+    /* lib/archive.c is the chokepoint over all of it: sniff, prefer the
+     * system tool when the box has one, otherwise drive the vendored
+     * decoders. Core for the same reason lib/tls.c is -- the sniffer, the tar
+     * and ar readers and the write path are plain C and compile everywhere,
+     * and only the parts that need a decoder sit under OSR_HAVE_ARCHIVE. */
+    "lib/archive.c",
     /* Modules both systems have. */
     "modules/fastfetch.c",
     "modules/osrvv.c",
@@ -548,7 +554,7 @@ static const char *win_srcs[] = {
  * linking them against the object built from the same source would define it
  * twice. */
 static const char *test_names[] = {
-    "net_parse_test", "artifact_test", "tls_url_test",
+    "net_parse_test", "artifact_test", "tls_url_test", "archive_test",
 };
 #define TEST_COUNT (sizeof(test_names) / sizeof(test_names[0]))
 
@@ -843,6 +849,18 @@ static bool target_windows(void) {
  * NOB_TLS=1 forces it in, NOB_TLS=0 forces it out, for the targets the name
  * cannot settle and for measuring what it costs.
  */
+/* target_needs_own_archive -- the mirror of target_needs_own_tls with the
+ * default the other way up. Every tier opens archives and the tiers with no
+ * extractor at all (Windows XP, a minimal POSIX box) are exactly the ones
+ * that cannot ask for a build flag, so this is on unless NOB_ARCHIVE=0 turns
+ * it off -- which is a dev convenience, the vendored decoders being the
+ * slowest units in the tree, not a supported way to ship. */
+static bool target_needs_own_archive(void) {
+    const char *env = getenv("NOB_ARCHIVE");
+    if (env != NULL && *env != '\0') return strcmp(env, "0") != 0;
+    return true;
+}
+
 static bool target_needs_own_tls(void) {
     const char *env = getenv("NOB_TLS");
     const char *prog;
@@ -1053,6 +1071,7 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
         cmd_append_args(cmd, "/wd4505", "/D_CRT_SECURE_NO_WARNINGS", NULL);
         cmd_append_args(cmd, "/DWINVER=0x0501", "/D_WIN32_WINNT=0x0501", NULL);
         if (target_needs_own_tls()) nob_cmd_append(cmd, "/DOSR_HAVE_BEARSSL");
+        if (target_needs_own_archive()) nob_cmd_append(cmd, "/DOSR_HAVE_ARCHIVE");
         return;
     }
     if (is_faucc()) {
@@ -1090,6 +1109,13 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
     /* helpers used only by one platform branch of a file are dead on the
      * other -- that is expected, not a defect. */
     nob_cmd_append(cmd, "-Wno-unused-function");
+    /* lib/archive.c is ours and is warned about like the rest of the tree,
+     * but it includes the vendored decoder headers, and thirdparty/zstd.h
+     * spells its API with `long long` while thirdparty/lzmasdk.h has a
+     * commented-out line with a `/*` inside it. Those two diagnostics are
+     * upstream's, from headers -w already covers everywhere else. */
+    if (src != NULL && strcmp(src, "lib/archive.c") == 0)
+        cmd_append_args(cmd, "-Wno-long-long", "-Wno-comment", NULL);
     /* pcc turns on -Wshadow under -Wall and has no diagnostic pragma to
      * scope it, so the vendored thirdparty/yaml.h (included tree-wide)
      * warns from every TU. gcc/clang do not enable -Wshadow at all under
@@ -1100,6 +1126,7 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
     /* What lib/tls.c's #ifdef reads: the client half of it is compiled only
      * where the target carries its own TLS -- on either system. */
     if (target_needs_own_tls()) nob_cmd_append(cmd, "-DOSR_HAVE_BEARSSL");
+    if (target_needs_own_archive()) nob_cmd_append(cmd, "-DOSR_HAVE_ARCHIVE");
 }
 
 

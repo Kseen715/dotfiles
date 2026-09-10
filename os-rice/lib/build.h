@@ -149,7 +149,8 @@ int osr_artifact_url(const char *source, char *url_out, unsigned long url_sz);
 int osr_fetch_artifact(const char *url, char *path_out, unsigned long path_sz);
 
 /* osr_unzip -- expand `archive` into `dest_dir` (created if needed). Uses
- * Expand-Archive, falling back to Shell.Application on hosts too old for it. */
+ * Expand-Archive, falling back to Shell.Application on hosts too old for it,
+ * and to the vendored reader in lib/archive.c on a host with neither. */
 int osr_unzip(const char *archive, const char *dest_dir);
 
 /* osr_find_exe_dir -- depth-limited search for `exe_name` under `root`,

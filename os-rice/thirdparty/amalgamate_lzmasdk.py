@@ -145,12 +145,21 @@ FORCE_INLINE = re.compile(
     re.M)
 
 
+NO_CPUID = re.compile(
+    r'^/\* for unsupported cpuid: \*/\n'
+    r'void Z7_FASTCALL z7_x86_cpuid\(UInt32 p\[4\], UInt32 func\)\n'
+    r'\{\n[^}]*\}\n'
+    r'UInt32 Z7_FASTCALL z7_x86_cpuid_GetMaxFunc\(void\)\n'
+    r'\{\n  return 0;\n\}\n', re.M)
+
+
 PACK_PUSH = re.compile(r'^MY_CPU_pragma_pack_push_1$', re.M)
 PACK_POP = re.compile(r'^MY_CPU_pragma_pop$', re.M)
 
 
 def clean(text, path):
-    """Three upstream edits: `inline`, SHA-NI without Sha256Opt.c, and _Pragma.
+    """Four upstream edits: `inline`, SHA-NI without Sha256Opt.c, _Pragma,
+    and the cpuid stub CpuArch.c's no-cpuid branch is missing.
 
     7zTypes.h spells the gcc/clang half of Z7_FORCE_INLINE as
     `__attribute__((always_inline)) inline`, and C90 has no `inline`. Every
@@ -172,6 +181,25 @@ def clean(text, path):
         text, n = PACK_POP.subn('#pragma pack(pop)', text)
         assert n == 1, 'Ppmd.h no longer closes with MY_CPU_pragma_pop'
         return text
+    if os.path.basename(path) == 'CpuArch.c':
+        text, n = NO_CPUID.subn(
+            lambda m: m.group(0) +
+            '/* amalgamated: upstream\'s no-cpuid branch forgets\n'
+            ' * z7_x86_cpuid_subFunc, which CPU_IsSupported_SHA512 below calls\n'
+            ' * unconditionally -- so on a compiler that is neither GNU nor\n'
+            ' * MSVC (tcc 0.9.27, which nob.c drives) every other unit links\n'
+            ' * and this one symbol does not. Zeros match the branch above it,\n'
+            ' * and GetMaxFunc returning 0 means SHA512 answers False before\n'
+            ' * this is ever reached; it exists to be defined, not called. */\n'
+            'static\n'
+            'void Z7_FASTCALL z7_x86_cpuid_subFunc(UInt32 p[4], UInt32 func, UInt32 subFunc)\n'
+            '{\n'
+            '  UNUSED_VAR(func)\n'
+            '  UNUSED_VAR(subFunc)\n'
+            '  p[0] = p[1] = p[2] = p[3] = 0;\n'
+            '}\n', text)
+        assert n == 1, "CpuArch.c no longer has the no-cpuid branch"
+        return _clean_sha(text, path)
     if os.path.basename(path) == '7zTypes.h':
         text, n = FORCE_INLINE.subn(r'\1', text)
         assert n == 1, '7zTypes.h no longer spells Z7_FORCE_INLINE with `inline`'

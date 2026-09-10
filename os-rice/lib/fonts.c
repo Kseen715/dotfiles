@@ -155,6 +155,7 @@ int osr_fonts_main(int argc, char **argv) {
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "archive.h"
 #include "fonts.h"
 #include "module.h"
 #include "cmds.h"
@@ -261,12 +262,6 @@ int osr_install_nerd_font(const char *name) {
         str_free(&dir);
         return 1;
     }
-    if (!osr_have_cmd("unzip")) {
-        osr_warnf("unzip not available - skipping %s Nerd Font install", name);
-        str_free(&dir);
-        return 1;
-    }
-
     str_init(&url);
     str_addzz(&url, NERD_FONT_RELEASES, env_str("OSR_NERD_FONT_VERSION", "v3.4.0"), "/", name,
         ".zip", (const char *)NULL);
@@ -282,10 +277,13 @@ int osr_install_nerd_font(const char *name) {
         osr_warnf("failed to download %s Nerd Font (%s) - skipping", name, str_text(&url));
         remove(str_text(&zip));
     } else {
-        argv[0] = (char *)"unzip"; argv[1] = (char *)"-o";
-        argv[2] = (char *)str_text(&zip); argv[3] = (char *)"-d";
-        argv[4] = (char *)str_text(&dir); argv[5] = NULL;
-        if (osr_run_user_quiet(argv) != 0) {
+        OsrExtract ex;
+        osr_extract_init(&ex);
+        ex.archive = str_text(&zip);
+        ex.dest_dir = str_text(&dir);
+        ex.quiet = 1;
+        ex.as_user = 1;
+        if (!osr_extract(&ex)) {
             osr_warnf("failed to unzip %s Nerd Font - skipping", name);
             remove(str_text(&zip));
         } else {

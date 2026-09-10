@@ -33,6 +33,7 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+#include "../lib/archive.h"
 #include "../lib/module.h"
 #include "../lib/fetch.h"
 
@@ -167,7 +168,18 @@ int osrm_lcc(void) {
         osr_warnf("lcc: failed to download the source tarball");
         ok = 0; goto out;
     }
-    str_setz(&script, "cd ", str_text(&src), " && tar -xzf lcc.tar.gz && mv lcc-master lcc",
+    {
+        OsrExtract ex;
+        osr_extract_init(&ex);
+        ex.archive = str_text(&gz);
+        ex.dest_dir = str_text(&src);
+        if (!osr_extract(&ex)) {
+            osr_warnf("lcc: failed to extract the source tarball");
+            ok = 0; goto out;
+        }
+    }
+    /* The tarball unpacks as lcc-master/; the build below expects lcc/. */
+    str_setz(&script, "mv ", str_text(&src), "/lcc-master ", str_text(&src), "/lcc",
         (const char *)NULL);
     if (!run_sh_user("Extracting lcc source", str_text(&script))) {
         ok = 0; goto out;

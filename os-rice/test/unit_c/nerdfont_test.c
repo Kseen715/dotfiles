@@ -25,6 +25,10 @@
  */
 #include "../harness.c"
 
+/* The zip the no-unzip scenario feeds the built-in reader. Tests run with cwd
+ * test/unit_c, so this is the same fixture archive_test.c reads. */
+#define NERD_ZIP_FIXTURE "fixtures/archives/plain.zip"
+
 static OsrSandbox sb;
 
 /* fresh -- a scenario starts with an empty home, an empty TMPDIR and no
@@ -53,9 +57,14 @@ static int install(const char *family) {
 
 int main(void) {
     HStr p;
+    HStr fixture;
+    char cwd[1024];
 
     osr_sb_init(&sb);
     hs_init(&p);
+    hs_init(&fixture);
+    if (getcwd(cwd, sizeof(cwd)) == NULL) cwd[0] = '\0';
+    hs_path(&fixture, cwd, NERD_ZIP_FIXTURE);
 
     /* The version is pinned so the URL is a fact of the scenario rather than
      * of whatever lib/nerdfont.c defaults to this month. */
@@ -68,6 +77,7 @@ int main(void) {
     osr_sb_env(&sb, "DL_FAIL", hs_text(&p));
     hs_path(&p, hs_text(&sb.root), "UNZIP_FAIL");
     osr_sb_env(&sb, "UNZIP_FAIL", hs_text(&p));
+    osr_sb_env(&sb, "ZIP_SRC", "");
 
     /* The staging zip carries this process's pid; the mask collapses it so an
      * expectation can name the file without naming the run. */
@@ -81,7 +91,8 @@ int main(void) {
         "[ -f \"$DL_FAIL\" ] && exit 22\n"
         "_out=''\n"
         "while [ $# -gt 0 ]; do [ \"$1\" = \"-o\" ] && { _out=$2; shift; }; shift; done\n"
-        "[ -n \"$_out\" ] && printf 'PK\\003\\004fake-zip\\n' >\"$_out\"\n"
+        "[ -n \"$_out\" ] && { if [ -f \"$ZIP_SRC\" ]; then cat \"$ZIP_SRC\" >\"$_out\";"
+        " else printf 'PK\\003\\004fake-zip\\n' >\"$_out\"; fi; }\n"
         "exit 0\n");
     /* unzip lays down one file, so the tree shows that the font landed rather
      * than only that unzip was called. */
@@ -113,9 +124,9 @@ int main(void) {
         "releases/download/v3.4.0/JetBrainsMono.zip\n"
         "curl -fsSL -o ROOT/tmp/JetBrainsMono-X https://github.com/ryanoasis/"
         "nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip\n"
-        "sudo -u tester unzip -o ROOT/tmp/JetBrainsMono-X -d "
+        "sudo -u tester unzip -q -o ROOT/tmp/JetBrainsMono-X -d "
         "ROOT/home/.local/share/fonts\n"
-        "unzip -o ROOT/tmp/JetBrainsMono-X -d ROOT/home/.local/share/fonts\n"
+        "unzip -q -o ROOT/tmp/JetBrainsMono-X -d ROOT/home/.local/share/fonts\n"
         "sudo -u tester fc-cache -f ROOT/home/.local/share/fonts\n"
         "fc-cache -f ROOT/home/.local/share/fonts\n",
         "probe fontconfig, download the release, unzip into the user's font "
@@ -207,18 +218,22 @@ int main(void) {
         "a failed unzip still cleans up its staging file");
     osr_sb_rm(&sb, "UNZIP_FAIL");
 
-    /* No unzip on the box: nothing is downloaded either. Checking the tool
-     * BEFORE the download is the difference between a wasted 30MB fetch and a
-     * one-line warning. */
+    /* No unzip on the box -- Windows XP, or a minimal POSIX image. The
+     * download still happens and the font still lands, because lib/archive.c
+     * carries a zip reader; the system tool is a preference, not a
+     * requirement. The stub curl serves a real zip here so the in-process
+     * reader has something it can actually open. */
     fresh();
     osr_sb_rm(&sb, "bin/unzip");
+    osr_sb_env(&sb, "ZIP_SRC", hs_text(&fixture));
     osr_assert_rc(install(NULL), 0, "a box without unzip is not fatal");
-    osr_assert_log_is(&sb,
-        "sudo -u tester fc-list\n"
-        "fc-list\n",
-        "with no unzip, nothing is downloaded -- the tool is checked first");
-    osr_assert_err(&sb, "unzip not available",
-        "a box without unzip is told which tool is missing");
+    osr_refute_log(&sb, "unzip",
+        "no unzip is called -- there is none, and none is needed");
+    osr_assert_file(&sb, "home/.local/share/fonts/p/hello.txt", "hello",
+        "the zip is unpacked by the built-in reader instead");
+    osr_assert_tree_is(&sb, "tmp", "tmp\n",
+        "and the staging zip is still cleaned up");
+    osr_sb_env(&sb, "ZIP_SRC", "");
     osr_sb_stub_body(&sb, "unzip",
         "printf 'unzip %s\\n' \"$*\" >>\"$LOG\"\n"
         "_d=''\n"
@@ -242,9 +257,9 @@ int main(void) {
         "releases/download/v3.4.0/JetBrainsMono.zip\n"
         "curl -fsSL -o ROOT/tmp/JetBrainsMono-X https://github.com/ryanoasis/"
         "nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip\n"
-        "sudo -u tester unzip -o ROOT/tmp/JetBrainsMono-X -d "
+        "sudo -u tester unzip -q -o ROOT/tmp/JetBrainsMono-X -d "
         "ROOT/home/.local/share/fonts\n"
-        "unzip -o ROOT/tmp/JetBrainsMono-X -d ROOT/home/.local/share/fonts\n",
+        "unzip -q -o ROOT/tmp/JetBrainsMono-X -d ROOT/home/.local/share/fonts\n",
         "with no fontconfig the font still lands, unprobed and uncached");
     osr_assert_tree_is(&sb, "home/.local/share/fonts",
         "home/.local/share/fonts\n"
@@ -252,6 +267,7 @@ int main(void) {
         "the font is on disk even where fontconfig cannot be told about it");
 
     hs_free(&p);
+    hs_free(&fixture);
     osr_sb_free(&sb);
     return osr_finish();
 }

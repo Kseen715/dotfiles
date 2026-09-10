@@ -48,6 +48,7 @@
 #endif
 #endif
 
+#include "archive.h"
 #include "build.h"
 #include "cmds.h"
 #include "fetch.h"
@@ -432,6 +433,32 @@ static int has_text(const char *hay, size_t len, const char *needle) {
 /* run_ok -- run argv with its output straight through, as the sh builders did. */
 static int run_ok(char *const argv[]) { return osr_run(argv) == 0; }
 
+/* unpack / unpack_root -- every archive this file opens goes through
+ * lib/archive.c, which prefers the system tar or unzip when the box has one
+ * and falls back to the vendored decoders when it does not. That fallback is
+ * why these two exist: a build box without tar used to be a dead run.
+ *
+ * unpack_root is for the destinations under /opt and /usr that need
+ * privilege to write; it hands the whole extraction to the privileged half
+ * rather than unpacking somewhere writable and copying. */
+static int unpack(const char *archive, const char *dir) {
+    OsrExtract o;
+    osr_extract_init(&o);
+    o.archive = archive;
+    o.dest_dir = dir;
+    return osr_extract(&o);
+}
+
+static int unpack_root(const char *archive, const char *dir, int strip) {
+    OsrExtract o;
+    osr_extract_init(&o);
+    o.archive = archive;
+    o.dest_dir = dir;
+    o.strip_components = strip;
+    o.as_root = 1;
+    return osr_extract(&o);
+}
+
 /* pkgconfig_env -- _osr_pkgconfig_path, as the `PKG_CONFIG_PATH=<value>`
  * assignment the sh builders handed to `env`.
  *
@@ -602,9 +629,7 @@ int osr_install_tarball_bin(const char *url, const char *bin) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download %s", url);
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract %s", url);
     }
@@ -633,16 +658,6 @@ static int install_zip_bins(const char *url, const char *const bins[]) {
     size_t i;
     int ok = 1;
 
-    if (!osr_have_cmd("unzip")) {
-        const char *want[2];
-        want[0] = "unzip"; want[1] = NULL;
-        (void)osr_pkg_install(want);
-    }
-    if (!osr_have_cmd("unzip")) {
-        osr_warnf("unzip not available for %s", url);
-        return 0;
-    }
-
     str_initv(&tmp, &zip_path, &found, &dest, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
     str_addzz(&zip_path, str_text(&tmp), "/pkg.zip", (const char *)NULL);
@@ -651,13 +666,9 @@ static int install_zip_bins(const char *url, const char *const bins[]) {
         osr_warnf("failed to download %s", url);
         ok = 0;
     }
-    if (ok) {
-        argv[0] = (char *)"unzip"; argv[1] = (char *)"-q"; argv[2] = (char *)"-o";
-        argv[3] = zip_path.p; argv[4] = (char *)"-d"; argv[5] = tmp.p; argv[6] = NULL;
-        if (!run_ok(argv)) {
-            osr_warnf("failed to extract %s", url);
-            ok = 0;
-        }
+    if (ok && !unpack(zip_path.p, tmp.p)) {
+        osr_warnf("failed to extract %s", url);
+        ok = 0;
     }
     for (i = 0; ok && bins[i] != NULL; i++) {
         if (!find_file(&found, str_text(&tmp), bins[i])) {
@@ -825,7 +836,7 @@ int osr_chafa_ok(void) {
  * /usr/local/bin precedes /usr/bin, so the built chafa wins even where the old
  * package stays installed. */
 static int provide_chafa(void) {
-    static const char *const deps[] = { "build", "chafa-build-deps", "tar", "xz", NULL };
+    static const char *const deps[] = { "build", "chafa-build-deps", NULL };
     Str have, ver, tmp, tar_path, src, pc, jobs;
     char *argv[6];
 
@@ -870,9 +881,7 @@ static int provide_chafa(void) {
         }
         str_free(&url);
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract chafa %s", str_text(&ver));
     }
@@ -948,9 +957,7 @@ static int provide_ueberzugpp(void) {
         }
         str_free(&url);
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract ueberzugpp %s", str_text(&tag));
     }
@@ -1182,10 +1189,7 @@ int osr_build_zig(const char *want) {
         }
         argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = dir.p; argv[3] = NULL;
         (void)osr_run_root(argv);
-        argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-        argv[3] = (char *)"-C"; argv[4] = dir.p;
-        argv[5] = (char *)"--strip-components=1"; argv[6] = NULL;
-        if (osr_run_root(argv) != 0) {
+        if (!unpack_root(tar_path.p, dir.p, 1)) {
             rm_rf(str_text(&tmp));
             osr_die("failed to extract zig %s", str_text(&ver));
         }
@@ -1279,7 +1283,7 @@ static int provide_ghostty_deb(void) {
 static int provide_ghostty(void) {
     /* GTK/build deps as logical names; pkgmap splits them per distro. */
     static const char *const deps[] = {
-        "build", "gtk4-dev", "libadwaita-dev", "gettext", "pkg-config", "tar", "xz", NULL
+        "build", "gtk4-dev", "libadwaita-dev", "gettext", "pkg-config", NULL
     };
     Str ver, tmp, tar_path, src, zigver, pc;
     char *argv[7];
@@ -1313,9 +1317,7 @@ static int provide_ghostty(void) {
         }
         str_free(&url);
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract ghostty");
     }
@@ -1678,14 +1680,12 @@ static const char thunderbird_desktop[] =
     "StartupWMClass=thunderbird\n";
 
 static int provide_thunderbird_tarball(void) {
-    static const char *const deps[] = { "tar", "xz", NULL };
     Str tmp, tar_path, unpacked;
     char *argv[6];
 
     if (strcmp(arch(), "x86_64") != 0)
         osr_die("Mozilla publishes no Linux %s Thunderbird build - use the distro "
                 "package (an ESR without Exchange/EWS) on this arch", arch());
-    pkg(deps);
 
     str_initv(&tmp, &tar_path, &unpacked, (Str *)NULL);
     if (!make_tmp_dir(&tmp)) osr_die("failed to create a temporary directory");
@@ -1697,9 +1697,7 @@ static int provide_thunderbird_tarball(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download Thunderbird");
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the Thunderbird tarball");
     }
@@ -1894,9 +1892,7 @@ static int provide_betterlockscreen(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download betterlockscreen %s", str_text(&tag));
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the betterlockscreen tarball");
     }
@@ -1945,7 +1941,7 @@ static int provide_betterlockscreen(void) {
  * shims under /usr/local/lib/tcc, which is where the compiled tcc looks for
  * them; nothing else on the box links libtcc, so no ldconfig run is needed. */
 static int provide_tcc(void) {
-    static const char *const deps[] = { "build", "tcc-build-deps", "tar", NULL };
+    static const char *const deps[] = { "build", "tcc-build-deps", NULL };
     Str tmp, tar_path, src, jobs;
     char *argv[6];
 
@@ -1966,9 +1962,7 @@ static int provide_tcc(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download the tinycc sources");
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the tinycc tarball");
     }
@@ -2029,9 +2023,7 @@ static int provide_autotiling(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download autotiling %s", str_text(&tag));
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract the autotiling tarball");
     }
@@ -2356,12 +2348,10 @@ static void datagrip_desktop_entry(void) {
  * product-info.json against the feed and returns early only when they match.
  * That is what makes `osr module datagrip` the update path. */
 static int provide_datagrip(void) {
-    static const char *const deps[] = { "tar", "gzip", NULL };
     Str ver, url, have, tmp, tar_path, src, parent;
     long size = 0;
     char *argv[6];
 
-    pkg(deps);
     str_initv(&ver, &url, (Str *)NULL);
     datagrip_latest(&ver, &url, &size);
     datagrip_report_foreign();
@@ -2407,9 +2397,7 @@ static int provide_datagrip(void) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xzf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to extract the DataGrip tarball");
     }
@@ -2515,13 +2503,11 @@ static void telegram_report_foreign(void) {
  * a rerun reinstalls the same version once -- a wasted 80 MB in the rare case,
  * against re-downloading on every rice run if presence were the test. */
 static int provide_telegram(void) {
-    static const char *const deps[] = { "tar", "xz", NULL };
     const char *prefix = env_str("OSR_TELEGRAM_PREFIX", TELEGRAM_PREFIX);
     Str ver, url, tmp, tar_path, src, stamp, binary, parent;
     long size = 0;
     char *argv[6];
 
-    pkg(deps);
     str_initv(&ver, &url, (Str *)NULL);
     telegram_latest(&ver, &url, &size);
     telegram_report_foreign();
@@ -2570,9 +2556,7 @@ static int provide_telegram(void) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf_root(str_text(&tmp));
         osr_die("failed to extract the Telegram tarball");
     }
@@ -2626,16 +2610,17 @@ static int provide_telegram(void) {
  * its own (Void). The vendor publishes deb + rpm and nothing else, and there is
  * no void-packages template, so the only route is unpacking the official .deb:
  * a self-contained Chromium tree under /opt/yandex plus a launcher symlink and
- * .desktop entries, with no maintainer scripts that matter outside dpkg. bsdtar
- * reads both the outer `ar` container and the inner compressed data tarball, so
- * no dpkg/binutils is needed.
+ * .desktop entries, with no maintainer scripts that matter outside dpkg.
+ * lib/archive.c reads both the outer `ar` container and the inner compressed
+ * data tarball, so no dpkg, binutils or even bsdtar is needed.
  *
  * ./etc is deliberately left behind: everything the deb puts there exists for
  * dpkg's world only -- a daily cron job that runs `apt-get update`, and an
  * autostart entry whose whole job is the "make me your default browser" nag.
  *
  * The one thing dpkg's postinst did that has to be repeated: the SUID sandbox
- * helper gets its setuid bit back. bsdtar drops it when not extracting as root,
+ * helper gets its setuid bit back. Nothing that unpacks this keeps it --
+ * lib/archive.c drops setuid unconditionally, bsdtar drops it when not root --
  * and Chromium refuses to start without either that or unprivileged user
  * namespaces. */
 
@@ -2688,8 +2673,6 @@ static int provide_yandex_browser_deb(void) {
     if (strcmp(arch(), "x86_64") != 0)
         osr_die("Yandex publishes no Linux %s browser build (amd64 only)", arch());
     pkg(deps);
-    if (!osr_have_cmd("bsdtar"))
-        osr_die("bsdtar (libarchive) is required to unpack the Yandex Browser .deb");
 
     str_init(&url);
     yb_deb_url(&url);
@@ -2707,9 +2690,7 @@ static int provide_yandex_browser_deb(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download %s", str_text(&url));
     }
-    argv[0] = (char *)"bsdtar"; argv[1] = (char *)"-xf"; argv[2] = deb.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(deb.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to open the Yandex Browser .deb");
     }
@@ -2732,9 +2713,7 @@ static int provide_yandex_browser_deb(void) {
     str_addzz(&root, str_text(&tmp), "/root", (const char *)NULL);
     argv[0] = (char *)"mkdir"; argv[1] = (char *)"-p"; argv[2] = root.p; argv[3] = NULL;
     (void)osr_run(argv);
-    argv[0] = (char *)"bsdtar"; argv[1] = (char *)"-xf"; argv[2] = data.p;
-    argv[3] = (char *)"-C"; argv[4] = root.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(data.p, root.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to unpack the Yandex Browser .deb");
     }
@@ -2801,9 +2780,7 @@ static int provide_amneziavpn(void) {
         gh_asset(&url, "amnezia-vpn/amnezia-client", &tag, str_text(&bin));
         str_reset(&bin);
         if (osr_fetch_download(str_text(&url), tar_path.p, 0)) {
-            argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-            argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-            if (run_ok(argv)) (void)find_path(&bin, str_text(&tmp), ".bin");
+            if (unpack(tar_path.p, tmp.p)) (void)find_path(&bin, str_text(&tmp), ".bin");
         }
         if (bin.len > 0) {
             (void)chmod(str_text(&bin), 0755);
@@ -3255,9 +3232,7 @@ static int provide_gpaste(void) {
         rm_rf(str_text(&tmp));
         osr_die("failed to download GPaste %s", str_text(&tag));
     }
-    argv[0] = (char *)"tar"; argv[1] = (char *)"-xf"; argv[2] = tar_path.p;
-    argv[3] = (char *)"-C"; argv[4] = tmp.p; argv[5] = NULL;
-    if (!run_ok(argv)) {
+    if (!unpack(tar_path.p, tmp.p)) {
         rm_rf(str_text(&tmp));
         osr_die("failed to extract GPaste %s", str_text(&tag));
     }
@@ -3592,7 +3567,19 @@ int osr_unzip(const char *archive, const char *dest_dir) {
     cat_bounded(desc, sizeof(desc), "extracting ");
     cat_bounded(desc, sizeof(desc), basename_of(archive));
 
-    return osr_run_step_cmd(desc, cmd) == 0;
+    if (osr_run_step_cmd(desc, cmd) == 0) return 1;
+
+    /* Neither route worked, which is Windows XP with no PowerShell at all
+     * and a Shell.Application that will not take a .zip it did not write.
+     * lib/archive.c carries its own zip reader for exactly this box. */
+    {
+        OsrExtract ex;
+        osr_extract_init(&ex);
+        ex.archive = archive;
+        ex.dest_dir = dest_dir;
+        ex.allow_system = 0;
+        return osr_extract(&ex);
+    }
 }
 
 int osr_find_exe_dir(const char *root, const char *exe_name, int depth,
