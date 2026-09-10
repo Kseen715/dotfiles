@@ -20,6 +20,7 @@ stays a re-run instead of a merge.
 
 import os
 import sys
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import amalgamate_lib as A
@@ -102,6 +103,27 @@ HEADERS = ['zstd.h', 'zstd_errors.h']
 REPEAT = ('zstd_deps.h',)
 
 
+# cpu.h's cpuid: the MSVC and i386-PIC branches above it are guarded by the
+# compiler that supports them, but the general x86 one is selected on
+# architecture alone and then uses GNU inline asm. cproc rejects it ("inline
+# assembly is not yet supported") and lacc's x86_64 backend asserts on it, so
+# it is gated on __GNUC__ like its neighbours. Non-GNU compilers fall out of
+# the chain with the feature words left at zero, which is what ZSTD_cpuid
+# already returns everywhere that is not x86.
+CPUID_ASM = re.compile(
+    r'^#elif defined\(__x86_64__\) \|\| defined\(_M_X64\) \|\| defined\(__i386__\)$',
+    re.M)
+
+
+def clean(text, path):
+    if os.path.basename(path) == 'cpu.h':
+        text, n = CPUID_ASM.subn(
+            '#elif (defined(__x86_64__) || defined(_M_X64) '
+            '|| defined(__i386__)) && defined(__GNUC__)', text)
+        assert n == 1, 'cpu.h no longer selects its asm cpuid on arch alone'
+    return text
+
+
 def main():
     src = os.path.join(sys.argv[1], 'lib')
     out = sys.argv[2]
@@ -115,6 +137,7 @@ def main():
         sources=[os.path.join(src, s) for s in SOURCES],
         roots=[src, os.path.join(src, 'common'), os.path.join(src, 'decompress')],
         repeat=REPEAT,
+        clean=clean,
         prefix='zstd_amalg',
     )
     open(out, 'w', encoding='utf-8').write(text)

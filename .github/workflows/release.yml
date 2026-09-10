@@ -371,7 +371,11 @@ jobs:
             note: 'QBE built into the same prefix'
           # The Windows rows. `boot` exists for them: the Linux legs bootstrap
           # nob with the host `cc`, which Windows has no such thing as, and
-          # MSVC additionally spells the whole command differently (/Fe:, /Fo)
+          # MSVC additionally spells the whole command differently (-Fe:, -Fo)
+          # -- written with dashes, not slashes: this step runs under Git
+          # bash, whose MSYS path mangling rewrites a lone /nologo argument
+          # into C:/Program Files/Git/nologo before cl ever sees it. cl takes
+          # either prefix.
           # -- that dialect split is nob.c's own (is_msvc_name), so the
           # bootstrap has to speak it before nob is there to.
           #
@@ -401,7 +405,7 @@ jobs:
             slug: msvc
             name: '[MSVC cl](https://learn.microsoft.com/cpp/build/reference/compiling-a-c-cpp-program)'
             cc: cl.exe
-            boot: cl /nologo /Fe:build/nob.exe /Fobuild/ nob.c
+            boot: cl -nologo -Fe:build/nob.exe -Fobuild/ nob.c
             msvc: x64
             exe: .exe
           # Windows-on-ARM is MSVC only: the arm64 image ships Visual Studio
@@ -412,7 +416,7 @@ jobs:
             slug: msvc
             name: '[MSVC cl](https://learn.microsoft.com/cpp/build/reference/compiling-a-c-cpp-program)'
             cc: cl.exe
-            boot: cl /nologo /Fe:build/nob.exe /Fobuild/ nob.c
+            boot: cl -nologo -Fe:build/nob.exe -Fobuild/ nob.c
             msvc: arm64
             exe: .exe
     steps:
@@ -465,8 +469,11 @@ jobs:
           ${{ matrix.boot || 'cc -o build/nob nob.c' }} || ok=0
           if [ $ok = 1 ]; then $nob clean || ok=0; fi
           if [ $ok = 1 ]; then CC="$CC" $nob -t 2>build/time.log || ok=0; fi
+          # Unconditionally: the compiler's diagnostics are ON THIS STREAM, so
+          # printing it only on success means a failing row shows the log of
+          # `nob clean` and nothing about why the build died.
+          cat build/time.log 2>/dev/null || :
           if [ $ok = 1 ]; then
-            cat build/time.log
             # tr -d '\r': a native Windows nob.exe writes its stderr in text
             # mode, so every line of the log arrives CRLF-terminated and the
             # anchored sed below would match nothing at all.
@@ -484,9 +491,12 @@ jobs:
           # The MSVC banner spends its first 39 characters on the product
           # name before reaching a version number, which cut -c1-60 would then
           # amputate; drop that prefix so the column holds the version.
+          # `|| :` because the job shell is `bash -eo pipefail`: cproc and lacc
+          # reject --version outright, and their nonzero exit would become the
+          # assignment's, killing the step before it can write its row.
           ver=$($CC --version 2>&1 | head -1 \
                 | sed 's|^Microsoft (R) C/C++ Optimizing Compiler ||; s| *([^()]*://[^()]*)||g; s|  *| |g; s| *$||' \
-                | cut -c1-60)
+                | cut -c1-60) || :
           [ -n "$ver" ] || ver='-'
           printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             '${{ matrix.arch }}' '${{ matrix.slug }}' '${{ matrix.name }}' "$(( 1 - ok ))" \

@@ -153,6 +153,14 @@ NO_CPUID = re.compile(
     r'\{\n  return 0;\n\}\n', re.M)
 
 
+# Alloc.c's MY_uintptr_t: upstream picks uintptr_t through a hardcoded
+# `#elif 1` and keeps its own C89 fallback (ptrdiff_t) in the dead #else
+# below it. uintptr_t is C99 and optional at that, so a C89 front end with
+# honest headers (lacc, cproc -- both driven by nob.c) does not declare it
+# and the typedef loses its type specifier. Flipping the branch selects the
+# fallback upstream already wrote.
+UINTPTR = re.compile(r'^  #elif 1\n    uintptr_t\n', re.M)
+
 PACK_PUSH = re.compile(r'^MY_CPU_pragma_pack_push_1$', re.M)
 PACK_POP = re.compile(r'^MY_CPU_pragma_pop$', re.M)
 
@@ -181,6 +189,13 @@ def clean(text, path):
         text, n = PACK_POP.subn('#pragma pack(pop)', text)
         assert n == 1, 'Ppmd.h no longer closes with MY_CPU_pragma_pop'
         return text
+    if os.path.basename(path) == 'Alloc.c':
+        text, n = UINTPTR.subn(
+            '  /* amalgamated: uintptr_t is C99 and optional; the ptrdiff_t\n'
+            '   * branch below is upstream\'s own C89 fallback. */\n'
+            '  #elif 0\n    uintptr_t\n', text)
+        assert n == 1, 'Alloc.c no longer picks uintptr_t with `#elif 1`'
+        return _clean_sha(text, path)
     if os.path.basename(path) == 'CpuArch.c':
         text, n = NO_CPUID.subn(
             lambda m: m.group(0) +

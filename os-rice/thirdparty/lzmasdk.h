@@ -14182,7 +14182,9 @@ const ISzAlloc g_BigAlloc = { SzBigAlloc, SzBigFree };
 typedef
   #ifdef _WIN32
     UINT_PTR
-  #elif 1
+  /* amalgamated: uintptr_t is C99 and optional; the ptrdiff_t
+   * branch below is upstream's own C89 fallback. */
+  #elif 0
     uintptr_t
   #else
     ptrdiff_t

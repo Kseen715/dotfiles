@@ -901,6 +901,20 @@ static const char **target_srcs(size_t *count) {
     return with_tls;
 }
 
+/* cc_basename_is -- is $CC's program name (path stripped) exactly `name`?
+ * The compilers below are each recognized this way: what dialect a front end
+ * speaks is not something a probe can ask it, and the name is what the user
+ * typed. */
+static bool cc_basename_is(const char *name) {
+    const char *prog = cc_prog();
+    const char *base = prog;
+    const char *p;
+    for (p = prog; *p; p++) {
+        if (*p == '/' || *p == '\\') base = p + 1;
+    }
+    return strcmp(base, name) == 0;
+}
+
 /* is_chibicc -- does $CC name chibicc, with or without a path and flags?
  * chibicc is deliberately absent from cc_ladder: it is a self-hosting toy
  * compiler that searches /usr/include but not the compiler-private
@@ -909,51 +923,21 @@ static const char **target_srcs(size_t *count) {
  * Left alone, `CC=chibicc` dies on the first real system header with a
  * "stddef.h: cannot open file" that reads like a missing file, not a
  * missing capability -- so say so up front. */
-static bool is_chibicc(void) {
-    const char *prog = cc_prog();
-    const char *base = prog;
-    const char *p;
-    size_t len;
-    for (p = prog; *p; p++) {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    len = strlen(base);
-    return len == 7 && memcmp(base, "chibicc", 7) == 0;
-}
+static bool is_chibicc(void) { return cc_basename_is("chibicc"); }
 
 /* is_faucc -- does $CC name faucc (FAUcc, the FAU machine's C compiler),
  * with or without a path? faucc emits only 16-bit (i286) or 32-bit (i386)
  * Intel code -- there is no 64-bit backend -- and its cc1 predates most of
  * what a modern glibc header does, so it needs its own flag dialect (see
  * append_common_flags) and its own early warning (see check_cc_detection). */
-static bool is_faucc(void) {
-    const char *prog = cc_prog();
-    const char *base = prog;
-    const char *p;
-    size_t len;
-    for (p = prog; *p; p++) {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    len = strlen(base);
-    return len == 5 && memcmp(base, "faucc", 5) == 0;
-}
+static bool is_faucc(void) { return cc_basename_is("faucc"); }
 
 /* is_pcc -- does $CC name pcc (Portable C Compiler), with or without a path?
  * pcc advertises __GNUC__ but does not understand every glibc attribute: it
  * warns "unsupported attribute `__cold__'" on stdlib.h/stdio.h on every
  * translation unit. Scoped here (not in append_common_flags for every
  * compiler) because gcc/clang builds want real attribute diagnostics. */
-static bool is_pcc(void) {
-    const char *prog = cc_prog();
-    const char *base = prog;
-    const char *p;
-    size_t len;
-    for (p = prog; *p; p++) {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    len = strlen(base);
-    return len == 3 && memcmp(base, "pcc", 3) == 0;
-}
+static bool is_pcc(void) { return cc_basename_is("pcc"); }
 
 /* is_lcc -- does $CC name lcc (Fraser & Hanson's retargetable C compiler),
  * with or without a path? lcc's driver does not speak gcc's flag dialect at
@@ -963,17 +947,13 @@ static bool is_pcc(void) {
  * append_common_flags below. Deliberately absent from cc_ladder (it is a
  * 32-bit-only i386 C89 compiler a user picks explicitly, never a default).
  */
-static bool is_lcc(void) {
-    const char *prog = cc_prog();
-    const char *base = prog;
-    const char *p;
-    size_t len;
-    for (p = prog; *p; p++) {
-        if (*p == '/' || *p == '\\') base = p + 1;
-    }
-    len = strlen(base);
-    return len == 3 && memcmp(base, "lcc", 3) == 0;
-}
+static bool is_lcc(void) { return cc_basename_is("lcc"); }
+
+/* is_cproc -- does $CC name cproc (the QBE-backed C compiler)? cproc's driver
+ * accepts gcc's -std/-W.../-O spellings but has no -w at all ("cproc: unknown
+ * option '-w'"), which is otherwise how the vendored amalgamations are built.
+ * See append_common_flags_for. */
+static bool is_cproc(void) { return cc_basename_is("cproc"); }
 
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
@@ -1099,7 +1079,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
          * rewrites upstream's `//` comments and `inline` away, and nothing
          * else in what they carry is post-C90. Upstream's warnings are
          * upstream's, so they are off rather than read past on every build. */
-        cmd_append_args(cmd, "-std=c89", "-w", o0 ? "-O0" : "-O2", NULL);
+        cmd_append_args(cmd, "-std=c89", NULL);
+        /* cproc has no -w; its own diagnostics on this code are few and it
+         * is the one front end that would fail the build over the flag. */
+        if (!is_cproc()) nob_cmd_append(cmd, "-w");
+        cmd_append_args(cmd, o0 ? "-O0" : "-O2", NULL);
         if (target_windows())
             cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
         return;
