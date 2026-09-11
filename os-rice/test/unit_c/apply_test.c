@@ -351,11 +351,11 @@ int main(void) {
             HStr st;
             char *text;
             hs_init(&st);
-            hs_path(&st, hs_text(&sb.root), "home/.config/osr/state");
+            hs_path(&st, hs_text(&sb.root), "home/.config/osr/state.yaml");
             text = h_slurp(hs_text(&st));
-            osr_assert_true(strstr(text, "theme=nord") != NULL,
+            osr_assert_true(strstr(text, "theme: \"nord\"") != NULL,
                 "apply: the state records the applied theme");
-            osr_assert_true(strstr(text, "rice=catppuccin") != NULL,
+            osr_assert_true(strstr(text, "rice: \"catppuccin\"") != NULL,
                 "apply: and keeps the rice -- theme and rice are separate axes");
             free(text);
             hs_free(&st);

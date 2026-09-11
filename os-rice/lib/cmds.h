@@ -30,6 +30,15 @@ int osr_state_main(int argc, char **argv);    /* lib/state.sh */
  * without a trailing newline, the way `$( )` handed it to sh. */
 void osr_state_get(Str *out, const char *key);
 int osr_state_set(const char *key, const char *value);
+
+/* osr_installed_add / osr_installed_get -- the modules this machine has
+ * actually had installed, the `modules` half of ~/.config/osr/state.yaml. The
+ * rice
+ * manifest says what a rice SHIPS; this says what is really here, which is
+ * what a theme apply has to repaint. add is idempotent; get appends one name
+ * per line, manifest-independent order. */
+int osr_installed_add(const char *name);
+void osr_installed_get(Str *out);
 int osr_user_main(int argc, char **argv);     /* lib/user.sh */
 
 /* The login-shell half of lib/user.sh, for a caller inside this process. They

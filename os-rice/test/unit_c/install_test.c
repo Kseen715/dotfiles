@@ -297,11 +297,11 @@ int main(void) {
         HStr st;
         char *text;
         hs_init(&st);
-        hs_path(&st, hs_text(&sb.root), "home/.config/osr/state");
+        hs_path(&st, hs_text(&sb.root), "home/.config/osr/state.yaml");
         text = h_slurp(hs_text(&st));
-        osr_assert_true(strstr(text, "rice=demo") != NULL,
+        osr_assert_true(strstr(text, "rice: \"demo\"") != NULL,
             "the run records which rice was installed");
-        osr_assert_true(strstr(text, "theme=") != NULL,
+        osr_assert_true(strstr(text, "theme: \"") != NULL,
             "and which theme, so a later `osr apply theme` has somewhere to "
             "start from");
         free(text);

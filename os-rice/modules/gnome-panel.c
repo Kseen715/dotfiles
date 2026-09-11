@@ -122,27 +122,54 @@ static int load_layout(const char *name, const char *schema_path) {
     return ok;
 }
 
+/* ext_present -- is this extension already unpacked in the user's home? The
+ * theme pass asks, because it may not install one: a theme switch that tried
+ * to reach extensions.gnome.org, and failed there because no build exists for
+ * this Shell major, would fail the whole layer and leave the panel painted in
+ * the old palette -- which is the one thing the pass was for. */
+static int ext_present(const char *uuid) {
+    Str path;
+    int there;
+
+    str_init(&path);
+    str_addzz(&path, osr_home(), "/.local/share/gnome-shell/extensions/", uuid,
+              (const char *)NULL);
+    there = dir_exists(str_text(&path));
+    str_free(&path);
+    return there;
+}
+
 int osrm_gnome_panel(void) {
     static const char *const sensors[] = { "lm_sensors", "libgtop", "dconf", NULL };
-    int ok;
+    int theme_only = osr_theme_only();
+    int ok = 1;
 
     if (!osr_gnome_is_session()) return 1;
 
-    /* Optional to the extension: it degrades to fewer sensors rather than
-     * failing, so a distro missing either name must not fail the module. */
-    (void)osr_pkg_install_step_try("Installing panel sensor libraries", sensors);
+    if (!theme_only) {
+        /* Optional to the extension: it degrades to fewer sensors rather than
+         * failing, so a distro missing either name must not fail the module. */
+        (void)osr_pkg_install_step_try("Installing panel sensor libraries", sensors);
 
-    /* The clock first, and deliberately: it is the half that needs no network
-     * and no Shell restart, so it still lands when extensions.gnome.org is
-     * unreachable. */
-    ok = osr_step("Showing seconds, weekday and date in the clock",
-                  clock_detail, NULL);
-    if (!osr_gnome_extension_install("Installing Astra Monitor", AM_UUID)) ok = 0;
-    else (void)load_layout("astra-monitor.dconf", AM_PATH);
-    if (!osr_gnome_extension_install("Installing SimpleWeather", SW_UUID)) ok = 0;
-    else (void)load_layout("simple-weather.dconf", SW_PATH);
+        /* The clock first, and deliberately: it is the half that needs no
+         * network and no Shell restart, so it still lands when
+         * extensions.gnome.org is unreachable. */
+        ok = osr_step("Showing seconds, weekday and date in the clock",
+                      clock_detail, NULL);
+    }
 
-    osr_infof("  panel modules load on the next session -- log out and back in "
-              "(Wayland) or Alt+F2 r (X11)");
+    if (theme_only ? ext_present(AM_UUID)
+                   : osr_gnome_extension_install("Installing Astra Monitor", AM_UUID))
+        (void)load_layout("astra-monitor.dconf", AM_PATH);
+    else if (!theme_only) ok = 0;
+
+    if (theme_only ? ext_present(SW_UUID)
+                   : osr_gnome_extension_install("Installing SimpleWeather", SW_UUID))
+        (void)load_layout("simple-weather.dconf", SW_PATH);
+    else if (!theme_only) ok = 0;
+
+    if (!theme_only)
+        osr_infof("  panel modules load on the next session -- log out and back "
+                  "in (Wayland) or Alt+F2 r (X11)");
     return ok;
 }

@@ -343,6 +343,47 @@ int osr_apply_theme(const char *name) {
     return 1;
 }
 
+/* out_has -- is this module name already one of the lines in out? The rice
+ * manifest and the installed set overlap in the ordinary case, and a module
+ * listed twice would run its layer twice and be counted twice in the
+ * "(N layers)" line. */
+static int out_has(const Str *out, const char *name) {
+    size_t pos = 0;
+    Line l;
+    size_t n = strlen(name);
+
+    while (next_line(str_text(out), out->len, &pos, &l))
+        if (l.len == n && memcmp(l.start, name, n) == 0) return 1;
+    return 0;
+}
+
+/* add_installed -- the modules this machine has actually had installed, from
+ * the `modules` half of ~/.config/osr/state.yaml (lib/state.c). The manifest
+ * says what the rice shipped; this says what is really here, and a theme has
+ * to repaint both.
+ * Appended after the manifest so manifest order still decides the order layers
+ * land in, with anything installed since trailing it. */
+static void add_installed(Str *out) {
+    Str installed;
+    size_t pos = 0;
+    Line l;
+
+    str_init(&installed);
+    osr_installed_get(&installed);
+    while (next_line(str_text(&installed), installed.len, &pos, &l)) {
+        Str name;
+        if (l.len == 0) continue;
+        str_init(&name);
+        str_add(&name, l.start, l.len);
+        if (module_is_themable(str_text(&name)) && !out_has(out, str_text(&name))) {
+            str_add(out, str_text(&name), name.len);
+            str_addc(out, '\n');
+        }
+        str_free(&name);
+    }
+    str_free(&installed);
+}
+
 void osr_theme_modules(Str *out, const char *rice) {
     Str list;
     char *buf = NULL;
@@ -378,6 +419,7 @@ void osr_theme_modules(Str *out, const char *rice) {
             str_free(&name);
         }
         str_free(&lines);
+        add_installed(out);
     } else {
         /* No recorded rice (first run, or a hand-built system): every module
          * that can paint something. */

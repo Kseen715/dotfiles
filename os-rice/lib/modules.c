@@ -263,6 +263,7 @@ int osr_module_has(const char *name) { return find(name) != NULL; }
  * same contract the sh run_module had. */
 int osr_module_run(const char *name, int theme_only) {
     const ModuleRow *m;
+    int ok;
 
     if (theme_only) osr_set_theme_only(1);
     m = find(name);
@@ -271,10 +272,25 @@ int osr_module_run(const char *name, int theme_only) {
         return 0;
     }
 #ifdef OSR_RUNTIME_MODULES
-    return osr_module_runtime_run(name);
+    ok = osr_module_runtime_run(name);
 #else
-    return m->run();
+    ok = m->run();
 #endif
+    /* Remember it. A theme apply repaints what is INSTALLED, and the rice
+     * manifest only knows what the rice shipped -- anything added later with
+     * `osr module <name>` would otherwise keep its old colors through every
+     * switch.
+     *
+     * Two exclusions, both because the record exists ONLY to drive that
+     * repaint. Not on a theme pass: that pass runs modules precisely because
+     * they are already installed, and recording there would turn the rice's
+     * own list into state on first switch. And not a module with no theme
+     * layer: `paru` on apt or a microcode blob paints nothing, so recording
+     * one would only add a name a theme apply then has to skip -- and would
+     * put a write in the middle of a module that is meant to do nothing on
+     * this box. */
+    if (ok && !theme_only && m->themable) (void)osr_installed_add(name);
+    return ok;
 }
 
 int osr_module_themable(const char *name) {

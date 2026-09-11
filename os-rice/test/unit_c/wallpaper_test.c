@@ -50,7 +50,7 @@ static void state_has(const char *needle, const char *label) {
     HStr path;
     char *got;
     hs_init(&path);
-    hs_path(&path, hs_text(&sb.root), "home/.config/osr/state");
+    hs_path(&path, hs_text(&sb.root), "home/.config/osr/state.yaml");
     got = h_slurp(hs_text(&path));
     osr_assert_true(strstr(got, needle) != NULL, label);
     free(got);
@@ -174,7 +174,7 @@ int main(void) {
     wp(NULL, NULL);
     out_has("02-second.jpg", "set: the pick is what a later show reports");
 
-    state_has("wallpaper.nord=",
+    state_has("wallpaper.nord: \"",
         "set: the choice is keyed BY THEME -- switching away and back returns "
         "this image, not whatever was chosen for another theme");
 
@@ -182,7 +182,7 @@ int main(void) {
         "home/Pictures/Wallpapers\n"
         "home/Pictures/Wallpapers/02-second.jpg\n",
         "set: the image is copied into the user's own Pictures/Wallpapers");
-    state_has("wallpaper=",
+    state_has("wallpaper: \"",
         "set: and the INSTALLED copy is recorded separately under `wallpaper` "
         "-- that is the path a setter and a lockscreen config point at, "
         "because the choice above may live inside the os-rice checkout");
