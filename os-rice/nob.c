@@ -960,10 +960,11 @@ static bool is_cproc(void) { return cc_basename_is("cproc"); }
  * is entitled to expect one: Termux/bionic's <limits.h> defines the POSIX
  * limits and then `#include_next <limits.h>` for CHAR_BIT/INT_MAX/LONG_MAX,
  * which under tcc reaches nothing -- so every TU that wants INT_MAX fails
- * ("'INT_MAX' undeclared" out of thirdparty/yaml.h). compat/tcc/limits.h is
- * that missing header and this is what puts it on the include path; see
- * append_common_flags_for. Harmless on a libc that spells the macros out
- * itself (glibc): the file guards every define it makes. */
+ * ("'INT_MAX' undeclared" out of thirdparty/yaml.h). Bionic also spells
+ * <wchar.h>'s result constants as a C23 enum tcc cannot parse. compat/tcc
+ * holds a C99 stand-in for each of those headers and this is what puts it on
+ * the include path; see append_common_flags_for. Harmless elsewhere: each
+ * file defers to the real header or guards every define it makes. */
 static bool is_tcc(void) { return cc_basename_is("tcc"); }
 
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
