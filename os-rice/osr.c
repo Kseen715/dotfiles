@@ -120,7 +120,8 @@ static int usage(void) {
  *
  * The layout is the one nob.c writes: every binary lands in <os-rice>/build/,
  * so the tree root is the parent of the directory holding this executable, and
- * the dotfiles checkout is the parent of that. Derived rather than compiled in,
+ * and the configs are config/ in the checkout around it. Derived rather than
+ * compiled in,
  * because a clone can sit anywhere.
  */
 static void resolve_roots(const char *argv0) {
@@ -145,8 +146,11 @@ static void resolve_roots(const char *argv0) {
         }
     }
     if (!env_is_set("OSR_DOTFILES")) {
-        osr_dirname(env_str("OSR_ROOT", root), buf, sizeof(buf));
-        osr_setenv("OSR_DOTFILES", buf);
+        char repo[OSR_PATH_MAX];
+        osr_dirname(env_str("OSR_ROOT", root), repo, sizeof(repo));
+        if (osr_path_join(buf, sizeof(buf), repo, "config")) {
+            osr_setenv("OSR_DOTFILES", buf);
+        }
     }
 }
 
@@ -207,7 +211,7 @@ static void provision_tree(void) {
         return;
     }
     /* The tree is os-rice/ INSIDE the dotfiles repo, and the configs the
-     * modules copy are the repo itself -- the same two roots the launcher
+     * modules copy are config/ beside it -- the same two roots the launcher
      * exports from a checkout. */
     if (!osr_path_join(root, sizeof(root), dest, "os-rice")) return;
 
@@ -229,7 +233,7 @@ static void provision_tree(void) {
         if (!tree_at(root)) osr_die("cloned %s but found no tree at %s", url, root);
     }
 
-    osr_setenv("OSR_DOTFILES", dest);
+    if (osr_path_join(buf, sizeof(buf), dest, "config")) osr_setenv("OSR_DOTFILES", buf);
     osr_setenv("OSR_ROOT", root);
     if (osr_path_join(buf, sizeof(buf), root, "lib")) osr_setenv("OSR_LIB", buf);
 }

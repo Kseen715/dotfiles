@@ -294,7 +294,7 @@ int main(void) {
         char *nord_first;
 
         hs_init(&dots);
-        hs_path(&dots, hs_text(&sb.osr_root), "..");
+        hs_path(&dots, hs_text(&sb.osr_root), "../config");
         osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&dots));
         hs_free(&dots);
         osr_sb_env(&sb, "OSR_PKG", "apt");

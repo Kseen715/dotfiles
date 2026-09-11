@@ -276,7 +276,7 @@ Exchange/Office365 — the usual reason an account cannot be added at all),
 ### 8.1 Firefox on a low-RAM machine
 
 Nothing to install — it is prefs. `modules/firefox.sh` writes
-`dotfiles/firefox/user.js` into every profile; the two knobs that actually move
+`dotfiles config/firefox/user.js` into every profile; the two knobs that actually move
 the needle are `dom.ipc.processCount` (default 8, each process is a fixed
 ~80-150 MB floor even idle) and `browser.sessionhistory.max_total_viewers`
 (fully-live back/forward DOM+JS heaps). `browser.tabs.unloadOnLowMemory` is the

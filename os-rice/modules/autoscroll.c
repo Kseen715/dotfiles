@@ -11,7 +11,7 @@
  *                    the button does INSTEAD today, and leaving them on means a
  *                    middle click in a page pastes the selection into the
  *                    search box or loads it as a URL. The prefs are also in
- *                    dotfiles/firefox/user.js, which the firefox module
+ *                    dotfiles config/firefox/user.js, which the firefox module
  *                    installs whole; they are ensured line by line here so a
  *                    profile the firefox module never touched (Zen, or a box
  *                    riced without it) still gets them, in whichever order the

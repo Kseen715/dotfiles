@@ -75,7 +75,7 @@ int main(void) {
     hs_init(&p);
 
     osr_sb_env_ubuntu(&sb);
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     hs_path(&p, hs_text(&sb.root), "scratch");
     osr_sb_mkdir(&sb, "scratch");
@@ -343,7 +343,7 @@ int main(void) {
      * thunderbird`, which a snap on PATH satisfies -- so a de-snap that ran
      * afterwards would leave the snap in place and install nothing.
      * ================================================================ */
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     osr_sb_env(&sb, "OSR_THEME", "xin");
     hs_path(&p, hs_text(&sb.osr_root), "themes/xin");
@@ -430,7 +430,7 @@ int main(void) {
     /* ================================================================
      * 4. rust -- a toolchain that installs itself, as the user
      * ================================================================ */
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     osr_sb_stub_body(&sb, "curl",
         "printf 'curl %s\\n' \"$*\" >>\"$LOG\"\n"

@@ -31,7 +31,7 @@
 
 /* --- what the module was given ------------------------------------------- */
 const char *osr_mod_root(void);      /* the os-rice/ directory */
-const char *osr_mod_dotfiles(void);  /* the dotfiles checkout (its parent) */
+const char *osr_mod_dotfiles(void);  /* config/ in the dotfiles checkout */
 const char *osr_mod_user(void);      /* the account being riced (§8) */
 const char *osr_mod_home(void);      /* that account's home */
 const char *osr_mod_theme(void);     /* the resolved theme name, "" if none */

@@ -223,8 +223,8 @@ fi
 # what is left is a path and a build.
 OSR_ROOT=$OSR_SELF_DIR
 OSR_LIB="$OSR_ROOT/lib"
-# The dotfiles repo root is the parent of os-rice/ -- configs live there.
-OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)
+# The configs live in config/ at the repo root, the parent of os-rice/.
+OSR_DOTFILES=$(cd -- "$OSR_ROOT/.." && pwd)/config
 case ${OSR_C_MODULE_BACKEND:-static} in
     static)  OSR_C_MODULE_BACKEND=static; OSR_BIN="$OSR_ROOT/build/osr"; OSR_BUILD_TARGET=static ;;
     runtime) OSR_C_MODULE_BACKEND=runtime; OSR_BIN="$OSR_ROOT/build/osr-runtime"; OSR_BUILD_TARGET=runtime ;;

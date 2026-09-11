@@ -39,7 +39,8 @@ int osrm_proteus(void) {
     str_initv(&dir, &src, &dst, (Str *)NULL);
     str_addzz(&dir, osr_mod_home(), "/.config/proteus", (const char *)NULL);
     ok = osr_mkdir_p(str_text(&dir)) && ok;
-    str_addzz(&src, osr_mod_dotfiles(), "/proteus/proteus.toml", (const char *)NULL);
+    /* The crate sits at the repo root, beside config/, not inside it. */
+    str_addzz(&src, osr_mod_dotfiles(), "/../proteus/proteus.toml", (const char *)NULL);
     str_addzz(&dst, str_text(&dir), "/proteus.toml", (const char *)NULL);
     if (file_exists(str_text(&src)))
         ok = osr_install_layer(str_text(&src), str_text(&dst)) && ok;

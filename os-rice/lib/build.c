@@ -1760,7 +1760,8 @@ static int provide_proteus(void) {
                 "(manifest order, section 4)");
 
     str_init(&src);
-    str_addzz(&src, osr_mod_dotfiles(), "/proteus", (const char *)NULL);
+    /* The crate sits at the repo root, beside config/, not inside it. */
+    str_addzz(&src, osr_mod_dotfiles(), "/../proteus", (const char *)NULL);
     str_init(&manifest);
     str_addzz(&manifest, str_text(&src), "/Cargo.toml", (const char *)NULL);
     if (!file_exists(str_text(&manifest)))

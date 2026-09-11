@@ -38,7 +38,7 @@ fi
 # cargo() — route `cargo install` and `cargo install-update` through
 # cargo-binstall (prebuilt binaries instead of source builds), each with a
 # source-build fallback for crates binstall cannot resolve. install-update gets
-# it via the shim os-rice modules/rust.sh installs from dotfiles/cargo/; without
+# it via the shim os-rice modules/rust.sh installs from dotfiles config/cargo/; without
 # the shim, or without binstall, every branch is a plain passthrough.
 cargo() {
   local shim=~/.local/bin/cargo-binstall-shim

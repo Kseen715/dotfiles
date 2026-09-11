@@ -15,7 +15,7 @@
  *
  * The low-RAM set targets the two things that actually dominate Firefox's RSS on
  * a small machine: the number of content processes, and how many back/forward
- * page states are kept alive in memory. See dotfiles/firefox/user.js.
+ * page states are kept alive in memory. See dotfiles config/firefox/user.js.
  *
  * Was modules/firefox.sh; what it must do is stated in the C tests
  * under test/unit_c/ rather than diffed against a recording. C89.

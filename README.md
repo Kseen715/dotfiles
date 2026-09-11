@@ -24,7 +24,7 @@ Configs for apps, plus the machinery that installs them.
 | [[os-rice/README\|os-rice]] | the installer: modules, rices, themes, `osr` |
 | [[os-rice/DESIGN\|os-rice/DESIGN]] | why it is shaped that way — the design in force |
 | [[PLAN_UNIVERSAL]] | the compiled C core: Windows today, XP and bare boards later |
-| [[proteus/README\|Proteus]] | the GUI theme picker (Rust, X11 + Wayland) |
+| [[config/proteus/README\|Proteus]] | the GUI theme picker (Rust, X11 + Wayland) |
 | [[archive-decisions]] | superseded decisions and deleted trees. History, not documentation |
 
 ## Rices
@@ -41,14 +41,15 @@ Configs for apps, plus the machinery that installs them.
 - [[os-rice/modules/WINDOWS|The `win-` modules]] — the OS passes over a Windows machine
 - [[os-rice/i3-sugg|i3-sugg]] — what an X11 desktop needs, and why
 - [[os-rice/i3-void-packages|i3-void-packages]] — those components mapped to Void `xbps` packages
-- [[wezterm/README|wezterm]]
+- [[config/wezterm/README|wezterm]]
 
 ## App configs
 
-One directory per app (`zsh/`, `hypr/` under a rice, `waybar/`, `yazi/`, …).
+One directory per app under `config/` (`config/zsh/`, `hypr/` under a rice,
+`config/waybar/`, `config/yazi/`, …).
 os-rice owns the layered files in them; `99-local.*` is always yours.
 
 > [!tip] Theme templates live with the app, not with the theme
-> `<app>/<file>.tmpl` is written once, against the palette vocabulary in
+> `config/<app>/<file>.tmpl` is written once, against the palette vocabulary in
 > [[os-rice/DESIGN#6b. A theme is a palette, not a directory of app configs|DESIGN 6b]].
 > A theme is `theme.list` — a palette, not a folder of configs.

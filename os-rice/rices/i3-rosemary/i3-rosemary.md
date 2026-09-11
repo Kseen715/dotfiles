@@ -80,7 +80,7 @@ desaturated neutral. Keep it that way when adding modules.
 | `config/firefox/userChrome.css`, `config/thunderbird/userChrome.css` | into every Mozilla profile |
 | `config/{zathura,mpv,vlc}/*` | document + media viewers |
 | `config/fastfetch/config.jsonc` | truecolor, so a screenshot keeps the palette |
-| `config/yazi/theme.toml` | selects `dotfiles/yazi/flavors/rosemary.yazi` |
+| `config/yazi/theme.toml` | selects `dotfiles config/yazi/flavors/rosemary.yazi` |
 
 Everything else in `~/.config` belongs to the dotfiles base layer or to you.
 `99-local.conf` / `99-local.sh` are yours and are never rewritten.

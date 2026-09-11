@@ -242,7 +242,7 @@ int main(void) {
     warned("a PATH-dependent brew probe",
         "stale: a code line still holding the legacy is reported, in the "
         "caller's own words");
-    osr_assert_err(&sb, "see zsh/rc.d/ in the dotfiles repo",
+    osr_assert_err(&sb, "see config/zsh/rc.d/ in the dotfiles repo",
         "stale: and the warning says where the current version lives, since "
         "the fix is the user's to make");
 

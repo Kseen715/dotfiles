@@ -99,7 +99,7 @@ int main(void) {
     osr_sb_init(&sb);
     hs_init(&p);
 
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     hs_path(&p, hs_text(&sb.root), "theme");
     osr_sb_env(&sb, "OSR_THEME_DIR", hs_text(&p));

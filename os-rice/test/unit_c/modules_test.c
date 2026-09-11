@@ -87,7 +87,7 @@ int main(void) {
 
     osr_sb_env_ubuntu(&sb);
     osr_sb_env(&sb, "OSR_INIT", "systemd");
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     /* modules/helpers.c writes one file by absolute system path; aim it at a
      * fixture dir instead (OSR_XFCE_HELPERS_DIR, DESIGN §11). Baseline rather
@@ -456,7 +456,7 @@ int main(void) {
     osr_sb_env(&sb, "OSR_ID_LIKE", "debian");
     osr_sb_env(&sb, "OSR_CODENAME", "noble");
     osr_sb_env(&sb, "OSR_VERSION_ID", "24.04");
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     /* A seed writes only when the file is ABSENT, and the sweep above already
      * ran helpers once -- so clear the fixture, exactly as fresh_home() clears

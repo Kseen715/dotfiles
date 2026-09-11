@@ -201,7 +201,7 @@ int osr_migrate_stale(const char *file, const char *detect_ere,
 
     if (hit)
         osr_warnf("%s still has %s, edited so it cannot be patched automatically"
-                  " - see zsh/rc.d/ in the dotfiles repo for the current version",
+                  " - see config/zsh/rc.d/ in the dotfiles repo for the current version",
                   file, what);
     return 1;
 }

@@ -42,7 +42,7 @@
 /* --- the facts ------------------------------------------------------------ */
 
 const char *osr_mod_root(void)      { return env_str("OSR_ROOT", "."); }
-const char *osr_mod_dotfiles(void)  { return env_str("OSR_DOTFILES", ".."); }
+const char *osr_mod_dotfiles(void)  { return env_str("OSR_DOTFILES", "../config"); }
 const char *osr_mod_user(void)      { return env_str("OSR_USER", ""); }
 const char *osr_mod_home(void)      { return env_str("OSR_HOME", env_str("HOME", "")); }
 const char *osr_mod_theme(void)     { return env_str("OSR_THEME", ""); }
@@ -943,7 +943,7 @@ int osr_ensure_line(const char *file, const char *line) {
  * executable's own location when nothing else has.
  * ------------------------------------------------------------------------- */
 const char *osr_mod_root(void)      { return env_str("OSR_ROOT", "."); }
-const char *osr_mod_dotfiles(void)  { return env_str("OSR_DOTFILES", ".."); }
+const char *osr_mod_dotfiles(void)  { return env_str("OSR_DOTFILES", "../config"); }
 const char *osr_mod_user(void)      { return env_str("OSR_USER", env_str("USERNAME", "")); }
 const char *osr_mod_home(void)      { return env_str("OSR_HOME", env_str("USERPROFILE", "")); }
 const char *osr_mod_theme(void)     { return env_str("OSR_THEME", ""); }

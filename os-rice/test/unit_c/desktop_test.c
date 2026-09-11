@@ -91,7 +91,7 @@ int main(void) {
     osr_sb_init(&sb);
     hs_init(&p);
 
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
     osr_sb_env(&sb, "OSR_INIT", "systemd");
     osr_sb_stub_body(&sb, "dpkg", "exit 1\n");

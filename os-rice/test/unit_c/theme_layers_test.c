@@ -171,7 +171,7 @@ int main(void) {
      * to ask which theme the user wants.
      * ================================================================ */
     osr_sb_env(&sb, "OSR_ROOT", hs_text(&sb.osr_root));
-    hs_path(&p, hs_text(&sb.osr_root), "..");
+    hs_path(&p, hs_text(&sb.osr_root), "../config");
     osr_sb_env(&sb, "OSR_DOTFILES", hs_text(&p));
 
     osr_assert_true(themable("btop"),
