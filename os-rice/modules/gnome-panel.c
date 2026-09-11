@@ -65,7 +65,7 @@ static int clock_detail(void *ctx) {
 
     (void)ctx;
     for (i = 0; CLOCK_KEYS[i] != NULL; i++) {
-        argv[0] = (char *)"gsettings";
+        argv[0] = (char *)osr_gsettings();
         argv[1] = (char *)"set";
         argv[2] = (char *)IFACE;
         argv[3] = (char *)CLOCK_KEYS[i];

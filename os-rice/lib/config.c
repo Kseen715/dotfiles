@@ -42,6 +42,7 @@
 #include "config.h"
 #include "build.h"
 #include "cmds.h"
+#include "gnome.h"
 #include "module.h"
 
 /* --- local plumbing -------------------------------------------------------- */
@@ -996,6 +997,59 @@ void osr_wallpaper_set_live(const char *img) {
 
 #else /* !_WIN32 */
 
+/* file_uri -- a path as the file:// URI GNOME stores. Everything outside the
+ * unreserved set is percent-encoded, which covers the two things a wallpaper
+ * path actually has: spaces, and the UTF-8 bytes of a non-ASCII filename. */
+static void file_uri(Str *out, const char *path) {
+    static const char hex[] = "0123456789ABCDEF";
+    const unsigned char *p = (const unsigned char *)path;
+    size_t i;
+
+    str_addz(out, "file://");
+    for (i = 0; p[i] != '\0'; i++) {
+        unsigned char c = p[i];
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+            || (c >= '0' && c <= '9')
+            || c == '-' || c == '_' || c == '.' || c == '~' || c == '/') {
+            str_addc(out, (char)c);
+        } else {
+            str_addc(out, '%');
+            str_addc(out, hex[c >> 4]);
+            str_addc(out, hex[c & 0x0f]);
+        }
+    }
+}
+
+/* gnome_wallpaper -- GNOME paints from a setting, not from a command: there is
+ * no `swww` to call, the Shell owns the root window, and X11 tools that draw on
+ * it (feh) are painted over. Both URI keys are written because GNOME 42+ picks
+ * between them by color-scheme, and a rice that set only one flips back to the
+ * old image the moment the desktop switches to dark. Returns 1 when this is a
+ * GNOME session and the writes were attempted. */
+static int gnome_wallpaper(const char *img) {
+    static const char *const keys[] = { "picture-uri", "picture-uri-dark", NULL };
+    Str uri;
+    char *argv[6];
+    int i;
+
+    if (!osr_gnome_is_session() || !osr_have_cmd(osr_gsettings())) return 0;
+
+    str_init(&uri);
+    file_uri(&uri, img);
+    argv[0] = (char *)osr_gsettings();
+    argv[1] = (char *)"set";
+    argv[2] = (char *)"org.gnome.desktop.background";
+    argv[4] = (char *)str_text(&uri);
+    argv[5] = NULL;
+    for (i = 0; keys[i] != NULL; i++) {
+        argv[3] = (char *)keys[i];
+        if (osr_run_user_quiet(argv) != 0)
+            osr_warnf("could not set %s - the desktop keeps its wallpaper", keys[i]);
+    }
+    str_free(&uri);
+    return 1;
+}
+
 void osr_wallpaper_set_live(const char *img) {
     char *argv[5];
 
@@ -1016,6 +1070,8 @@ void osr_wallpaper_set_live(const char *img) {
         argv[0] = (char *)"feh"; argv[1] = (char *)"--bg-scale";
         argv[2] = (char *)img; argv[3] = NULL;
         if (osr_run_user_quiet(argv) != 0) osr_warnf("feh failed to set wallpaper");
+    } else if (gnome_wallpaper(img)) {
+        /* Painted through gsettings, above. */
     } else {
         /* A container, an ssh session, a CI host: nothing to paint, and that
          * is not a failure (§9). The record above is still the answer. */

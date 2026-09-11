@@ -20,6 +20,7 @@
  * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
+#include "../lib/gnome.h"
 #include "../lib/common.h"
 #include "../lib/cmds.h"
 #include "../lib/config.h"
@@ -27,19 +28,49 @@
 #include "../lib/render.h"
 
 #include <stddef.h>
+#include <string.h>
 #include <unistd.h>
 
 static int nerd_font(void *ctx) { return osr_install_nerd_font((const char *)ctx); }
 
 /* gset -- `as_user gsettings set org.gnome.desktop.interface <key> <value>`,
- * best-effort: no dconf daemon in a container, and a failure here is cosmetic
- * (§9). */
+ * then read the key back and say so when it did not take.
+ *
+ * Still best-effort -- there is no dconf daemon in a container, and a desktop
+ * that does not read these keys is not a failed rice (§9) -- but silent was
+ * too quiet. `gsettings set` exits 0 on a write dconf then drops (a session
+ * bus the caller cannot reach, a schema shadowed by a snap's
+ * GSETTINGS_SCHEMA_DIR), so the exit status alone proves nothing and the
+ * desktop just kept its old colours with no line anywhere saying why. The
+ * read-back is the only honest check. */
 static void gset(const char *key, const char *value) {
     char *argv[6];
-    argv[0] = (char *)"gsettings"; argv[1] = (char *)"set";
+    Str got;
+    const char *text;
+    size_t len;
+
+    argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"set";
     argv[2] = (char *)"org.gnome.desktop.interface";
     argv[3] = (char *)key; argv[4] = (char *)value; argv[5] = NULL;
-    (void)osr_run_user_quiet(argv);
+    if (osr_run_user_quiet(argv) != 0) {
+        osr_warnf("gsettings could not set %s=%s", key, value);
+        return;
+    }
+
+    str_init(&got);
+    argv[1] = (char *)"get"; argv[4] = NULL;
+    if (osr_run_user_capture(argv, &got) != 0) { str_free(&got); return; }
+
+    /* `gsettings get` quotes a string ('purple') and does not quote the rest;
+     * trim the quotes and the newline before comparing. */
+    text = str_text(&got);
+    len = got.len;
+    while (len > 0 && (text[len - 1] == '\n' || text[len - 1] == '\r')) len--;
+    if (len >= 2 && text[0] == '\'' && text[len - 1] == '\'') { text++; len -= 2; }
+    if (strlen(value) != len || strncmp(text, value, len) != 0)
+        osr_warnf("%s did not take - it reads %.*s, not %s "
+                  "(no dconf for this session?)", key, (int)len, text, value);
+    str_free(&got);
 }
 
 int osrm_theming(void) {
@@ -108,7 +139,13 @@ int osrm_theming(void) {
         (void)osr_install_theme_layer(layers[i], layers[i + 1], str_text(&dst));
     }
 
-    if (osr_have_cmd("gsettings")) {
+    if (!osr_have_cmd(osr_gsettings())) {
+        /* Not an error on a WM that has no settings daemon -- that is what the
+         * files above are for -- but on GNOME it means the desktop keeps its
+         * old colours and nothing else in this run would have said so. */
+        osr_warnf("gsettings not on PATH - GNOME keys (accent, gtk/icon theme) "
+                  "left alone");
+    } else {
         Str value;
         str_init(&value);
         for (i = 0; gkeys[i] != NULL; i += 2) {

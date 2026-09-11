@@ -31,6 +31,7 @@
  * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
+#include "../lib/gnome.h"
 #include "../lib/common.h"
 
 #include <stddef.h>
@@ -79,7 +80,7 @@ static int has_key(const char *schema, const char *key) {
     int found = 0;
 
     str_init(&out);
-    argv[0] = (char *)"gsettings"; argv[1] = (char *)"list-keys";
+    argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"list-keys";
     argv[2] = (char *)schema; argv[3] = NULL;
     if (osr_run_user_capture(argv, &out)) {
         while (!found && next_line(str_text(&out), out.len, &pos, &line))
@@ -104,7 +105,7 @@ static void gsettings_apply(const char *file) {
 
     str_init(&base);
     base_of(&base, file);
-    if (!osr_have_cmd("gsettings")) {
+    if (!osr_have_cmd(osr_gsettings())) {
         osr_warnf("gsettings not available - skipping %s", str_text(&base));
         str_free(&base);
         free(buf);
@@ -131,7 +132,7 @@ static void gsettings_apply(const char *file) {
             continue;
         }
         if (has_key(str_text(&schema), str_text(&key))) {
-            argv[0] = (char *)"gsettings"; argv[1] = (char *)"set";
+            argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"set";
             argv[2] = schema.p; argv[3] = key.p; argv[4] = (char *)val; argv[5] = NULL;
             if (osr_run_user_quiet(argv) == 0) set++;
             else osr_warnf("gsettings set %s %s '%s' failed",

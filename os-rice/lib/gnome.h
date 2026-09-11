@@ -24,6 +24,18 @@
  * XDG_SESSION_DESKTOP. */
 int osr_gnome_is_session(void);
 
+/* osr_gsettings -- the gsettings to run, as an argv[0].
+ *
+ * Not the literal "gsettings": PATH order decides which glib answers, and a
+ * Homebrew or Nix glib earlier on PATH is built without the dconf GIO module.
+ * It still exits 0 -- it writes to its own keyfile backend under
+ * ~/.config/glib-2.0/settings, which nothing in the session reads -- so a
+ * theme apply reported success while the desktop kept its old colours, and
+ * even reading the key back through the same binary agreed with the write.
+ * The session's settings live in the session's dconf, so prefer the system
+ * binary and fall back to PATH only where there is none. */
+const char *osr_gsettings(void);
+
 /* osr_gnome_free_binding -- unbind every GNOME Shell / mutter key holding this
  * chord, so a custom shortcut can take it: an upstream keybinding on the same
  * chord silently WINS over a custom one, leaving a dead shortcut with nothing

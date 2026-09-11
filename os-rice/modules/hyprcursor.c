@@ -6,6 +6,7 @@
  * under test/unit_c/ rather than diffed against a recording. C89.
  */
 #include "../lib/module.h"
+#include "../lib/gnome.h"
 #include "../lib/common.h"
 
 #include <stddef.h>
@@ -37,8 +38,8 @@ int osrm_hyprcursor(void) {
     }
     /* Cosmetic, and only where the tool exists: a bare WM has no gsettings and
      * no flatpak, and neither is worth failing the module over. */
-    if (osr_have_cmd("gsettings")) {
-        argv[0] = (char *)"gsettings"; argv[1] = (char *)"set";
+    if (osr_have_cmd(osr_gsettings())) {
+        argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"set";
         argv[2] = (char *)"org.gnome.desktop.interface";
         argv[3] = (char *)"cursor-theme"; argv[4] = (char *)"Bibata-Modern-Ice";
         argv[5] = NULL;

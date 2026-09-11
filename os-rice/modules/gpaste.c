@@ -63,7 +63,7 @@ int osrm_gpaste(void) {
 
     ok = osr_step("Enabling the GPaste shell extension", enable_extension, NULL) && ok;
     for (i = 0; settings[i] != NULL; i += 2) {
-        argv[0] = (char *)"gsettings"; argv[1] = (char *)"set";
+        argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"set";
         argv[2] = (char *)"org.gnome.GPaste"; argv[3] = (char *)settings[i];
         argv[4] = (char *)settings[i + 1]; argv[5] = NULL;
         (void)osr_run_user(argv);

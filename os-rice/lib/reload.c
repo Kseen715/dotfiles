@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include "module.h"
+#include "gnome.h"
 
 #include "cmds.h"
 #include "reload.h"
@@ -272,9 +273,9 @@ int osr_reload_gtk(void) {
     Str theme;
     Str cmd;
 
-    if (!osr_have_cmd("gsettings")) return 1;
+    if (!osr_have_cmd(osr_gsettings())) return 1;
 
-    argv[0] = (char *)"gsettings";
+    argv[0] = (char *)osr_gsettings();
     argv[1] = (char *)"get";
     argv[2] = (char *)iface;
     argv[3] = (char *)"gtk-theme";
@@ -290,8 +291,9 @@ int osr_reload_gtk(void) {
      * it are not. The value comes back from gsettings already quoted, and is
      * spliced in unquoted for exactly that reason. */
     str_init(&cmd);
-    str_addzz(&cmd, "gsettings set ", iface, " gtk-theme 'Adwaita' && gsettings set ", iface,
-        " gtk-theme ", str_text(&theme), (const char *)NULL);
+    str_addzz(&cmd, osr_gsettings(), " set ", iface, " gtk-theme 'Adwaita' && ",
+        osr_gsettings(), " set ", iface, " gtk-theme ", str_text(&theme),
+        (const char *)NULL);
 
     argv[0] = (char *)"sh";
     argv[1] = (char *)"-c";

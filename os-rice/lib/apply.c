@@ -26,6 +26,7 @@
 
 #include "apply.h"
 #include "cmds.h"
+#include "reload.h"
 #include "config.h"
 
 /* The markers that make a module theme-carrying. */
@@ -515,9 +516,19 @@ int osr_apply_main(int argc, char **argv) {
         osr_theme_modules(&out, argc == 3 ? argv[2] : "");
     } else if (strcmp(argv[1], "theme") == 0 && argc <= 3) {
         /* The whole §6a apply. `osr theme <name>` is this, and so is the
-         * runner's --theme-only path. */
+         * runner's --theme-only path.
+         *
+         * And the reload, because rendering the layers only rewrites files:
+         * a running GTK app re-reads gtk.css when it is told to and not
+         * before, so an apply without this leaves every open window in the
+         * old palette and looks like the switch did nothing. The runner's
+         * path reloads for itself (it has --no-reload to turn that off);
+         * this one is the direct call, and it had no way to ask. */
+        int ok;
         str_free(&out);
-        return osr_apply_theme(argc == 3 ? argv[2] : "") ? 0 : 1;
+        ok = osr_apply_theme(argc == 3 ? argv[2] : "");
+        (void)osr_reload_all();
+        return ok ? 0 : 1;
     } else {
         str_free(&out);
         return apply_usage();

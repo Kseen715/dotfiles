@@ -28,7 +28,7 @@ int osrm_gnome_overview(void) {
     /* Only under GNOME: the Super-tap overview is a mutter setting, and setting
      * it anywhere else writes a key nothing reads. */
     if (!osr_gnome_is_session()) return 1;
-    argv[0] = (char *)"gsettings"; argv[1] = (char *)"set";
+    argv[0] = (char *)osr_gsettings(); argv[1] = (char *)"set";
     argv[2] = (char *)"org.gnome.mutter"; argv[3] = (char *)"overlay-key";
     argv[4] = (char *)""; argv[5] = NULL;
     return osr_run_step_user("Disabling the Super-tap overview", argv);

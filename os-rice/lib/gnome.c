@@ -29,6 +29,45 @@ static const char *const KEY_SCHEMAS[] = {
     NULL
 };
 
+const char *osr_gsettings(void) {
+    /* Package managers that install a whole parallel userland under one prefix.
+     * Their glib is a normal build with one thing missing: the dconf GIO
+     * module, which is packaged separately and rarely pulled in. Without it
+     * GSettings silently falls back to the keyfile backend, so `set` exits 0,
+     * `get` through the same binary agrees with it, and the session -- which
+     * reads dconf -- never hears about any of it. */
+    static const char *const foreign[] = {
+        "/home/linuxbrew/.linuxbrew/", "/opt/homebrew/", "/nix/store/",
+        "/var/lib/flatpak/", "/snap/", NULL
+    };
+    static const char *const sys[] = { "/usr/bin/gsettings", "/bin/gsettings", NULL };
+    static char chosen[512];
+    Str found;
+    size_t i;
+
+    if (chosen[0] != '\0') return chosen;
+    osr_copy_bounded(chosen, sizeof(chosen), "gsettings");
+
+    str_init(&found);
+    if (osr_path_lookup("gsettings", &found)) {
+        for (i = 0; foreign[i] != NULL; i++) {
+            size_t n = strlen(foreign[i]);
+            if (found.len < n || strncmp(str_text(&found), foreign[i], n) != 0) continue;
+            /* PATH points at one of those. Take the distro's, if there is one;
+             * with none, the foreign binary is still the only gsettings here
+             * and a keyfile write beats no write at all. */
+            for (i = 0; sys[i] != NULL; i++) {
+                if (access(sys[i], X_OK) != 0) continue;
+                osr_copy_bounded(chosen, sizeof(chosen), sys[i]);
+                break;
+            }
+            break;
+        }
+    }
+    str_free(&found);
+    return chosen;
+}
+
 /* has_gnome -- a *GNOME* / *gnome* glob over one variable's value. */
 static int has_gnome(const char *value) {
     const char *p;
@@ -116,7 +155,7 @@ int osr_gnome_free_binding(const char *binding) {
         const char *k;
         const char *kend;
 
-        argv[0] = (char *)"gsettings";
+        argv[0] = (char *)osr_gsettings();
         argv[1] = (char *)"list-recursively";
         argv[2] = (char *)KEY_SCHEMAS[i];
         argv[3] = NULL;
@@ -145,7 +184,7 @@ int osr_gnome_free_binding(const char *binding) {
             str_init(&key);
             str_add(&key, start, (size_t)(k - start));
 
-            argv[0] = (char *)"gsettings";
+            argv[0] = (char *)osr_gsettings();
             argv[1] = (char *)"set";
             argv[2] = (char *)KEY_SCHEMAS[i];
             argv[3] = (char *)str_text(&key);
@@ -183,7 +222,7 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
     str_addzz(&child, CUSTOM_KEY, ":", str_text(&path), (const char *)NULL);
 
     str_init(&existing);
-    argv[0] = (char *)"gsettings";
+    argv[0] = (char *)osr_gsettings();
     argv[1] = (char *)"get";
     argv[2] = (char *)MEDIA_KEYS;
     argv[3] = (char *)"custom-keybindings";
@@ -199,7 +238,7 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
         return 1;
     }
 
-    argv[0] = (char *)"gsettings";
+    argv[0] = (char *)osr_gsettings();
     argv[1] = (char *)"set";
     argv[2] = (char *)str_text(&child);
     argv[3] = (char *)"name";
@@ -354,7 +393,7 @@ static void ext_enable(const char *uuid) {
     str_addc(&quoted, '\'');
     str_addzz(&quoted, uuid, "'", (const char *)NULL);
 
-    argv[0] = (char *)"gsettings";
+    argv[0] = (char *)osr_gsettings();
     argv[1] = (char *)"get";
     argv[2] = (char *)"org.gnome.shell";
     argv[3] = (char *)"enabled-extensions";
