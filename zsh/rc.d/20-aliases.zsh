@@ -90,12 +90,17 @@ if [[ "$TERM" == xterm-ghostty && "$GHOSTTY_SHELL_FEATURES" != *ssh-* ]]; then
   }
 fi
 
-# fastfetch() — Termux only: the Android Vulkan loader writes driver chatter to
-# stderr while the gpu module probes it, so every run ends with a block of
-#   <GPU> [WARNING][T:32157] <VK_QUEUE> ... ~QueueInternal start.
-# lines the device's own driver emits, after the output. fastfetch has no knob
-# for it (its GPU detection on Android IS Vulkan), so drop stderr for this one
-# command on this one platform. Exit status is untouched.
+# fastfetch() — Termux only: the Huawei Vulkan driver logs its own teardown
+# chatter while the gpu module probes it —
+#   <GPU> [WARNING][T:6256] <VK_QUEUE> ... ~QueueInternal start.
+# — and writes it to STDOUT, mixed into fastfetch's own output, so a plain
+# `2>/dev/null` does nothing. fastfetch has no knob for it (its GPU detection on
+# Android IS Vulkan), so drop just those lines. stderr is merged in so a real
+# error still reaches the terminal; --pipe false keeps the logo and colors that
+# fastfetch would otherwise turn off on seeing a pipe. Exit status is fastfetch's.
 if [[ -n "${TERMUX_VERSION:-}" || "${PREFIX:-}" == */com.termux/* ]]; then
-  fastfetch() { command fastfetch "$@" 2>/dev/null; }
+  fastfetch() {
+    command fastfetch --pipe false "$@" 2>&1 | grep -v '^<GPU> \['
+    return $pipestatus[1]
+  }
 fi
