@@ -248,6 +248,53 @@ static void provision_tree(void) {
  * Every value is set only when the environment does not already carry one, so
  * a caller (a test, a CI job, `NO_COLOR=1`) still wins.
  */
+/* unsnap -- undo a snap launcher's environment rewrite, so gsettings resolves
+ * the SYSTEM schemas.
+ *
+ * A terminal inside a snapped editor (VS Code, and every other snap that ships
+ * its own GNOME platform) exports GSETTINGS_SCHEMA_DIR, XDG_DATA_HOME and
+ * XDG_DATA_DIRS pointing into the snap's bundled runtime. glib takes the FIRST
+ * definition of a schema id it finds there, and the snap's copy of
+ * org.gnome.desktop.interface is whatever GNOME the snap was built against --
+ * an old one, missing color-scheme and accent-color. So every gsettings write
+ * the theming layer makes against those keys fails with "No such key", silently
+ * (a theme apply must not die because one toolkit key is absent), the desktop
+ * chrome keeps the accent it had, and the apply looks like it did nothing.
+ *
+ * The session's real apps are not launched from inside the snap and read the
+ * real schemas, so the fix is to stop inheriting the snap's view here rather
+ * than to work around a missing key. The snap wrappers leave the pre-rewrite
+ * value behind in *_SNAP_ORIG when they have one. */
+static void unsnap(void) {
+    static const char *const orig[] = {
+        "XDG_DATA_DIRS_VSCODE_SNAP_ORIG", "XDG_DATA_DIRS_SNAP_ORIG", NULL
+    };
+    const char *home;
+    int i;
+
+    if (!env_is_set("SNAP") || !env_is_set("SNAP_NAME")) return;
+
+    osr_unsetenv("GSETTINGS_SCHEMA_DIR");
+
+    for (i = 0; orig[i] != NULL; i++) {
+        if (env_str(orig[i], "")[0] != '\0') {
+            osr_setenv("XDG_DATA_DIRS", env_str(orig[i], ""));
+            break;
+        }
+    }
+    if (orig[i] == NULL) osr_setenv("XDG_DATA_DIRS", "/usr/local/share:/usr/share");
+
+    home = env_str("SNAP_REAL_HOME", "");
+    if (home[0] == '\0') home = env_str("HOME", "");
+    if (home[0] != '\0') {
+        Str data;
+        str_init(&data);
+        str_addzz(&data, home, "/.local/share", (const char *)NULL);
+        osr_setenv("XDG_DATA_HOME", str_text(&data));
+        str_free(&data);
+    }
+}
+
 static void startup_env(void) {
     const char *const *pal;
     int i;
@@ -256,6 +303,8 @@ static void startup_env(void) {
      * `$(...)` fd 1 is the capture pipe, so the real terminal is on fd 3 when
      * one was handed over. With no fd 3 it is plain fd 1, which is the
      * ordinary case now that no shell wraps this. */
+    unsnap();
+
     pal = osr_palette_values(query_fd());
     for (i = 0; i < OSR_PALETTE_COUNT; i++) {
         if (!env_is_set(osr_palette_names[i])) {
