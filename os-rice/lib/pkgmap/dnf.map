@@ -311,3 +311,10 @@ xcape =
 elogind =
 
 cuik-build-deps = luajit ninja-build nasm clang lld
+
+# Theme names (see the block at the end of any.map).
+Breeze = breeze-gtk
+Adwaita-dark = gnome-themes-extra
+Vanilla-DMZ = dmz-cursor-theme
+Gruvbox =
+PearDarkCursors =

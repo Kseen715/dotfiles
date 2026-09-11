@@ -116,6 +116,13 @@ int osrm_rust(void) {
     Str cargo;
     int ok;
 
+    /* No theme layer anywhere in a toolchain, so nothing for a theme pass to
+     * do -- and plenty for it to break: rustup and cargo are plain commands,
+     * which theme-only does not neutralise the way it does the package verbs.
+     * The guard lives here rather than in the module table because `serie`
+     * calls this directly, as its cargo: row's prerequisite. */
+    if (osr_theme_only()) return 1;
+
     /* Termux: rustup refuses to run at all here (it compares $HOME against the
      * euid home -- one Android app uid, no passwd entry -- and bails before it
      * writes settings.toml), and cargo-binstall's release asset is a

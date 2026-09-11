@@ -586,3 +586,13 @@ cuik-build-deps = luajit ninja-build nasm clang lld
 # and its kwin_wayland come only with plasma-workspace-wayland.
 plasma-desktop = kde-plasma-desktop
 plasma-wayland = plasma-workspace-wayland
+
+# Theme names (see the block at the end of any.map). Adwaita-dark is not a
+# package of its own: it ships inside gnome-themes-extra, the same place
+# gtk-dark-theme resolves to. No Debian package carries a Gruvbox GTK icon
+# theme, and empty RHS = skip, so the rice warns instead of failing an install.
+Breeze = breeze-gtk-theme
+Adwaita-dark = gnome-themes-extra
+Vanilla-DMZ = dmz-cursor-theme
+Gruvbox =
+PearDarkCursors =

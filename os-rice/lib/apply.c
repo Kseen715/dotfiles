@@ -250,10 +250,16 @@ static int run_layer(const char *name) {
     pid = fork();
     if (pid < 0) return 0;
     if (pid == 0) {
+        /* stdout to the log, stderr left on the terminal. A layer's normal
+         * chatter ("applying config ...") is per-file and would bury the six
+         * lines the apply itself prints, so it goes to the log; a warning does
+         * not -- it is the one thing in a layer the user has to act on (a theme
+         * that names an uninstalled GTK theme, a key that would not take), and
+         * in the log it is seen by nobody, because the log is only ever
+         * mentioned when the layer FAILED. */
         int fd = open(env_str("OSR_LOG", "/dev/null"), O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (fd >= 0) {
             (void)dup2(fd, 1);
-            (void)dup2(fd, 2);
             if (fd > 2) close(fd);
         }
         _exit(osr_module_run(name, 1) ? 0 : 1);

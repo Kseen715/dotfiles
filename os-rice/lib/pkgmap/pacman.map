@@ -118,3 +118,10 @@ zramen =
 # than to a separate package.
 plasma-desktop = plasma-meta
 plasma-wayland = plasma-workspace
+
+# Theme names (see the block at the end of any.map).
+Breeze = breeze-gtk
+Adwaita-dark = gnome-themes-extra
+Vanilla-DMZ = xcursor-vanilla-dmz
+Gruvbox =
+PearDarkCursors =

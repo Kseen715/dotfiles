@@ -371,7 +371,11 @@ int osrm_zsh(void) {
      * osr_set_login_shell walks chsh -> usermod -> /etc/passwd and registers zsh
      * in /etc/shells first. */
     str_initv(&zsh_bin, &desc, (Str *)NULL);
-    if (!osr_path_lookup("zsh", &zsh_bin) || zsh_bin.len == 0) {
+    if (osr_theme_only()) {
+        /* Not a theme layer: the login shell is system state, the write needs
+         * root, and a theme apply has neither the right nor a sudo ticket --
+         * it only ever warned that chsh had failed. */
+    } else if (!osr_path_lookup("zsh", &zsh_bin) || zsh_bin.len == 0) {
         osr_warn("zsh not on PATH after install - leaving login shell unchanged");
     } else if (!osr_user_shell_is(osr_mod_user(), str_text(&zsh_bin))) {
         ok = osr_step("Setting default shell to zsh", set_login_shell,

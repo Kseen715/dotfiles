@@ -271,6 +271,14 @@ int osr_module_run(const char *name, int theme_only) {
         osr_warn("no such C module");
         return 0;
     }
+    /* A theme pass runs a module for its theme layer, so a module that has no
+     * theme layer has nothing to do on one. Running it anyway was not merely
+     * wasted work: theme-only neutralises the package and service verbs, but
+     * not a plain command, so `rust` still shelled out to cargo and `cliphist`
+     * to go -- installs, on the pass that is documented to install nothing,
+     * failing the layer on any box without those toolchains. */
+    if (theme_only && !m->themable) return 1;
+
 #ifdef OSR_RUNTIME_MODULES
     ok = osr_module_runtime_run(name);
 #else

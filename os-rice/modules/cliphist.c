@@ -55,15 +55,20 @@ int osrm_cliphist(void) {
         }
     }
 
-    /* ---- cliphist-wofi-img helper ---------------------------------------- */
-    if (!osr_have_cmd("go")) (void)osr_pkg_install(go_pkg);
-    argv[0] = (char *)"go"; argv[1] = (char *)"install";
-    argv[2] = (char *)"github.com/pdf/cliphist-wofi-img@latest"; argv[3] = NULL;
-    ok = osr_run_step_user("Installing cliphist-wofi-img (go)", argv) && ok;
+    /* ---- cliphist-wofi-img helper ----------------------------------------
+     * A go build and a download, so not on a theme pass: nothing about this
+     * helper is themed, osr_run_step_user is not one of the verbs theme-only
+     * neutralises, and on a box without go it failed the whole layer. */
+    if (!osr_theme_only()) {
+        if (!osr_have_cmd("go")) (void)osr_pkg_install(go_pkg);
+        argv[0] = (char *)"go"; argv[1] = (char *)"install";
+        argv[2] = (char *)"github.com/pdf/cliphist-wofi-img@latest"; argv[3] = NULL;
+        ok = osr_run_step_user("Installing cliphist-wofi-img (go)", argv) && ok;
+    }
 
     /* Upstream wofi image-preview shim to /usr/local/bin (a system path, so
      * as_root). */
-    if (access("/usr/local/bin/cliphist-wofi-img", X_OK) != 0) {
+    if (!osr_theme_only() && access("/usr/local/bin/cliphist-wofi-img", X_OK) != 0) {
         str_init(&tmp);
         str_addzz(&tmp, env_str("TMPDIR", "/tmp"), "/cliphist-wofi-img", (const char *)NULL);
         if (osr_fetch_download(WOFI_IMG_URL, str_text(&tmp), 0)) {
