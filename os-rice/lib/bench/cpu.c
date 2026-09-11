@@ -72,7 +72,7 @@ static int temp_by_label(char *out, size_t cap) {
     int best_rank = 0;
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     str_initv(&path, &label, &best, (Str *)NULL);
 
     while ((e = readdir(d)) != NULL) {
@@ -129,7 +129,7 @@ static int temp_by_driver(char *out, size_t cap) {
     size_t i;
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     str_initv(&path, &name, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {
@@ -220,7 +220,7 @@ static int sample_freq(long *out) {
     int found = 0;
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     str_init(&path);
     while ((e = readdir(d)) != NULL) {
         long v;
@@ -503,7 +503,7 @@ static void census(Str *out, const char *base, const char *leaf, const char *pre
     int skipped = 0;
 
     d = opendir(base);
-    if (d == NULL) {
+    if (!d) {
         str_addz(out, "absent (this kernel has no such class)");
         return;
     }

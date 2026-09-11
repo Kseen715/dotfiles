@@ -13,7 +13,6 @@
 int osrm_waybar(void) {
     static const char *const pkgs[] = { "waybar", "gsimplecal", "ddcutil", NULL };
     Str dir, src, dst;
-    char *argv[4];
     int ok;
 
     ok = osr_pkg_install_step("Installing Waybar", pkgs);

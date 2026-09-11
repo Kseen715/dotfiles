@@ -1225,7 +1225,7 @@ void osr_list_dir(Str *out, const char *dir, const char *marker,
     struct dirent *ent;
 
     d = opendir(dir);
-    if (d == NULL) return;
+    if (!d) return;
     while ((ent = readdir(d)) != NULL)
         list_dir_keep(ent->d_name, dir, marker, strip_suffix, &names, &count, &cap);
     closedir(d);

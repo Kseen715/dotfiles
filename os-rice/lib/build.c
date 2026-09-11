@@ -318,7 +318,7 @@ static int find_walk(Str *out, const char *dir, const char *name,
 
     if (depth <= 0) return 0;
     d = opendir(dir);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     while (!found && (e = readdir(d)) != NULL) {
         Str path;
         struct stat st;
@@ -2231,7 +2231,7 @@ static void warn_glob(const char *dir, const char *prefix, const char *skip,
     struct dirent *e;
     size_t n = strlen(prefix);
 
-    if (d == NULL) return;
+    if (!d) return;
     while ((e = readdir(d)) != NULL) {
         Str path;
         struct stat st;
@@ -2698,7 +2698,7 @@ static int provide_yandex_browser_deb(void) {
     {
         DIR *d = opendir(str_text(&tmp));
         struct dirent *e;
-        if (d != NULL) {
+        if (d) {
             while (data.len == 0 && (e = readdir(d)) != NULL) {
                 if (strncmp(e->d_name, "data.tar", 8) != 0) continue;
                 str_addzz(&data, str_text(&tmp), "/", e->d_name, (const char *)NULL);

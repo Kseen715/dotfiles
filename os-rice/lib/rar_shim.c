@@ -558,7 +558,7 @@ OsrRar *osr_rar_open(const char *path) {
     }
     for (i = 0; i < (int)(sizeof(r->a.formats) / sizeof(r->a.formats[0])); i++) {
         int bid;
-        if (r->a.formats[i].bid == NULL) continue;
+        if (!r->a.formats[i].bid) continue;
         r->a.format = &r->a.formats[i];        /* the bidder reads format->data */
         bid = r->a.format->bid(&r->a, best);
         __archive_read_seek(&r->a, 0, SEEK_SET);
@@ -574,7 +574,7 @@ int osr_rar_next(OsrRar *r, OsrRarEntry *e) {
 
     /* Whatever of the previous member was not read has to be stepped over
      * before the next header is where the reader expects it. */
-    if (r->a.archive.state == ARCHIVE_STATE_DATA && r->a.format->read_data_skip != NULL)
+    if (r->a.archive.state == ARCHIVE_STATE_DATA && r->a.format->read_data_skip)
         r->a.format->read_data_skip(&r->a);
 
     archive_entry_clear(r->entry);
@@ -619,7 +619,7 @@ void osr_rar_close(OsrRar *r) {
     int i;
     if (r == NULL) return;
     for (i = 0; i < (int)(sizeof(r->a.formats) / sizeof(r->a.formats[0])); i++)
-        if (r->a.formats[i].cleanup != NULL) {
+        if (r->a.formats[i].cleanup) {
             r->a.format = &r->a.formats[i];
             r->a.formats[i].cleanup(&r->a);
         }

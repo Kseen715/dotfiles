@@ -94,7 +94,7 @@ static int detect_rapl(PwrMeter *m) {
     int denied = 0;          /* ...of which some were unreadable */
 
     d = opendir(base);
-    if (d == NULL) {
+    if (!d) {
         /* No powercap tree at all: CONFIG_POWERCAP is off, or this is a guest
          * whose kernel never had it. Distinct from "empty", which is a driver
          * that merely has not been loaded. */
@@ -207,7 +207,7 @@ static int detect_hwmon(PwrMeter *m) {
     int found = 0;
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     str_initv(&path, &name, &found_at, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {
@@ -273,7 +273,7 @@ static int detect_battery(PwrMeter *m) {
     int on_ac = 0;
 
     d = opendir(base);
-    if (d == NULL) return 0;
+    if (!d) return 0;
     str_initv(&path, &status, (Str *)NULL);
 
     while (!found && (e = readdir(d)) != NULL) {

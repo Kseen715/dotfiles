@@ -271,7 +271,7 @@ static int drm_card_of_nouveau(void) {
     struct dirent *ent;
     int card = -1;
 
-    if (d == NULL) return -1;
+    if (!d) return -1;
     while (card < 0 && (ent = readdir(d)) != NULL) {
         Str path;
         const char *n = ent->d_name;

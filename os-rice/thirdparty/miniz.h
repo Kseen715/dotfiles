@@ -42,8 +42,9 @@
  * What the script does to upstream, beyond concatenating the two files:
  * rewrites `//` comments, empties the unknown-compiler fallback definition
  * of MZ_FORCEINLINE (C90 has no `inline`; the gcc and MSVC spellings beside
- * it are extensions and are kept), and sets the two macros below. System
- * #includes are left where upstream put them.
+ * it are extensions and are kept), comments out upstream's #pragma message
+ * about the file-I/O path, and sets the two macros below. System #includes
+ * are left where upstream put them.
  */
 
 /* Extract only. MINIZ_NO_DEFLATE_APIS turns off MINIZ_NO_ARCHIVE_WRITING_APIS
@@ -4662,7 +4663,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 #define MZ_DELETE_FILE remove
 
 #else
-#pragma message("Using fopen, ftello, fseeko, stat() etc. path for file I/O - this path may not support large files.")
+/* amalgamated: silenced */
+/* #pragma message("Using fopen, ftello, fseeko, stat() etc. path for file I/O - this path may not support large files.") */
 #ifndef MINIZ_NO_TIME
 #include <utime.h>
 #endif

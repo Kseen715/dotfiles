@@ -64,8 +64,9 @@ PROLOGUE = r'''/*
  * What the script does to upstream, beyond concatenating the two files:
  * rewrites `//` comments, empties the unknown-compiler fallback definition
  * of MZ_FORCEINLINE (C90 has no `inline`; the gcc and MSVC spellings beside
- * it are extensions and are kept), and sets the two macros below. System
- * #includes are left where upstream put them.
+ * it are extensions and are kept), comments out upstream's #pragma message
+ * about the file-I/O path, and sets the two macros below. System #includes
+ * are left where upstream put them.
  */
 
 /* Extract only. MINIZ_NO_DEFLATE_APIS turns off MINIZ_NO_ARCHIVE_WRITING_APIS
@@ -80,10 +81,16 @@ PROLOGUE = r'''/*
 
 
 FORCEINLINE = re.compile(r'^#define MZ_FORCEINLINE inline\s*$', re.M)
+PRAGMA_MESSAGE = re.compile(r'^#pragma message\(.*\)\s*$', re.M)
+PRAGMAS = {}
 
 
 def clean(text, path):
-    """The one upstream edit: no `inline` on the compiler nobody named.
+    """Two upstream edits: no `inline`, and no #pragma message.
+
+    miniz.c announces its file-I/O path with a #pragma message, which no
+    compiler flag can quiet; commented out, it stops being printed on every
+    build. main() checks that exactly one was found.
 
     miniz.h picks __forceinline for MSVC and __inline__ for gcc/clang, both
     extensions this tree already compiles with, and falls back to plain
@@ -91,6 +98,12 @@ def clean(text, path):
     compiler reads it as a type name and the declaration after it stops
     parsing. MZ_FORCEINLINE is a hint; empty is a correct definition of it.
     """
+    # The file-I/O note miniz.c prints on every build of lib/miniz.c. No -W
+    # flag turns a #pragma message off, so the line itself goes.
+    text, pragmas = PRAGMA_MESSAGE.subn(
+        lambda m: '/* amalgamated: silenced */\n/* %s */' % m.group(0), text)
+    PRAGMAS[os.path.basename(path)] = pragmas
+
     if os.path.basename(path) != 'miniz.h':
         return text
     text, n = FORCEINLINE.subn(
@@ -118,6 +131,8 @@ def main():
         clean=clean,
         prefix='mz_amalg',
     )
+    assert sum(PRAGMAS.values()) == 1, (
+        'expected exactly one #pragma message upstream, found %r' % PRAGMAS)
     open(out, 'w', encoding='utf-8').write(text)
     print('%s: %d headers, %d sources, %d renamed statics, %d lines'
           % (out, nh, ns, len(set(n for v in renames.values() for n in v)),

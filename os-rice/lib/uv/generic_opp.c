@@ -150,7 +150,7 @@ static int probe_cpufreq(Str *report, Str *driver_out) {
     int count = 0;
 
     d = opendir(base);
-    if (d == NULL) {
+    if (!d) {
         row(report, "cpufreq", "no /sys/devices/system/cpu/cpufreq (no scaling driver)");
         return 0;
     }
@@ -218,7 +218,7 @@ static int probe_opp(Str *report) {
         return 0;
     }
     d = opendir(base);
-    if (d == NULL) {
+    if (!d) {
         row(report, "opp table",
             geteuid() == 0 ? "no /sys/kernel/debug/opp (kernel has no OPP tables)"
                            : "not readable as this user - re-run probe as root to see it");
@@ -261,7 +261,7 @@ static int probe_regulators(Str *report) {
     int shown = 0, others = 0;
 
     d = opendir(base);
-    if (d == NULL) {
+    if (!d) {
         row(report, "regulators", "no /sys/class/regulator (no software-visible rails)");
         return 0;
     }

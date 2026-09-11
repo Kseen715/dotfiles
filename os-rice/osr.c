@@ -56,7 +56,7 @@
 typedef struct {
     const char *name;
     int (*fn)(int argc, char **argv);
-    /* Does this command read the checkout -- themes/, rices/, modules/*.sh,
+    /* Does this command read the checkout -- themes/, rices/, modules/ *.sh,
      * lib/pkgmap, lib/servicemap, or the dotfiles configs beside it? Those are
      * data files, not compiled-in text, so a binary standing alone somewhere
      * (the release artifact, a copy in ~/wd) has none of them and the command

@@ -787,7 +787,7 @@ static int decode_zstd(FILE *in, FILE *out) {
     ZSTD_inBuffer zin;
     int ok = 1, done = 0;
 
-    if (d == NULL) return 0;
+    if (!d) return 0;
     ibuf = (char *)malloc(DEC_IN);
     obuf = (char *)malloc(DEC_OUT);
     if (ibuf == NULL || obuf == NULL) { free(ibuf); free(obuf); ZSTD_freeDStream(d); return 0; }
@@ -1024,7 +1024,7 @@ static int extract_rar(const OsrExtract *o, const char *path) {
     OsrRarEntry e;
     int rc, ok = 1;
 
-    if (r == NULL) {
+    if (!r) {
         osr_warnf("archive: cannot open %s", path);
         return 0;
     }

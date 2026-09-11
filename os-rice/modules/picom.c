@@ -24,7 +24,6 @@
 int osrm_picom(void) {
     static const char *const pkgs[] = { "picom", NULL };
     Str src, dst;
-    char *argv[4];
     int ok;
 
     ok = osr_pkg_install_step("Installing picom", pkgs);

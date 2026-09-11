@@ -27,7 +27,6 @@ int osrm_polybar(void) {
     };
     static const char *const files[] = { "config.ini", "modules.ini", "launch.sh", NULL };
     Str dir, src, dst;
-    char *argv[4];
     size_t i;
     int ok;
 
@@ -62,7 +61,7 @@ int osrm_polybar(void) {
         str_addzz(&sdir, str_text(&dir), "/scripts", (const char *)NULL);
         ok = osr_mkdir_p(str_text(&sdir)) && ok;
         d = opendir(str_text(&src));
-        if (d != NULL) {
+        if (d) {
             while ((e = readdir(d)) != NULL) {
                 size_t n = strlen(e->d_name);
                 Str from, to;
