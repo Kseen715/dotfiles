@@ -89,3 +89,13 @@ if [[ "$TERM" == xterm-ghostty && "$GHOSTTY_SHELL_FEATURES" != *ssh-* ]]; then
     TERM=xterm-256color command ssh -o "SetEnv COLORTERM=truecolor" "$@"
   }
 fi
+
+# fastfetch() — Termux only: the Android Vulkan loader writes driver chatter to
+# stderr while the gpu module probes it, so every run ends with a block of
+#   <GPU> [WARNING][T:32157] <VK_QUEUE> ... ~QueueInternal start.
+# lines the device's own driver emits, after the output. fastfetch has no knob
+# for it (its GPU detection on Android IS Vulkan), so drop stderr for this one
+# command on this one platform. Exit status is untouched.
+if [[ -n "${TERMUX_VERSION:-}" || "${PREFIX:-}" == */com.termux/* ]]; then
+  fastfetch() { command fastfetch "$@" 2>/dev/null; }
+fi
