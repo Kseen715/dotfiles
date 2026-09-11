@@ -55,3 +55,13 @@ lm_sensors =
 # ~/.termux/font.ttf, and ignores fontconfig. A font row would install
 # something nothing looks at.
 nerd-fonts-symbols =
+
+# btop is not packaged for Termux at all — it is absent from termux-main and
+# termux-x11 (checked 2026-09, binary-aarch64), and apt.map's
+# source:provide_btop_tarball is not a fallback here: that builder installs into
+# /usr/local/bin through osr_run_root, neither of which exists on a phone. So
+# the row is empty, the way lm_sensors is: the module still lays down
+# btop.conf/rice.theme (harmless, and correct the moment a btop appears), but
+# the install step is a no-op instead of `E: Unable to locate package btop` and
+# a failed run. htop IS packaged and has its own module.
+btop =

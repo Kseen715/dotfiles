@@ -266,6 +266,51 @@ int main(void) {
         "home/.local/share/fonts/FontFile.ttf\n",
         "the font is on disk even where fontconfig cannot be told about it");
 
+    /* ================================================================
+     * 4. Termux
+     *
+     * The Android terminal reads exactly one file, ~/.termux/font.ttf, and
+     * never asks fontconfig -- so an unpacked font directory is invisible
+     * there and every glyph is a box until one .ttf is copied to that path and
+     * the app is told to re-read it.
+     * ================================================================ */
+    osr_sb_stub_body(&sb, "termux-reload-settings",
+        "printf 'termux-reload-settings\\n' >>\"$LOG\"\nexit 0\n");
+    osr_sb_stub_body(&sb, "unzip",
+        "printf 'unzip %s\\n' \"$*\" >>\"$LOG\"\n"
+        "_d=''\n"
+        "while [ $# -gt 0 ]; do [ \"$1\" = \"-d\" ] && { _d=$2; shift; }; shift; done\n"
+        "[ -n \"$_d\" ] && { mkdir -p \"$_d\";"
+        " printf 'mono\\n' >\"$_d/JetBrainsMonoNerdFontMono-Regular.ttf\";"
+        " printf 'propo\\n' >\"$_d/JetBrainsMonoNerdFont-Regular.ttf\"; }\n"
+        "exit 0\n");
+    fresh();
+    osr_sb_env(&sb, "TERMUX_VERSION", "0.118.0");
+    osr_assert_rc(install(NULL), 0, "the Termux path is best-effort too");
+    osr_assert_file(&sb, "home/.termux/font.ttf", "mono\n",
+        "the Mono cut is what lands at ~/.termux/font.ttf: the terminal is "
+        "monospaced and that variant's advance widths are the cell");
+    osr_assert_log(&sb, "termux-reload-settings",
+        "the running terminal is told to re-read it, or it keeps the old face "
+        "until the app restarts");
+
+    /* The fonts being unpacked is not the same fact as the terminal pointing
+     * at one, so the already-installed skip still wires font.ttf. */
+    osr_sb_reset(&sb);
+    (void)install(NULL);
+    osr_assert_out(&sb, "already installed - skipping",
+        "the second run skips the download");
+    osr_refute_log(&sb, "termux-reload-settings",
+        "an unchanged font.ttf is not rewritten, so the terminal is not "
+        "reloaded (and its scrollback not cleared) for nothing");
+
+    osr_sb_rm(&sb, "home/.termux");
+    osr_sb_reset(&sb);
+    (void)install(NULL);
+    osr_assert_file(&sb, "home/.termux/font.ttf", "mono\n",
+        "and a font.ttf deleted by hand is put back on the next run");
+    osr_sb_env(&sb, "TERMUX_VERSION", "");
+
     hs_free(&p);
     hs_free(&fixture);
     osr_sb_free(&sb);

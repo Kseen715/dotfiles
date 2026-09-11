@@ -244,6 +244,62 @@ static int font_unpacked(const char *name, const char *dir) {
     return hit;
 }
 
+/* termux_font -- Termux's terminal is an Android app, not an X client: it reads
+ * exactly one file, $HOME/.termux/font.ttf, and never asks fontconfig. So the
+ * unpacked directory above is invisible there and every glyph draws as a box
+ * until one .ttf out of it is put at that path and the app is told to re-read
+ * it. Mono-Regular first because the terminal is monospaced and that is the
+ * variant whose advance widths are the cell; the plain Regular is the fallback
+ * for the handful of families that ship no Mono cut.
+ *
+ * Best-effort like the rest of this unit: a missing file or a failed copy warns
+ * and the module carries on. Runs on BOTH exits of the installer, the fresh
+ * unpack and the already-installed skip, because the fonts being on disk is not
+ * the same fact as the terminal pointing at one. */
+static void termux_font(const char *name, const char *dir) {
+    static const char *const want[] = { "NerdFontMono-Regular.ttf",
+                                        "NerdFont-Regular.ttf", NULL };
+    Str names, pick, dst;
+    char *argv[2];
+    size_t i;
+
+    if (!osr_on_termux()) return;
+
+    str_initv(&names, &pick, &dst, (Str *)NULL);
+    osr_list_dir(&names, dir, NULL, NULL);
+    for (i = 0; want[i] != NULL && pick.len == 0; i++) {
+        size_t pos = 0;
+        Line line;
+        while (next_line(str_text(&names), names.len, &pos, &line)) {
+            if (ci_find(line.start, line.len, name) == NULL) continue;
+            if (ci_find(line.start, line.len, want[i]) == NULL) continue;
+            str_setz(&pick, dir, "/", (const char *)NULL);
+            str_add(&pick, line.start, line.len);
+            break;
+        }
+    }
+    if (pick.len == 0) {
+        osr_warnf("no %s Nerd Font .ttf in %s for ~/.termux/font.ttf - skipping",
+                  name, dir);
+    } else {
+        str_addzz(&dst, osr_mod_home(), "/.termux/font.ttf", (const char *)NULL);
+        /* An identical file is a skip, so a rerun does not reload the terminal
+         * (which redraws and clears the scrollback) for nothing. */
+        if (!osr_files_equal(str_text(&pick), str_text(&dst))) {
+            if (!osr_copy_file(str_text(&pick), str_text(&dst))) {
+                osr_warnf("failed to install %s - skipping", str_text(&dst));
+            } else if (osr_have_cmd("termux-reload-settings")) {
+                /* Without this the running terminal keeps the old face until
+                 * the app is restarted. */
+                argv[0] = (char *)"termux-reload-settings";
+                argv[1] = NULL;
+                (void)osr_run_user_quiet(argv);
+            }
+        }
+    }
+    str_freev(&names, &pick, &dst, (Str *)NULL);
+}
+
 int osr_install_nerd_font(const char *name) {
     Str url;
     Str dir;
@@ -259,6 +315,7 @@ int osr_install_nerd_font(const char *name) {
 
     if (font_registered(name) || font_unpacked(name, str_text(&dir))) {
         osr_infof("%s Nerd Font already installed - skipping", name);
+        termux_font(name, str_text(&dir));
         str_free(&dir);
         return 1;
     }
@@ -299,6 +356,7 @@ int osr_install_nerd_font(const char *name) {
         }
     }
 
+    termux_font(name, str_text(&dir));
     str_freev(&url, &dir, &zip, (Str *)NULL);
     return 1;
 }

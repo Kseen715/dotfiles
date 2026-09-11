@@ -893,6 +893,9 @@ int main(void) {
              "termux.map overrides any.map's provide_yazi_bin back to the "
              "native package: that builder's release asset is a glibc binary "
              "and Android is bionic");
+    resolves("", "", "aarch64", "btop", "",
+             "termux.map resolves btop to nothing: Termux packages no btop, and "
+             "the source: builder apt.map uses needs /usr/local/bin and root");
 
     hs_free(&p);
     osr_sb_free(&sb);
