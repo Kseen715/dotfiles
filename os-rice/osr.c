@@ -137,6 +137,14 @@ static void resolve_roots(const char *argv0) {
     if (env_is_set("OSR_ROOT") && env_is_set("OSR_LIB") && env_is_set("OSR_DOTFILES")) return;
 
     osr_dirname(argv0, exe_dir, sizeof(exe_dir));
+    /* Canonical before anything is derived from it. argv0 is usually relative
+     * -- `./build/osr` from the checkout is how it is run by hand -- and the
+     * climb below is a dirname, not a chdir: on "./build" it yields ".", whose
+     * parent is "." again, so OSR_DOTFILES came out as "./config" and every
+     * layer that copies from the dotfiles half failed with "source not found"
+     * unless the caller happened to stand in the repo root. */
+    if (osr_absolute_dir(exe_dir, buf, sizeof(buf)))
+        osr_copy_bounded(exe_dir, sizeof(exe_dir), buf);
     osr_dirname(exe_dir, root, sizeof(root));
     /* Run from the tree itself rather than from build/ (a test, a developer):
      * there is no parent to climb to, so take the directory as it stands. */
