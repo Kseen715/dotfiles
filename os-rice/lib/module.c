@@ -646,15 +646,15 @@ int osr_step(const char *desc, int (*fn)(void *ctx), void *ctx) {
 
 /* --- files ---------------------------------------------------------------- */
 
-/* tee -- `as_root tee [-a] <path> >/dev/null <<'EOF' ... EOF`: write, or
+/* run_tee -- `as_root tee [-a] <path> >/dev/null <<'EOF' ... EOF`: write, or
  * append to, a file this program OWNS at a path the calling identity can write
  * -- a .desktop entry, an apt source list, a PAM stack line.
  *
- * tee and not a plain write because the escalation is the whole point, and the
+ * tee(1) and not a plain write because the escalation is the whole point, and the
  * heredoc becomes a temp file handed to tee on stdin: sh's heredoc was one too,
  * so this is the same shape and not an extra command in anybody's log. */
-static int tee(const char *path, const char *text, int append,
-               int (*run)(char *const argv[], int in_fd)) {
+static int run_tee(const char *path, const char *text, int append,
+                   int (*run)(char *const argv[], int in_fd)) {
     char *argv[4];
     int fd, rc;
 
@@ -669,16 +669,16 @@ static int tee(const char *path, const char *text, int append,
     return rc == 0;
 }
 
-int osr_write_root(const char *path, const char *text)  { return tee(path, text, 0, osr_run_root_quiet_in); }
-int osr_append_root(const char *path, const char *text) { return tee(path, text, 1, osr_run_root_quiet_in); }
+int osr_write_root(const char *path, const char *text)  { return run_tee(path, text, 0, osr_run_root_quiet_in); }
+int osr_append_root(const char *path, const char *text) { return run_tee(path, text, 1, osr_run_root_quiet_in); }
 
 /* The user half is the same command as the RICED ACCOUNT, for a file under its
  * own $HOME that this program owns and rewrites (a portal preference, a
  * generated fragment). Identity matters more than privilege there: a root-owned
  * dotfile is one the user's session cannot rewrite. Which is the whole
  * difference between the two, so it is the only thing passed in. */
-int osr_write_user(const char *path, const char *text)  { return tee(path, text, 0, osr_run_user_quiet_in); }
-int osr_append_user(const char *path, const char *text) { return tee(path, text, 1, osr_run_user_quiet_in); }
+int osr_write_user(const char *path, const char *text)  { return run_tee(path, text, 0, osr_run_user_quiet_in); }
+int osr_append_user(const char *path, const char *text) { return run_tee(path, text, 1, osr_run_user_quiet_in); }
 
 int osr_mkdir_p_all(const char *const dirs[]) {
     char **argv;

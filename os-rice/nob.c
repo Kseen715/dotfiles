@@ -55,7 +55,7 @@
  * osr.ps1, which creates build/ and bootstraps into it).
  *
  * nob.c/nob.h are build-time tooling, run only on the developer/CI host --
- * unlike install.c/lib/*.c they are never cross-compiled for the XP
+ * unlike install.c and the lib sources they are never cross-compiled for the XP
  * target, so unlike those files this one is free to use C99 (nob.h itself
  * requires it).
  */
@@ -567,7 +567,7 @@ static const char *unity_test_names[] = {
 /* posix_test_names -- tests of the POSIX-only units, which cannot be linked
  * the way the ones above are.
  *
- * A test of lib/uv/* includes the .c files it needs directly (a unity build)
+ * A test under lib/uv includes the .c files it needs directly (a unity build)
  * and links nothing else at all, which is also why these tests can reach
  * static helpers the header does not export. The behaviour tests below do the
  * same for a different reason: they drive build/osr as a subprocess, so they
@@ -1010,7 +1010,7 @@ static bool unoptimized_src(const char *src) {
            (strcmp(src, "lib/yaml.c") == 0 || strcmp(src, "lib/bearssl.c") == 0);
 }
 
-/* vendored_src -- the units that carry an amalgamated thirdparty/*.h.
+/* vendored_src -- the units that carry an amalgamated thirdparty header.
  * Upstream code: compiled, never edited, so its warnings are not this tree's
  * to fix and are turned off rather than read past on every build. Note what
  * is NOT here -- lib/rar_shim.c is ours, and lib/yaml.c is not either,
@@ -1126,7 +1126,7 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
     /* lib/archive.c is ours and is warned about like the rest of the tree,
      * but it includes the vendored decoder headers, and thirdparty/zstd.h
      * spells its API with `long long` while thirdparty/lzmasdk.h has a
-     * commented-out line with a `/*` inside it. Those two diagnostics are
+     * commented-out line with an unterminated comment opener inside it. Those two diagnostics are
      * upstream's, from headers -w already covers everywhere else. */
     if (src != NULL && strcmp(src, "lib/archive.c") == 0)
         cmd_append_args(cmd, "-Wno-long-long", "-Wno-comment", NULL);
