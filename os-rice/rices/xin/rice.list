@@ -20,6 +20,7 @@ theme: xin
 themes: catppuccin nord gruvbox xin
 
 rust
+theming
 starship
 zsh
 fastfetch
