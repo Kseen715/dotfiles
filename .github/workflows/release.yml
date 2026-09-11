@@ -262,6 +262,67 @@ jobs:
           path: os-rice/build/osr${{ matrix.exe }}
           if-no-files-found: error
 
+  # Proteus, the theme/wallpaper picker, shipped alongside osr. Separate job
+  # rather than another leg of `build` because nothing is shared: it is a Rust
+  # crate built by cargo, not a C tree built by nob, and the matrix above is
+  # entirely nob's cross-compilation interface ($CC naming, NOB_TARGET, the
+  # BearSSL tier) which says nothing here.
+  #
+  # Two legs, both glibc, both native. No Windows: proteus talks to Wayland
+  # and X11 and has no backend for anything else. No musl: cargo cross-linking
+  # to musl needs a target toolchain installed per arch, and the binary it
+  # would replace dlopens libwayland/libEGL/libX11 at runtime anyway -- a
+  # static libc buys nothing on a box that must have those .so files present
+  # for the program to draw at all. Native runners rather than cross-compiling
+  # for the same reason `build`'s aarch64 legs use one: the arm64 runner is
+  # free here, and a native cargo build needs no target plumbing.
+  proteus:
+    needs: test
+    runs-on: ${{ matrix.runner || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: proteus
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: proteus-linux-x86_64-glibc
+            expect: 'ELF 64-bit.*x86-64'
+          - slug: proteus-linux-aarch64-glibc
+            runner: ubuntu-24.04-arm
+            expect: 'ELF 64-bit.*aarch64'
+    steps:
+      - uses: actions/checkout@v7
+
+      # The runner's preinstalled toolchain, not a setup action: Cargo.toml
+      # pins rust-version = "1.85" and the images ship a far newer stable, so
+      # there is nothing to install and nothing to pin that the manifest is
+      # not already asserting for us (cargo refuses to build if it is older).
+      - name: Build ${{ matrix.slug }}
+        run: cargo build --release --locked
+
+      # Same reasoning as the osr legs: a build that succeeded says nothing
+      # about what machine the artifact is for. Cheaper here -- these are
+      # native builds, so this is mostly a guard against the arm64 leg
+      # silently losing its `runner:` pin -- but it is one line.
+      - name: Check the binary is for the target we asked for
+        run: |
+          desc=$(file -b target/release/proteus)
+          echo "$desc"
+          echo "$desc" | grep -Eq '${{ matrix.expect }}' || {
+            echo "::error::${{ matrix.slug }}: expected /${{ matrix.expect }}/, got: $desc"
+            exit 1
+          }
+
+      # No strip step: [profile.release] in Cargo.toml already sets
+      # strip = true, so cargo hands back a stripped binary.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.slug }}
+          path: proteus/target/release/proteus
+          if-no-files-found: error
+
   # Optional gate: does the tree still build under every front end the README
   # claims, and at what cost. One job per compiler and architecture. The
   # numbers are RATIOS against that host's gcc -- comparing a time measured on
@@ -543,7 +604,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build, ccbench]
+    needs: [build, proteus, ccbench]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # The only write scope in the file, and only here: this job runs no
@@ -594,16 +655,19 @@ jobs:
           mkdir dist
           for d in artifacts/*/; do
             slug=$(basename "$d")
-            for f in "$d"osr*; do
-              # artifacts/ also holds the ccbench-* rows, which match no
-              # osr* -- an unmatched glob comes back as its own literal.
+            for f in "$d"osr* "$d"proteus; do
+              # artifacts/ also holds the ccbench-* rows, which match neither
+              # glob -- an unmatched glob comes back as its own literal.
               [ -e "$f" ] || continue
               case "$f" in *.exe) ext=.exe ;; *) ext= ;; esac
-              cp "$f" "dist/osr-${{ steps.v.outputs.tag }}-$slug$ext"
+              # The proteus legs already carry "proteus-" in their slug, so
+              # strip it back off rather than emitting proteus-<tag>-proteus-*.
+              prog=$(basename "$f" .exe)
+              cp "$f" "dist/$prog-${{ steps.v.outputs.tag }}-${slug#$prog-}$ext"
             done
           done
           chmod +x dist/*
-          cd dist && sha256sum osr-* > SHA256SUMS
+          cd dist && sha256sum osr-* proteus-* > SHA256SUMS
           cat SHA256SUMS
 
       # The compiler tables, assembled here rather than in the bench jobs
