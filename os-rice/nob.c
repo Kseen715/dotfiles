@@ -956,6 +956,16 @@ static bool is_lcc(void) { return cc_basename_is("lcc"); }
  * See append_common_flags_for. */
 static bool is_cproc(void) { return cc_basename_is("cproc"); }
 
+/* is_tcc -- does $CC name tcc? tcc ships no <limits.h> of its own, and a libc
+ * is entitled to expect one: Termux/bionic's <limits.h> defines the POSIX
+ * limits and then `#include_next <limits.h>` for CHAR_BIT/INT_MAX/LONG_MAX,
+ * which under tcc reaches nothing -- so every TU that wants INT_MAX fails
+ * ("'INT_MAX' undeclared" out of thirdparty/yaml.h). compat/tcc/limits.h is
+ * that missing header and this is what puts it on the include path; see
+ * append_common_flags_for. Harmless on a libc that spells the macros out
+ * itself (glibc): the file guards every define it makes. */
+static bool is_tcc(void) { return cc_basename_is("tcc"); }
+
 /* check_cc_detection -- runs on every invocation; the dialect pick is the
  * one thing here that silently produces a garbage command line if wrong. */
 static void check_cc_detection(void) {
@@ -1041,6 +1051,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
      * levels is ambiguous to read besides. See unoptimized_src. */
     bool o0 = src && unoptimized_src(src);
     append_cc(cmd);
+    /* Ahead of the system include dir, so tcc's missing <limits.h> is found
+     * before the libc header that expects it to exist. Every dialect branch
+     * below returns, so it goes here -- and only for tcc, which is the one
+     * front end in the ladder that ships no such header. */
+    if (is_tcc()) nob_cmd_append(cmd, "-Icompat/tcc");
     if (is_msvc()) {
         /* No /std: equivalent to -std=c89 -- MSVC's C mode is already C89
          * plus extensions and /Za (the closest thing) is long discouraged.
