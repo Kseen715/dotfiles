@@ -137,6 +137,21 @@ int main(void) {
         "shell-is: two paths that canonicalise to the same file are the same "
         "shell -- otherwise every run would 'fix' a shell that was correct");
 
+    /* Termux: Android has no writable /etc/passwd and the account has no
+     * passwd entry at all, so field 7 answers nothing. What decides the login
+     * shell there is ~/.termux/shell, which the app execs at startup -- so
+     * that link, not the passwd line, is what the probe has to read. */
+    osr_sb_env(&sb, "TERMUX_VERSION", "0.118.0");
+    osr_assert_true(user_cmd("shell-is", "tester", abs_of("usr/bin/zsh"), NULL) != 0,
+        "shell-is: on Termux with no ~/.termux/shell, zsh is not the login "
+        "shell -- however the passwd line reads");
+    osr_sb_mkdir(&sb, "home/.termux");
+    osr_sb_symlink(&sb, "usr/bin/zsh", "home/.termux/shell");
+    osr_assert_rc(user_cmd("shell-is", "tester", abs_of("bin2/zsh"), NULL), 0,
+        "shell-is: on Termux the link IS the answer, canonicalised like every "
+        "other path so a rerun does not relink");
+    osr_sb_env(&sb, "TERMUX_VERSION", "");
+
     osr_sb_write(&sb, "etc/passwd",
         "root:x:0:0:root:/root:/bin/bash\n"
         "tester:x:1000:1000:Me:/home/tester:/bin/sh\n"

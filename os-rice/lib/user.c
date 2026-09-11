@@ -319,10 +319,54 @@ static int cmd_passwd_shell(const char *path, const char *user, const char *shel
  * trusted: chsh -> usermod -> a direct /etc/passwd rewrite.
  */
 
+/* termux_shell_link -- $HOME/.termux/shell, which IS the login shell on
+ * Android. There is no writable /etc/passwd there, no usermod, and the account
+ * has no passwd entry at all, so field 7 can neither be read nor set: the
+ * Termux app instead execs this one path at startup when it is executable and
+ * falls back to bash otherwise (that is all its `chsh` writes). Returns 0 off
+ * Termux, which leaves every caller on the passwd route. */
+static int termux_shell_link(Str *out) {
+    if (!osr_on_termux()) return 0;
+    str_setz(out, osr_mod_home(), "/.termux/shell", (const char *)NULL);
+    return 1;
+}
+
+/* termux_set_shell -- point that link at <shell>. Replaced, not appended to:
+ * symlink() refuses an existing path, and a stale link is exactly what a
+ * rerun after a zsh move has to fix. */
+static int termux_set_shell(const char *shell) {
+    Str link, dir;
+    int ok;
+
+    str_initv(&link, &dir, (Str *)NULL);
+    (void)termux_shell_link(&link);
+    str_setz(&dir, osr_mod_home(), "/.termux", (const char *)NULL);
+    (void)osr_mkdir_parents(str_text(&dir));
+    (void)unlink(str_text(&link));
+    ok = symlink(shell, str_text(&link)) == 0;
+    str_freev(&link, &dir, (Str *)NULL);
+    return ok;
+}
+
 /* osr_user_shell_is -- cmd_shell_is as a predicate: 1 when the account already
  * logs in with this shell, canonical paths compared. */
 int osr_user_shell_is(const char *user, const char *shell) {
-    return cmd_shell_is(user, shell) == 0;
+    Str link, a, b;
+    int same;
+
+    str_init(&link);
+    if (!termux_shell_link(&link)) {
+        str_free(&link);
+        return cmd_shell_is(user, shell) == 0;
+    }
+    str_initv(&a, &b, (Str *)NULL);
+    canon(&a, str_text(&link));
+    canon(&b, shell);
+    /* canon() hands back its input when the path does not resolve, so a
+     * missing link canonicalises to ~/.termux/shell and compares unequal. */
+    same = strcmp(str_text(&a), str_text(&b)) == 0;
+    str_freev(&link, &a, &b, (Str *)NULL);
+    return same;
 }
 
 /* osr_register_shell -- make sure /etc/shells lists it (idempotent, §2). Not
@@ -375,6 +419,14 @@ static int osr_passwd_set_shell(const char *user, const char *shell) {
  * which is the caller's cue to warn rather than claim success. */
 int osr_set_login_shell(const char *user, const char *shell) {
     char *argv[5];
+
+    /* Termux first and only: /etc/shells does not exist on Android and $PREFIX
+     * is the app's own tree, so the three mechanisms below have nothing to
+     * write to. */
+    if (osr_on_termux()) {
+        (void)termux_set_shell(shell);
+        return osr_user_shell_is(user, shell);
+    }
 
     (void)osr_register_shell(shell);
 
@@ -501,7 +553,10 @@ int osr_user_main(int argc, char **argv) {
         str_free(&out);
         return 0;
     }
-    if (strcmp(argv[1], "shell-is") == 0 && argc == 4) return cmd_shell_is(argv[2], argv[3]);
+    /* Through the predicate, not cmd_shell_is, so the CLI and the C callers
+     * answer from the same place -- on Termux that is ~/.termux/shell. */
+    if (strcmp(argv[1], "shell-is") == 0 && argc == 4)
+        return osr_user_shell_is(argv[2], argv[3]) ? 0 : 1;
     if (strcmp(argv[1], "resolve") == 0 && argc <= 3) {
         return cmd_resolve(argc == 3 ? argv[2] : "");
     }
