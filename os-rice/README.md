@@ -84,7 +84,7 @@ os-rice/
     preflight.c        the require: predicates
     fonts.c gnome.c migrate.c wallpaper.c
     pkgmap/            logical name -> real package(s), per manager --
-                       apt/dnf/pacman/apk/xbps/portage/any, and windows
+                       apt/dnf/pacman/apk/xbps/portage/termux/any, and windows
     servicemap/        logical service -> real unit, per init, where they differ
   modules/             ONE file per module, never one per OS, and ONE
     <name>.c           function: int osrm_<name>(void). A module both

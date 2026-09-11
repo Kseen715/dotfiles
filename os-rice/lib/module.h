@@ -36,7 +36,7 @@ const char *osr_mod_user(void);      /* the account being riced (§8) */
 const char *osr_mod_home(void);      /* that account's home */
 const char *osr_mod_theme(void);     /* the resolved theme name, "" if none */
 const char *osr_mod_theme_dir(void); /* themes/<name>, "" if none */
-const char *osr_mod_pkg(void);       /* apt | dnf | pacman | apk | xbps | portage */
+const char *osr_mod_pkg(void);       /* apt|dnf|pacman|apk|xbps|portage|termux */
 const char *osr_mod_distro(void);    /* the os-release ID */
 const char *osr_mod_init(void);      /* systemd | openrc | runit | sysvinit */
 

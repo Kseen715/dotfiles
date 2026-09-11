@@ -105,6 +105,10 @@ static char **escalate(char *const argv[], const char *want_user) {
         need = *want_user != '\0' && strcmp(whoami(), want_user) != 0;  /* as_user */
         prefix = need ? 3 : 0;
     }
+    /* Termux has one uid and no sudo: it is never 0, and there is nothing to
+     * switch to. Every command runs as us, which is already the owner of
+     * everything os-rice touches there ($PREFIX and $HOME). */
+    if (osr_on_termux()) { need = 0; prefix = 0; }
 
     out = (char **)malloc((n + prefix + 1) * sizeof(char *));
     if (out == NULL) osr_die_oom();
@@ -172,7 +176,7 @@ static int can_root(void) {
     char *argv[4];
 
     if (answer >= 0) return answer;
-    if (getuid() == 0) { answer = 1; return answer; }
+    if (getuid() == 0 || osr_on_termux()) { answer = 1; return answer; }
     argv[0] = (char *)"sudo"; argv[1] = (char *)"-n"; argv[2] = (char *)"true";
     argv[3] = NULL;
     answer = osr_run_quiet(argv) == 0;

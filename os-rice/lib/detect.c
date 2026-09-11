@@ -334,7 +334,12 @@ static int word_in_list(const Facts *f, const char *word) {
 /* The binary probe is authoritative (a Debian derivative still has apt-get);
  * the distro/id_like fallback only runs when none of them is installed. */
 static void detect_pkg(Facts *f) {
-    if (osr_path_lookup("apt-get", NULL))            str_addz(&f->pkg, "apt");
+    /* Termux first, and ahead of the apt-get probe it would otherwise win:
+     * Termux ships apt-get and dpkg, but its package NAMES are its own and it
+     * has no sudo, so calling it "apt" would resolve Debian rows and prefix
+     * every install with a sudo that is not there. See osr_on_termux. */
+    if (osr_on_termux())                             str_addz(&f->pkg, "termux");
+    else if (osr_path_lookup("apt-get", NULL))       str_addz(&f->pkg, "apt");
     else if (osr_path_lookup("dnf", NULL))           str_addz(&f->pkg, "dnf");
     else if (osr_path_lookup("pacman", NULL))        str_addz(&f->pkg, "pacman");
     else if (osr_path_lookup("apk", NULL))           str_addz(&f->pkg, "apk");

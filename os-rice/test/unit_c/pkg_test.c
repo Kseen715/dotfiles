@@ -391,6 +391,29 @@ int main(void) {
         "portage: --noreplace and --getbinpkg, with the installed atom filtered out");
     box_says("installed", "");
 
+    /* --- termux (Android: one app uid, no root) ----------------------- */
+    /* Two things are different here, and the log asserts both: the commands
+     * are `pkg`, Termux's own wrapper -- `pkg update` is what re-selects a
+     * dead mirror, which calling apt-get directly would skip -- and NOTHING
+     * carries a sudo prefix. Termux runs as one unprivileged Android app uid;
+     * there is no root to escalate to and $PREFIX is already ours. A sudo
+     * creeping back in would not fail loudly, it would fail per-install on a
+     * box that has no sudo binary at all. */
+    write_map("termux", "build = build-essential\n");
+    on_manager("termux");
+    osr_sb_env(&sb, "TERMUX_VERSION", "0.118.0");
+    probe("dpkg",
+        "[ \"$1\" = \"-s\" ] || exit 0\n"
+        "grep -qx \"$2\" \"$INSTALLED\" 2>/dev/null\n");
+    probe("apt-mark", "cat \"$HELD\" 2>/dev/null\n");
+    loud("pkg");
+    install("zsh", "build", NULL, NULL, NULL, NULL);
+    osr_assert_log_is(&sb,
+        "pkg update -y\n"
+        "pkg install -y -o Dpkg::Use-Pty=0 zsh build-essential\n",
+        "termux: pkg update then pkg install, batched, and no sudo anywhere");
+    osr_sb_env(&sb, "TERMUX_VERSION", "");
+
     /* ================================================================
      * 3b. script: and source: (was pkg_dispatch.sh)
      *
@@ -863,6 +886,13 @@ int main(void) {
     on_manager("pacman");
     resolves("", "", "x86_64", "build", "base-devel",
              "pacman.map resolves the logical `build` to base-devel");
+    on_manager("termux");
+    resolves("", "", "aarch64", "build", "build-essential",
+             "termux.map resolves the logical `build` to build-essential");
+    resolves("", "", "aarch64", "yazi", "yazi",
+             "termux.map overrides any.map's provide_yazi_bin back to the "
+             "native package: that builder's release asset is a glibc binary "
+             "and Android is bionic");
 
     hs_free(&p);
     osr_sb_free(&sb);

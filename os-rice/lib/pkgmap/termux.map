@@ -1,0 +1,57 @@
+# termux.map — logical name -> real Termux package(s).
+# Termux is Debian-shaped (apt, dpkg, apt-mark) but it is not Debian: it is an
+# Android app whose tree lives under $PREFIX, and its repository is its own, so
+# it gets its own map rather than falling back on apt.map. Only rows where the
+# name actually differs from the logical name (§1) — zsh, git, curl, unzip,
+# fontconfig, fd, lsd, fzf, chafa, starship, gh, tcc, rust, vim, tar, wget,
+# openssh, ttf-dejavu, atool, lzip, p7zip and unrar are all spelled identically
+# in termux-main, so they need no row.
+#
+# Two facts shape everything below, and both are different from every other map
+# here:
+#
+#   no root      Termux runs as one unprivileged Android app uid. There is no
+#                sudo and no system to configure — so anything whose whole
+#                point is /etc, a kernel, a device or a display server (the
+#                nvidia/mesa/xf86/lightdm/pipewire/lm_sensors families) has no
+#                row and cannot get one. Those names pass through (§1) and the
+#                install fails against the repository, which is the honest
+#                answer: they do not exist on a phone.
+#   bionic       Android's libc is neither glibc nor musl, so a `source:` row
+#                that downloads a prebuilt GNU/Linux binary installs something
+#                that cannot start — the same trap apk.map documents for
+#                thunderbird on musl. Where any.map names such a builder and
+#                Termux packages the program natively, this map overrides it
+#                back to the native package.
+#
+# Names checked against termux-main and termux-x11 (binary-aarch64), 2026-09.
+
+# Termux ships no separate -dev packages: headers, pkg-config files and the
+# shared library are one package, so every `*-dev` logical name resolves to the
+# plain one.
+build = build-essential
+dev-headers = openssl pkg-config
+gtk4-dev = gtk4
+libadwaita-dev = libadwaita
+chafa-build-deps = glib freetype libjpeg-turbo libwebp libtiff pkg-config
+
+glib2 = glib                 # Termux drops the API version (carries `gsettings`)
+go = golang
+xz = xz-utils
+
+# yazi is native in termux-main and current, so it overrides any.map's
+# provide_yazi_bin: that builder fetches a *-unknown-linux-gnu release asset,
+# which is a glibc binary and does not run on bionic. The native package brings
+# both `yazi` and `ya`, same as the builder would have.
+yazi = yazi
+
+# Termux has no perf, no cpupower and no lm_sensors: the kernel is the phone
+# vendor's and ships none of the interfaces they read. Empty rather than absent
+# so a manifest naming them is a no-op instead of a failed install.
+kernel-tools =
+lm_sensors =
+
+# Fonts are not a package on Termux — the terminal reads exactly one file,
+# ~/.termux/font.ttf, and ignores fontconfig. A font row would install
+# something nothing looks at.
+nerd-fonts-symbols =

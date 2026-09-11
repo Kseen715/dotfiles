@@ -238,6 +238,14 @@ void osr_stepf(unsigned long n, unsigned long total, const char *fmt, ...);
 char *slurp(const char *path, size_t *len);
 int file_exists(const char *path);
 int dir_exists(const char *path);
+/* osr_on_termux -- is this process running inside Termux? Termux is Debian
+ * shaped (apt-get, dpkg) but it is not a Linux distribution: it is an Android
+ * app, running as that app's unprivileged uid with its tree under $PREFIX.
+ * Two facts follow from it and nothing else in the tree can derive them --
+ * the package manager is `pkg` with its own names (lib/pkgmap/termux.map),
+ * and there is no root and no sudo, so "as root" is just "as us"
+ * ($PREFIX is owned by the app uid). Always 0 on Windows. */
+int osr_on_termux(void);
 /* osr_path_taken -- `[ -e path ]`: is anything at all at this path? Not the
  * same question as file_exists -- a dangling symlink is not openable but IS
  * already spoken for, and a seed-once layer must not overwrite one. */

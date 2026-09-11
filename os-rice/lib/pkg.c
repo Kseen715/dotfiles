@@ -3,7 +3,8 @@
  *
  * The shared half is the MAP: one row format, one @facet ranking, one
  * resolution order, over lib/pkgmap/<manager>.map. Which manager that is comes
- * from OSR_PKG -- apt, dnf, pacman, apk, xbps, portage, and `windows` for the
+ * from OSR_PKG -- apt, dnf, pacman, apk, xbps, portage, termux, and `windows`
+ * for the
  * one map whose rows name scoop/choco/winget ids instead of distro package
  * names. Nothing about a row's SHAPE differs between the two systems, which is
  * why windows.map lives in lib/pkgmap/ next to the others rather than in a
@@ -347,7 +348,8 @@ int osr_pkg_native_installed(const char *pkg) {
     char *argv[6];
     int devnull_rc;
 
-    if (strcmp(mgr, "apt") == 0) {
+    if (strcmp(mgr, "apt") == 0 || strcmp(mgr, "termux") == 0) {
+        /* `pkg` is a wrapper over apt, and the database under both is dpkg's. */
         argv[0] = (char *)"dpkg"; argv[1] = (char *)"-s"; argv[2] = (char *)pkg; argv[3] = NULL;
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[0] = (char *)"rpm"; argv[1] = (char *)"-q"; argv[2] = (char *)pkg; argv[3] = NULL;
@@ -471,7 +473,7 @@ static int native_held(const char *pkg) {
     int held = 0;
 
     str_init(&out);
-    if (strcmp(mgr, "apt") == 0) {
+    if (strcmp(mgr, "apt") == 0 || strcmp(mgr, "termux") == 0) {
         char *argv[3];
         argv[0] = (char *)"apt-mark"; argv[1] = (char *)"showhold"; argv[2] = NULL;
         if (osr_run_capture(argv, &out)) held = line_match(str_text(&out), pkg);
@@ -728,6 +730,16 @@ void osr_pkg_refresh(void) {
         argv[2] = (char *)"apt-get"; argv[3] = (char *)"update"; argv[4] = (char *)"-q";
         argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Use-Pty=0";
         argv[7] = NULL;
+    } else if (strcmp(mgr, "termux") == 0) {
+        /* `pkg update` is `apt update` plus Termux's own mirror selection, which
+         * is the half that matters: a stale or dead mirror is the usual reason a
+         * fresh Termux cannot install anything, and calling apt-get directly
+         * would skip it. No sources.list pruning here -- the bootstrap lists
+         * osr_apt_prune_bootstrap_lists exists for are an apt-repo thing, and
+         * Termux has no third-party repos of ours to collide with. */
+        argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
+        argv[2] = (char *)"pkg"; argv[3] = (char *)"update"; argv[4] = (char *)"-y";
+        argv[5] = NULL;
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[0] = (char *)"dnf"; argv[1] = (char *)"-q"; argv[2] = (char *)"makecache"; argv[3] = NULL;
     } else if (strcmp(mgr, "pacman") == 0) {
@@ -1171,6 +1183,14 @@ static int via_native(const char *const names[]) {
         argv[argc++] = (char *)"-q";
         argv[argc++] = (char *)"-o";
         argv[argc++] = (char *)"Dpkg::Use-Pty=0";
+    } else if (strcmp(mgr, "termux") == 0) {
+        argv[argc++] = (char *)"env";
+        argv[argc++] = (char *)"DEBIAN_FRONTEND=noninteractive";
+        argv[argc++] = (char *)"pkg";
+        argv[argc++] = (char *)"install";
+        argv[argc++] = (char *)"-y";
+        argv[argc++] = (char *)"-o";
+        argv[argc++] = (char *)"Dpkg::Use-Pty=0";
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[argc++] = (char *)"dnf"; argv[argc++] = (char *)"install"; argv[argc++] = (char *)"-y";
     } else if (strcmp(mgr, "pacman") == 0) {
@@ -1359,6 +1379,9 @@ int osr_pkg_remove(const char *const names[]) {
     if (argv == NULL) osr_die_oom();
     if (strcmp(mgr, "apt") == 0) {
         argv[argc++] = (char *)"apt-get"; argv[argc++] = (char *)"remove";
+        argv[argc++] = (char *)"-y";
+    } else if (strcmp(mgr, "termux") == 0) {
+        argv[argc++] = (char *)"pkg"; argv[argc++] = (char *)"uninstall";
         argv[argc++] = (char *)"-y";
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[argc++] = (char *)"dnf"; argv[argc++] = (char *)"remove"; argv[argc++] = (char *)"-y";

@@ -485,6 +485,32 @@ int dir_exists(const char *path) {
     return S_ISDIR(st.st_mode) ? 1 : 0;
 }
 
+/* Three probes, widest first, because each alone has a hole: $TERMUX_VERSION is
+ * exported by termux-tools' login profile, so a non-login shell (adb, an ssh
+ * into sshd, a cron-ish wrapper) does not have it; $PREFIX/bin/pkg catches
+ * those and also the rebuilt-with-another-app-id forks, whose prefix is not the
+ * stock path; and the stock path itself answers when neither variable survived
+ * an env-scrubbing exec. Probed at most once. */
+int osr_on_termux(void) {
+    static int answer = -1;
+    const char *prefix;
+
+    if (answer >= 0) return answer;
+    answer = 0;
+    if (*env_str("TERMUX_VERSION", "") != '\0') { answer = 1; return answer; }
+    prefix = env_str("PREFIX", "");
+    if (*prefix != '\0') {
+        Str p;
+        str_init(&p);
+        str_addzz(&p, prefix, "/bin/pkg", (const char *)NULL);
+        answer = file_exists(str_text(&p));
+        str_free(&p);
+        if (answer) return answer;
+    }
+    answer = dir_exists("/data/data/com.termux/files/usr");
+    return answer;
+}
+
 int next_line(const char *buf, size_t buf_len, size_t *pos, Line *out) {
     size_t i;
     if (*pos >= buf_len) return 0;
