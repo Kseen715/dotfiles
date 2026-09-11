@@ -332,6 +332,14 @@ setopt hist_ignore_all_dups   # drop older duplicates from the list entirely
 setopt hist_save_no_dups      # ...and never write them out to $HISTFILE
 setopt hist_reduce_blanks     # "ls   -la" and "ls -la" are one command
 
+# The menuselect keymap is created by the complist module, not by zsh itself, and
+# every `bindkey -M menuselect` below is an error ("no such keymap menuselect")
+# until it is loaded. omz's lib/completion.zsh does the zmodload, so this is a
+# no-op on a full install — but the omz source above is conditional, and on a box
+# without it (Termux) the whole block below failed, once per key. -i: already
+# loaded is not an error.
+zmodload -i zsh/complist
+
 # Enter runs the highlighted command straight from the menu. Without this,
 # menuselect's Enter only accepts the selection onto the command line and a
 # second Enter is needed to run it. The leading dot is the builtin widget, not
