@@ -112,8 +112,18 @@ static int install_cargo_tooling(void *ctx) {
 
 int osrm_rust(void) {
     static const char *const deps[] = { "build", "curl", NULL };
+    static const char *const native[] = { "build", "curl", "rust", NULL };
     Str cargo;
     int ok;
+
+    /* Termux: rustup refuses to run at all here (it compares $HOME against the
+     * euid home -- one Android app uid, no passwd entry -- and bails before it
+     * writes settings.toml), and cargo-binstall's release asset is a
+     * *-unknown-linux-gnu binary that bionic cannot start. termux-main packages
+     * the toolchain natively, so the whole rustup/binstall path is replaced by
+     * one pkg row (see the bionic note in lib/pkgmap/termux.map). */
+    if (osr_on_termux())
+        return osr_pkg_install_step("Installing Rust (native package)", native);
 
     ok = osr_pkg_install_step("Installing build tools (cc, curl)", deps);
 

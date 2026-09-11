@@ -885,10 +885,16 @@ int osr_pkg_cargo(const char *name, const char *crate) {
         ok = 1;
         goto done;
     }
-    /* Fatal, not a warning: lib/pkg.sh spelled this `error`, and a missing
+    /* Not every toolchain is rustup's: on Termux modules/rust.c installs the
+     * native package, whose cargo lives in $PREFIX/bin (crates it installs
+     * still land in ~/.cargo/bin, so only this one path moves). Fall back to
+     * PATH before giving up.
+     * Fatal, not a warning: lib/pkg.sh spelled this `error`, and a missing
      * toolchain is a manifest-order bug (§4) the run cannot install around. */
-    if (!user_test_x(str_text(&cargo)))
-        osr_die("cargo not found for %s - install 'rust' before any cargo: package", name);
+    if (!user_test_x(str_text(&cargo))) {
+        if (osr_have_cmd("cargo")) str_setz(&cargo, "cargo", (const char *)NULL);
+        else osr_die("cargo not found for %s - install 'rust' before any cargo: package", name);
+    }
     /* binstall first (modules/rust.sh installs it): a prebuilt binary where
      * upstream ships one. Not every crate/arch has an asset, so a failure
      * falls through to the source build rather than ending the install. */
