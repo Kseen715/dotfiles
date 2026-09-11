@@ -393,9 +393,9 @@ int main(void) {
 
     /* --- termux (Android: one app uid, no root) ----------------------- */
     /* Two things are different here, and the log asserts both: the commands
-     * are `pkg`, Termux's own wrapper -- `pkg update` is what re-selects a
-     * dead mirror, which calling apt-get directly would skip -- and NOTHING
-     * carries a sudo prefix. Termux runs as one unprivileged Android app uid;
+     * are `pkg`, Termux's own wrapper -- `pkg upgrade` is what re-selects a
+     * dead mirror AND brings the tree up to date, neither of which calling
+     * apt-get directly would do -- and NOTHING carries a sudo prefix. Termux runs as one unprivileged Android app uid;
      * there is no root to escalate to and $PREFIX is already ours. A sudo
      * creeping back in would not fail loudly, it would fail per-install on a
      * box that has no sudo binary at all. */
@@ -409,9 +409,12 @@ int main(void) {
     loud("pkg");
     install("zsh", "build", NULL, NULL, NULL, NULL);
     osr_assert_log_is(&sb,
-        "pkg update -y\n"
+        "pkg upgrade -y -o Dpkg::Options::=--force-confold\n"
         "pkg install -y -o Dpkg::Use-Pty=0 zsh build-essential\n",
-        "termux: pkg update then pkg install, batched, and no sudo anywhere");
+        "termux: the refresh is `pkg upgrade`, not `pkg update` -- termux-main "
+        "is rolling and keeps one version of everything, so installing against "
+        "a stale tree links a new .so against libraries missing its symbols; "
+        "then pkg install, batched, and no sudo anywhere");
     osr_sb_env(&sb, "TERMUX_VERSION", "");
 
     /* ================================================================

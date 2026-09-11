@@ -731,15 +731,37 @@ void osr_pkg_refresh(void) {
         argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Use-Pty=0";
         argv[7] = NULL;
     } else if (strcmp(mgr, "termux") == 0) {
-        /* `pkg update` is `apt update` plus Termux's own mirror selection, which
-         * is the half that matters: a stale or dead mirror is the usual reason a
-         * fresh Termux cannot install anything, and calling apt-get directly
-         * would skip it. No sources.list pruning here -- the bootstrap lists
+        /* `pkg upgrade`, not `pkg update`: it is `apt update` plus Termux's own
+         * mirror selection (a stale or dead mirror is the usual reason a fresh
+         * Termux cannot install anything, and calling apt-get directly would
+         * skip it) AND the full-upgrade after it.
+         *
+         * The upgrade is not optional here. termux-main is a rolling repo that
+         * keeps ONE version of everything and does not support a partially
+         * upgraded tree: install a package today against libraries from an
+         * image last touched months ago and the new .so wants a symbol the old
+         * one does not export. That is not theory -- it is what a yazi install
+         * on a stale phone hits, as
+         *
+         *   CANNOT LINK EXECUTABLE "ffmpeg": cannot locate symbol
+         *   "_ZNSt6ndk127from_chars_floating_point..." referenced by
+         *   "libplacebo.so"
+         *
+         * from ffmpeg's postinst, which fails the dpkg run and so the whole
+         * install step. Termux's own advice for it is `pkg upgrade`, which is
+         * why the refresh does it rather than leaving the user to.
+         *
+         * The cost is honest: the first run on an old install downloads every
+         * outdated package. There is no cheaper correct option -- apt cannot
+         * upgrade only the dependency subtree it is about to need.
+         *
+         * No sources.list pruning here -- the bootstrap lists
          * osr_apt_prune_bootstrap_lists exists for are an apt-repo thing, and
          * Termux has no third-party repos of ours to collide with. */
         argv[0] = (char *)"env"; argv[1] = (char *)"DEBIAN_FRONTEND=noninteractive";
-        argv[2] = (char *)"pkg"; argv[3] = (char *)"update"; argv[4] = (char *)"-y";
-        argv[5] = NULL;
+        argv[2] = (char *)"pkg"; argv[3] = (char *)"upgrade"; argv[4] = (char *)"-y";
+        argv[5] = (char *)"-o"; argv[6] = (char *)"Dpkg::Options::=--force-confold";
+        argv[7] = NULL;
     } else if (strcmp(mgr, "dnf") == 0) {
         argv[0] = (char *)"dnf"; argv[1] = (char *)"-q"; argv[2] = (char *)"makecache"; argv[3] = NULL;
     } else if (strcmp(mgr, "pacman") == 0) {
