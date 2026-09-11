@@ -186,7 +186,7 @@ if osr_detached; then
     fi
     if ! _bs_have_cc; then
         _bs_log "no C compiler found - installing via $(_bs_pkg)"
-        _bs_add build-essential gcc base-devel build-base gcc sys-devel/gcc
+        _bs_add gcc gcc base-devel build-base gcc sys-devel/gcc
     fi
 
     if [ -d "$OSR_DEST/.git" ]; then
@@ -258,7 +258,7 @@ export OSR_ROOT OSR_LIB OSR_DOTFILES OSR_BIN OSR_C_MODULE_BACKEND
 # the bare distro images the matrix runs on ship no compiler at all.
 if [ -z "${OSR_NO_BUILD:-}" ] && [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ] && ! _bs_have_cc; then
     _bs_log "no C compiler found - installing via $(_bs_pkg)"
-    _bs_add build-essential gcc base-devel build-base gcc sys-devel/gcc
+    _bs_add gcc gcc base-devel build-base gcc sys-devel/gcc
 fi
 if [ -z "${OSR_NO_BUILD:-}" ] && [ -f "$OSR_ROOT/nob.c" ] && [ ! -x "$OSR_ROOT/build/nob" ]; then
     # nob.c is the build system (its header comment has the one-time bootstrap
