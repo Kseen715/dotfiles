@@ -1108,6 +1108,11 @@ static void append_common_flags_for(Nob_Cmd *cmd, const char *src) {
         /* cproc has no -w; its own diagnostics on this code are few and it
          * is the one front end that would fail the build over the flag. */
         if (!is_cproc()) nob_cmd_append(cmd, "-w");
+        /* pcc's -w does not cover its "unsupported attribute" warning, which
+         * glibc's __COLD triggers from stdio.h/stdlib.h on every translation
+         * unit -- including these, where upstream's own diagnostics are off.
+         * -Wno-attributes is the switch that silences it. */
+        if (is_pcc()) nob_cmd_append(cmd, "-Wno-attributes");
         cmd_append_args(cmd, o0 ? "-O0" : "-O2", NULL);
         if (target_windows())
             cmd_append_args(cmd, "-DWINVER=0x0501", "-D_WIN32_WINNT=0x0501", NULL);
