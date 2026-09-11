@@ -88,6 +88,11 @@ static const Command commands[] = {
     { "apply",    osr_apply_main,      1, "the lists a theme-only apply is built out of" },
     { "reload",   osr_reload_main,     0, "tell the running apps to re-read their config" },
     { "wallpaper", osr_wallpaper_main,  1, "set or query the current theme's wallpaper" },
+    /* needs_tree = 0: updating from a release is exactly the case where there
+     * is no tree yet, and cloning one to run `osr update` would be absurd. */
+#ifndef _WIN32
+    { "update",   osr_update_main,     0, "replace this binary: latest release, or --src" },
+#endif
 #ifndef _WIN32
     /* The four that have no Windows answer -- a GNOME session, MSRs, sysfs
      * hwmon, and a suite that drives this binary under sh. lib/cmds.h says
@@ -154,13 +159,6 @@ static void resolve_roots(const char *argv0) {
     }
 }
 
-/* The checkout provision_tree() fetches when there is none around the binary.
- * Same defaults as the `osr` launcher's self-bootstrap block, and the same two
- * env overrides, because it is the same job done from the other side: that
- * script clones because it has no binary, this clones because it has no tree.
- */
-#define OSR_REPO_URL_DEFAULT "https://github.com/Kseen715/dotfiles.git"
-#define OSR_TREE_DIR_DEFAULT "os-rice-dotfiles"
 
 /* tree_at -- is <root> an os-rice tree, rather than whatever directory the
  * binary happens to be sitting in?
@@ -192,24 +190,24 @@ static int tree_at(const char *root) {
  *
  *     [WARN] install: source not found: ./zsh/rc.d/10-omz.zsh
  *
- * The clone is shallow and lands in $TMPDIR (OSR_DEST overrides), and a tree
- * already sitting there is used as it is -- no fetch, so a second run costs
- * nothing and works offline. Only the commands marked needs_tree in the table
- * above reach this, so no `osr log` or `osr detect` ever touches the network.
+ * The clone is shallow and lands wherever osr_dotfiles_dest() says (lib/git.h
+ * holds that decision, because the launcher's self-bootstrap and `osr update
+ * --src` must agree with it), and a tree already sitting there is used as it
+ * is -- no fetch, so a second run costs nothing and works offline. Only the
+ * commands marked needs_tree in the table above reach this, so no `osr log` or
+ * `osr detect` ever touches the network.
  */
 static void provision_tree(void) {
-    const char *url = env_str("OSR_REPO_URL", OSR_REPO_URL_DEFAULT);
+    const char *url = env_str("OSR_REPO_URL", OSR_DOTFILES_REPO_URL);
     char dest[OSR_PATH_MAX];
     char root[OSR_PATH_MAX];
     char buf[OSR_PATH_MAX];
 
     if (tree_at(env_str("OSR_ROOT", ""))) return;
 
-    if (env_is_set("OSR_DEST")) {
-        osr_copy_bounded(dest, sizeof(dest), env_str("OSR_DEST", ""));
-    } else if (!osr_path_join(dest, sizeof(dest), osr_tmpdir(), OSR_TREE_DIR_DEFAULT)) {
-        return;
-    }
+    /* Where the launcher's self-bootstrap and `osr update --src` also look, so
+     * whichever of the three fetched the tree, this one finds it (lib/git.h). */
+    if (!osr_dotfiles_dest(dest, sizeof(dest))) return;
     /* The tree is os-rice/ INSIDE the dotfiles repo, and the configs the
      * modules copy are config/ beside it -- the same two roots the launcher
      * exports from a checkout. */

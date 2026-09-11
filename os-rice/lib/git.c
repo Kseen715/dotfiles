@@ -72,6 +72,21 @@ static int repo_dirty(const char *dir) {
     return osr_run_user_quiet(v) != 0;
 }
 
+int osr_dotfiles_dest(char *out, unsigned long out_sz) {
+    char share[OSR_PATH_MAX];
+    const char *home;
+
+    if (out_sz > 0) out[0] = '\0';
+    if (env_is_set("OSR_DEST")) {
+        osr_copy_bounded(out, (size_t)out_sz, env_str("OSR_DEST", ""));
+        return out[0] != '\0';
+    }
+    home = osr_mod_home();
+    if (*home == '\0' || !osr_path_join(share, sizeof(share), home, ".local/share"))
+        osr_copy_bounded(share, sizeof(share), osr_tmpdir());
+    return osr_path_join(out, (size_t)out_sz, share, "os-rice-dotfiles");
+}
+
 /* clone_into -- `as_user git clone [args...] <url> <dir>`, fatal on failure,
  * which is what check_error did to every caller. */
 static void clone_into(const char *name, const char *url, const char *dir,

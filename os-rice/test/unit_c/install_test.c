@@ -308,6 +308,33 @@ int main(void) {
         hs_free(&st);
     }
 
+    /* `osr` on PATH. The callers that spell it as a bare command -- i3
+     * bindings, proteus (`osr theme {}`), a .desktop entry -- have no login
+     * shell to find the checkout with, and before this the picker died with
+     * "osr: No such file or directory" and looked like a broken keybinding.
+     *
+     * /usr/local/bin, not ~/.local/bin: the latter is on PATH only where the
+     * zsh and xprofile layers put it, which would make the harness's own front
+     * end depend on two of its modules having been installed first. Root-owned
+     * for the same reason every system path is -- a shim on every user's PATH
+     * that any user can rewrite is an escalation.
+     *
+     * A shim, never a symlink: the launcher finds its tree from `dirname $0`,
+     * so a symlinked $0 lands in a directory with no lib/ beside it, which is
+     * exactly the signal it reads as "detached" -- it would clone a second
+     * copy of the repo and drive that instead of this checkout. Hence the
+     * refutation as well as the assertion. */
+    {
+        osr_assert_log(&sb, "sudo tee /usr/local/bin/osr",
+            "the run puts `osr` itself on PATH, at a system path every shell "
+            "and every session already has -- not only the ones os-rice's own "
+            "shell layers have been installed into");
+        osr_refute_log(&sb, "ln -s",
+            "and writes a shim rather than symlinking the launcher, which "
+            "would give it a $0 outside the tree and make it clone a second "
+            "copy of the repo to drive");
+    }
+
     /* ================================================================
      * 4. The option loop
      *

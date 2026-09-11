@@ -25,6 +25,15 @@
 #                                                    (omitted: the theme already
 #                                                    applied, else the picker,
 #                                                    else the default if no TTY).
+#   osr update [--src]                               replace this osr with a newer
+#                                                    one: the release built for
+#                                                    this machine, or --src to
+#                                                    fetch the sources and
+#                                                    recompile. A checkout has to
+#                                                    use --src - the launcher
+#                                                    rebuilds build/osr on every
+#                                                    run, so a downloaded binary
+#                                                    would not survive one.
 #   osr list                                         list available rices
 #   osr themes                                       list available themes
 #   osr modules                                      list available modules
@@ -302,6 +311,7 @@ case "$_cmd" in
         exec "$OSR_BIN" install run --theme-only --theme "$_theme" "$@"
         ;;
     wallpaper) exec "$OSR_BIN" wallpaper "$@" ;;
+    update)    exec "$OSR_BIN" update "$@" ;;
     benchmark)
         # Dependency installs happen through the installer rather than inside
         # the benchmark: pulling packages is the module machinery's job, and
@@ -350,10 +360,10 @@ case "$_cmd" in
         "$OSR_BIN" test-run "$OSR_SELF_DIR/test"
         ;;
     -h|--help|"")
-        sed -n '2,54p' "$0" | sed 's/^# \{0,1\}//'
+        sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'
         ;;
     *)
-        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, benchmark, undervolt, list, themes, modules, test)" >&2
+        echo "osr: unknown command '$_cmd' (try: install, switch, theme, wallpaper, module, update, benchmark, undervolt, list, themes, modules, test)" >&2
         exit 1
         ;;
 esac

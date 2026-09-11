@@ -13,6 +13,30 @@
 
 #include "common.h"
 
+/* The dotfiles repo itself, and where a fetched copy of it lives.
+ *
+ * Three places need to agree on this: the `osr` launcher's self-bootstrap
+ * (piped from curl, no checkout), provision_tree() in osr.c (a released binary
+ * standing alone, no tree beside it) and `osr update --src` (a source update
+ * with nothing to update yet). They are the same clone -- whichever of them
+ * fetched it, the others must find it rather than make a second copy -- so the
+ * URL and the destination are stated once, here, rather than three times.
+ *
+ * $OSR_REPO_URL and $OSR_DEST override, as they do in the launcher.
+ */
+#define OSR_DOTFILES_REPO_URL "https://github.com/Kseen715/dotfiles.git"
+
+/* osr_dotfiles_dest -- the checkout directory, into `out`. Returns 0 (and
+ * leaves out empty) only when the path would not fit.
+ *
+ * $HOME/.local/share, not $TMPDIR: a tmpdir is swept between boots, so a tree
+ * cloned there cost a fresh download of themes/ and rices/ every session and
+ * left an offline box with nothing. A home that cannot be resolved at all (a
+ * daemon, a bare container) falls back to the tmpdir -- a swept tree beats no
+ * tree.
+ */
+int osr_dotfiles_dest(char *out, unsigned long out_sz);
+
 /* osr_git_repo -- clone <url> into <dir> if it is absent; if it is there and
  * the remote matches, reset a dirty tree then pull; if the remote differs,
  * throw the tree away and clone again. clone_args is a NULL-terminated vector

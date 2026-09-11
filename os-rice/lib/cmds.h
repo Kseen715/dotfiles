@@ -146,4 +146,11 @@ int osr_module_run(const char *name, int theme_only);
  * separation wallpaper.sh has from install.sh: this is not an install. */
 int osr_wallpaper_main(int argc, char **argv);/* wallpaper.sh */
 
+/* osr_update_main -- replace this binary with a newer one: the release
+ * artifact for this OS/arch/libc, or (--src) a rebuild from the sources.
+ * POSIX only: on Windows the front end is osr.ps1, which has its own. */
+#ifndef _WIN32
+int osr_update_main(int argc, char **argv);
+#endif
+
 #endif /* OSR_CMDS_H */

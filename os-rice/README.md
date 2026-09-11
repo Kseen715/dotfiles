@@ -135,6 +135,8 @@ proteus                                # the GUI picker (X11 + Wayland)
 
 ```sh
 os-rice/osr module <name>              # one module, nothing else
+os-rice/osr update                     # replace this osr with the latest release
+os-rice/osr update --src               # fetch the sources and rebuild it instead
 os-rice/osr undervolt cpu probe        # never writes anything
 build/osr benchmark cpu                # core command; ./osr has no verb for it
 ```
