@@ -94,8 +94,13 @@ def main():
     
     run_cmd("ip route add default via 10.8.0.1")
 
-    with open("/etc/resolv.conf", "w") as f:
-        f.write("nameserver 8.8.8.8\n")
+    # ponytail: resolv.conf may be immutable (chattr +i) or managed by systemd-resolved.
+    # Not fatal: RFC1918 still reaches the LAN resolver, public resolvers go via the tunnel.
+    try:
+        with open("/etc/resolv.conf", "w") as f:
+            f.write("nameserver 8.8.8.8\n")
+    except OSError as e:
+        print(f"[!] Could not set DNS ({e}); keeping existing resolv.conf.")
 
     print("\n[+] Tunnel active. Internet traffic routed through 10.8.0.1.")
     print("[+] Local subnets remain on original gateway.")

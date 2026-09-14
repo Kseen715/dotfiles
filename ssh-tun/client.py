@@ -6,7 +6,9 @@ import time
 import argparse
 
 def run_cmd(cmd, ignore_error=False):
-    result = subprocess.run(cmd, shell=True, capture_output=True)
+    result = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+    if result.returncode != 0 and not ignore_error:
+        print(f"[!] Error: {result.stderr.strip()}")
     return result.stdout.strip()
 
 def main():
@@ -23,7 +25,7 @@ def main():
     ssh_proc = subprocess.Popen(["ssh", "-w", "0:0", "-N", f"root@{args.server_ip}"])
 
     try:
-        while run_cmd("ip link show tun0", ignore_error=True) == b"":
+        while run_cmd("ip link show tun0", ignore_error=True) == "":
             if ssh_proc.poll() is not None:
                 print("[!] SSH connection failed or terminated.")
                 sys.exit(1)
