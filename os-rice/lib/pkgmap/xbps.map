@@ -107,6 +107,8 @@ webkit2gtk-4.1 = libwebkit2gtk41
 
 # --- input, power, apps (the second i3 desktop pass) --------------------------
 xorg-xmodmap = xmodmap
+# fancontrol (modules/fans.c) is one of the scripts in lm_sensors.
+fancontrol = lm_sensors
 # Void names the LDAC codec library after the upstream project.
 libldac = ldacBT
 

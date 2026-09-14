@@ -116,6 +116,10 @@ zramen =
 # KDE Plasma (modules/plasma.c). Arch's plasma-meta already carries the Wayland
 # session, so the second logical name resolves to the workspace itself rather
 # than to a separate package.
+# fancontrol (modules/fans.c) is a script inside the lm_sensors package, not a
+# package of its own — the same on Fedora, Void and Alpine.
+fancontrol = lm_sensors
+
 plasma-desktop = plasma-meta
 plasma-wayland = plasma-workspace
 

@@ -55,6 +55,8 @@ tcc = tcc tcc-libs-static musl-dev
 
 # Alpine hyphenates the sensors package (modules/gnome-panel.c).
 lm_sensors = lm-sensors
+# fancontrol (modules/fans.c) ships inside that same package.
+fancontrol = lm-sensors
 
 # --- i3/X11 desktop (rices/i3-rosemary) --------------------------------------
 # Every row below was checked against the real Alpine repository index

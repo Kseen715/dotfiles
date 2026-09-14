@@ -110,6 +110,7 @@ typedef struct {
     X("dunst",           dunst,           "x11+wayland", 1) \
     X("easyeffects",     easyeffects,     "x11+wayland", 0) \
     X("evolution",       evolution,       "x11+wayland", 1) \
+    X("fans",            fans,            "x11+wayland", 0) \
     X("fastfetch",       fastfetch,       "x11+wayland", 1) \
     X("fcitx5",          fcitx5,          "x11+wayland", 1) \
     X("feh",             feh,             "x11",         0) \

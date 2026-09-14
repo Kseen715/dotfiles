@@ -17,6 +17,11 @@
  *   ./build/nob -v          (any of the above, with full command lines)
  *   ./build/nob -t          (any of the above, timed: how long each unit
  *                            took to compile and each binary to link)
+ *   ./build/nob -j N test   (N test binaries at once; the default is one per
+ *                            hardware thread, and NOB_JOBS says the same
+ *                            thing for the `make` wrapper. -t implies -j 1,
+ *                            because a timing is only meaningful when one
+ *                            command runs at a time)
  *
  * Commands are echoed the way an autoconf build with silent rules prints
  * them -- "TCC      build/obj/lib_net.o", "LD       build/install" -- so a
@@ -398,6 +403,7 @@ static const char *posix_srcs[] = {
     "modules/dunst.c",
     "modules/easyeffects.c",
     "modules/evolution.c",
+    "modules/fans.c",
     "modules/fcitx5.c",
     "modules/feh.c",
     "modules/firefox.c",
@@ -581,7 +587,7 @@ static const char *posix_test_names[] = {
      * box -- which is why they belong here rather than with the tests that
      * link the lib objects: a black-box test of what a unit must do should
      * not break when the unit is renamed or split. */
-    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test", "reload_test", "migrate_test", "zsh_test", "gnome_test", "gnome_modules_test", "logging_test", "detect_test", "gpu_drivers_test", "audio_test", "swap_test", "log_test", "ui_test", "state_test", "testrun_test", "user_test", "theme_test", "theme_layers_test", "wallpaper_test", "config_test", "terminals_test", "build_test", "apps_test", "desktop_test", "weston_rdp_test", "install_test", "modules_test", "yaml_test", "update_test"
+    "service_test", "preflight_test", "apply_test", "pkg_test", "nerdfont_test", "net_test", "git_test", "reload_test", "migrate_test", "zsh_test", "gnome_test", "gnome_modules_test", "logging_test", "detect_test", "gpu_drivers_test", "audio_test", "swap_test", "fans_test", "log_test", "ui_test", "state_test", "testrun_test", "user_test", "theme_test", "theme_layers_test", "wallpaper_test", "config_test", "terminals_test", "build_test", "apps_test", "desktop_test", "weston_rdp_test", "install_test", "modules_test", "yaml_test", "update_test"
 };
 #define POSIX_TEST_COUNT (sizeof(posix_test_names) / sizeof(posix_test_names[0]))
 
@@ -1638,19 +1644,111 @@ static bool link_standalone(const char *bin, const char *main_src, Nob_Procs *pr
     }
 }
 
-/* run_test -- tests read fixtures via a path relative to test/unit_c/, so
- * that is still the working directory they run in; only the binary itself
- * moved out to build/test/, hence the climb back up in its path.
+/* --- running the test binaries --------------------------------------------
+ *
+ * The binaries share nothing. Every sandbox is its own mkdtemp (test/
+ * harness.c), the two shell integration tests use $$-suffixed temporaries,
+ * and nothing writes into the checkout. So the suite was serial only for the
+ * sake of readable output, and on a 24-thread box that readability cost
+ * thirty seconds of processes taking turns to sleep: the run sat at ~10% of
+ * one core because almost every test is a parent waiting on a forked sandbox.
+ *
+ * Output stays exactly as readable. Each test's stdout and stderr are
+ * captured to build/test/<name>.log and .err.log, and a wave's logs are
+ * printed, whole, in the order the tests are LISTED once that wave finishes
+ * -- so the transcript reads like the serial one it replaces, and progress
+ * still appears as the run goes rather than all at the end.
+ *
+ * WHAT DECIDES PASS/FAIL: the wave's aggregate exit status, which is what
+ * nob_procs_flush returns. The logs are for the person reading them; nothing
+ * here parses them for a verdict.
+ *
+ * Under nob89 (the C89 backend) anything handed to .async is run
+ * synchronously and jobs_cap() is 1, so this is the serial runner again
+ * rather than a second code path to keep in step.
+ *
+ * Tests read fixtures via a path relative to test/unit_c/, so that is still
+ * the directory they run in; only the binaries and their logs live under
+ * build/, hence the climb back up in every path below.
  */
-static bool run_test(const char *name) {
-    const char *bin_name = nob_temp_sprintf("../../" TEST_BIN_DIR "/%s%s", name, exe());
+
+/* test_jobs -- how many at once. 0 means one per hardware thread; `-j N`,
+ * `--jobs N` and NOB_JOBS set it. */
+static int test_jobs = 0;
+
+static size_t jobs_cap(void) {
+    int n = test_jobs;
+#ifdef NOB89_IMPLEMENTATION
+    /* The C89 backend has no nob_nprocs and runs every .async command
+     * synchronously; one at a time is what it is going to do regardless. */
+    if (n <= 0) n = 1;
+#else
+    if (n <= 0) n = nob_nprocs();
+#endif
+    if (n < 1) n = 1;
+    return (size_t)n;
+}
+
+static const char *test_bin(const char *name) {
+    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s%s", name, exe());
+}
+static const char *test_out(const char *name) {
+    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s.log", name);
+}
+/* stderr gets a file of its own: two opens of one path would each truncate
+ * it and then write over each other from separate offsets. */
+static const char *test_err(const char *name) {
+    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s.err.log", name);
+}
+
+/* print_captured -- one captured stream, verbatim, or nothing when it is
+ * empty or was never written (a test that produced no stderr). */
+static void print_captured(const char *path) {
+    Nob_String_Builder sb = {0};
+    if (nob_file_exists(path) <= 0) return;
+    if (!nob_read_entire_file(path, &sb)) return;
+    if (sb.count > 0) fwrite(sb.items, 1, sb.count, stdout);
+    fflush(stdout);
+    nob_sb_free(sb);
+}
+
+/* run_test_wave -- names[from..to) at once, then their logs in list order. */
+static bool run_test_wave(const char *const *names, size_t from, size_t to) {
+    Nob_Procs procs = {0};
     Nob_Cmd cmd = {0};
+    size_t i;
     bool ok;
-    nob_log(NOB_INFO, "--- %s ---", name);
-    nob_cmd_append(&cmd, bin_name);
-    if (!nob_set_current_dir("test/unit_c")) return false;
-    ok = nob_cmd_run(&cmd);
-    nob_set_current_dir("../..");
+
+    for (i = from; i < to; i++) {
+        Nob_Cmd_Opt opt = {0};
+        nob_cmd_append(&cmd, test_bin(names[i]));
+        opt.async = &procs;
+        opt.max_procs = jobs_cap();
+        opt.stdout_path = test_out(names[i]);
+        opt.stderr_path = test_err(names[i]);
+        if (!nob_cmd_run_opt(&cmd, opt)) { nob_procs_flush(&procs); return false; }
+    }
+    ok = nob_procs_flush(&procs);
+
+    for (i = from; i < to; i++) {
+        nob_log(NOB_INFO, "--- %s ---", names[i]);
+        print_captured(test_out(names[i]));
+        print_captured(test_err(names[i]));
+    }
+    return ok;
+}
+
+/* run_tests -- every binary in one list, jobs_cap() at a time. The caller is
+ * already inside test/unit_c. */
+static bool run_tests(const char *const *names, size_t count) {
+    size_t wave = jobs_cap();
+    size_t i;
+    bool ok = true;
+
+    for (i = 0; i < count; i += wave) {
+        size_t to = i + wave < count ? i + wave : count;
+        if (!run_test_wave(names, i, to)) ok = false;
+    }
     return ok;
 }
 
@@ -1727,16 +1825,20 @@ static bool run_all_tests(void) {
                 target_windows() ? "Windows" : "POSIX");
         return true;
     }
-    for (i = 0; i < TEST_COUNT; i++) {
-        if (!run_test(test_names[i])) ok = false;
-    }
-    for (i = 0; i < UNITY_TEST_COUNT; i++) {
-        if (!run_test(unity_test_names[i])) ok = false;
-    }
+    NOB_UNUSED(i);
+    /* One chdir for the whole pool rather than one per test: the children
+     * inherit the working directory at spawn, and every path the runner
+     * composes is already relative to it. */
+    if (!nob_set_current_dir("test/unit_c")) return false;
+    if (!run_tests(test_names, TEST_COUNT)) ok = false;
+    if (!run_tests(unity_test_names, UNITY_TEST_COUNT)) ok = false;
+    if (!target_windows() && !run_tests(posix_test_names, POSIX_TEST_COUNT)) ok = false;
+    if (!nob_set_current_dir("../..")) return false;
+
+    /* The two integration tests stay serial and stay last: they are scripts
+     * that drive a real git clone and a real compiler, so they are neither
+     * short nor quiet, and there are two of them. */
     if (!target_windows()) {
-        for (i = 0; i < POSIX_TEST_COUNT; i++) {
-            if (!run_test(posix_test_names[i])) ok = false;
-        }
         if (!run_runtime_module_tests()) ok = false;
         if (!run_standalone_tree_tests()) ok = false;
     }
@@ -1766,14 +1868,20 @@ static bool clean(void) {
     delete_if_exists(CACERT_SRC);
     for (i = 0; i < TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", test_names[i], exe()));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.log", test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.err.log", test_names[i]));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", test_names[i]));
     }
     for (i = 0; i < UNITY_TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", unity_test_names[i], exe()));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.log", unity_test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.err.log", unity_test_names[i]));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", unity_test_names[i]));
     }
     for (i = 0; i < POSIX_TEST_COUNT; i++) {
         delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s%s", posix_test_names[i], exe()));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.log", posix_test_names[i]));
+        delete_if_exists(nob_temp_sprintf(TEST_BIN_DIR "/%s.err.log", posix_test_names[i]));
         delete_built(nob_temp_sprintf("test/unit_c/%s.c", posix_test_names[i]));
     }
     /* the compiler bookkeeping goes too: with no objects left there is no
@@ -1905,6 +2013,22 @@ static bool is_verbose_flag(const char *arg) {
 
 static bool is_time_flag(const char *arg) {
     return strcmp(arg, "-t") == 0 || strcmp(arg, "--time") == 0;
+}
+
+/* `-j N` / `--jobs N`, and the glued spellings `-jN` / `--jobs=N`. The count
+ * caps how many test binaries run at once (run_tests above). */
+static bool is_jobs_flag(const char *arg) {
+    return strcmp(arg, "-j") == 0 || strcmp(arg, "--jobs") == 0;
+}
+/* jobs_value_of -- the count glued to the flag, or NULL when it is not one of
+ * the glued spellings (so the next argv entry is the value). */
+static const char *jobs_value_of(const char *arg) {
+    if (strncmp(arg, "--jobs=", 7) == 0) return arg + 7;
+    if (arg[0] == '-' && arg[1] == 'j' && arg[2] != '\0') return arg + 2;
+    return NULL;
+}
+static bool is_any_jobs_flag(const char *arg) {
+    return is_jobs_flag(arg) || jobs_value_of(arg) != NULL;
 }
 
 /* Cmd_Brief -- what one rendered command line boils down to: the tool that
@@ -2086,14 +2210,35 @@ static bool want_timing(int argc, char **argv) {
     return false;
 }
 
+/* want_jobs -- how many test binaries may run at once. NOB_JOBS is the
+ * environment form, for the `make` wrapper and for CI. 0 leaves the default
+ * (one per hardware thread). */
+static int want_jobs(int argc, char **argv) {
+    const char *env = getenv("NOB_JOBS");
+    int i;
+    for (i = 1; i < argc; i++) {
+        const char *glued = jobs_value_of(argv[i]);
+        if (glued != NULL) return atoi(glued);
+        if (is_jobs_flag(argv[i]) && i + 1 < argc) return atoi(argv[i + 1]);
+    }
+    if (env != NULL && *env != '\0') return atoi(env);
+    return 0;
+}
+
 /* drop_verbose_flags -- compact argv so the subcommand parse in main() sees
- * subcommands only, and `nob -v test` (or `nob -t test`) works in either
- * order. */
+ * subcommands only, and `nob -v test` (or `nob -t test`, `nob -j 8 test`)
+ * works in either order. `-j` takes a value, so that value goes too. */
 static int drop_verbose_flags(int argc, char **argv) {
     int i;
     int n = 0;
+    bool drop_next = false;
     for (i = 0; i < argc; i++) {
+        if (i > 0 && drop_next) { drop_next = false; continue; }
         if (i > 0 && (is_verbose_flag(argv[i]) || is_time_flag(argv[i]))) continue;
+        if (i > 0 && is_any_jobs_flag(argv[i])) {
+            drop_next = is_jobs_flag(argv[i]);   /* the separate-value spelling */
+            continue;
+        }
         argv[n++] = argv[i];
     }
     return n;
@@ -2104,6 +2249,10 @@ int main(int argc, char **argv) {
     const char *subcommand;
 
     timing = want_timing(argc, argv);
+    test_jobs = want_jobs(argc, argv);
+    /* Per-command timings are only meaningful one command at a time, and the
+     * test pool is the one place this program runs several. */
+    if (timing) test_jobs = 1;
     if (timing) atexit(&report_timed_total);
     if (!want_verbose(argc, argv)) nob_set_log_handler(&brief_log_handler);
     NOB_GO_REBUILD_URSELF(argc, argv);
@@ -2141,6 +2290,6 @@ int main(int argc, char **argv) {
         return clean() ? 0 : 1;
     }
 
-    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: static, runtime, both, test, clean; -v for full command lines)", subcommand);
+    nob_log(NOB_ERROR, "unknown subcommand '%s' (try: static, runtime, both, test, clean; -v for full command lines, -j N for test parallelism)", subcommand);
     return 1;
 }

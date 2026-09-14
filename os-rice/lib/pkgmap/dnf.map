@@ -111,6 +111,8 @@ sane = sane-backends
 bluez-obex = bluez-obexd
 sof-firmware = alsa-sof-firmware
 cpupower = kernel-tools
+# fancontrol (modules/fans.c) ships inside lm_sensors, not as its own package.
+fancontrol = lm_sensors
 p7zip = p7zip p7zip-plugins
 # Fedora 44 dropped p7zip for the upstream 7-Zip port.
 p7zip@44 = 7zip

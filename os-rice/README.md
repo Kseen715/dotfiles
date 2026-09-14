@@ -409,6 +409,12 @@ suite is written this way rather than as a diff against the shell tier.
 > failed comparison instead of only the first line that differed - which is
 > what you want while writing a new expectation, and not what you want in CI.
 
+The test binaries run in parallel - one per hardware thread by default, `-j N`
+/ `--jobs N` / `NOB_JOBS` to cap it, and `-t` (per-command timing) forces
+`-j 1`. They share nothing: every sandbox is its own `mkdtemp`. Each test's
+output is captured to `build/test/<name>.log` and printed whole, in the order
+the tests are listed, so a parallel transcript reads like a serial one.
+
 CI runs the fast gate on every push and the matrix across
 debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).
 

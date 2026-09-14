@@ -50,6 +50,8 @@ yazi = yazi
 # so a manifest naming them is a no-op instead of a failed install.
 kernel-tools =
 lm_sensors =
+# A phone has no fan header either (modules/fans.c finds no pwm and stops).
+fancontrol =
 
 # Fonts are not a package on Termux — the terminal reads exactly one file,
 # ~/.termux/font.ttf, and ignores fontconfig. A font row would install
