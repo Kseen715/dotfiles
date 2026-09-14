@@ -681,14 +681,36 @@ static const char *h_nc(void) {
     return (c != NULL && *c != '\0') ? "\033[0m" : "";
 }
 
+/* h_dots -- the compact readout, asked for by the runner in OSR_TEST_DOTS:
+ * one character per assertion rather than one line, because 1700 ok-lines are
+ * 1700 lines nobody reads and the one line that matters is the one that says
+ * FAIL. Nothing about a FAILURE changes: its label and detail still go to
+ * stderr in full, and the runner prints that under FAILURES.
+ *
+ * Off by default, so running a test binary directly still narrates every
+ * assertion -- which is what you want when you are writing one. */
+static int h_dots(void) {
+    const char *c = getenv("OSR_TEST_DOTS");
+    return c != NULL && *c != '\0';
+}
+
 void osr_ok(const char *label) {
     h_pass++;
+    if (h_dots()) {
+        printf("%s.%s", h_green(), h_nc());
+        fflush(stdout);
+        return;
+    }
     printf("  %sok%s   %s\n", h_green(), h_nc(), label);
     fflush(stdout);
 }
 
 void osr_fail(const char *label, const char *detail) {
     h_failed++;
+    /* The F takes the assertion's place in the dot stream, so the readout
+     * still shows WHERE in the run it went wrong; the detail follows on
+     * stderr. */
+    if (h_dots()) printf("%sF%s", h_red(), h_nc());
     fflush(stdout);
     if (detail != NULL && *detail != '\0') {
         fprintf(stderr, "  %sFAIL%s %s (%s)\n", h_red(), h_nc(), label, detail);
@@ -699,6 +721,15 @@ void osr_fail(const char *label, const char *detail) {
 }
 
 int osr_finish(void) {
+    if (h_dots()) {
+        /* The counts, for the runner to total up, on a line of their own
+         * after the dots. Machine-readable because the runner adds these up
+         * across every binary -- the VERDICT is still the exit status below,
+         * never this line. */
+        printf("\n@@ %d %d\n", h_pass, h_failed);
+        fflush(stdout);
+        return h_failed == 0 ? 0 : 1;
+    }
     printf("  %s--- %d passed, %d failed ---%s\n",
            h_failed == 0 ? h_green() : h_red(), h_pass, h_failed, h_nc());
     fflush(stdout);

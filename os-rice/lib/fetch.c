@@ -264,6 +264,7 @@ int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out,
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "common.h"
@@ -275,6 +276,17 @@ int osr_github_latest_quiet(Str *out, const char *repo) { return github_tag(out,
  * a 30 KB tarball is noise; the number is roughly "big enough that the
  * terminal looks hung without one". */
 #define PROGRESS_MIN_DEFAULT 1048576L      /* 1 MiB */
+
+/* POLL_SLICE_NS -- how often the download loop LOOKS, as opposed to how often
+ * it PRINTS. The two were one number, and that conflated a reader's comfort
+ * (a line every few seconds, not a wall of them) with a transfer's latency:
+ * the loop slept the whole print interval before its first waitpid, so every
+ * download that finished inside it -- which is every small one, and every
+ * stubbed one in the test suite -- still sat here for the remainder of three
+ * seconds with nothing left to do. Looking ten times a second costs nothing
+ * and bounds that tail at a tenth of a second. */
+#define POLL_SLICE_NS 100000000L           /* 0.1s */
+#define POLL_SLICES_PER_SEC 10
 
 /* external_backend -- the downloader program this box has, "" for none. The
  * in-process one (lib/tls.c) is not one of these: it needs no program and is
@@ -601,6 +613,14 @@ static void fit_left(Str *out, const char *text, long width) {
 
 /* progress_line -- the one line a poll prints, built exactly as net.sh's
  * printf pair built it: the fitted name, then the byte counts. */
+/* poll_slice -- one look's worth of waiting. */
+static void poll_slice(void) {
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = POLL_SLICE_NS;
+    nanosleep(&ts, NULL);
+}
+
 static void progress_line(Str *out, const char *name, long now, long total, long pct) {
     Str num;
     long cols = env_long("OSR_COLS", term_cols());
@@ -627,6 +647,7 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
     long total = expected;
     long min_bytes = env_long("OSR_PROGRESS_MIN_BYTES", PROGRESS_MIN_DEFAULT);
     long poll_secs = env_long("OSR_DOWNLOAD_POLL", 3);
+    long slices;
     long last = -1;
     char name[512];
     pid_t pid;
@@ -666,18 +687,24 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
      * a progress format, and all of them redraw with \r on one line -- which
      * the run_step live window, being a `tail` over a logfile, renders as one
      * endless line. */
+    slices = (poll_secs > 0 ? poll_secs : 1) * POLL_SLICES_PER_SEC;
     for (;;) {
-        long now, pct;
+        long now, pct, waited;
         Str line;
-        pid_t done;
+        pid_t done = 0;
 
-        /* `kill -0 "$_dl_pid"` in sh: sh's own SIGCHLD reaping is what makes
-         * that probe go false, so the C form has to reap too -- a plain
-         * kill(pid, 0) succeeds forever on an unreaped zombie and the loop
-         * would never end. */
-        done = waitpid(pid, &status, WNOHANG);
+        /* One print interval, looked at a slice at a time. `kill -0
+         * "$_dl_pid"` in sh: sh's own SIGCHLD reaping is what makes that probe
+         * go false, so the C form has to reap too -- a plain kill(pid, 0)
+         * succeeds forever on an unreaped zombie and the loop would never
+         * end. */
+        for (waited = 0; waited < slices; waited++) {
+            done = waitpid(pid, &status, WNOHANG);
+            if (done == pid || done < 0) break;
+            poll_slice();
+        }
         if (done == pid || done < 0) { reaped = 1; break; }
-        sleep((unsigned int)(poll_secs > 0 ? poll_secs : 1));
+
         now = file_size(dest);
         pct = total > 0 ? now * 100 / total : 100;
         if (pct > 100) pct = 100;
@@ -689,7 +716,24 @@ int osr_fetch_download(const char *url, const char *dest, long expected) {
         last = pct;
     }
     if (!reaped && waitpid(pid, &status, 0) < 0) return 0;
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) return 0;
+
+    /* The finished size, always: a transfer that completed inside the first
+     * interval printed nothing at all above, and a meter that opens and never
+     * closes reads as an install that stopped halfway. */
+    {
+        long now = file_size(dest);
+        long pct = total > 0 ? now * 100 / total : 100;
+        if (pct > 100) pct = 100;
+        if (pct != last) {
+            Str line;
+            str_init(&line);
+            progress_line(&line, name, now, total, pct);
+            out_flush(&line);
+            str_free(&line);
+        }
+    }
+    return 1;
 }
 
 static int net_usage(void) {

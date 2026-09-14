@@ -412,8 +412,26 @@ suite is written this way rather than as a diff against the shell tier.
 The test binaries run in parallel - one per hardware thread by default, `-j N`
 / `--jobs N` / `NOB_JOBS` to cap it, and `-t` (per-command timing) forces
 `-j 1`. They share nothing: every sandbox is its own `mkdtemp`. Each test's
-output is captured to `build/test/<name>.log` and printed whole, in the order
-the tests are listed, so a parallel transcript reads like a serial one.
+output is captured to `build/test/<name>.log`, so a parallel transcript reads
+like a serial one.
+
+The readout is pytest's: one line per binary, one character per assertion, a
+running percentage, and every failure's detail - label, expectation, the line
+that differed - gathered under `==== FAILURES ====` at the end rather than
+scrolled past in the middle.
+
+```text
+  detect_test     ................................ [  8%]
+  net_test        ........F.......                 [ 14%]
+
+  ==== 1 failed, 1701 passed in 4.13s ====
+```
+
+`nob -v test` turns it off and the binaries narrate every assertion again,
+which is the mode for WRITING an expectation (with `OSR_TEST_DUMP=1`) rather
+than reading a result. The dots come from the binaries themselves - only they
+know what an assertion is - via `OSR_TEST_DOTS`; `NO_COLOR` and a non-tty both
+drop the colour.
 
 CI runs the fast gate on every push and the matrix across
 debian/alpine/arch/fedora (`.github/workflows/os-rice-ci.yml`).

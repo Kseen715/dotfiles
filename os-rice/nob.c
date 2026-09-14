@@ -82,6 +82,7 @@
 #include <string.h>
 #ifndef _WIN32
 #include <sys/time.h>   /* gettimeofday, for `nob -t`; see now_secs() */
+#include <sys/ioctl.h>  /* TIOCGWINSZ, for the test readout; see term_cols() */
 #endif
 
 /* HOST_EXE -- the executable suffix of the machine nob itself runs on. It
@@ -1689,21 +1690,135 @@ static size_t jobs_cap(void) {
     return (size_t)n;
 }
 
-static const char *test_bin(const char *name) {
-    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s%s", name, exe());
+/* --- the readout ----------------------------------------------------------
+ *
+ * pytest's shape, for pytest's reason: one line per test binary, one
+ * character per assertion, a running percentage, and every failure's detail
+ * gathered at the END where it gets read instead of scrolled past.
+ *
+ *   detect_test      ................................ [  8%]
+ *   fans_test        .......................          [ 11%]
+ *   net_test         ........F.......                 [ 14%]
+ *
+ *   ==== FAILURES ====
+ *   net_test
+ *     FAIL progress: the readout gives the current size AND the total
+ *
+ *   ==== 1 failed, 1701 passed in 4.13s ====
+ *
+ * The dots come from the test binaries themselves -- only they know what an
+ * assertion is (test/harness.c, test/c_test.h, asked for with OSR_TEST_DOTS).
+ * This file lays them out, totals them, and decides what red means.
+ *
+ * `nob -v test` turns it off: the binaries narrate every assertion again,
+ * which is the mode for WRITING an expectation rather than reading a result.
+ */
+
+#define TEST_NAME_COL 18   /* the narrowest the name column may be */
+#define TEST_PCT_COL   8   /* room the trailing "[ NN%]" needs */
+
+/* name_col -- where the dots start, measured from the longest name actually
+ * in the run rather than picked. A fixed field silently overflows for the
+ * names longer than it (gnome_modules_test is 18 characters), and an
+ * overflowing field is a line one or two columns wider than its neighbours --
+ * which shows up as the percentages not lining up. Computed once per run, so
+ * adding a test with a longer name cannot reintroduce that. */
+static int name_col = TEST_NAME_COL;
+
+static void measure_name_col(const char *const *names, size_t count) {
+    size_t i;
+    for (i = 0; i < count; i++) {
+        int want = (int)strlen(names[i]) + 3;   /* 2 of indent, 1 of gap */
+        if (want > name_col) name_col = want;
+    }
 }
-static const char *test_out(const char *name) {
-    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s.log", name);
+
+/* readout_active -- the pool is drawing. nob's own per-command echo ("RUN
+ * ../../build/test/x") is the build talking about itself, and in the middle
+ * of a readout whose whole point is one line per test it is noise between the
+ * lines. Silenced for the duration rather than removed: `-v` still wants it,
+ * and so does every other subcommand. */
+static bool readout_active = false;
+static int tests_total = 0;
+static int tests_done = 0;
+static long asserts_pass = 0;
+static long asserts_fail = 0;
+static bool verbose_mode = false;
+#define FAILED_MAX 64
+static const char *failed_names[FAILED_MAX];
+static int failed_count = 0;
+
+#ifdef _WIN32
+static int use_color(void) { return 0; }
+#else
+static int use_color(void) {
+    return isatty(1) && getenv("NO_COLOR") == NULL;
+}
+#endif
+static const char *c_green(void) { return use_color() ? "\033[0;32m" : ""; }
+static const char *c_red(void)   { return use_color() ? "\033[0;31m" : ""; }
+static const char *c_dim(void)   { return use_color() ? "\033[2m"    : ""; }
+static const char *c_nc(void)    { return use_color() ? "\033[0m"    : ""; }
+
+/* export_readout_env -- the two knobs the test binaries read. Set once in this
+ * process so every child inherits them; there is no per-command environment
+ * in the subset of nob this file builds against, and no test needs a
+ * different answer from any other. */
+static void export_readout_env(void) {
+    static char dots[] = "OSR_TEST_DOTS=1";
+    static char color[] = "OSR_TEST_COLOR=1";
+#ifdef _WIN32
+    _putenv(dots);
+    if (use_color()) _putenv(color);
+#else
+    putenv(dots);
+    if (use_color()) putenv(color);
+#endif
+}
+
+/* term_cols -- how wide the dots may run.
+ *
+ * The terminal is asked first and $COLUMNS is the fallback, not the other way
+ * round: a shell keeps COLUMNS for itself unless it was explicitly exported
+ * (zsh does not export it), so trusting it means assuming 80 on a terminal
+ * that is not 80 -- and a readout that wraps at the wrong column is exactly
+ * the thing this width is for. */
+static int term_cols(void) {
+    int n = 0;
+#if !defined(_WIN32) && defined(TIOCGWINSZ)
+    struct winsize ws;
+    if (ioctl(1, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) n = (int)ws.ws_col;
+#endif
+    if (n <= 0) {
+        const char *env = getenv("COLUMNS");
+        n = env != NULL ? atoi(env) : 0;
+    }
+    if (n < 40) n = 80;
+    if (n > 200) n = 200;
+    return n;
+}
+
+/* Paths. `prefix` is how far the caller's working directory is from the
+ * checkout root -- the unit tests run in test/unit_c, the shell ones at the
+ * root -- because a captured log is named the same either way. */
+static const char *test_bin_at(const char *prefix, const char *name) {
+    return nob_temp_sprintf("%s" TEST_BIN_DIR "/%s%s", prefix, name, exe());
+}
+static const char *test_out_at(const char *prefix, const char *name) {
+    return nob_temp_sprintf("%s" TEST_BIN_DIR "/%s.log", prefix, name);
 }
 /* stderr gets a file of its own: two opens of one path would each truncate
  * it and then write over each other from separate offsets. */
-static const char *test_err(const char *name) {
-    return nob_temp_sprintf("../../" TEST_BIN_DIR "/%s.err.log", name);
+static const char *test_err_at(const char *prefix, const char *name) {
+    return nob_temp_sprintf("%s" TEST_BIN_DIR "/%s.err.log", prefix, name);
 }
 
-/* print_captured -- one captured stream, verbatim, or nothing when it is
- * empty or was never written (a test that produced no stderr). */
-static void print_captured(const char *path) {
+static void note_failure(const char *name) {
+    if (failed_count < FAILED_MAX) failed_names[failed_count++] = nob_temp_strdup(name);
+}
+
+/* print_file -- one captured stream, verbatim. */
+static void print_file(const char *path) {
     Nob_String_Builder sb = {0};
     if (nob_file_exists(path) <= 0) return;
     if (!nob_read_entire_file(path, &sb)) return;
@@ -1712,7 +1827,94 @@ static void print_captured(const char *path) {
     nob_sb_free(sb);
 }
 
-/* run_test_wave -- names[from..to) at once, then their logs in list order. */
+/* put_marks -- the dots, wrapped to the terminal, continuation lines indented
+ * under the first.
+ *
+ * Counted in MARKS, never in bytes, and coloured HERE rather than passed
+ * through from the test: a coloured dot the test wrote is ten bytes of escape
+ * around one column of width, so byte-counting wrapped after five dots and
+ * cut the escape sequence in half while doing it. The captured stream is
+ * therefore reduced to bare '.' and 'F' on the way in (render), and the
+ * colour is put back on the way out, where one mark is one column by
+ * construction. */
+static void put_marks(const char *marks, size_t len, int avail) {
+    size_t i;
+    int col = 0;
+    for (i = 0; i < len; i++) {
+        if (col == avail) {
+            printf("\n%*s", name_col, "");
+            col = 0;
+        }
+        if (marks[i] == 'F') printf("%sF%s", c_red(), c_nc());
+        else                 printf("%s.%s", c_green(), c_nc());
+        col++;
+    }
+    while (col < avail) { putchar(' '); col++; }
+}
+
+/* render -- one finished test as its readout line.
+ *
+ * The captured stdout is dots followed by "@@ <passed> <failed>", the count
+ * trailer test/harness.c writes. A binary that died before printing it (a
+ * crash, a signal, or one that was never spawned) has no counts, and that is
+ * reported as the failure it is rather than quietly totalling as zero.
+ *
+ * WHOSE FAILURE IT IS comes from that trailer and nothing else. The wave's
+ * exit status is an aggregate over everything running at the time, so using
+ * it here named every test that happened to share a wave with a failing one.
+ */
+static void render(const char *prefix, const char *name) {
+    Nob_String_Builder sb = {0};
+    const char *path = test_out_at(prefix, name);
+    char marks[4096];
+    size_t nmarks = 0;
+    long pass = 0, fail = 0;
+    int counted = 0;
+    int avail = term_cols() - name_col - TEST_PCT_COL;
+
+    if (avail < 10) avail = 10;
+    if (nob_file_exists(path) > 0 && nob_read_entire_file(path, &sb)) {
+        size_t i;
+        /* Marks in, escapes out. A test writes its dots already coloured (it
+         * has to: run one directly and the colour is the point), but those
+         * escapes are bytes without width, and anything downstream that
+         * counts columns has to see one character per assertion. */
+        for (i = 0; i < sb.count; i++) {
+            char ch = sb.items[i];
+            if (ch == '\033') {
+                i++;
+                if (i < sb.count && sb.items[i] == '[') {
+                    i++;
+                    while (i < sb.count && !(sb.items[i] >= '@' && sb.items[i] <= '~')) i++;
+                }
+                continue;
+            }
+            if (ch == '@' && i + 1 < sb.count && sb.items[i + 1] == '@') {
+                counted = sscanf(sb.items + i, "@@ %ld %ld", &pass, &fail) == 2;
+                break;
+            }
+            if (ch != '.' && ch != 'F') continue;
+            if (nmarks < sizeof(marks)) marks[nmarks++] = ch;
+        }
+    }
+
+    tests_done++;
+    asserts_pass += pass;
+    asserts_fail += fail;
+    if (!counted || fail > 0) note_failure(name);
+
+    printf("  %s%-*s%s", c_dim(), name_col - 2, name, c_nc());
+    if (!counted) {
+        printf("%s%-*s%s", c_red(), avail, "(crashed)", c_nc());
+    } else {
+        put_marks(marks, nmarks, avail);
+    }
+    printf(" [%3d%%]\n", tests_total > 0 ? tests_done * 100 / tests_total : 100);
+    fflush(stdout);
+    nob_sb_free(sb);
+}
+
+/* run_test_wave -- names[from..to) at once, then their lines in list order. */
 static bool run_test_wave(const char *const *names, size_t from, size_t to) {
     Nob_Procs procs = {0};
     Nob_Cmd cmd = {0};
@@ -1721,19 +1923,23 @@ static bool run_test_wave(const char *const *names, size_t from, size_t to) {
 
     for (i = from; i < to; i++) {
         Nob_Cmd_Opt opt = {0};
-        nob_cmd_append(&cmd, test_bin(names[i]));
+        nob_cmd_append(&cmd, test_bin_at("../../", names[i]));
         opt.async = &procs;
         opt.max_procs = jobs_cap();
-        opt.stdout_path = test_out(names[i]);
-        opt.stderr_path = test_err(names[i]);
+        opt.stdout_path = test_out_at("../../", names[i]);
+        opt.stderr_path = test_err_at("../../", names[i]);
         if (!nob_cmd_run_opt(&cmd, opt)) { nob_procs_flush(&procs); return false; }
     }
     ok = nob_procs_flush(&procs);
 
     for (i = from; i < to; i++) {
-        nob_log(NOB_INFO, "--- %s ---", names[i]);
-        print_captured(test_out(names[i]));
-        print_captured(test_err(names[i]));
+        if (verbose_mode) {
+            nob_log(NOB_INFO, "--- %s ---", names[i]);
+            print_file(test_out_at("../../", names[i]));
+            print_file(test_err_at("../../", names[i]));
+        } else {
+            render("../../", names[i]);
+        }
     }
     return ok;
 }
@@ -1795,11 +2001,36 @@ static bool build_tests(void) {
     return nob_procs_flush(&procs);
 }
 
-static bool run_runtime_module_tests(void) {
+/* run_script_test -- the two integration tests are shell, and know nothing
+ * about dots: they pass or they do not. One mark each, so they take their
+ * place in the same readout instead of printing underneath it. */
+static bool run_script_test(const char *name, const char *script) {
     Nob_Cmd cmd = {0};
-    nob_log(NOB_INFO, "--- runtime_modules ---");
-    cmd_append_args(&cmd, "sh", "test/runtime_modules.sh", NULL);
-    return nob_cmd_run(&cmd);
+    Nob_Cmd_Opt opt = {0};
+    bool ok;
+
+    cmd_append_args(&cmd, "sh", script, NULL);
+    if (verbose_mode) {
+        nob_log(NOB_INFO, "--- %s ---", name);
+        return nob_cmd_run(&cmd);
+    }
+    opt.stdout_path = test_out_at("", name);
+    opt.stderr_path = test_err_at("", name);
+    ok = nob_cmd_run_opt(&cmd, opt);
+
+    tests_done++;
+    if (ok) asserts_pass++; else { asserts_fail++; note_failure(name); }
+    printf("  %s%-*s%s%s%c%s", c_dim(), name_col - 2, name, c_nc(),
+           ok ? c_green() : c_red(), ok ? '.' : 'F', c_nc());
+    printf("%*s [%3d%%]\n",
+           term_cols() - name_col - TEST_PCT_COL - 1, "",
+           tests_total > 0 ? tests_done * 100 / tests_total : 100);
+    fflush(stdout);
+    return ok;
+}
+
+static bool run_runtime_module_tests(void) {
+    return run_script_test("runtime_modules", "test/runtime_modules.sh");
 }
 
 /* The released binary run from a directory with no checkout in it: it detects
@@ -1807,15 +2038,36 @@ static bool run_runtime_module_tests(void) {
  * stand in for that -- the whole scenario IS the absence of a tree, and the
  * clone is a real git run -- so it is a script here rather than a unit test. */
 static bool run_standalone_tree_tests(void) {
-    Nob_Cmd cmd = {0};
-    nob_log(NOB_INFO, "--- standalone_tree ---");
-    cmd_append_args(&cmd, "sh", "test/standalone_tree.sh", NULL);
-    return nob_cmd_run(&cmd);
+    return run_script_test("standalone_tree", "test/standalone_tree.sh");
+}
+
+/* report -- the FAILURES section and the one line that says how it went.
+ *
+ * Every failing test's stderr is printed in FULL: that stream carries the
+ * label, the detail, and (for a whole-text comparison) the line that
+ * differed. A readout that says only "3 failed" makes the reader go digging
+ * for what a captured log already knows. */
+static void report(double elapsed) {
+    int i;
+
+    if (failed_count > 0) {
+        printf("\n  %s==== FAILURES ====%s\n", c_red(), c_nc());
+        for (i = 0; i < failed_count; i++) {
+            printf("\n  %s%s%s\n", c_red(), failed_names[i], c_nc());
+            print_file(test_err_at("", failed_names[i]));
+        }
+    }
+    printf("\n  %s==== ", failed_count == 0 ? c_green() : c_red());
+    if (asserts_fail > 0) printf("%ld failed, ", asserts_fail);
+    if (failed_count > 0 && asserts_fail == 0) printf("%d crashed, ", failed_count);
+    printf("%ld passed in %.2fs ====%s\n", asserts_pass, elapsed, c_nc());
+    fflush(stdout);
 }
 
 static bool run_all_tests(void) {
     bool ok = true;
     size_t i;
+    double started;
     if (!build_tests()) return false;
     /* A cross build produced binaries this machine cannot exec (a PE on
      * Linux). Building them is still the point -- that is the compile check
@@ -1826,6 +2078,24 @@ static bool run_all_tests(void) {
         return true;
     }
     NOB_UNUSED(i);
+    tests_total = (int)(TEST_COUNT + UNITY_TEST_COUNT)
+                + (target_windows() ? 0 : (int)POSIX_TEST_COUNT + 2);
+    started = now_secs();
+    if (!verbose_mode) {
+        export_readout_env();
+        readout_active = true;
+    }
+    failed_count = 0;
+    asserts_pass = asserts_fail = 0;
+    tests_done = 0;
+    measure_name_col(test_names, TEST_COUNT);
+    measure_name_col(unity_test_names, UNITY_TEST_COUNT);
+    if (!target_windows()) {
+        static const char *const scripts[] = { "runtime_modules", "standalone_tree" };
+        measure_name_col(posix_test_names, POSIX_TEST_COUNT);
+        measure_name_col(scripts, 2);
+    }
+
     /* One chdir for the whole pool rather than one per test: the children
      * inherit the working directory at spawn, and every path the runner
      * composes is already relative to it. */
@@ -1842,6 +2112,11 @@ static bool run_all_tests(void) {
         if (!run_runtime_module_tests()) ok = false;
         if (!run_standalone_tree_tests()) ok = false;
     }
+    readout_active = false;
+    /* A test whose own trailer says it failed is a failed run even if the
+     * wave it was in exited cleanly, and the other way round. */
+    if (failed_count > 0) ok = false;
+    if (!verbose_mode) report(now_secs() - started);
     return ok;
 }
 
@@ -2167,8 +2442,16 @@ static void brief_cmd(const char *line, Cmd_Brief *out) {
 }
 
 static void brief_log_handler(Nob_Log_Level level, const char *fmt, va_list args) {
+    /* While the readout is drawing, nob's own commentary on the pool is
+     * redundant with it: the per-command echo names binaries the readout is
+     * about to list, and "command exited with exit code 1" restates a failure
+     * the readout reports in its own vocabulary, under FAILURES, with the
+     * detail attached. A test that could not be spawned at all still shows up
+     * -- render() has no counts for it and says "(crashed)". */
+    if (readout_active && level == NOB_ERROR) return;
     if (level == NOB_INFO && strcmp(fmt, CMD_ECHO_FMT) == 0) {
         Cmd_Brief brief;
+        if (readout_active) return;
         if (level < nob_minimal_log_level) return;
         brief_cmd(va_arg(args, const char *), &brief);
         /* no "[INFO]" here: these lines are the build's output, not
@@ -2249,6 +2532,7 @@ int main(int argc, char **argv) {
     const char *subcommand;
 
     timing = want_timing(argc, argv);
+    verbose_mode = want_verbose(argc, argv);
     test_jobs = want_jobs(argc, argv);
     /* Per-command timings are only meaningful one command at a time, and the
      * test pool is the one place this program runs several. */
