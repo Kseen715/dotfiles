@@ -190,3 +190,6 @@ zramen =
 # Vulkan drivers are USE=video_cards_* on media-libs/mesa, not separate atoms.
 vulkan-intel = media-libs/mesa
 vulkan-virtio = media-libs/mesa
+
+# JDK 17 for modules/sqldeveloper.c: the -no-jre zip carries no Java.
+jdk17 = dev-java/openjdk:17

@@ -182,6 +182,7 @@ typedef struct {
     X("serie",           serie,           "x11+wayland", 1) \
     X("shecc",           shecc,           "x11+wayland", 0) \
     X("smallerc",        smallerc,        "x11+wayland", 0) \
+    X("sqldeveloper",    sqldeveloper,    "x11+wayland", 0) \
     X("starship",        starship,        "x11+wayland", 1) \
     X("steam",           steam,           "x11+wayland", 0) \
     X("swap",            swap,            "x11+wayland", 0) \

@@ -44,6 +44,12 @@ datagrip = source:provide_datagrip
 # provide_telegram directly so `osr module telegram` can repair a stale tree.
 telegram-desktop = source:provide_telegram
 
+# sqldeveloper: Oracle publishes one platform-neutral zip for Linux (plus a
+# noarch RPM), no repo anywhere, so the zip is the route on every target. Same
+# presence-vs-version caveat as datagrip above: modules/sqldeveloper.c calls
+# provide_sqldeveloper directly so `osr module sqldeveloper` upgrades the tree.
+sqldeveloper = source:provide_sqldeveloper
+
 # 32-bit libnm is an Arch-ism: it exists to let 32-bit apps (Steam's runtime,
 # wine) talk to NetworkManager, and outside Arch it is either absent (Debian,
 # Fedora, Alpine) or gated behind an opt-in multilib repo (Void's libnm-32bit).

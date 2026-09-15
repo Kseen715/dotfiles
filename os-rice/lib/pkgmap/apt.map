@@ -596,3 +596,6 @@ Adwaita-dark = gnome-themes-extra
 Vanilla-DMZ = dmz-cursor-theme
 Gruvbox =
 PearDarkCursors =
+
+# JDK 17 for modules/sqldeveloper.c: the -no-jre zip carries no Java.
+jdk17 = openjdk-17-jdk

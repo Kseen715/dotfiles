@@ -221,3 +221,6 @@ zam-plugins =
 
 # Void spells LuaJIT with its upstream capitalization.
 cuik-build-deps = LuaJIT ninja nasm clang lld
+
+# JDK 17 for modules/sqldeveloper.c: the -no-jre zip carries no Java.
+jdk17 = openjdk17

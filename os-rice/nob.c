@@ -348,6 +348,7 @@ static const char *core_srcs[] = {
     /* Modules both systems have. */
     "modules/fastfetch.c",
     "modules/osrvv.c",
+    "modules/sqldeveloper.c",
     "modules/starship.c",
     "modules/wezterm.c",
 };

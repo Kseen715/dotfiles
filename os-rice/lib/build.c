@@ -2754,6 +2754,419 @@ static int provide_yandex_browser_deb(void) {
     return 1;
 }
 
+/* --- Oracle SQL Developer (vendor zip) ---------------------------------------
+ * Oracle publishes the Linux build of SQL Developer as one platform-neutral
+ * zip (sqldeveloper-<version>-no-jre.zip) plus a noarch RPM. The zip is the
+ * route on every target: it needs no package manager, no login, and unpacks to
+ * a self-contained sqldeveloper/ tree, which is what "install" means for this
+ * product.
+ *
+ * OSR_SQLDEVELOPER_PREFIX is the one tree this builder owns. The version is
+ * read back out of the installed tree (sqldeveloper/bin/version.properties,
+ * VER_FULL=), so a rerun downloads nothing and an upgrade is recognised by
+ * version rather than by presence -- the same shape as provide_datagrip.
+ *
+ * The no-jre zip carries no JDK, and the launcher otherwise prompts on stdin
+ * for one at first start. modules/sqldeveloper.c installs a JDK 17 package;
+ * this builder pins it with the SetJavaHome directive the vendor documents in
+ * sqldeveloper/bin/jdk.conf, because the distro's default `java` on PATH is
+ * frequently a different major version than the one that was just installed. */
+#define SQLDEV_PREFIX "/opt/sqldeveloper"
+#define SQLDEV_PAGE \
+    "https://www.oracle.com/database/sqldeveloper/technologies/download/"
+#define SQLDEV_XRENDER "-Dsun.java2d.xrender=false"
+#define SQLDEV_BIN "/usr/local/bin/sqldeveloper"
+#define SQLDEV_XMX "1024M"
+
+static const char *sqldev_prefix(void) {
+    return env_str("OSR_SQLDEVELOPER_PREFIX", SQLDEV_PREFIX);
+}
+
+/* sd_path -- <prefix><suffix>, for the handful of paths under the tree. */
+static const char *sd_path(const char *suffix) {
+    static Str held;
+    static int ready = 0;
+    if (!ready) { str_init(&held); ready = 1; }
+    str_setz(&held, sqldev_prefix(), suffix, (const char *)NULL);
+    return str_text(&held);
+}
+
+/* sqldev_latest -- the current zip's URL and version, scraped off Oracle's
+ * download page so no version is hard-coded (G4). The page links the artifact
+ * by its full name; the version is the part of that name between the product
+ * and the -no-jre suffix. */
+static void sqldev_latest(Str *ver, Str *url) {
+    const char *tail = "-no-jre.zip";
+    Str page;
+    const char *text, *hit, *start, *dash;
+
+    str_init(&page);
+    if (!osr_fetch_buffer(&page, SQLDEV_PAGE))
+        osr_die("failed to read the Oracle SQL Developer download page");
+
+    text = str_text(&page);
+    str_reset(url);
+    for (hit = strstr(text, tail); hit != NULL; hit = strstr(hit + 1, tail)) {
+        /* Back up to the delimiter of the href this name sits in. */
+        for (start = hit; start > text && *start != '"' && *start != '\'' &&
+                          *start != '>' && *start != ' '; start--)
+            ;
+        if (*start == '"' || *start == '\'' || *start == '>' || *start == ' ') start++;
+        if (strncmp(start, "https://", 8) != 0) continue;
+        if (strstr(start, "sqldeveloper-") == NULL) continue;
+        str_add(url, start, (size_t)(hit - start) + strlen(tail));
+        break;
+    }
+    str_free(&page);
+
+    if (url->len == 0)
+        osr_die("could not find the sqldeveloper-<version>-no-jre.zip link on %s",
+                SQLDEV_PAGE);
+
+    dash = strstr(str_text(url), "sqldeveloper-");
+    dash += strlen("sqldeveloper-");
+    str_reset(ver);
+    str_add(ver, dash, strlen(dash) - strlen(tail));
+    if (ver->len == 0)
+        osr_die("could not read the SQL Developer version out of %s", str_text(url));
+}
+
+/* sqldev_version_at -- VER_FULL out of an installed tree's version.properties,
+ * which is the file that makes a stamp file unnecessary here. */
+static int sqldev_version_at(Str *out, const char *dir) {
+    Str path;
+    char *text;
+    size_t len;
+    const char *p;
+
+    str_init(&path);
+    str_addzz(&path, dir, "/sqldeveloper/bin/version.properties", (const char *)NULL);
+    text = slurp(str_text(&path), &len);
+    str_free(&path);
+    if (text == NULL) return 0;
+
+    str_reset(out);
+    p = strstr(text, "VER_FULL=");
+    if (p != NULL) {
+        p += strlen("VER_FULL=");
+        while (*p != '\0' && *p != '\n' && *p != '\r') str_addc(out, *p++);
+    }
+    free(text);
+    return out->len > 0;
+}
+
+/* sqldev_jdk_home -- a JDK 17 home under /usr/lib/jvm (OSR_SQLDEVELOPER_JVM_DIR
+ * for a test), or 0 when the box has none there. Debian, Arch, Fedora, Alpine
+ * and Void all land their JDKs in that directory, under a name carrying the
+ * major version. */
+static int sqldev_jdk_home(Str *out) {
+    const char *dir = env_str("OSR_SQLDEVELOPER_JVM_DIR", "/usr/lib/jvm");
+    Str names;
+    size_t pos = 0;
+    Line line;
+    int found = 0;
+
+    str_init(&names);
+    osr_list_dir(&names, dir, NULL, NULL);
+    while (!found && next_line(str_text(&names), names.len, &pos, &line)) {
+        Str path;
+        str_init(&path);
+        str_addzz(&path, dir, "/", (const char *)NULL);
+        str_add(&path, line.start, line.len);
+        str_addz(&path, "/bin/java");
+        if (has_text(line.start, line.len, "17") && file_exists(str_text(&path))) {
+            str_setz(out, dir, "/", (const char *)NULL);
+            str_add(out, line.start, line.len);
+            found = 1;
+        }
+        str_free(&path);
+    }
+    str_free(&names);
+    return found;
+}
+
+/* sqldev_clear_stale_user_pin -- a SetJavaHome in the PER-USER conf
+ * (~/.sqldeveloper/<version>/product.conf) naming a JDK that is no longer
+ * installed. That file survives every reinstall of the tree, and the launcher
+ * reads it AFTER sqldeveloper/bin/jdk.conf, so a stale line there overrides
+ * the pin below: the launcher finds no Java, drops into its "Type the full
+ * pathname of a JDK installation" prompt, and with no terminal to answer on it
+ * appears to hang. Only a line whose directory has no bin/java is touched, and
+ * it is commented out rather than repointed, so jdk.conf decides from then on
+ * and a deliberate user pin to a JDK that exists is left alone. */
+static void sqldev_clear_stale_user_pin(void) {
+    Str dir, names, conf, text, java;
+    size_t pos = 0;
+    Line ver;
+
+    str_init(&dir);
+    str_addzz(&dir, osr_home(), "/.sqldeveloper", (const char *)NULL);
+    str_init(&names);
+    osr_list_dir(&names, str_text(&dir), NULL, NULL);
+    str_init(&conf);
+    str_init(&text);
+    str_init(&java);
+
+    while (next_line(str_text(&names), names.len, &pos, &ver)) {
+        char *had;
+        size_t len, at = 0;
+        Line line;
+        int stale = 0;
+
+        str_setz(&conf, str_text(&dir), "/", (const char *)NULL);
+        str_add(&conf, ver.start, ver.len);
+        str_addz(&conf, "/product.conf");
+        had = slurp(str_text(&conf), &len);
+        if (had == NULL) continue;
+
+        str_reset(&text);
+        while (next_line(had, len, &at, &line)) {
+            if (line.len > 12 && strncmp(line.start, "SetJavaHome ", 12) == 0) {
+                str_reset(&java);
+                str_add(&java, line.start + 12, line.len - 12);
+                str_trim_trailing(&java, '\r');
+                str_trim_trailing(&java, ' ');
+                str_addz(&java, "/bin/java");
+                if (!file_exists(str_text(&java))) {
+                    str_addz(&text, "# ");
+                    stale = 1;
+                }
+            }
+            str_add(&text, line.start, line.len);
+            str_addc(&text, '\n');
+        }
+        free(had);
+        if (stale) {
+            (void)osr_write_user(str_text(&conf), str_text(&text));
+            osr_infof("commented out a stale SetJavaHome in %s - it pointed at a "
+                      "JDK that is gone, and it overrides the system pin",
+                      str_text(&conf));
+        }
+    }
+    str_freev(&dir, &names, &conf, &text, &java, (Str *)NULL);
+}
+
+/* sqldev_pin_jdk -- the directives this install needs, appended to the tool's
+ * own sqldeveloper.conf. Appended to what Oracle shipped rather than replacing
+ * it: the rest of that file is their VM options. Rerun-safe -- a directive
+ * already present is left as it is, including one the user edited.
+ *
+ * sqldeveloper.conf and NOT the tree's sqldeveloper/bin/jdk.conf, which looks
+ * like the right file and is dead: the chain the launcher actually reads is
+ * sqldeveloper.conf -> ide/bin/ide.conf -> ide/bin/jdk.conf, and nothing
+ * includes the jdk.conf beside it. A directive written there reaches no JVM.
+ *
+ * What is pinned:
+ *   SetJavaHome  - the -no-jre zip ships no Java, and with no JDK the launcher
+ *                  prompts on stdin for a path instead of starting.
+ *   xrender=false - Java2D's XRender pipeline dies on XWayland with
+ *                  "RenderBadPicture (invalid Picture parameter)" before the
+ *                  first window ever appears; the X11 pipeline is fine. Costs
+ *                  nothing on a native X or headless box.
+ *   heap         - ide.conf asks for -Xmx2G, which on a box with 8G of RAM is
+ *                  most of what is left after a desktop session. The ceiling
+ *                  is OSR_SQLDEVELOPER_XMX, and G1PeriodicGCInterval with a
+ *                  free-ratio ceiling is what makes the JVM hand idle heap
+ *                  BACK to the OS rather than sit on its high-water mark.
+ *
+ * The heap options go in as Add64VMOption, not AddVMOption: the launcher
+ * flushes its 64-bit bucket into the command line after every conf file has
+ * been read (launcher.sh, "for (( i = 0; i < ${#APP_VM_OPTS_64[@]}"), so
+ * ide.conf's `Add64VMOption -Xmx2G` lands after any plain AddVMOption no
+ * matter which file carries it. Same bucket, later entry, and last -Xmx wins. */
+static void sqldev_pin_jdk(void) {
+    const char *conf = sd_path("/sqldeveloper/bin/sqldeveloper.conf");
+    Str home, text, xmx;
+    char *had;
+    size_t len;
+    int changed = 0;
+
+    sqldev_clear_stale_user_pin();
+
+    str_init(&home);
+    if (!sqldev_jdk_home(&home))
+        osr_warn("no JDK 17 found under /usr/lib/jvm - SQL Developer will search "
+                 "PATH and ask for a JDK on first launch if it finds none");
+
+    had = slurp(conf, &len);
+    str_init(&text);
+    if (had != NULL) {
+        str_add(&text, had, len);
+        if (text.len > 0 && text.p[text.len - 1] != '\n') str_addc(&text, '\n');
+    }
+    if (home.len > 0 && (had == NULL || !has_text(had, len, "\nSetJavaHome "))) {
+        str_addzz(&text, "SetJavaHome ", str_text(&home), "\n", (const char *)NULL);
+        osr_infof("SQL Developer will run on %s", str_text(&home));
+        changed = 1;
+    }
+    /* The needle carries the leading newline + directive: the vendor file ships
+       this very option as a commented-out example, and a bare match on the
+       option text alone would read that comment as "already pinned". */
+    if (had == NULL || !has_text(had, len, "\nAddVMOption " SQLDEV_XRENDER)) {
+        str_addzz(&text, "AddVMOption ", SQLDEV_XRENDER, "\n", (const char *)NULL);
+        changed = 1;
+    }
+    str_init(&xmx);
+    str_addz(&xmx, env_str("OSR_SQLDEVELOPER_XMX", SQLDEV_XMX));
+    if (had == NULL || !has_text(had, len, "Add64VMOption -Xmx")) {
+        str_addzz(&text, "Add64VMOption -Xmx", str_text(&xmx), "\n",
+                  "Add64VMOption -Xms64M\n"
+                  /* MinHeapFreeRatio defaults to 40; the JVM refuses to start
+                     if it exceeds MaxHeapFreeRatio, so both must be set. */
+                  "Add64VMOption -XX:MinHeapFreeRatio=10\n"
+                  "Add64VMOption -XX:MaxHeapFreeRatio=30\n"
+                  "Add64VMOption -XX:G1PeriodicGCInterval=300000\n",
+                  (const char *)NULL);
+        osr_infof("SQL Developer heap capped at %s (OSR_SQLDEVELOPER_XMX), "
+                  "down from Oracle's 2G", str_text(&xmx));
+        changed = 1;
+    }
+    free(had);
+    if (changed) (void)osr_write_root(conf, str_text(&text));
+    str_freev(&home, &text, &xmx, (Str *)NULL);
+}
+
+/* sqldev_desktop_entry -- the launcher on PATH and the menu entry. The zip
+ * ships neither, but it does ship icon.png at the root of the tree. Rerun-safe,
+ * so it repairs a box whose entry was lost while the tree stayed current.
+ *
+ * Both the wrapper and the entry run sqldeveloper/bin/sqldeveloper directly
+ * rather than the tree's own sqldeveloper.sh: that file is nothing but a
+ * `cd "`dirname $0`"/sqldeveloper/bin && bash sqldeveloper` shim, and it is
+ * only correct when it is reached as itself.
+ *
+ * The PATH entry is REMOVED before it is written. tee follows a symlink, so
+ * where an earlier install left one there -- pointing into the tree -- writing
+ * the wrapper over it would land the wrapper INSIDE the tree, at the path the
+ * wrapper itself runs: a script that execs itself, spinning at 100% CPU
+ * without ever starting java. */
+static void sqldev_desktop_entry(void) {
+    Str entry, icon, exe;
+
+    /* sd_path hands back one shared buffer, so the launcher path is copied
+     * before the icon lookup overwrites it. */
+    str_init(&exe);
+    str_addz(&exe, sd_path("/sqldeveloper/bin/sqldeveloper"));
+    if (!file_exists(str_text(&exe)))
+        osr_die("no sqldeveloper/bin/sqldeveloper under %s", sqldev_prefix());
+    (void)osr_chmod("755", exe.p, 1);
+
+    str_init(&entry);
+    str_addzz(&entry, "#!/bin/sh\ncd ", sd_path("/sqldeveloper/bin"),
+        " || exit 1\nexec bash sqldeveloper \"$@\"\n", (const char *)NULL);
+    rm_rf_root(SQLDEV_BIN);
+    (void)osr_write_root(SQLDEV_BIN, str_text(&entry));
+    (void)osr_chmod("755", (char *)SQLDEV_BIN, 1);
+    str_reset(&entry);
+
+    str_init(&icon);
+    str_addz(&icon, sd_path("/icon.png"));
+    str_addzz(&entry, "[Desktop Entry]\nName=Oracle SQL Developer\n"
+        "Comment=Database IDE for Oracle Database\nExec=" SQLDEV_BIN
+        "\nIcon=", file_exists(str_text(&icon)) ? str_text(&icon) : "sqldeveloper",
+        (const char *)NULL);
+    str_addz(&entry, "\nTerminal=false\nType=Application\n"
+                     "Categories=Development;IDE;Database;\n"
+                     "Keywords=sql;database;oracle;\n"
+                     "StartupNotify=true\nStartupWMClass=sqldeveloper\n");
+    (void)osr_write_root("/usr/share/applications/sqldeveloper.desktop", str_text(&entry));
+    refresh_desktop_db();
+
+    str_freev(&exe, &icon, &entry, (Str *)NULL);
+}
+
+/* provide_sqldeveloper -- install or UPGRADE SQL Developer from the vendor zip.
+ * Presence is not sufficiency (§2): the caller's probe is `command -v
+ * sqldeveloper`, so the version comparison here is what makes `osr module
+ * sqldeveloper` an update path rather than a no-op. */
+static int provide_sqldeveloper(void) {
+    Str ver, url, have, tmp, zip_path, src, parent;
+    long size;
+    char *argv[6];
+
+    str_initv(&ver, &url, (Str *)NULL);
+    sqldev_latest(&ver, &url);
+    if (osr_pkg_native_installed("sqldeveloper"))
+        osr_warn("a native 'sqldeveloper' package is installed - separate from "
+                 SQLDEV_PREFIX ", not upgraded here");
+
+    str_init(&have);
+    if (sqldev_version_at(&have, sqldev_prefix()) &&
+        strcmp(str_text(&have), str_text(&ver)) == 0) {
+        osr_infof("SQL Developer %s is already the current release - skipping the download",
+                  str_text(&ver));
+        sqldev_pin_jdk();
+        sqldev_desktop_entry();
+        str_freev(&ver, &url, &have, (Str *)NULL);
+        return 1;
+    }
+    if (have.len > 0) osr_infof("upgrading SQL Developer %s -> %s", str_text(&have), str_text(&ver));
+    else              osr_infof("installing SQL Developer %s", str_text(&ver));
+    str_free(&have);
+
+    /* Staged beside the tree it becomes, so the `mv` into place is a rename
+     * within one filesystem rather than a copy of half a gigabyte. */
+    str_init(&parent);
+    {
+        const char *pfx = sqldev_prefix();
+        const char *slash = strrchr(pfx, '/');
+        if (slash == NULL || slash == pfx) str_addz(&parent, "/");
+        else str_add(&parent, pfx, (size_t)(slash - pfx));
+    }
+    str_init(&tmp);
+    if (!stage_dir(&tmp, str_text(&parent), "sqldeveloper"))
+        osr_die("failed to create a staging directory under %s", str_text(&parent));
+
+    size = osr_fetch_remote_size(str_text(&url));
+    if (size < 0) size = 0;
+    osr_infof("downloading the SQL Developer zip (%ld MiB)", size / 1048576);
+    str_init(&zip_path);
+    str_addzz(&zip_path, str_text(&tmp), "/sqldeveloper.zip", (const char *)NULL);
+    if (!osr_fetch_download(str_text(&url), zip_path.p, size)) {
+        rm_rf_root(str_text(&tmp));
+        osr_die("failed to download %s", str_text(&url));
+    }
+    if (!unpack(zip_path.p, tmp.p)) {
+        rm_rf_root(str_text(&tmp));
+        osr_die("failed to extract the SQL Developer zip");
+    }
+    (void)unlink(str_text(&zip_path));
+
+    /* The zip unpacks into a single sqldeveloper/ directory. */
+    str_init(&src);
+    {
+        Str probe;
+        int ok;
+        ok = first_subdir(&src, str_text(&tmp));
+        str_init(&probe);
+        if (ok) {
+            str_addzz(&probe, str_text(&src), "/sqldeveloper.sh", (const char *)NULL);
+            ok = file_exists(str_text(&probe));
+        }
+        str_free(&probe);
+        if (!ok) {
+            rm_rf_root(str_text(&tmp));
+            osr_die("the SQL Developer zip has an unexpected layout (no sqldeveloper.sh)");
+        }
+    }
+    rm_rf_root(sqldev_prefix());
+    argv[0] = (char *)"mv"; argv[1] = src.p; argv[2] = (char *)sqldev_prefix();
+    argv[3] = NULL;
+    if (osr_run_root(argv) != 0) {
+        rm_rf_root(str_text(&tmp));
+        osr_die("failed to install SQL Developer into %s", sqldev_prefix());
+    }
+    rm_rf_root(str_text(&tmp));
+    argv[0] = (char *)"chown"; argv[1] = (char *)"-R"; argv[2] = (char *)"0:0";
+    argv[3] = (char *)sqldev_prefix(); argv[4] = NULL;
+    (void)osr_run_root(argv);
+    sqldev_pin_jdk();
+    sqldev_desktop_entry();
+
+    str_freev(&ver, &url, &tmp, &zip_path, &src, &parent, (Str *)NULL);
+    return 1;
+}
+
 /* --- AmneziaVPN --------------------------------------------------------------
  * The release binary if there is one for this arch, and a full Qt/QML source
  * build if there is not. The fallback lives inside the builder rather than
@@ -3342,6 +3755,7 @@ static const Builder builders[] = {
     { "provide_tcc",               provide_tcc },
     { "provide_datagrip",          provide_datagrip },
     { "provide_telegram",          provide_telegram },
+    { "provide_sqldeveloper",      provide_sqldeveloper },
     { "provide_yandex_browser_deb", provide_yandex_browser_deb },
     { "provide_amneziavpn",        provide_amneziavpn },
     { "provide_gpaste",            provide_gpaste }

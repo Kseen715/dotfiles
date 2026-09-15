@@ -49,6 +49,16 @@ static void file_is(const char *rel, const char *expected, const char *label) {
     free(got);
 }
 
+/* joined -- "<a><b>", for an expectation that has to name a real sandbox path:
+ * file contents are compared raw, unlike the argv log, which is scrubbed. */
+static HStr joined_buf;
+static const char *joined(const char *a, const char *b) {
+    hs_reset(&joined_buf);
+    hs_add(&joined_buf, a);
+    hs_add(&joined_buf, b);
+    return hs_text(&joined_buf);
+}
+
 static void ran(const char *needle, const char *label) {
     osr_assert_log(&sb, needle, label);
 }
@@ -73,6 +83,7 @@ int main(void) {
 
     osr_sb_init(&sb);
     hs_init(&p);
+    hs_init(&joined_buf);
 
     osr_sb_env_ubuntu(&sb);
     hs_path(&p, hs_text(&sb.osr_root), "../config");
@@ -83,6 +94,7 @@ int main(void) {
     /* Both vendor trees go inside the sandbox rather than into a real /opt. */
     osr_sb_env(&sb, "OSR_DATAGRIP_PREFIX", at("opt/datagrip"));
     osr_sb_env(&sb, "OSR_TELEGRAM_PREFIX", at("opt/telegram-desktop"));
+    osr_sb_env(&sb, "OSR_SQLDEVELOPER_PREFIX", at("opt/sqldeveloper"));
     osr_sb_mask(&sb, "tmp.");
 
     osr_sb_stub_body(&sb, "dpkg", "exit 1\n");
@@ -215,7 +227,162 @@ int main(void) {
         "telegram: a newer release upgrades the tree and restamps it");
 
     /* ================================================================
-     * 3. Yandex Browser -- patch the vendor's own .desktop entry
+     * 3. Oracle SQL Developer -- a vendor zip plus a JDK it does not ship
+     *
+     * Oracle's Linux download is one platform-neutral zip whose name carries
+     * the version, so the version comes off the download page rather than out
+     * of a feed. The -no-jre zip has no Java in it: without a SetJavaHome
+     * directive the launcher asks for a JDK path on stdin at first start.
+     * ================================================================ */
+    osr_sb_rm(&sb, "usr/share/applications");
+    osr_sb_mkdir(&sb, "usr/share/applications");
+    osr_sb_mkdir(&sb, "usr/lib/jvm/java-17-openjdk-amd64/bin");
+    osr_sb_write(&sb, "usr/lib/jvm/java-17-openjdk-amd64/bin/java", "#!/bin/sh\n", 0755);
+    osr_sb_env(&sb, "OSR_SQLDEVELOPER_JVM_DIR", at("usr/lib/jvm"));
+    osr_sb_real(&sb, "zip");
+    osr_sb_real(&sb, "unzip");
+    osr_sb_stub_body(&sb, "curl",
+        "printf 'curl %s\\n' \"$*\" >>\"$LOG\"\n"
+        "_dest=; _head=; _prev=\n"
+        "for _a in \"$@\"; do\n"
+        "  [ \"$_prev\" = \"-o\" ] && _dest=$_a\n"
+        "  case \"$_a\" in -I|--head) _head=1 ;; esac\n"
+        "  _prev=$_a\n"
+        "done\n"
+        "if [ -n \"$_head\" ]; then\n"
+        "  printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 509841799\\r\\n\\r\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ -z \"$_dest\" ]; then\n"
+        /* The page links several artifacts; only the Linux/other-platforms zip
+         * is the one this builder may pick. */
+        "  printf '<a href=\"https://download.oracle.com/otn_software/java/sqldeveloper/"
+        "sqldeveloper-%s-x64.exe\">Windows</a>\\n' \"$SDVER\"\n"
+        "  printf '<a href=\"https://download.oracle.com/otn_software/java/sqldeveloper/"
+        "sqldeveloper-%s-no-jre.zip\">Other Platforms</a>\\n' \"$SDVER\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "_stage=$TMPROOT/fake; rm -rf \"$_stage\"\n"
+        "mkdir -p \"$_stage/sqldeveloper/sqldeveloper/bin\"\n"
+        "printf 'VER_FULL=%s\\n' \"$SDVER\" "
+        ">\"$_stage/sqldeveloper/sqldeveloper/bin/version.properties\"\n"
+        "printf '# SetJavaHome /path/jdk\\nAddVMOption -Xmx2048M\\n' "
+        ">\"$_stage/sqldeveloper/sqldeveloper/bin/jdk.conf\"\n"
+        /* The conf the launcher actually reads: the jdk.conf beside it is in
+         * nobody's include chain. */
+        "printf 'IncludeConfFile ../../ide/bin/ide.conf\\n"
+        "AddVMOption -Dprism.allowhidpi=false\\n' "
+        ">\"$_stage/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf\"\n"
+        "printf '#!/bin/bash\\n' >\"$_stage/sqldeveloper/sqldeveloper.sh\"\n"
+        "printf '#!/bin/bash\\n' "
+        ">\"$_stage/sqldeveloper/sqldeveloper/bin/sqldeveloper\"\n"
+        ": >\"$_stage/sqldeveloper/icon.png\"\n"
+        "( cd \"$_stage\" && zip -qr \"$_dest\" sqldeveloper )\n"
+        "exit 0\n");
+    osr_sb_env(&sb, "SDVER", "26.2.0.186.2220");
+
+    /* Two per-user confs left behind by an earlier install. The launcher reads
+     * these AFTER the tree's jdk.conf, so the first one -- naming a JDK that is
+     * gone -- is what makes a fresh install stall on the JDK prompt. */
+    osr_sb_mkdir(&sb, "home/.sqldeveloper/26.2.0");
+    osr_sb_write(&sb, "home/.sqldeveloper/26.2.0/product.conf",
+        "AddVMOption -Xmx800M\nSetJavaHome /usr/lib/jvm/temurin-17-jdk\n", 0644);
+    osr_sb_mkdir(&sb, "home/.sqldeveloper/25.1.0");
+    osr_sb_write(&sb, "home/.sqldeveloper/25.1.0/product.conf",
+        joined("SetJavaHome ", at("usr/lib/jvm/java-17-openjdk-amd64")), 0644);
+
+    build("provide_sqldeveloper");
+    holds("home/.sqldeveloper/26.2.0/product.conf",
+        "# SetJavaHome /usr/lib/jvm/temurin-17-jdk",
+        "sqldeveloper: a per-user SetJavaHome naming a JDK that is gone is "
+        "commented out -- it overrides jdk.conf, and the launcher answers a "
+        "missing JDK with a stdin prompt that looks like a hang");
+    holds("home/.sqldeveloper/26.2.0/product.conf", "AddVMOption -Xmx800M",
+        "sqldeveloper: and the rest of that user's file is left as it was");
+    lacks("home/.sqldeveloper/25.1.0/product.conf", "# SetJavaHome",
+        "sqldeveloper: a per-user pin to a JDK that DOES exist is deliberate, "
+        "so it is left alone");
+    ran("sqldeveloper-26.2.0.186.2220-no-jre.zip",
+        "sqldeveloper: the zip URL comes off Oracle's download page, so no "
+        "version is hard-coded anywhere");
+    did_not("sqldeveloper-26.2.0.186.2220-x64.exe",
+        "sqldeveloper: and the Windows artifact linked on the same page is not "
+        "the one that gets downloaded");
+    file_is("opt/sqldeveloper/sqldeveloper/bin/version.properties",
+        "VER_FULL=26.2.0.186.2220\n",
+        "sqldeveloper: the tree lands at the prefix; version.properties IS the "
+        "version stamp, so a rerun can read it back");
+    ran("tee /usr/local/bin/sqldeveloper",
+        "sqldeveloper: the launcher reaches PATH as a WRAPPER, not a symlink -- "
+        "sqldeveloper.sh locates its own tree with `dirname $0`, so through a "
+        "symlink it would cd into /usr/local/bin/sqldeveloper/bin");
+    did_not("ln -sf ROOT/opt/sqldeveloper/sqldeveloper.sh /usr/local/bin/sqldeveloper",
+        "sqldeveloper: and specifically not as a symlink");
+    ran("rm -rf /usr/local/bin/sqldeveloper",
+        "sqldeveloper: the PATH entry is removed before it is written -- tee "
+        "follows a symlink, so an older install's symlink there would take the "
+        "wrapper into the tree and make a script that execs itself");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        joined("SetJavaHome ", at("usr/lib/jvm/java-17-openjdk-amd64")),
+        "sqldeveloper: the JDK is pinned -- the -no-jre zip ships no Java, and "
+        "without this the launcher prompts on stdin for a path");
+    lacks("opt/sqldeveloper/sqldeveloper/bin/jdk.conf",
+        joined("SetJavaHome ", at("usr/lib/jvm/java-17-openjdk-amd64")),
+        "sqldeveloper: and NOT in the jdk.conf beside it, which looks like the "
+        "right file but is in nobody's include chain -- the launcher reads "
+        "sqldeveloper.conf -> ide/bin/ide.conf -> ide/bin/jdk.conf");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        "AddVMOption -Dprism.allowhidpi=false",
+        "sqldeveloper: and the directives are APPENDED to what Oracle shipped, "
+        "not written over their VM options");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        "AddVMOption -Dsun.java2d.xrender=false",
+        "sqldeveloper: Java2D's XRender pipeline dies on XWayland with "
+        "RenderBadPicture before the first window appears, so it is pinned off");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        "Add64VMOption -Xmx1024M",
+        "sqldeveloper: the heap ceiling replaces ide.conf's -Xmx2G, and goes in "
+        "as Add64VMOption because the launcher flushes that bucket LAST -- a "
+        "plain AddVMOption -Xmx would be overridden by theirs");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        "Add64VMOption -XX:G1PeriodicGCInterval=300000",
+        "sqldeveloper: and idle heap is handed back to the OS rather than held "
+        "at the high-water mark");
+    holds("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf",
+        "Add64VMOption -XX:MinHeapFreeRatio=10",
+        "sqldeveloper: paired with MaxHeapFreeRatio because the JVM refuses to "
+        "start when the default Min (40) exceeds the Max we set");
+    ran("tee /usr/share/applications/sqldeveloper.desktop",
+        "sqldeveloper: the zip ships no .desktop entry, so one is written -- "
+        "there is no environment override for that path, which is why this is "
+        "read out of the argv log rather than off disk");
+    osr_assert_absent(&sb, "opt/.sqldeveloper-staging",
+        "sqldeveloper: the staging directory is cleaned up rather than left in /opt");
+
+    /* SS2: half a gigabyte not re-downloaded. */
+    build("provide_sqldeveloper");
+    did_not("-o ROOT/opt/.sqldeveloper",
+        "sqldeveloper: a tree already at the current version downloads nothing "
+        "(SS2) -- this zip is about half a gigabyte");
+    said("already the current release", "sqldeveloper: and says why it did nothing");
+    {
+        char *conf = read_rel("opt/sqldeveloper/sqldeveloper/bin/sqldeveloper.conf");
+        const char *first = strstr(conf, "\nSetJavaHome ");
+        osr_assert_true(first != NULL && strstr(first + 1, "\nSetJavaHome ") == NULL,
+            "sqldeveloper: and a rerun does not append the SetJavaHome line twice");
+        free(conf);
+    }
+
+    osr_sb_env(&sb, "SDVER", "26.3.0.100.1200");
+    build("provide_sqldeveloper");
+    said("upgrading SQL Developer 26.2.0.186.2220 -> 26.3.0.100.1200",
+        "sqldeveloper: a newer release upgrades the tree, and names both versions");
+    file_is("opt/sqldeveloper/sqldeveloper/bin/version.properties",
+        "VER_FULL=26.3.0.100.1200\n",
+        "sqldeveloper: and the tree is the new one afterwards");
+
+    /* ================================================================
+     * 4. Yandex Browser -- patch the vendor's own .desktop entry
      *
      * The flags exist because the browser is a memory hog on a small machine.
      * Rewriting the whole entry would mean maintaining the vendor's MIME

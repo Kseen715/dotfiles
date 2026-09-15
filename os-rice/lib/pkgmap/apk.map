@@ -272,3 +272,6 @@ gtklock =
 gtklock-userinfo-module =
 libdeep-filter-ladspa =
 nwg-displays =
+
+# JDK 17 for modules/sqldeveloper.c: the -no-jre zip carries no Java.
+jdk17 = openjdk17
