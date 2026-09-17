@@ -335,10 +335,12 @@ int main(void) {
         "rofi: the unrelated shortcut is untouched");
     db_holds(MK_CHILD MK_PATH "rofi/ binding <Super>r",
         "rofi: rofi now holds Super+R");
-    db_holds("env -u WAYLAND_DISPLAY rofi -show drun",
+    db_holds("env -u WAYLAND_DISPLAY rofi -normal-window -show drun",
         "rofi: the command unsets WAYLAND_DISPLAY - rofi's Wayland backend "
         "needs wlr-layer-shell, which mutter does not implement, so the "
-        "chord has to take the XWayland path");
+        "chord has to take the XWayland path - and -normal-window, because "
+        "rofi's default override-redirect window is typed on only through an "
+        "XGrabKeyboard that a focused native Wayland client never feeds");
 
     /* And back. Installing wofi afterwards reclaims the chord the same way,
      * so the rule is symmetric rather than rofi winning permanently. */

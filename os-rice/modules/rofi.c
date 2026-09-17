@@ -58,6 +58,17 @@ int osrm_rofi(void) {
      * the layer shell protocol"), so the chord unsets WAYLAND_DISPLAY and rofi
      * takes the X11 path through XWayland - where icons cost nothing.
      *
+     * -normal-window is not cosmetic, it is what makes the launcher usable.
+     * rofi's default X11 window is override-redirect: unmanaged, invisible to
+     * mutter, and typed on only because rofi holds an XGrabKeyboard. That grab
+     * covers XWayland, not the compositor - so with a NATIVE Wayland client
+     * focused (ghostty, nautilus) mutter never routes a key into XWayland and
+     * every keystroke lands in the window behind rofi. It only looked fine
+     * from an X11 client (VS Code, the browser), where input was already
+     * going there. As a normal window mutter manages and focuses it like any
+     * other toplevel, and rofi still maps it undecorated and centred
+     * (_MOTIF_WM_HINTS decorations=0, no _NET_FRAME_EXTENTS).
+     *
      * wofi's custom shortcut has to be removed, not just unbound: two custom
      * shortcuts on one chord is a state gsettings accepts and GNOME resolves
      * arbitrarily. Last launcher module installed owns Super+R; wofi does the
@@ -68,7 +79,7 @@ int osrm_rofi(void) {
         (void)osr_gnome_free_binding("<Super>r");
         osr_info("rofi Super+R shortcut");
         (void)osr_gnome_keybind("rofi", "Application Launcher", "<Super>r",
-                                "sh -c 'pkill rofi || env -u WAYLAND_DISPLAY rofi -show drun'");
+                                "sh -c 'pkill rofi || env -u WAYLAND_DISPLAY rofi -normal-window -show drun'");
     }
 
     str_freev(&dir, &src, &dst, (Str *)NULL);
