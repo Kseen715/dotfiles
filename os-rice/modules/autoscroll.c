@@ -98,7 +98,7 @@ int osrm_autoscroll(void) {
     str_freev(&root, &js, &profiles, (Str *)NULL);
 
     for (i = 0; chromium_desktops[i] != NULL; i++)
-        chrome += osr_desktop_add_flags(chromium_desktops[i], AS_BLINK);
+        chrome += osr_desktop_add_flags("autoscroll", chromium_desktops[i], AS_BLINK);
     if (chrome > 0)
         osr_infof("middle-click autoscroll: %d Chromium-family launcher(s)", chrome);
 

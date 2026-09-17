@@ -488,10 +488,46 @@ int main(void) {
     run_module("autoscroll");
     file_is("home/.local/share/applications/chromium.desktop",
         "[Desktop Entry]\n"
+        "X-OSR-Flags-autoscroll=--enable-blink-features=MiddleClickAutoscroll\n"
         "Name=Chromium\n"
         "Exec=/usr/bin/chromium --enable-blink-features=MiddleClickAutoscroll %U\n",
         "autoscroll: a rerun is a no-op -- a launcher already carrying the "
-        "switch is left alone rather than stamped twice");
+        "switch is left alone rather than stamped twice, and the key naming "
+        "whose switches those are rides along");
+
+    /* The bug this key exists for: the copy used to be its own input, so every
+     * run appended the CURRENT flag list on top of whatever an earlier run had
+     * left there. Change the list and both the new and the abandoned switches
+     * ended up on the command line -- on the real machine, four stacked copies
+     * including an --enable-low-end-device-mode the config had since dropped. */
+    osr_sb_rm(&sb, "home/.local/share/applications");
+    osr_sb_write(&sb, "dotfiles/yandex-browser/flags.conf",
+        "--process-per-site\n--renderer-process-limit=4\n", 0644);
+    run_module("yandex-browser");
+    osr_sb_write(&sb, "dotfiles/yandex-browser/flags.conf",
+        "--media-cache-size=33554432\n", 0644);
+    run_module("yandex-browser");
+    file_is("home/.local/share/applications/yandex-browser.desktop",
+        "[Desktop Entry]\n"
+        "X-OSR-Flags-yandex-browser=--media-cache-size=33554432\n"
+        "Name=Yandex Browser\n"
+        "Exec=/usr/bin/yandex-browser-stable --media-cache-size=33554432 %U\n",
+        "yandex-browser: a switch dropped from flags.conf is gone from the "
+        "launcher on the next run -- the copy is rebuilt from the vendor's "
+        "file, never from itself");
+
+    run_module("autoscroll");
+    run_module("yandex-browser");
+    file_is("home/.local/share/applications/yandex-browser.desktop",
+        "[Desktop Entry]\n"
+        "X-OSR-Flags-autoscroll=--enable-blink-features=MiddleClickAutoscroll\n"
+        "X-OSR-Flags-yandex-browser=--media-cache-size=33554432\n"
+        "Name=Yandex Browser\n"
+        "Exec=/usr/bin/yandex-browser-stable "
+        "--enable-blink-features=MiddleClickAutoscroll "
+        "--media-cache-size=33554432 %U\n",
+        "yandex-browser: and the other module's switches survive that rebuild, "
+        "in an order that does not depend on which module ran last");
 
     osr_sb_rm(&sb, "usr/share/applications");
     osr_sb_rm(&sb, "home/.mozilla");

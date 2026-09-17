@@ -84,7 +84,7 @@ int osrm_yandex_browser(void) {
      * The browser is installed either way, but without a launcher nothing
      * carries the flags -- say so instead of leaving the tuning silently
      * unapplied. */
-    if (osr_desktop_add_flags("*yandex*browser*.desktop", str_text(&flags)) == 0)
+    if (osr_desktop_add_flags("yandex-browser", "*yandex*browser*.desktop", str_text(&flags)) == 0)
         osr_warn("no yandex-browser .desktop found - the low-RAM flags are not "
                  "applied (rerun this module after the install)");
 

@@ -94,15 +94,22 @@ int osr_install_mozilla_layer(const char *root, const char *user_js, const char 
  * vendor's file is never touched and a package update cannot fight it (SS5).
  *
  * The switches go straight after the binary in each Exec= line, before the %U
- * field code. A launcher that already carries this flag string is left alone,
- * and a launcher already patched by another module is patched ON TOP of that
- * copy, so two modules stamping the same browser keep both sets of switches.
+ * field code. The copy is REBUILT from the vendor's file every run, never from
+ * itself, so a switch dropped from `flags` is gone on the next run instead of
+ * surviving in the copy that used to be its own input. What every OTHER module
+ * asked for is kept: each caller's list is recorded under its own
+ * `X-OSR-Flags-<id>` key in the copy and merged back in id order, so two
+ * modules stamping the same browser keep both sets whichever runs last, and a
+ * run that changes nothing rewrites nothing.
+ *
+ * `id` names the caller (the module, normally) and is the identity the copy
+ * remembers a list by; two callers must not share one.
  *
  * Returns how many launchers matched -- 0 means the app is not installed (or
  * ships no entry), which is the caller's cue to say the switches went nowhere.
  * Reads OSR_DESKTOP_DIRS for the system directories to scan. */
 #ifndef _WIN32
-int osr_desktop_add_flags(const char *pattern, const char *flags);
+int osr_desktop_add_flags(const char *id, const char *pattern, const char *flags);
 #endif
 
 

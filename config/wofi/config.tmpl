@@ -12,7 +12,15 @@ show_all=true
 gtk_dark=true
 location=center
 allow_markup=true
-allow_images=true
+# Icons off. Measured on resolute (176 .desktop entries, Papirus-Dark): wofi
+# reaches idle in ~850ms with images and ~420ms without -- half the launcher's
+# whole startup is GTK rasterising one SVG per entry through the glycin pixbuf
+# loader, synchronously, before the first frame. wofi 1.5.1 has no icon cache
+# and no lazy row rendering, so there is nothing to precache: the work is
+# redone on every Super+R. Neither a raster icon theme (~170ms back) nor
+# image_size=16 nor GLYCIN_SANDBOX_MECHANISM=not-sandboxed moved it. The
+# remaining ~420ms is GTK init plus the .desktop scan, wofi's floor.
+allow_images=false
 line_wrap=word
 width=600
 height=420

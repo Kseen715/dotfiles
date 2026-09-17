@@ -707,7 +707,8 @@ static void write_as_user(const char *path, const char *text, size_t len) {
  * switches straight after the binary in every Exec= line ([Desktop Action]
  * entries included) and before the %U field code -- positional arguments after
  * it are URLs, not switches. */
-static void stamp_exec(Str *out, const char *text, size_t len, const char *flags) {
+static void stamp_exec(Str *out, const char *text, size_t len, const char *flags,
+                       const char *keys) {
     size_t pos = 0;
     Line line;
 
@@ -723,20 +724,42 @@ static void stamp_exec(Str *out, const char *text, size_t len, const char *flags
             str_add(out, line.start, line.len);
         }
         str_addc(out, '\n');
+        /* The bookkeeping keys belong to [Desktop Entry]; a .desktop file puts
+         * that section first, so straight after its header is the one spot
+         * that is inside it whatever [Desktop Action] blocks follow. */
+        if (line.len == 15 && memcmp(line.start, "[Desktop Entry]", 15) == 0)
+            str_addz(out, keys);
     }
 }
 
-/* contains -- `grep -F`, over bytes that are not NUL-terminated. */
-static int contains(const char *text, size_t len, const char *needle) {
-    size_t n = strlen(needle);
+/* OSR_FLAGS_KEY -- the prefix of the bookkeeping key each caller's switch list
+ * is remembered under, `X-OSR-Flags-<id>=`. It lives in the [Desktop Entry]
+ * section of the user copy, which is the only durable place to record WHOSE
+ * switches are whose: Exec= itself cannot say, so a second run reading Exec=
+ * back has no way to tell a switch this caller no longer wants from one
+ * another module put there. */
+#define OSR_FLAGS_KEY "X-OSR-Flags-"
+
+/* flags_line_id -- if the line is `X-OSR-Flags-<id>=<list>`, point *val at the
+ * list and return the id's length; otherwise 0. */
+static size_t flags_line_id(const Line *line, const char **id, const char **val,
+                            size_t *val_len) {
+    size_t pre = sizeof(OSR_FLAGS_KEY) - 1;
     size_t i;
-    if (n == 0 || n > len) return 0;
-    for (i = 0; i + n <= len; i++)
-        if (memcmp(text + i, needle, n) == 0) return 1;
+
+    if (line->len <= pre || memcmp(line->start, OSR_FLAGS_KEY, pre) != 0) return 0;
+    for (i = pre; i < line->len; i++) {
+        if (line->start[i] != '=') continue;
+        if (i == pre) return 0;                        /* no id between - and = */
+        *id = line->start + pre;
+        *val = line->start + i + 1;
+        *val_len = line->len - i - 1;
+        return i - pre;
+    }
     return 0;
 }
 
-int osr_desktop_add_flags(const char *pattern, const char *flags) {
+int osr_desktop_add_flags(const char *id, const char *pattern, const char *flags) {
     /* A variable only so a unit test can aim at a fixture dir. */
     const char *dirs = env_str("OSR_DESKTOP_DIRS",
                                "/usr/share/applications /usr/local/share/applications");
@@ -766,32 +789,71 @@ int osr_desktop_add_flags(const char *pattern, const char *flags) {
         str_addz(&glob_pattern, pattern);
         if (glob(str_text(&glob_pattern), 0, NULL, &g) == 0) {
             for (i = 0; i < g.gl_pathc; i++) {
-                Str base;
-                char *entry;
-                size_t elen;
+                Str base, merged, keys;
+                char *sys, *old = NULL;
+                size_t slen, olen = 0;
+                int placed = 0;
 
                 if (!file_exists(g.gl_pathv[i])) continue;
                 str_init(&base);
                 base_of(&base, g.gl_pathv[i]);
                 str_setz(&dst, str_text(&apps), "/", str_text(&base), (const char *)NULL);
 
-                /* The user-level copy is the source when there is one, so two
-                 * modules stamping the same launcher ACCUMULATE their switches
-                 * instead of the second one dropping the first one's. */
-                entry = slurp(file_exists(str_text(&dst)) ? str_text(&dst) : g.gl_pathv[i], &elen);
-                if (entry == NULL) { str_free(&base); continue; }
+                /* The VENDOR's file is always the source. The user copy is a
+                 * derived artefact -- rebuilt from scratch every run, so a
+                 * switch dropped from a module's list disappears with it
+                 * instead of surviving in a copy that is its own input. */
+                sys = slurp(g.gl_pathv[i], &slen);
+                if (sys == NULL) { str_free(&base); continue; }
                 n++;
-                if (contains(entry, elen, flags)) {   /* already stamped: rerun */
-                    free(entry);
-                    str_free(&base);
-                    continue;
+                if (file_exists(str_text(&dst))) old = slurp(str_text(&dst), &olen);
+
+                /* What the other modules asked for, read back from the copy's
+                 * own bookkeeping keys, with this caller's list merged in at
+                 * its sorted position -- the order must not depend on which
+                 * module ran last, or two of them rewrite the file forever. */
+                str_initv(&merged, &keys, (Str *)NULL);
+                if (old != NULL) {
+                    size_t pos = 0;
+                    Line line;
+                    while (next_line(old, olen, &pos, &line)) {
+                        const char *kid, *val;
+                        size_t klen, vlen;
+                        klen = flags_line_id(&line, &kid, &val, &vlen);
+                        if (klen == 0) continue;
+                        if (klen == strlen(id) && memcmp(kid, id, klen) == 0)
+                            continue;                     /* ours: replaced below */
+                        if (!placed && strncmp(kid, id, klen) > 0) {
+                            placed = 1;
+                            str_addzz(&merged, flags, " ", (const char *)NULL);
+                            str_addzz(&keys, OSR_FLAGS_KEY, id, "=", flags, "\n",
+                                      (const char *)NULL);
+                        }
+                        str_add(&merged, val, vlen);
+                        str_addc(&merged, ' ');
+                        str_add(&keys, line.start, line.len);
+                        str_addc(&keys, '\n');
+                    }
                 }
-                osr_infof("stamping launcher switches into %s", str_text(&base));
+                if (!placed) {
+                    str_addz(&merged, flags);
+                    str_addzz(&keys, OSR_FLAGS_KEY, id, "=", flags, "\n",
+                              (const char *)NULL);
+                } else while (merged.len > 0 && merged.p[merged.len - 1] == ' ') {
+                    merged.p[--merged.len] = '\0';        /* no ` %U` gap */
+                }
+
                 str_reset(&body);
-                stamp_exec(&body, entry, elen, flags);
-                free(entry);
-                osr_write_user(str_text(&dst), str_text(&body));
-                str_free(&base);
+                stamp_exec(&body, sys, slen, str_text(&merged), str_text(&keys));
+                free(sys);
+                /* Byte-identical output is a rerun: leave the file's mtime be. */
+                if (old == NULL || olen != body.len ||
+                    memcmp(old, str_text(&body), olen) != 0) {
+                    osr_infof("stamping launcher switches into %s", str_text(&base));
+                    osr_write_user(str_text(&dst), str_text(&body));
+                }
+                free(old);
+                str_freev(&base, &merged, &keys, (Str *)NULL);
             }
         }
         globfree(&g);
