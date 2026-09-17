@@ -56,6 +56,25 @@ int osr_gnome_free_binding(const char *binding);
 int osr_gnome_keybind(const char *id, const char *name, const char *binding,
                       const char *command);
 
+/* osr_gnome_unkeybind -- remove the custom shortcut registered at
+ * .../custom-keybindings/<id>/: drop its path from the parent list and reset
+ * the child schema, so no orphan name/binding/command is left behind.
+ * Returns 1 when there was one to remove, 0 when there was not.
+ *
+ * WHY this exists, when osr_gnome_free_binding already frees a chord: that one
+ * only clears GNOME Shell and mutter keys. It cannot touch a CUSTOM shortcut,
+ * because a custom shortcut is not a key holding a chord -- it is a whole
+ * dconf path in a shared list. Two custom shortcuts on one chord is a state
+ * gsettings accepts and GNOME resolves arbitrarily: one of them silently never
+ * fires, and which one is not defined. So a module taking a chord that another
+ * module's custom shortcut already holds has to remove that entry, not just
+ * free the chord -- which is what the launcher modules do to each other's
+ * Super+R (last one installed owns it).
+ *
+ * Idempotent: an id that is not in the list is not an error.
+ */
+int osr_gnome_unkeybind(const char *id);
+
 /* osr_gnome_extension_install -- install one extensions.gnome.org extension by
  * UUID for the Shell major this box runs, then enable it. extensions.gnome.org
  * serves a DIFFERENT zip per Shell major, so the version goes into the query

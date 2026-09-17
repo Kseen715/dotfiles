@@ -146,8 +146,8 @@ betterlockscreen = source:provide_betterlockscreen
 
 # Empty RHS = skip: in no Alpine release, and the rice still works without them.
 # What is lost, in order: the Qt clipboard manager (gpaste covers GTK apps),
-# MTP phone mounting via FUSE (gvfs-mtp still works), the emoji picker (rofi's
-# own rofi-emoji IS packaged and is what modules/rofi.c prefers), the extra
+# MTP phone mounting via FUSE (gvfs-mtp still works), the emoji picker (rofimoji,
+# which modules/fcitx5.c installs), the extra
 # PipeWire mixer (pavucontrol is packaged), touchpad swipe gestures, the battery
 # notifier (the bar still shows charge), the bar's calendar popup, the .mtp/USB
 # transfer GUI, Qt6 theme matching, CUPS's print-to-PDF backend, EPUB cover

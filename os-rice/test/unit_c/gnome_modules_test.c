@@ -125,6 +125,8 @@ int main(void) {
         "  set) grep -v \"^$2 $3 \" \"$GSDB\" >\"$GSDB.tmp\" 2>/dev/null || true\n"
         "       mv \"$GSDB.tmp\" \"$GSDB\"\n"
         "       printf '%s %s %s\\n' \"$2\" \"$3\" \"$4\" >>\"$GSDB\" ;;\n"
+        "  reset-recursively) grep -v \"^$2 \" \"$GSDB\" >\"$GSDB.tmp\" 2>/dev/null || true\n"
+        "       mv \"$GSDB.tmp\" \"$GSDB\" ;;\n"
         "  list-recursively) grep \"^$2 \" \"$GSDB\" 2>/dev/null || true ;;\n"
         "  *) exit 1 ;;\n"
         "esac\n"
@@ -248,6 +250,111 @@ int main(void) {
         "wofi: Shift+Super+R is a different chord and stays bound");
     db_holds(MK_CHILD MK_PATH "wofi/ binding <Super>r",
         "wofi: and the shortcut is registered after the unbind, not before");
+
+    /* ================================================================
+     * 2b. fuzzel -- the fast launcher, and the one chord it must NOT take
+     *
+     * fuzzel is a wlr-layer-shell client with no fallback: on mutter it
+     * prints "compositor is missing support for the Wayland layer surface
+     * protocol" and exits without mapping a window. So on GNOME it installs
+     * and configures, but leaves Super+R with wofi -- a shortcut pointing at
+     * a binary that exits on sight is worse than no shortcut at all.
+     * ================================================================ */
+    fresh();
+    on_desktop("i3", "i3");
+    osr_sb_env(&sb, "OSR_THEME", "");
+    osr_sb_env(&sb, "OSR_THEME_DIR", "");
+    run_module("fuzzel");
+    osr_assert_log(&sb, "apt-get install",
+        "fuzzel: the package is installed regardless of session");
+    db_empty("fuzzel: no shortcut is registered off GNOME");
+    osr_assert_absent(&sb, "home/.config/fuzzel/fuzzel.ini",
+        "fuzzel: no theme layer is applied when no theme is resolved");
+
+    fresh();
+    on_desktop("ubuntu:GNOME", "gnome");
+    osr_sb_env(&sb, "OSR_THEME", "xin");
+    hs_path(&p, hs_text(&sb.osr_root), "themes/xin");
+    osr_sb_env(&sb, "OSR_THEME_DIR", hs_text(&p));
+    preset("org.gnome.shell.keybindings show-screen-recording-ui ['<Super>r']");
+    run_module("fuzzel");
+    osr_assert_true(strstr(gs(), "custom-keybindings") == NULL,
+        "fuzzel: it registers NO custom shortcut under GNOME - Super+R "
+        "stays wofi's, because fuzzel cannot open on mutter");
+    db_holds("org.gnome.shell.keybindings show-screen-recording-ui ['<Super>r']",
+        "fuzzel: and it does not free the chord either, having no use for it");
+    {
+        char *ini;
+        HStr inip;
+        hs_init(&inip);
+        hs_path(&inip, hs_text(&sb.root), "home/.config/fuzzel/fuzzel.ini");
+        ini = h_slurp(hs_text(&inip));
+        osr_assert_true(strstr(ini, "background=181818ff") != NULL,
+            "fuzzel: the config carries the theme palette as fuzzel's RGBA, "
+            "hash stripped by the _rgb placeholder");
+        osr_assert_true(strstr(ini, "{{") == NULL,
+            "fuzzel: and every placeholder in it is one this theme defines");
+        free(ini);
+        hs_free(&inip);
+    }
+
+    /* ================================================================
+     * 2c. rofi -- the launcher that wins Super+R on GNOME
+     *
+     * rofi opens in ~100ms under mutter where wofi needs ~360ms with icons
+     * off, so on GNOME it takes the chord. Taking it means REMOVING wofi's
+     * custom shortcut, not merely unbinding a key: two custom shortcuts on
+     * one chord is a state gsettings accepts and GNOME resolves arbitrarily.
+     * The handoff goes both ways -- last launcher installed owns Super+R.
+     * ================================================================ */
+    fresh();
+    on_desktop("i3", "i3");
+    osr_sb_env(&sb, "OSR_THEME", "");
+    osr_sb_env(&sb, "OSR_THEME_DIR", "");
+    run_module("rofi");
+    osr_assert_log(&sb, "apt-get install",
+        "rofi: the package is installed regardless of session");
+    db_empty("rofi: no shortcut is registered off GNOME");
+
+    /* The handoff. wofi holds Super+R and an unrelated shortcut holds its own
+     * chord; after rofi only wofi's entry is gone, and its child keys with
+     * it -- an orphaned name/binding/command would be inherited whole by the
+     * next module to register that id. */
+    fresh();
+    on_desktop("ubuntu:GNOME", "gnome");
+    preset(MK " custom-keybindings ['" MK_PATH "cliphist/', '" MK_PATH "wofi/']");
+    preset(MK_CHILD MK_PATH "wofi/ binding <Super>r");
+    preset(MK_CHILD MK_PATH "wofi/ command sh -c 'pkill wofi || wofi --show drun'");
+    preset(MK_CHILD MK_PATH "cliphist/ binding <Super>v");
+    run_module("rofi");
+    db_holds(MK " custom-keybindings ['" MK_PATH "cliphist/', '" MK_PATH "rofi/']",
+        "rofi: wofi's path is dropped from the list and rofi's appended");
+    osr_assert_true(strstr(gs(), MK_PATH "wofi/ ") == NULL,
+        "rofi: and wofi's child keys are reset, leaving no orphan behind");
+    db_holds(MK_CHILD MK_PATH "cliphist/ binding <Super>v",
+        "rofi: the unrelated shortcut is untouched");
+    db_holds(MK_CHILD MK_PATH "rofi/ binding <Super>r",
+        "rofi: rofi now holds Super+R");
+    db_holds("env -u WAYLAND_DISPLAY rofi -show drun",
+        "rofi: the command unsets WAYLAND_DISPLAY - rofi's Wayland backend "
+        "needs wlr-layer-shell, which mutter does not implement, so the "
+        "chord has to take the XWayland path");
+
+    /* And back. Installing wofi afterwards reclaims the chord the same way,
+     * so the rule is symmetric rather than rofi winning permanently. */
+    run_module("wofi");
+    db_holds(MK " custom-keybindings ['" MK_PATH "cliphist/', '" MK_PATH "wofi/']",
+        "wofi: reinstalling it takes Super+R back off rofi");
+    osr_assert_true(strstr(gs(), MK_PATH "rofi/ ") == NULL,
+        "wofi: and rofi's entry is removed, never left to collide");
+
+    /* A rerun of the winner is a no-op: nothing to remove, nothing to add. */
+    {
+        int before = db_lines();
+        run_module("wofi");
+        osr_assert_true(db_lines() == before,
+            "wofi: a second run adds no line - already-owned is not re-added");
+    }
 
     /* ================================================================
      * 3. cliphist -- Super+V, the clipboard history

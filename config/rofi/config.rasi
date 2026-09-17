@@ -4,14 +4,19 @@
  */
 
 configuration {
-    modi:                "drun,run,window,emoji";
+    /* Built-in modes only. `emoji` needs the rofi-emoji plugin, which is not
+     * packaged for rofi 2.x -- and rofi refuses to start at all when a listed
+     * mode is missing ("Mode emoji is not found"), so one absent plugin breaks
+     * the launcher, not just the picker. The emoji picker is rofimoji, bound
+     * to $mod+period: a separate binary driving rofi as its frontend, no
+     * plugin ABI involved. */
+    modi:                "drun,run,window";
     show-icons:          true;
     icon-theme:          "Papirus-Dark";
     drun-display-format: "{name}";
     display-drun:        "apps";
     display-run:         "run";
     display-window:      "window";
-    display-emoji:       "emoji";
     sidebar-mode:        false;
     hide-scrollbar:      true;
     disable-history:     false;

@@ -39,6 +39,7 @@ int osrm_wofi(void) {
      * launcher would simply never open. Elsewhere the WM config binds it. */
     if (osr_gnome_is_session()) {
         osr_info("wofi unbind Super+R from GNOME Shell");
+        (void)osr_gnome_unkeybind("rofi");
         (void)osr_gnome_free_binding("<Super>r");
         osr_info("wofi Super+R shortcut");
         (void)osr_gnome_keybind("wofi", "Application Launcher", "<Super>r",

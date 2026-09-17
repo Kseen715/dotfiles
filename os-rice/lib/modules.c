@@ -118,6 +118,7 @@ typedef struct {
     X("flameshot",       flameshot,       "x11",         0) \
     X("flatpak",         flatpak,         "x11+wayland", 0) \
     X("foot",            foot,            "wayland",     1) \
+    X("fuzzel",          fuzzel,          "wayland",     1) \
     X("gh",              gh,              "x11+wayland", 0) \
     X("ghostty",         ghostty,         "x11+wayland", 1) \
     X("git-base",        git_base,        "x11+wayland", 0) \
@@ -176,7 +177,7 @@ typedef struct {
     X("qbittorrent",     qbittorrent,     "x11+wayland", 0) \
     X("qpwgraph",        qpwgraph,        "x11+wayland", 0) \
     X("redshift",        redshift,        "x11",         0) \
-    X("rofi",            rofi,            "x11",         1) \
+    X("rofi",            rofi,            "x11+wayland", 1) \
     X("rust",            rust,            "x11+wayland", 0) \
     X("sddm",            sddm,            "x11+wayland", 1) \
     X("serie",           serie,           "x11+wayland", 1) \

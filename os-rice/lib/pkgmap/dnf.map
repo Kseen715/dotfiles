@@ -221,8 +221,6 @@ autotiling = source:provide_autotiling
 # pavucontrol/pulsemixer, touchpad swipe gestures, kernel-level key remapping
 # (xcape, which IS packaged, covers dual-role keys at the X level), and the
 # aptX/LDAC Bluetooth codecs (SBC and AAC still work).
-rofi-calc =
-rofi-emoji =
 rofimoji =
 ncpamixer =
 pwvucontrol =

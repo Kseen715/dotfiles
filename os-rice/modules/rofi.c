@@ -1,6 +1,6 @@
 /* modules/rofi.c -- rofi launcher, the X11 replacement for wofi (i3-sugg §2).
- * Also the app switcher, the emoji picker and the logout menu, so it replaces
- * wleave/wlogout too — a rofi-modi script, not another package.
+ * Also the app switcher and the logout menu, so it replaces wleave/wlogout
+ * too — a rofi-modi script, not another package.
  *
  * Config split (§5): config.rasi + the launcher/powermenu layouts are
  * dotfiles-owned; colors.rasi is rice-owned and `@import`ed by both, so a rice
@@ -11,11 +11,15 @@
  */
 #include "../lib/module.h"
 #include "../lib/common.h"
+#include "../lib/gnome.h"
 
 #include <stddef.h>
 
 int osrm_rofi(void) {
-    static const char *const pkgs[] = { "rofi", "rofi-emoji", "rofi-calc", NULL };
+    /* rofi alone. The rofi-emoji and rofi-calc plugins are 1.7-ABI and are in
+     * no repo that ships rofi 2.x; emoji is rofimoji's job (modules/fcitx5.c)
+     * and nothing here ever asked for calc. */
+    static const char *const pkgs[] = { "rofi", NULL };
     static const char *const files[] = {
         "config.rasi", "launcher.rasi", "powermenu.rasi", NULL
     };
@@ -46,6 +50,26 @@ int osrm_rofi(void) {
     }
     str_setz(&dst, str_text(&dir), "/colors.rasi", (const char *)NULL);
     (void)osr_install_theme_layer("rofi", "colors.rasi", str_text(&dst));
+
+    /* Super+R on a GNOME session. rofi is the fastest launcher that actually
+     * opens under mutter: ~100ms to a window against wofi's ~360ms with icons
+     * off and ~850ms with them on. Its Wayland backend wants wlr-layer-shell,
+     * which mutter does not implement ("Rofi on wayland requires support for
+     * the layer shell protocol"), so the chord unsets WAYLAND_DISPLAY and rofi
+     * takes the X11 path through XWayland - where icons cost nothing.
+     *
+     * wofi's custom shortcut has to be removed, not just unbound: two custom
+     * shortcuts on one chord is a state gsettings accepts and GNOME resolves
+     * arbitrarily. Last launcher module installed owns Super+R; wofi does the
+     * same to rofi. */
+    if (osr_gnome_is_session()) {
+        osr_info("rofi unbind Super+R from GNOME Shell");
+        (void)osr_gnome_unkeybind("wofi");
+        (void)osr_gnome_free_binding("<Super>r");
+        osr_info("rofi Super+R shortcut");
+        (void)osr_gnome_keybind("rofi", "Application Launcher", "<Super>r",
+                                "sh -c 'pkill rofi || env -u WAYLAND_DISPLAY rofi -show drun'");
+    }
 
     str_freev(&dir, &src, &dst, (Str *)NULL);
     return ok;

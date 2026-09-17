@@ -286,6 +286,90 @@ int osr_gnome_keybind(const char *id, const char *name, const char *binding,
     return 1;
 }
 
+/* osr_gnome_unkeybind -- see lib/gnome.h. The list is rebuilt from its quoted
+ * elements rather than spliced: dropping one element by cutting around a ", "
+ * has to special-case first, middle, last and only, and gsettings spells an
+ * empty list at least three ways ("@as []", "[]", "''"). Scanning the quoted
+ * paths and re-emitting all but the target has none of those cases. */
+int osr_gnome_unkeybind(const char *id) {
+    Str path;
+    Str existing;
+    Str kept;
+    Str child;
+    const char *p;
+    const char *end;
+    int found = 0;
+    int count = 0;
+    char *argv[6];
+
+    str_init(&path);
+    str_addzz(&path, "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/", id,
+        "/", (const char *)NULL);
+
+    str_init(&existing);
+    argv[0] = (char *)osr_gsettings();
+    argv[1] = (char *)"get";
+    argv[2] = (char *)MEDIA_KEYS;
+    argv[3] = (char *)"custom-keybindings";
+    argv[4] = NULL;
+    (void)osr_run_user_capture(argv, &existing);
+
+    /* Every element is a single-quoted dconf path; anything outside the quotes
+     * ("@as", the brackets, the separators) is syntax this rebuilds anyway. */
+    str_init(&kept);
+    str_addz(&kept, "[");
+    p = str_text(&existing);
+    end = p + existing.len;
+    while (p < end) {
+        const char *start;
+        const char *close;
+        p = memchr(p, '\'', (size_t)(end - p));
+        if (p == NULL) break;
+        start = p + 1;
+        close = memchr(start, '\'', (size_t)(end - start));
+        if (close == NULL) break;
+        if ((size_t)(close - start) == path.len &&
+            memcmp(start, str_text(&path), path.len) == 0) {
+            found = 1;                      /* the one being removed */
+        } else {
+            if (count > 0) str_addz(&kept, ", ");
+            str_addc(&kept, '\'');
+            str_add(&kept, start, (size_t)(close - start));
+            str_addc(&kept, '\'');
+            count++;
+        }
+        p = close + 1;
+    }
+    str_addz(&kept, "]");
+
+    if (!found) {
+        str_freev(&path, &existing, &kept, (Str *)NULL);
+        return 0;
+    }
+
+    argv[0] = (char *)osr_gsettings();
+    argv[1] = (char *)"set";
+    argv[2] = (char *)MEDIA_KEYS;
+    argv[3] = (char *)"custom-keybindings";
+    argv[4] = (char *)str_text(&kept);
+    argv[5] = NULL;
+    (void)osr_run_user(argv);
+
+    /* The child schema keys outlive the list entry -- dconf keeps whatever was
+     * written under that path. Reset them, or the next module to register the
+     * same id inherits a stale name and command. */
+    str_init(&child);
+    str_addzz(&child, CUSTOM_KEY, ":", str_text(&path), (const char *)NULL);
+    argv[1] = (char *)"reset-recursively";
+    argv[2] = (char *)str_text(&child);
+    argv[3] = NULL;
+    (void)osr_run_user_quiet(argv);
+
+    osr_infof("  removed the %s shortcut at %s", id, str_text(&path));
+    str_freev(&path, &existing, &kept, &child, (Str *)NULL);
+    return 1;
+}
+
 /* --- shell extensions ----------------------------------------------------- */
 
 /* shell_major -- "50" out of `gnome-shell --version`'s "GNOME Shell 50.1". The

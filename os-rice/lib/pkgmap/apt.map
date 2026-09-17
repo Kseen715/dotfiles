@@ -373,8 +373,6 @@ batsignal = cbatticon
 # on top of pavucontrol/pulsemixer, one of three MTP routes (gvfs-mtp and jmtpfs
 # remain), touchpad swipe gestures, and kernel-level key remapping (xcape, which
 # IS packaged, covers dual-role keys at the X level).
-rofi-calc =
-rofi-emoji =
 rofimoji =
 ncpamixer =
 pwvucontrol =

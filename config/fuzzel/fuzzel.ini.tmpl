@@ -1,0 +1,67 @@
+# themes/xin/config/fuzzel/fuzzel.ini - the xin launcher, fuzzel's half.
+#
+# The same palette and the same proportions as config/wofi/style.css.tmpl, on a
+# launcher that opens in a tenth of the time: fuzzel is a plain Wayland client
+# on cairo and nanosvg, so it pays neither GTK's init nor the out-of-process
+# glycin rasteriser wofi's icons go through.
+#
+# What could NOT be carried over, because fuzzel has no stylesheet and no
+# per-widget selectors:
+#   - wofi gave the search bar its own @surface fill and an accent focus ring.
+#     fuzzel paints one surface for the whole window, so the prompt is set
+#     apart by color (accent) and by inner-pad instead.
+#   - wofi rounded the selected row (8px). fuzzel's selection bar is square;
+#     only the window has a radius.
+# Everything else - palette, 1px surface border, 12px window radius, the
+# roughly 600x420 footprint, mono font, "search" prompt - is the same.
+
+[main]
+font={{mono_font}}:size=11
+# wofi sized in CSS pixels, which do not follow the monitor's scale factor.
+# dpi-aware=no is the nearest fuzzel has: the font is sized off the scale
+# factor, so a 1x display renders the same 14-ish pixels wofi did.
+dpi-aware=no
+prompt="search "
+terminal=alacritty -e
+
+# Icons stay ON here, unlike wofi (see config/wofi/config.tmpl). fuzzel
+# rasterises SVG in-process with nanosvg, so the whole icon pass is a few
+# milliseconds - it was wofi's GTK/glycin path that cost ~430ms, not the icons
+# themselves.
+icons-enabled=yes
+icon-theme={{icon_theme}}
+
+# show_all=true / no_actions=true, in fuzzel's spelling: every .desktop file
+# regardless of XDG_CURRENT_DESKTOP, and one flat list of primary actions
+# rather than expandable Actions= rows.
+filter-desktop=no
+show-actions=no
+
+# ~600x420 at this font, the size wofi was pinned to. width is in characters
+# and excludes padding; line-height is set explicitly because fuzzel's font
+# metrics give a tighter row than wofi's 0.6rem-padded entries.
+width=65
+lines=13
+line-height=28
+horizontal-pad=12
+vertical-pad=8
+inner-pad=6
+anchor=center
+layer=overlay
+
+[colors]
+background={{background_rgb}}ff
+text={{foreground_rgb}}ff
+match={{accent_rgb}}ff
+selection={{selection_background_rgb}}ff
+selection-text={{accent_rgb}}ff
+selection-match={{accent_rgb}}ff
+input={{accent_rgb}}ff
+prompt={{accent_rgb}}ff
+placeholder={{text_muted_rgb}}ff
+counter={{text_muted_rgb}}ff
+border={{selection_background_rgb}}ff
+
+[border]
+width=1
+radius=12

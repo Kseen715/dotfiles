@@ -412,6 +412,7 @@ static const char *posix_srcs[] = {
     "modules/flameshot.c",
     "modules/flatpak.c",
     "modules/foot.c",
+    "modules/fuzzel.c",
     "modules/gh.c",
     "modules/ghostty.c",
     "modules/git-base.c",
